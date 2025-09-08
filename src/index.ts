@@ -119,30 +119,7 @@ async function main() {
     return;
   }
 
-  // Step 6: Handoff (optional)
-  const toolCommand = getToolCommand(answers.ide);
-  if (toolCommand) {
-    const launch = await p.confirm({
-      message: `Launch ${getToolName(answers.ide)}?`,
-      initialValue: false,
-    });
-
-    if (!p.isCancel(launch) && launch) {
-      p.outro(`Launching ${getToolName(answers.ide)}...`);
-      try {
-        execSync(toolCommand, { stdio: "inherit", cwd: rootDir });
-      } catch {
-        // Tool may not be installed
-        console.log(
-          pc.yellow(
-            `  Could not run '${toolCommand}'. Make sure the tool is installed.`,
-          ),
-        );
-      }
-      return;
-    }
-  }
-
+  // Step 6: Done!
   p.outro(
     pc.green("Done! ") +
       pc.dim(
