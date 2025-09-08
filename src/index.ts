@@ -7,16 +7,27 @@ import { runPrompts } from "./prompts.js";
 import { generateSnapshot } from "./snapshot.js";
 import { generateFiles } from "./generate.js";
 import { printSummary } from "./summary.js";
+import { loadConfig, saveConfig, configToAnswers } from "./config.js";
+import { refreshSnapshot } from "./refresh.js";
 
 async function main() {
   const args = process.argv.slice(2);
   const force = args.includes("--force");
   const dryRun = args.includes("--dry-run");
+  const refresh = args.includes("--refresh-snapshot");
+  const reconfigure = args.includes("--reconfigure");
   const targetDir = args.find((a) => !a.startsWith("-")) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
   console.log("");
   p.intro(pc.bold(" context-pilot "));
+
+  // --refresh-snapshot: fast path — update snapshot in existing context file
+  if (refresh) {
+    await refreshSnapshot(rootDir);
+    p.outro(pc.green("Snapshot refreshed!"));
+    return;
+  }
 
   if (dryRun) {
     p.log.warn(pc.yellow("DRY RUN — no files will be written"));
@@ -30,8 +41,39 @@ async function main() {
   const detected = await detectContext(rootDir);
   spinner.stop("Detection complete.");
 
-  // Step 2: Interactive prompts
-  const answers = await runPrompts(detected);
+  // Step 1.5: Check for saved config
+  const savedConfig = await loadConfig(rootDir);
+
+  let answers;
+
+  if (savedConfig && !reconfigure) {
+    // Use saved config — skip prompts
+    p.log.info(
+      `Using saved config from ${pc.cyan(".context-pilot.json")} ` +
+        pc.dim("(run with --reconfigure to change)"),
+    );
+    answers = configToAnswers(savedConfig);
+
+    // Re-check monorepo (structure may have changed)
+    if (
+      detected.monorepo &&
+      detected.monorepo.packages.length > 0 &&
+      !savedConfig.generatePerPackage
+    ) {
+      // Monorepo exists but wasn't configured — keep saved value
+    }
+  } else {
+    // Step 2: Interactive prompts (with defaults from saved config if --reconfigure)
+    answers = await runPrompts(detected, reconfigure ? savedConfig : null);
+
+    // Save config for future runs
+    if (!dryRun) {
+      await saveConfig(rootDir, answers);
+      p.log.info(
+        pc.dim("Saved config to .context-pilot.json for future runs."),
+      );
+    }
+  }
 
   // Step 3: Code snapshot (if requested)
   let snapshot = null;

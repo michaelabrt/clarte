@@ -1,5 +1,6 @@
 import type { CodeSnapshot, DetectedContext, UserAnswers } from "../types.js";
 import { summarizeDetection } from "../detect.js";
+import { getFrameworkHints } from "./framework-hints.js";
 
 /**
  * Build an Aider config file (.aider.conf.yml) with project conventions.
@@ -66,6 +67,32 @@ export function buildAiderContext(
       .filter(Boolean);
     for (const g of gotchas) {
       lines.push(`  - "GOTCHA: ${escapeYaml(g)}"`);
+    }
+  }
+
+  // Framework conventions
+  const fwHints = getFrameworkHints(ctx);
+  if (fwHints.length > 0) {
+    // Filter to just the bullet-point lines (skip headers and blank lines)
+    for (const hint of fwHints) {
+      const trimmed = hint.trim();
+      if (trimmed && trimmed.startsWith("- ")) {
+        lines.push(`  - "${escapeYaml(trimmed.slice(2))}"`);
+      }
+    }
+  }
+
+  // Monorepo info
+  if (ctx.monorepo && ctx.monorepo.packages.length > 0) {
+    lines.push(
+      `  - "Monorepo: ${ctx.monorepo.type} with ${ctx.monorepo.packages.length} packages"`,
+    );
+    for (const pkg of ctx.monorepo.packages) {
+      const fws =
+        pkg.frameworks.length > 0
+          ? ` (${pkg.frameworks.map((f) => f.name).join(", ")})`
+          : "";
+      lines.push(`  - "Package: ${escapeYaml(pkg.name)} at ${escapeYaml(pkg.path)}${escapeYaml(fws)}"`);
     }
   }
 

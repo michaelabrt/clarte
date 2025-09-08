@@ -1,5 +1,6 @@
 import type { CodeSnapshot, DetectedContext, UserAnswers } from "../types.js";
 import { summarizeDetection } from "../detect.js";
+import { getFrameworkHintsSection } from "./framework-hints.js";
 
 /**
  * Build the main context file content (CLAUDE.md, AGENTS.md, or CONTEXT.md).
@@ -45,6 +46,12 @@ export function buildMainContext(
   sections.push(buildTechStackSection(ctx, stackSummary));
   sections.push("");
 
+  // -- Framework Conventions --
+  const fwHints = getFrameworkHintsSection(ctx);
+  if (fwHints) {
+    sections.push(fwHints);
+  }
+
   // -- Project Structure --
   if (ctx.directories.length > 0) {
     sections.push("## Project Structure");
@@ -52,6 +59,24 @@ export function buildMainContext(
     sections.push("```");
     sections.push(buildStructureTree(ctx));
     sections.push("```");
+    sections.push("");
+  }
+
+  // -- Monorepo Structure --
+  if (ctx.monorepo && ctx.monorepo.packages.length > 0) {
+    sections.push("## Monorepo Structure");
+    sections.push("");
+    sections.push(
+      `${ctx.monorepo.type} workspace with ${ctx.monorepo.packages.length} packages:`,
+    );
+    sections.push("");
+    for (const pkg of ctx.monorepo.packages) {
+      const fws =
+        pkg.frameworks.length > 0
+          ? ` — ${pkg.frameworks.map((f) => f.name).join(", ")}`
+          : "";
+      sections.push(`- **${pkg.name}** (\`${pkg.path}\`)${fws}`);
+    }
     sections.push("");
   }
 

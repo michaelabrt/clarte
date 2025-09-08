@@ -5,9 +5,11 @@ import type {
   DetectedFramework,
   Language,
   Linter,
+  MonorepoInfo,
+  MonorepoPackage,
   PackageManager,
 } from "./types.js";
-import { fileExists, readJsonFile, readDirSafe } from "./utils.js";
+import { fileExists, readFileOr, readJsonFile, readDirSafe } from "./utils.js";
 
 /** Well-known directories to look for */
 const KNOWN_DIRS = [
@@ -109,6 +111,7 @@ export async function detectContext(rootDir: string): Promise<DetectedContext> {
     isGitRepo: false,
     totalSourceBytes: 0,
     sourceFileCount: 0,
+    monorepo: null,
   };
 
   // Parallel checks for common project markers
@@ -274,6 +277,10 @@ export async function detectContext(rootDir: string): Promise<DetectedContext> {
     // Non-critical, leave at 0
   }
 
+  // -- Detect monorepo --
+
+  ctx.monorepo = await detectMonorepo(rootDir, topEntries);
+
   return ctx;
 }
 
@@ -294,6 +301,130 @@ function getExtensionsForLanguage(lang: Language): string[] {
     default:
       return [".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs"];
   }
+}
+
+/**
+ * Detect monorepo tooling and enumerate packages.
+ */
+async function detectMonorepo(
+  rootDir: string,
+  topEntries: string[],
+): Promise<MonorepoInfo | null> {
+  // Determine monorepo type
+  const hasTurboJson = topEntries.includes("turbo.json");
+  const hasNxJson = topEntries.includes("nx.json");
+  const hasPnpmWorkspace = topEntries.includes("pnpm-workspace.yaml");
+
+  let type: MonorepoInfo["type"] | null = null;
+  if (hasTurboJson) type = "turborepo";
+  else if (hasNxJson) type = "nx";
+  else if (hasPnpmWorkspace) type = "pnpm-workspaces";
+
+  if (!type) return null;
+
+  // Resolve workspace package globs
+  let packageGlobs: string[] = [];
+
+  if (hasPnpmWorkspace || hasTurboJson) {
+    // pnpm-workspace.yaml (also used by Turborepo)
+    const yamlContent = await readFileOr(
+      path.join(rootDir, "pnpm-workspace.yaml"),
+    );
+    if (yamlContent) {
+      // Simple YAML parse: extract lines under "packages:"
+      const lines = yamlContent.split("\n");
+      let inPackages = false;
+      for (const line of lines) {
+        if (/^packages:/i.test(line.trim())) {
+          inPackages = true;
+          continue;
+        }
+        if (inPackages) {
+          const match = line.match(/^\s+-\s+['"]?([^'"]+)['"]?/);
+          if (match) {
+            packageGlobs.push(match[1].trim());
+          } else if (line.trim() && !line.startsWith(" ") && !line.startsWith("\t")) {
+            break; // new top-level key
+          }
+        }
+      }
+    }
+  }
+
+  if (packageGlobs.length === 0 && hasNxJson) {
+    // Nx: check for packages/ or libs/ directories
+    for (const dir of ["packages", "libs", "apps"]) {
+      if (topEntries.includes(dir)) {
+        packageGlobs.push(`${dir}/*`);
+      }
+    }
+  }
+
+  // Fallback: try workspaces field from package.json
+  if (packageGlobs.length === 0) {
+    const pkg = await readJsonFile(path.join(rootDir, "package.json"));
+    if (pkg) {
+      const workspaces = pkg.workspaces;
+      if (Array.isArray(workspaces)) {
+        packageGlobs = workspaces as string[];
+      } else if (
+        workspaces &&
+        typeof workspaces === "object" &&
+        Array.isArray((workspaces as Record<string, unknown>).packages)
+      ) {
+        packageGlobs = (workspaces as Record<string, unknown>)
+          .packages as string[];
+      }
+    }
+  }
+
+  if (packageGlobs.length === 0) return null;
+
+  // Resolve globs to actual directories
+  const resolvedDirs = await fg(packageGlobs, {
+    cwd: rootDir,
+    onlyDirectories: true,
+    ignore: ["**/node_modules/**"],
+    absolute: false,
+  });
+
+  // Build package info for each directory
+  const packages: MonorepoPackage[] = [];
+
+  for (const dir of resolvedDirs) {
+    const pkgJsonPath = path.join(rootDir, dir, "package.json");
+    const pkgJson = await readJsonFile(pkgJsonPath);
+    if (!pkgJson) continue; // Not a valid package
+
+    const deps = {
+      ...(pkgJson.dependencies as Record<string, string> | undefined),
+      ...(pkgJson.devDependencies as Record<string, string> | undefined),
+    };
+    const depNames = Object.keys(deps);
+
+    // Detect frameworks for this package
+    const frameworks: DetectedFramework[] = [];
+    const seen = new Set<string>();
+    for (const dep of depNames) {
+      const framework = FRAMEWORK_MAP[dep];
+      if (framework && !seen.has(framework)) {
+        seen.add(framework);
+        const version = deps[dep]?.replace(/^[\^~>=<]/, "");
+        frameworks.push({ name: framework, version });
+      }
+    }
+
+    packages.push({
+      name: (pkgJson.name as string) ?? path.basename(dir),
+      path: dir,
+      dependencies: depNames,
+      frameworks,
+    });
+  }
+
+  if (packages.length === 0) return null;
+
+  return { type, packages };
 }
 
 /**

@@ -49,6 +49,26 @@ export interface DetectedFramework {
   version?: string;
 }
 
+/** Monorepo package info */
+export interface MonorepoPackage {
+  /** Package name from package.json */
+  name: string;
+  /** Relative path from project root */
+  path: string;
+  /** Dependency names */
+  dependencies: string[];
+  /** Detected frameworks for this package */
+  frameworks: DetectedFramework[];
+}
+
+/** Monorepo detection result */
+export interface MonorepoInfo {
+  /** Which monorepo tool was detected */
+  type: "pnpm-workspaces" | "turborepo" | "nx";
+  /** Discovered packages */
+  packages: MonorepoPackage[];
+}
+
 /** Result of auto-detecting a project's tech stack */
 export interface DetectedContext {
   /** Root directory being analyzed */
@@ -73,6 +93,8 @@ export interface DetectedContext {
   totalSourceBytes: number;
   /** Number of source files found */
   sourceFileCount: number;
+  /** Monorepo info (null if not a monorepo) */
+  monorepo: MonorepoInfo | null;
 }
 
 /** User-provided answers from the interactive prompts */
@@ -93,6 +115,28 @@ export interface UserAnswers {
   stackConfirmed: boolean;
   /** User corrections to detected stack (free text, empty if confirmed) */
   stackCorrections: string;
+  /** Whether to generate per-package context files in a monorepo */
+  generatePerPackage: boolean;
+}
+
+/** Persisted project config (.context-pilot.json) */
+export interface ProjectConfig {
+  /** Which IDE/tool to generate config for */
+  ide: IDETarget;
+  /** User's description of the project */
+  projectPurpose: string;
+  /** Key patterns and conventions */
+  keyPatterns: string;
+  /** Critical gotchas or anti-patterns */
+  gotchas: string;
+  /** Whether to generate code snapshots */
+  generateSnapshot: boolean;
+  /** Custom paths to scan for snapshots */
+  snapshotPaths: string[];
+  /** User corrections to detected stack */
+  stackCorrections: string;
+  /** Whether to generate per-package context files */
+  generatePerPackage: boolean;
 }
 
 /** A generated file ready to be written */

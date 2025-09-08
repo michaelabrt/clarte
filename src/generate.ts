@@ -6,7 +6,7 @@ import type {
   GeneratedFile,
   UserAnswers,
 } from "./types.js";
-import { fileExists, writeFileSafe, readFileOr } from "./utils.js";
+import { fileExists, writeFileSafe } from "./utils.js";
 import {
   buildMainContext,
   getMainContextFilename,
@@ -16,6 +16,8 @@ import {
   renderCursorRule,
 } from "./templates/cursor-rules.js";
 import { buildAiderContext } from "./templates/aider-context.js";
+import { detectContext } from "./detect.js";
+import { generateSnapshot } from "./snapshot.js";
 
 /**
  * Generate all context files based on detection, user answers, and snapshot.
@@ -70,6 +72,51 @@ export async function generateFiles(
         path: "CLAUDE.md",
         content: `# ${path.basename(ctx.rootDir)}\n\n> See AGENTS.md for full project context.\n`,
         existed: false,
+      });
+    }
+  }
+
+  // 4. Monorepo per-package context files
+  if (
+    answers.generatePerPackage &&
+    ctx.monorepo &&
+    ctx.monorepo.packages.length > 0
+  ) {
+    const pkgMainFilename =
+      answers.ide === "aider" ? ".aider.conf.yml" : getMainContextFilename(answers.ide);
+
+    for (const pkg of ctx.monorepo.packages) {
+      const pkgRootDir = path.join(ctx.rootDir, pkg.path);
+
+      // Detect context for this specific package
+      const pkgCtx = await detectContext(pkgRootDir);
+
+      // Generate snapshot scoped to this package
+      let pkgSnapshot: CodeSnapshot | null = null;
+      if (answers.generateSnapshot) {
+        pkgSnapshot = await generateSnapshot(pkgCtx, []);
+        if (pkgSnapshot.entries.length === 0) pkgSnapshot = null;
+      }
+
+      // Build scoped answers for this package
+      const pkgAnswers: UserAnswers = {
+        ...answers,
+        projectPurpose: `${pkg.name} — part of the ${path.basename(ctx.rootDir)} monorepo. ${answers.projectPurpose}`,
+        generatePerPackage: false, // don't recurse
+      };
+
+      const pkgContent =
+        answers.ide === "aider"
+          ? buildAiderContext(pkgCtx, pkgAnswers, pkgSnapshot)
+          : buildMainContext(pkgCtx, pkgAnswers, pkgSnapshot);
+
+      const pkgFilePath = path.join(pkg.path, pkgMainFilename);
+      const pkgAbsPath = path.join(ctx.rootDir, pkgFilePath);
+
+      files.push({
+        path: pkgFilePath,
+        content: pkgContent,
+        existed: await fileExists(pkgAbsPath),
       });
     }
   }

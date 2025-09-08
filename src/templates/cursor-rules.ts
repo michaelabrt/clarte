@@ -1,4 +1,5 @@
 import type { DetectedContext, UserAnswers } from "../types.js";
+import { getFrameworkHints } from "./framework-hints.js";
 
 interface CursorRule {
   /** Filename (without path) */
@@ -76,6 +77,17 @@ function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers): CursorRule
       .filter(Boolean);
     for (const g of gotchas) {
       bodyLines.push(`- ${g}`);
+    }
+    bodyLines.push("");
+  }
+
+  // Framework conventions
+  const fwHints = getFrameworkHints(ctx);
+  if (fwHints.length > 0) {
+    bodyLines.push("## Framework Conventions");
+    bodyLines.push("");
+    for (const hint of fwHints) {
+      bodyLines.push(hint);
     }
     bodyLines.push("");
   }

@@ -1,6 +1,6 @@
 {
   "name": "context-pilot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Bootstrap optimized AI context files for any project — auto-detect stack, generate code snapshots, produce config for Claude Code, Cursor, Copilot, Windsurf, Cline, Continue, Aider, and more.",
   "type": "module",
   "bin": {
