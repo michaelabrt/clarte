@@ -247,6 +247,16 @@ export function getMainContextFilename(ide: UserAnswers["ide"]): string {
       return "CLAUDE.md";
     case "opencode":
       return "AGENTS.md";
+    case "copilot":
+      return ".github/copilot-instructions.md";
+    case "windsurf":
+      return ".windsurfrules";
+    case "cline":
+      return ".clinerules";
+    case "continue":
+      return ".continuerules";
+    case "aider":
+      return ".aider.conf.yml";
     case "generic":
       return "CONTEXT.md";
   }

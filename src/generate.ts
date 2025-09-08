@@ -15,23 +15,31 @@ import {
   buildCursorRules,
   renderCursorRule,
 } from "./templates/cursor-rules.js";
+import { buildAiderContext } from "./templates/aider-context.js";
 
 /**
  * Generate all context files based on detection, user answers, and snapshot.
- * Returns the list of files that were written.
+ * Returns the list of files that were generated.
+ * When dryRun is true, no files are written to disk.
  */
 export async function generateFiles(
   ctx: DetectedContext,
   answers: UserAnswers,
   snapshot: CodeSnapshot | null,
   force: boolean = false,
+  dryRun: boolean = false,
 ): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [];
 
-  // 1. Main context file (CLAUDE.md / AGENTS.md / CONTEXT.md)
+  // 1. Main context file
   const mainFilename = getMainContextFilename(answers.ide);
-  const mainContent = buildMainContext(ctx, answers, snapshot);
   const mainPath = path.join(ctx.rootDir, mainFilename);
+
+  // Aider uses YAML format, everything else uses markdown
+  const mainContent =
+    answers.ide === "aider"
+      ? buildAiderContext(ctx, answers, snapshot)
+      : buildMainContext(ctx, answers, snapshot);
 
   files.push({
     path: mainFilename,
@@ -58,13 +66,17 @@ export async function generateFiles(
     const claudePath = path.join(ctx.rootDir, "CLAUDE.md");
     const claudeExists = await fileExists(claudePath);
     if (!claudeExists) {
-      // Generate a slim CLAUDE.md that points to AGENTS.md
       files.push({
         path: "CLAUDE.md",
         content: `# ${path.basename(ctx.rootDir)}\n\n> See AGENTS.md for full project context.\n`,
         existed: false,
       });
     }
+  }
+
+  // Dry run: return files without writing anything
+  if (dryRun) {
+    return files;
   }
 
   // Check for existing files and ask before overwriting

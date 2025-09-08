@@ -11,11 +11,17 @@ import { printSummary } from "./summary.js";
 async function main() {
   const args = process.argv.slice(2);
   const force = args.includes("--force");
+  const dryRun = args.includes("--dry-run");
   const targetDir = args.find((a) => !a.startsWith("-")) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
   console.log("");
   p.intro(pc.bold(" context-pilot "));
+
+  if (dryRun) {
+    p.log.warn(pc.yellow("DRY RUN — no files will be written"));
+  }
+
   p.log.info(`Analyzing ${pc.cyan(rootDir)}`);
 
   // Step 1: Auto-detect
@@ -45,9 +51,15 @@ async function main() {
   }
 
   // Step 4: Generate files
-  spinner.start("Generating context files...");
-  const files = await generateFiles(detected, answers, snapshot, force);
-  spinner.stop(`Generated ${files.length} file${files.length === 1 ? "" : "s"}.`);
+  spinner.start(
+    dryRun ? "Preparing context files..." : "Generating context files...",
+  );
+  const files = await generateFiles(detected, answers, snapshot, force, dryRun);
+  spinner.stop(
+    dryRun
+      ? `Would generate ${files.length} file${files.length === 1 ? "" : "s"}.`
+      : `Generated ${files.length} file${files.length === 1 ? "" : "s"}.`,
+  );
 
   if (files.length === 0) {
     p.outro("Nothing to write. Done!");
@@ -56,6 +68,14 @@ async function main() {
 
   // Step 5: Summary + token estimate
   printSummary(files, detected);
+
+  if (dryRun) {
+    p.outro(
+      pc.yellow("DRY RUN complete — ") +
+        pc.dim("no files were written. Remove --dry-run to generate."),
+    );
+    return;
+  }
 
   // Step 6: Handoff (optional)
   const toolCommand = getToolCommand(answers.ide);
@@ -97,6 +117,10 @@ function getToolCommand(ide: string): string | null {
       return "cursor .";
     case "opencode":
       return "opencode";
+    case "windsurf":
+      return "windsurf .";
+    case "aider":
+      return "aider";
     default:
       return null;
   }
@@ -110,6 +134,16 @@ function getToolName(ide: string): string {
       return "Cursor";
     case "opencode":
       return "OpenCode";
+    case "copilot":
+      return "GitHub Copilot";
+    case "windsurf":
+      return "Windsurf";
+    case "cline":
+      return "Cline";
+    case "continue":
+      return "Continue.dev";
+    case "aider":
+      return "Aider";
     default:
       return ide;
   }

@@ -1,6 +1,8 @@
 # context-pilot
 
-Bootstrap optimized AI context files for any project. Auto-detects your tech stack, generates code snapshots, and produces config for Claude Code, Cursor, or OpenCode.
+Bootstrap optimized AI context files for any project. Auto-detects your tech stack, generates code snapshots, and produces config for Claude Code, Cursor, Copilot, Windsurf, Cline, Continue, Aider, and more.
+
+![context-pilot demo](demo.gif)
 
 ## Quick Start
 
@@ -16,23 +18,29 @@ Run in your project root. It will:
 4. **Generate** optimized context files for your chosen tool
 5. **Show** a summary with token savings estimate
 
-## What It Generates
+## Supported Tools
 
-| Tool | Files |
-|------|-------|
+| Tool | Files Generated |
+|------|----------------|
 | Claude Code | `CLAUDE.md` |
 | Cursor | `CLAUDE.md` + `.cursor/rules/*.md` (glob-scoped) |
 | OpenCode | `AGENTS.md` |
+| GitHub Copilot | `.github/copilot-instructions.md` |
+| Windsurf | `.windsurfrules` |
+| Cline | `.clinerules` |
+| Continue.dev | `.continuerules` |
+| Aider | `.aider.conf.yml` |
 | Generic | `CONTEXT.md` |
 
 ## Options
 
 ```bash
-npx context-pilot [directory] [--force]
+npx context-pilot [directory] [--force] [--dry-run]
 ```
 
 - `directory` — path to analyze (defaults to current directory)
 - `--force` — overwrite existing files without asking
+- `--dry-run` — show what would be generated without writing any files
 
 ## Living Documents
 
