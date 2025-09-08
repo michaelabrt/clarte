@@ -1,0 +1,50 @@
+{
+  "name": "context-pilot",
+  "version": "0.1.0",
+  "description": "Bootstrap optimized AI context files for any project — auto-detect stack, generate code snapshots, produce config for Claude Code, Cursor, or OpenCode.",
+  "type": "module",
+  "bin": {
+    "context-pilot": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "ai",
+    "context",
+    "claude",
+    "cursor",
+    "opencode",
+    "bootstrap",
+    "cli"
+  ],
+  "author": "Michael Abrt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/michaelabrt/context-pilot.git"
+  },
+  "homepage": "https://github.com/michaelabrt/context-pilot#readme",
+  "bugs": {
+    "url": "https://github.com/michaelabrt/context-pilot/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@clack/prompts": "^1.0.1",
+    "fast-glob": "^3.3.3",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.0"
+  }
+}
