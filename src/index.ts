@@ -9,6 +9,7 @@ import { generateFiles } from "./generate.js";
 import { printSummary } from "./summary.js";
 import { loadConfig, saveConfig, configToAnswers } from "./config.js";
 import { refreshSnapshot } from "./refresh.js";
+import { buildImportGraph } from "./graph.js";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -41,7 +42,14 @@ async function main() {
   const detected = await detectContext(rootDir);
   spinner.stop("Detection complete.");
 
-  // Step 1.5: Check for saved config
+  // Step 1.5: Build import graph
+  spinner.start("Building import graph...");
+  const graph = await buildImportGraph(rootDir, detected.language);
+  spinner.stop(
+    `Import graph: ${graph.edges.length} edges, ${graph.externalImportCounts.size} external packages.`,
+  );
+
+  // Step 1.6: Check for saved config
   const savedConfig = await loadConfig(rootDir);
 
   let answers;
@@ -79,7 +87,7 @@ async function main() {
   let snapshot = null;
   if (answers.generateSnapshot) {
     spinner.start("Scanning source files for code snapshot...");
-    snapshot = await generateSnapshot(detected, answers.snapshotPaths);
+    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph);
     const count = snapshot.entries.length;
     spinner.stop(
       count > 0

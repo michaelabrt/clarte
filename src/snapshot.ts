@@ -1,7 +1,7 @@
 import path from "node:path";
 import fg from "fast-glob";
 import { readFileOr } from "./utils.js";
-import type { CodeSnapshot, DetectedContext, SnapshotEntry } from "./types.js";
+import type { CodeSnapshot, DetectedContext, ImportGraph, SnapshotEntry } from "./types.js";
 
 /**
  * Auto-detect which directories to scan for code snapshots.
@@ -269,6 +269,8 @@ function renderSnapshot(entries: SnapshotEntry[]): string {
 export async function generateSnapshot(
   ctx: DetectedContext,
   customPaths: string[],
+  graph?: ImportGraph,
+  maxTokens?: number,
 ): Promise<CodeSnapshot> {
   const scanPaths =
     customPaths.length > 0 ? customPaths : getDefaultScanPaths(ctx);

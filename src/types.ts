@@ -164,4 +164,34 @@ export interface CodeSnapshot {
   entries: SnapshotEntry[];
   /** Rendered markdown block */
   markdown: string;
+  /** Number of entries excluded by token budget */
+  budgetExcluded?: number;
+  /** Estimated total tokens for the snapshot */
+  estimatedTokens?: number;
+}
+
+/** A single import edge in the project graph */
+export interface ImportEdge {
+  /** Source file (relative path) */
+  from: string;
+  /** Target file or package (relative path or bare specifier) */
+  to: string;
+  /** Whether this is an external package import */
+  isExternal: boolean;
+  /** Raw import specifier as written in source */
+  specifier: string;
+  /** Named imports (e.g. ['useState', 'useEffect']) */
+  importedNames: string[];
+}
+
+/** Full import graph for a project */
+export interface ImportGraph {
+  /** All import edges */
+  edges: ImportEdge[];
+  /** Number of files that import each file */
+  inDegree: Map<string, number>;
+  /** PageRank-style centrality scores (0–1) */
+  centrality: Map<string, number>;
+  /** How many files import each external package */
+  externalImportCounts: Map<string, number>;
 }
