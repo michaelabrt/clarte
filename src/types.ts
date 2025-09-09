@@ -139,6 +139,10 @@ export interface ProjectConfig {
   stackCorrections: string;
   /** Whether to generate per-package context files */
   generatePerPackage: boolean;
+  /** Hash of source files at last snapshot generation */
+  snapshotHash?: string;
+  /** Timestamp of last snapshot generation */
+  snapshotGeneratedAt?: number;
 }
 
 /** A generated file ready to be written */

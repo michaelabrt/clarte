@@ -7,7 +7,12 @@ import { runPrompts } from "./prompts.js";
 import { generateSnapshot } from "./snapshot.js";
 import { generateFiles } from "./generate.js";
 import { printSummary } from "./summary.js";
-import { loadConfig, saveConfig, configToAnswers } from "./config.js";
+import {
+  loadConfig,
+  saveConfig,
+  configToAnswers,
+  computeSnapshotHash,
+} from "./config.js";
 import { refreshSnapshot } from "./refresh.js";
 import { buildImportGraph } from "./graph.js";
 
@@ -57,8 +62,23 @@ async function main() {
     graph.externalImportCounts,
   );
 
-  // Step 1.7: Check for saved config
+  // Step 1.7: Check for saved config + staleness
   const savedConfig = await loadConfig(rootDir);
+
+  if (savedConfig?.snapshotHash) {
+    const currentHash = await computeSnapshotHash(rootDir, detected.language);
+    if (currentHash !== savedConfig.snapshotHash && savedConfig.snapshotGeneratedAt) {
+      const daysSince = Math.floor(
+        (Date.now() - savedConfig.snapshotGeneratedAt) / (1000 * 60 * 60 * 24),
+      );
+      p.log.warn(
+        pc.yellow(
+          `Code snapshot may be stale (source files changed${daysSince > 0 ? `, last generated ${daysSince}d ago` : ""}). ` +
+            `Run with ${pc.bold("--refresh-snapshot")} to update.`,
+        ),
+      );
+    }
+  }
 
   let answers;
 
@@ -84,7 +104,8 @@ async function main() {
 
     // Save config for future runs
     if (!dryRun) {
-      await saveConfig(rootDir, answers);
+      const hash = await computeSnapshotHash(rootDir, detected.language);
+      await saveConfig(rootDir, answers, hash);
       p.log.info(
         pc.dim("Saved config to .context-pilot.json for future runs."),
       );
