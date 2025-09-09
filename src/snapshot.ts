@@ -1,6 +1,7 @@
 import path from "node:path";
 import fg from "fast-glob";
 import { estimateTokens, readFileOr } from "./utils.js";
+import { findUsedExports } from "./graph.js";
 import type { CodeSnapshot, DetectedContext, ImportGraph, SnapshotEntry } from "./types.js";
 
 /**
@@ -303,11 +304,14 @@ export async function generateSnapshot(
     allEntries.push(...entries);
   }
 
+  // Filter dead exports using import graph
+  const liveEntries = filterDeadExports(allEntries, graph);
+
   // Apply token budget if graph is available
   const budget =
     maxTokens ??
     Math.min(16000, 4000 + Math.floor(ctx.sourceFileCount / 25) * 500);
-  const { selected, excluded } = applyTokenBudget(allEntries, budget, graph);
+  const { selected, excluded } = applyTokenBudget(liveEntries, budget, graph);
 
   const markdown = renderSnapshot(selected);
 
@@ -317,6 +321,62 @@ export async function generateSnapshot(
     budgetExcluded: excluded,
     estimatedTokens: estimateTokens(markdown),
   };
+}
+
+/** Entry-point patterns — files that are never filtered as dead exports */
+const ENTRY_POINT_PATTERNS = [
+  /(?:^|\/)index\.[jt]sx?$/,
+  /(?:^|\/)App\.[jt]sx?$/,
+  /(?:^|\/)main\.[jt]sx?$/,
+  /(?:^|\/)pages\//,
+  /(?:^|\/)app\//,
+  /(?:^|\/)routes?\//,
+  /(?:^|\/)middleware\//,
+];
+
+/**
+ * Extract the identifier name from a signature string.
+ * e.g. "export interface Foo {" -> "Foo"
+ *      "export const bar =" -> "bar"
+ *      "export type Baz =" -> "Baz"
+ */
+function extractNameFromSignature(sig: string): string | null {
+  const m = sig.match(
+    /export\s+(?:default\s+)?(?:async\s+)?(?:interface|type|function|const|let|var|class|enum)\s+(\w+)/,
+  );
+  return m?.[1] ?? null;
+}
+
+/**
+ * Check if a file is an entry point (never filtered).
+ */
+function isEntryPoint(filePath: string): boolean {
+  return ENTRY_POINT_PATTERNS.some((p) => p.test(filePath));
+}
+
+/**
+ * Filter out exports that are never imported anywhere in the project.
+ * Entry-point files and barrel re-exports are always kept.
+ */
+function filterDeadExports(
+  entries: SnapshotEntry[],
+  graph?: ImportGraph,
+): SnapshotEntry[] {
+  if (!graph || graph.edges.length === 0) return entries;
+
+  const usedExports = findUsedExports(graph.edges);
+
+  return entries.filter((entry) => {
+    // Always keep entry-point files
+    if (isEntryPoint(entry.file)) return true;
+
+    // Extract the export name from the signature
+    const name = extractNameFromSignature(entry.signature);
+    if (!name) return true; // Can't determine name, keep it
+
+    // Check if this export is used somewhere
+    return usedExports.has(`${entry.file}::${name}`);
+  });
 }
 
 /**
