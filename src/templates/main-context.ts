@@ -145,7 +145,8 @@ function buildTechStackSection(ctx: DetectedContext, summary: string): string {
   if (ctx.frameworks.length > 0) {
     for (const fw of ctx.frameworks) {
       const ver = fw.version ? ` ${fw.version}` : "";
-      lines.push(`- **${fw.name}**${ver}`);
+      const usage = fw.importCount != null ? ` (used in ${fw.importCount} file${fw.importCount === 1 ? "" : "s"})` : "";
+      lines.push(`- **${fw.name}**${ver}${usage}`);
     }
   }
 

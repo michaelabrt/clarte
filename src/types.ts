@@ -47,6 +47,8 @@ export type Linter =
 export interface DetectedFramework {
   name: string;
   version?: string;
+  /** Number of files that import this framework (from import graph) */
+  importCount?: number;
 }
 
 /** Monorepo package info */

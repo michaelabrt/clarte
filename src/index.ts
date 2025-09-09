@@ -2,7 +2,7 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { detectContext } from "./detect.js";
+import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import { runPrompts } from "./prompts.js";
 import { generateSnapshot } from "./snapshot.js";
 import { generateFiles } from "./generate.js";
@@ -51,7 +51,13 @@ async function main() {
     `Import graph: ${graph.edges.length} edges, ${graph.externalImportCounts.size} external packages.`,
   );
 
-  // Step 1.6: Check for saved config
+  // Step 1.6: Enrich framework detection with actual import usage
+  detected.frameworks = enrichFrameworksWithUsage(
+    detected.frameworks,
+    graph.externalImportCounts,
+  );
+
+  // Step 1.7: Check for saved config
   const savedConfig = await loadConfig(rootDir);
 
   let answers;

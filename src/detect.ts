@@ -37,7 +37,7 @@ const KNOWN_DIRS = [
 ];
 
 /** Framework detection rules: dependency name -> framework info */
-const FRAMEWORK_MAP: Record<string, string> = {
+export const FRAMEWORK_MAP: Record<string, string> = {
   // JS/TS
   expo: "Expo",
   "react-native": "React Native",
@@ -425,6 +425,41 @@ async function detectMonorepo(
   if (packages.length === 0) return null;
 
   return { type, packages };
+}
+
+/**
+ * Build a reverse map: framework display name -> dependency names.
+ */
+function buildReverseFrameworkMap(): Map<string, string[]> {
+  const reverse = new Map<string, string[]>();
+  for (const [dep, name] of Object.entries(FRAMEWORK_MAP)) {
+    const deps = reverse.get(name) ?? [];
+    deps.push(dep);
+    reverse.set(name, deps);
+  }
+  return reverse;
+}
+
+/**
+ * Enrich detected frameworks with actual import counts from the import graph.
+ * Filters out frameworks with 0 imports (detected in package.json but never used).
+ */
+export function enrichFrameworksWithUsage(
+  frameworks: DetectedFramework[],
+  externalImportCounts: Map<string, number>,
+): DetectedFramework[] {
+  const reverseMap = buildReverseFrameworkMap();
+
+  return frameworks
+    .map((fw) => {
+      const depNames = reverseMap.get(fw.name) ?? [];
+      let totalCount = 0;
+      for (const dep of depNames) {
+        totalCount += externalImportCounts.get(dep) ?? 0;
+      }
+      return { ...fw, importCount: totalCount };
+    })
+    .filter((fw) => fw.importCount === undefined || fw.importCount > 0);
 }
 
 /**
