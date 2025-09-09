@@ -17,6 +17,8 @@ async function main() {
   const dryRun = args.includes("--dry-run");
   const refresh = args.includes("--refresh-snapshot");
   const reconfigure = args.includes("--reconfigure");
+  const maxTokensArg = args.find((a) => a.startsWith("--max-tokens="));
+  const maxTokens = maxTokensArg ? parseInt(maxTokensArg.split("=")[1], 10) : undefined;
   const targetDir = args.find((a) => !a.startsWith("-")) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
@@ -87,11 +89,14 @@ async function main() {
   let snapshot = null;
   if (answers.generateSnapshot) {
     spinner.start("Scanning source files for code snapshot...");
-    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph);
+    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens);
     const count = snapshot.entries.length;
+    const budgetNote = snapshot.budgetExcluded
+      ? ` (${snapshot.budgetExcluded} excluded by token budget)`
+      : "";
     spinner.stop(
       count > 0
-        ? `Found ${count} type${count === 1 ? "" : "s"}/signature${count === 1 ? "" : "s"}.`
+        ? `Found ${count} type${count === 1 ? "" : "s"}/signature${count === 1 ? "" : "s"}.${budgetNote}`
         : "No extractable types found (snapshot will be skipped).",
     );
 
@@ -117,7 +122,7 @@ async function main() {
   }
 
   // Step 5: Summary + token estimate
-  printSummary(files, detected);
+  printSummary(files, detected, snapshot);
 
   if (dryRun) {
     p.outro(

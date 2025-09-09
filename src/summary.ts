@@ -1,5 +1,5 @@
 import pc from "picocolors";
-import type { DetectedContext, GeneratedFile } from "./types.js";
+import type { CodeSnapshot, DetectedContext, GeneratedFile } from "./types.js";
 import { estimateTokens, formatBytes } from "./utils.js";
 
 /**
@@ -8,6 +8,7 @@ import { estimateTokens, formatBytes } from "./utils.js";
 export function printSummary(
   files: GeneratedFile[],
   ctx: DetectedContext,
+  snapshot?: CodeSnapshot | null,
 ): void {
   if (files.length === 0) return;
 
@@ -72,6 +73,14 @@ export function printSummary(
       `    Total: ${formatBytes(totalBytes)}, ~${formatNumber(totalTokens)} tokens`,
     ),
   );
+
+  if (snapshot?.budgetExcluded && snapshot.budgetExcluded > 0) {
+    console.log(
+      pc.dim(
+        `    (${snapshot.budgetExcluded} snapshot entries excluded by token budget)`,
+      ),
+    );
+  }
 
   // -- Token estimate comparison --
   console.log("");

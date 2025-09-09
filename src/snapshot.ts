@@ -1,6 +1,6 @@
 import path from "node:path";
 import fg from "fast-glob";
-import { readFileOr } from "./utils.js";
+import { estimateTokens, readFileOr } from "./utils.js";
 import type { CodeSnapshot, DetectedContext, ImportGraph, SnapshotEntry } from "./types.js";
 
 /**
@@ -303,7 +303,61 @@ export async function generateSnapshot(
     allEntries.push(...entries);
   }
 
-  const markdown = renderSnapshot(allEntries);
+  // Apply token budget if graph is available
+  const budget =
+    maxTokens ??
+    Math.min(16000, 4000 + Math.floor(ctx.sourceFileCount / 25) * 500);
+  const { selected, excluded } = applyTokenBudget(allEntries, budget, graph);
 
-  return { entries: allEntries, markdown };
+  const markdown = renderSnapshot(selected);
+
+  return {
+    entries: selected,
+    markdown,
+    budgetExcluded: excluded,
+    estimatedTokens: estimateTokens(markdown),
+  };
+}
+
+/**
+ * Greedy knapsack: prioritize entries by centrality-weighted value per token.
+ */
+function applyTokenBudget(
+  entries: SnapshotEntry[],
+  budget: number,
+  graph?: ImportGraph,
+): { selected: SnapshotEntry[]; excluded: number } {
+  if (entries.length === 0) return { selected: [], excluded: 0 };
+
+  // Score each entry
+  const scored = entries.map((entry) => {
+    const tokens = Math.max(1, estimateTokens(entry.signature));
+    const centrality = graph?.centrality.get(entry.file) ?? 0.5;
+
+    // Category boost: types/interfaces are more valuable for context
+    let boost = 1.0;
+    if (entry.category === "type" || entry.category === "interface") boost = 1.3;
+
+    const value = (centrality * boost) / tokens;
+    return { entry, tokens, value };
+  });
+
+  // Sort by value descending
+  scored.sort((a, b) => b.value - a.value);
+
+  // Greedily select
+  let remaining = budget;
+  const selected: SnapshotEntry[] = [];
+
+  for (const { entry, tokens } of scored) {
+    if (tokens <= remaining) {
+      selected.push(entry);
+      remaining -= tokens;
+    }
+  }
+
+  return {
+    selected,
+    excluded: entries.length - selected.length,
+  };
 }
