@@ -297,6 +297,20 @@ export interface GitAnalysis {
   changeCoupling: ChangeCoupling[];
 }
 
+/** A Claude Code skill definition */
+export interface ClaudeSkill {
+  /** Skill name (used as directory name) */
+  name: string;
+  /** Human-readable description */
+  description: string;
+  /** If true, skill cannot invoke the model — it just injects content */
+  disableModelInvocation: boolean;
+  /** Comma-separated allowed tools (e.g. "Read, Grep, Glob") */
+  allowedTools?: string;
+  /** Markdown body of the skill */
+  body: string;
+}
+
 /** Bundle of all structural analysis results */
 export interface ContextAnalysis {
   hubFiles: HubFile[];
@@ -307,4 +321,6 @@ export interface ContextAnalysis {
   instabilities: FileInstability[];
   /** Detected module clusters/communities */
   communities: Community[];
+  /** Export coverage metrics per file */
+  exportCoverage?: ExportCoverage[];
 }

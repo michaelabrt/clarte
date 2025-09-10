@@ -182,6 +182,27 @@ export function buildMainContext(
     sections.push("");
   }
 
+  // -- Export Coverage --
+  if (analysis?.exportCoverage && analysis.exportCoverage.length > 0) {
+    const underCovered = analysis.exportCoverage.filter((e) => e.coverage < 1);
+    if (underCovered.length > 0) {
+      sections.push("## Export Coverage");
+      sections.push("");
+      sections.push(
+        "Files with unused exports. Consider removing dead exports to reduce surface area.",
+      );
+      sections.push("");
+      sections.push("| File | Used | Total | Coverage |");
+      sections.push("|------|------|-------|----------|");
+      for (const entry of underCovered.slice(0, 10)) {
+        sections.push(
+          `| \`${entry.file}\` | ${entry.usedExports} | ${entry.totalExports} | ${(entry.coverage * 100).toFixed(0)}% |`,
+        );
+      }
+      sections.push("");
+    }
+  }
+
   // -- Module Clusters --
   if (analysis?.communities && analysis.communities.length > 0) {
     sections.push("## Module Clusters");
