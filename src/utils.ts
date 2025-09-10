@@ -38,10 +38,16 @@ export async function readJsonFile(filePath: string): Promise<Record<string, unk
 }
 
 /**
- * Estimate tokens from a string using the ~4 chars/token heuristic.
+ * Estimate tokens from a string using a code-density-aware heuristic.
+ * Code averages ~3.2-3.5 chars/token (more symbols than prose).
+ * If the symbol ratio exceeds 8%, we assume code-heavy text.
  */
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+  if (text.length === 0) return 0;
+  const symbolCount = text.replace(/[\w\s]/g, "").length;
+  const symbolRatio = symbolCount / text.length;
+  const charsPerToken = symbolRatio > 0.08 ? 3.2 : 3.5;
+  return Math.ceil(text.length / charsPerToken);
 }
 
 /**
