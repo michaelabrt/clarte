@@ -38,31 +38,73 @@ The generated context includes:
 
 ## How It Works
 
-context-pilot runs a pipeline of static analysis algorithms on your codebase:
+context-pilot runs a pipeline of static analysis on your codebase. Here's what each step does and why it matters.
 
-1. **Import graph construction** — Parses all source files to extract import/require/use statements and builds a directed graph of internal dependencies.
+### Mapping dependencies
 
-2. **PageRank centrality** — Runs PageRank on the import graph to identify the most structurally important files. High-centrality files are the "hubs" that agents should read first.
+**Problem:** AI agents don't know which files depend on each other, so they waste time reading unrelated code.
 
-3. **Dead export filtering** — Cross-references named exports against import edges to identify exports that no file in the project actually uses. These are excluded from code snapshots to reduce noise.
+context-pilot parses all `import`/`require`/`use` statements across your source files and builds a dependency graph. This graph powers most of the analysis below — it's how context-pilot understands the structure of your project without running it.
 
-4. **Token budgeting (greedy knapsack)** — Fits the code snapshot within a configurable token budget by prioritizing entries from high-centrality files, recently active files, and core categories (types, stores).
+### Ranking files by importance (PageRank)
 
-5. **Hub file identification** — Ranks files by a combination of centrality score, in-degree (imported-by count), and out-degree (import count).
+**Problem:** In a project with hundreds of files, which ones should an agent read first?
 
-6. **Architectural layer detection** — Classifies files into layers (types, stores, hooks, services, components, pages, utils, config) based on directory patterns and analyzes cross-layer imports.
+context-pilot runs the same algorithm Google uses to rank web pages — but on your import graph instead of the internet. Files that are imported by many important files get a high score. For example, your main `types.ts` or a shared `api-client.ts` would rank near the top because they sit at the center of your dependency tree. These high-centrality files are surfaced first so agents understand your architecture before diving into details.
 
-7. **Circular dependency detection (Tarjan's SCC)** — Finds all strongly connected components in the import graph. Every SCC with more than one file is a circular dependency cluster. This is more thorough than simple DFS cycle detection — it finds ALL maximal cycles in O(V+E).
+### Removing dead exports
 
-8. **Instability analysis (Robert C. Martin)** — Computes `instability = fanOut / (fanIn + fanOut)` for each file. Files with high instability (>70%) and many dependents (fanIn >= 3) are flagged as risk zones — they have high blast radius when changed.
+**Problem:** Source files often contain exported functions, types, or constants that nothing actually imports — leftover refactors, unused utilities, or over-exported modules. Including these in context wastes tokens.
 
-9. **Change coupling detection** — Analyzes 90 days of git history to find file pairs that frequently appear in the same commits. Uses co-occurrence counting with Jaccard-like confidence metrics. Pairs with >= 3 co-changes and >= 50% confidence are reported.
+context-pilot cross-references every named export against the import graph. If no file in the project imports it, it's excluded from the code snapshot.
 
-10. **Community/cluster detection (Label Propagation)** — Each file starts with a unique label and iteratively adopts the most common label among its import-graph neighbors. After convergence, files sharing a label form a natural module cluster. Groups of 3+ files are reported.
+### Fitting context into a token budget
 
-11. **Git activity analysis** — Counts commits per file over the last 90 days to identify hot spots and recently active files.
+**Problem:** A full code snapshot of every type, interface, and function signature might exceed the token budget — especially in large projects.
 
-12. **Staleness detection** — Hashes all source file paths and modification times. Compares against the stored hash to detect when the snapshot needs refreshing.
+context-pilot uses a greedy knapsack approach: it prioritizes entries from the most central files, recently active files, and core categories (types, store shapes) first, then fills the remaining budget with lower-priority items. This ensures the most valuable context always makes it in, even under tight limits.
+
+### Detecting architectural layers
+
+**Problem:** Agents need to understand the high-level shape of a project — where the types live, where the API calls happen, where the UI components are.
+
+context-pilot classifies files into layers (types, stores, hooks, services, components, pages, utils, config) based on directory and naming conventions, then analyzes how those layers depend on each other. This gives agents a quick mental model like "services call the API, components use hooks, hooks read from stores."
+
+### Finding circular dependencies (Tarjan's SCC)
+
+**Problem:** Circular imports cause subtle bugs, make refactoring dangerous, and confuse AI agents trying to understand dependency flow.
+
+context-pilot uses Tarjan's algorithm to find groups of files that form import cycles. For example, if `auth.ts → user.ts → permissions.ts → auth.ts`, all three files are reported as a circular dependency cluster. This is surfaced in the context so agents avoid introducing more cycles.
+
+### Flagging unstable files
+
+**Problem:** Some files change frequently but are imported by many others — any modification risks breaking things across the project.
+
+context-pilot computes an instability score for each file based on how many files it imports vs. how many files import it. Files that are both highly unstable and widely depended on are flagged as risk zones — agents will know to be extra careful when modifying them.
+
+### Detecting change coupling
+
+**Problem:** Some files always need to change together (e.g., a component and its test, or a route and its handler) but there's no import relationship between them.
+
+context-pilot analyzes 90 days of git history to find file pairs that frequently appear in the same commits. If two files were changed together in many commits, they're reported as coupled — so agents know that touching one likely means touching the other.
+
+### Discovering module clusters
+
+**Problem:** Large projects have natural groupings of related files (an auth module, a payments module) but these aren't always obvious from the folder structure.
+
+context-pilot uses label propagation on the import graph: each file starts with its own label and iteratively adopts the most common label among its neighbors. Files that end up sharing a label form a natural cluster. This reveals logical modules even when the folder layout doesn't match.
+
+### Tracking git activity
+
+**Problem:** Agents don't know which parts of the codebase are actively being worked on vs. which are stable.
+
+context-pilot counts commits per file over the last 90 days to surface hot spots and recently active files. This helps agents understand where current development is focused.
+
+### Detecting stale snapshots
+
+**Problem:** After a refactor, the code snapshot in your context file may be outdated — describing types and signatures that no longer exist.
+
+context-pilot hashes all source file paths and modification times. When you run `--check`, it compares this hash against the stored one to tell you if the snapshot needs refreshing.
 
 ## Supported Tools
 
