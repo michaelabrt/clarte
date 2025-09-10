@@ -124,6 +124,20 @@ function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analysis?: 
     bodyLines.push("");
   }
 
+  // Module clusters
+  if (analysis?.communities && analysis.communities.length > 0) {
+    bodyLines.push("## Module Clusters");
+    bodyLines.push("");
+    bodyLines.push(
+      "> Tightly-connected file groups. Changes in one file likely affect others in the same cluster.",
+    );
+    bodyLines.push("");
+    for (const community of analysis.communities.slice(0, 5)) {
+      bodyLines.push(`- **${community.label}** (${community.files.length} files): ${community.files.map((f) => `\`${f}\``).join(", ")}`);
+    }
+    bodyLines.push("");
+  }
+
   // Framework conventions
   const fwHints = getFrameworkHints(ctx);
   if (fwHints.length > 0) {

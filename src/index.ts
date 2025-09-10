@@ -24,7 +24,7 @@ import {
 } from "./graph.js";
 import { analyzeGitActivity } from "./git-analysis.js";
 import { formatBytes } from "./utils.js";
-import type { ContextAnalysis, ExportCoverage, ProgressCallback } from "./types.js";
+import type { ContextAnalysis, ProgressCallback } from "./types.js";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -33,6 +33,7 @@ async function main() {
   const refresh = args.includes("--refresh-snapshot");
   const reconfigure = args.includes("--reconfigure");
   const check = args.includes("--check");
+  const generateSkills = args.includes("--generate-skills");
   const maxTokensArg = args.find((a) => a.startsWith("--max-tokens="));
   const maxTokens = maxTokensArg ? parseInt(maxTokensArg.split("=")[1], 10) : undefined;
   const targetDir = args.find((a) => !a.startsWith("-")) ?? process.cwd();
@@ -125,10 +126,10 @@ async function main() {
   const layers = detectArchitecturalLayers(graph);
   const instabilities = computeInstability(graph);
   const communities = detectCommunities(graph);
-  const exportCoverage: ExportCoverage[] = computeExportCoverage(graph);
+  const exportCoverage = computeExportCoverage(graph);
   const gitActivity = detected.isGitRepo ? analyzeGitActivity(rootDir, spinnerProgress) : null;
 
-  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, gitActivity, instabilities, communities };
+  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, gitActivity, instabilities, communities, exportCoverage };
 
   const analysisParts: string[] = [];
   if (hubFiles.length > 0) analysisParts.push(`${hubFiles.length} hub files`);
@@ -216,7 +217,8 @@ async function main() {
   spinner.start(
     dryRun ? "Preparing context files..." : "Generating context files...",
   );
-  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis);
+  const shouldGenerateSkills = generateSkills || answers.ide === "claude";
+  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills);
   spinner.stop(
     dryRun
       ? `Would generate ${files.length} file${files.length === 1 ? "" : "s"}.`
@@ -229,7 +231,7 @@ async function main() {
   }
 
   // Step 5: Summary + token estimate
-  printSummary(files, detected, snapshot, analysis, exportCoverage);
+  printSummary(files, detected, snapshot, analysis);
 
   if (dryRun) {
     p.outro(
