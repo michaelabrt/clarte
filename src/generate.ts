@@ -7,7 +7,7 @@ import type {
   GeneratedFile,
   UserAnswers,
 } from "./types.js";
-import { fileExists, writeFileSafe } from "./utils.js";
+import { fileExists, readJsonFile, writeFileSafe } from "./utils.js";
 import {
   buildMainContext,
   getMainContextFilename,
@@ -16,6 +16,10 @@ import {
   buildCursorRules,
   renderCursorRule,
 } from "./templates/cursor-rules.js";
+import {
+  buildClaudeSkills,
+  renderClaudeSkill,
+} from "./templates/claude-skills.js";
 import { buildAiderContext } from "./templates/aider-context.js";
 import { detectContext } from "./detect.js";
 import { generateSnapshot } from "./snapshot.js";
@@ -32,6 +36,7 @@ export async function generateFiles(
   force: boolean = false,
   dryRun: boolean = false,
   analysis?: ContextAnalysis,
+  generateSkills: boolean = false,
 ): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [];
 
@@ -65,7 +70,23 @@ export async function generateFiles(
     }
   }
 
-  // 3. For OpenCode, also generate CLAUDE.md as fallback if main file is AGENTS.md
+  // 3. Claude Code skills
+  if (generateSkills) {
+    const pkgJson = await readJsonFile(path.join(ctx.rootDir, "package.json"));
+    const scripts = (pkgJson?.scripts as Record<string, string>) ?? undefined;
+    const skills = buildClaudeSkills(ctx, answers, analysis, scripts);
+    for (const skill of skills) {
+      const skillPath = `.claude/skills/${skill.name}/SKILL.md`;
+      const absPath = path.join(ctx.rootDir, skillPath);
+      files.push({
+        path: skillPath,
+        content: renderClaudeSkill(skill),
+        existed: await fileExists(absPath),
+      });
+    }
+  }
+
+  // For OpenCode, also generate CLAUDE.md as fallback if main file is AGENTS.md
   if (answers.ide === "opencode") {
     const claudePath = path.join(ctx.rootDir, "CLAUDE.md");
     const claudeExists = await fileExists(claudePath);
@@ -78,7 +99,7 @@ export async function generateFiles(
     }
   }
 
-  // 4. Monorepo per-package context files
+  // Monorepo per-package context files
   if (
     answers.generatePerPackage &&
     ctx.monorepo &&
