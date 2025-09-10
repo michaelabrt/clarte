@@ -1146,8 +1146,538 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 EOF
 
-  # Create many UI component files to bulk up the project
-  for f in Sidebar Header UserAvatar NotificationBell SearchBar Dropdown Tooltip Badge Card Spinner Alert Dialog Popover Tabs Accordion Table Pagination Input Select Checkbox Radio Switch TextArea Form FormField Label ErrorMessage; do
+  # ── Expanded key UI components (realistic, 40-80 lines each) ──
+
+  cat > "$DEMO_DIR/src/components/ui/Sidebar.tsx" << 'SIDEBAREOF'
+import { useState } from "react";
+import { useAppStore } from "../../stores/app-store";
+import { cn } from "../../lib/utils";
+
+interface NavItem {
+  label: string;
+  icon: string;
+  href: string;
+  badge?: number;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { label: "Dashboard", icon: "LayoutDashboard", href: "/dashboard" },
+  { label: "Projects", icon: "FolderKanban", href: "/projects" },
+  { label: "Tasks", icon: "CheckSquare", href: "/tasks", badge: 3 },
+  { label: "Team", icon: "Users", href: "/team" },
+  { label: "Analytics", icon: "BarChart3", href: "/analytics" },
+  { label: "Settings", icon: "Settings", href: "/settings" },
+];
+
+export interface SidebarProps {
+  className?: string;
+}
+
+export function Sidebar({ className }: SidebarProps) {
+  const [activeItem, setActiveItem] = useState("/dashboard");
+  const collapsed = useAppStore((s) => s.settings.sidebarCollapsed);
+  const updateSettings = useAppStore((s) => s.updateSettings);
+
+  return (
+    <aside className={cn("flex flex-col h-full bg-gray-900 text-white transition-all", collapsed ? "w-16" : "w-64", className)}>
+      <div className="flex items-center justify-between p-4 border-b border-gray-800">
+        {!collapsed && <span className="text-lg font-bold">Acme</span>}
+        <button onClick={() => updateSettings({ sidebarCollapsed: !collapsed })} className="p-1 rounded hover:bg-gray-800">
+          {collapsed ? "→" : "←"}
+        </button>
+      </div>
+      <nav className="flex-1 py-4">
+        {NAV_ITEMS.map((item) => (
+          <button
+            key={item.href}
+            onClick={() => setActiveItem(item.href)}
+            className={cn(
+              "flex items-center w-full gap-3 px-4 py-2.5 text-sm transition-colors",
+              activeItem === item.href ? "bg-gray-800 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800/50"
+            )}
+          >
+            <span className="w-5 h-5 shrink-0">{item.icon.charAt(0)}</span>
+            {!collapsed && (
+              <>
+                <span className="flex-1 text-left">{item.label}</span>
+                {item.badge && (
+                  <span className="px-1.5 py-0.5 text-xs bg-blue-600 rounded-full">{item.badge}</span>
+                )}
+              </>
+            )}
+          </button>
+        ))}
+      </nav>
+      <div className="p-4 border-t border-gray-800">
+        {!collapsed && <p className="text-xs text-gray-500">v1.0.0</p>}
+      </div>
+    </aside>
+  );
+}
+SIDEBAREOF
+
+  cat > "$DEMO_DIR/src/components/ui/Header.tsx" << 'HEADEREOF'
+import { useAppStore } from "../../stores/app-store";
+import { cn } from "../../lib/utils";
+
+export interface HeaderProps {
+  title?: string;
+  className?: string;
+}
+
+export function Header({ title = "Dashboard", className }: HeaderProps) {
+  const currentUser = useAppStore((s) => s.currentUser);
+  const settings = useAppStore((s) => s.settings);
+  const updateSettings = useAppStore((s) => s.updateSettings);
+  const logout = useAppStore((s) => s.logout);
+
+  const toggleTheme = () => {
+    const next = settings.theme === "light" ? "dark" : settings.theme === "dark" ? "system" : "light";
+    updateSettings({ theme: next });
+  };
+
+  return (
+    <header className={cn("flex items-center justify-between h-16 px-6 border-b bg-white", className)}>
+      <div className="flex items-center gap-4">
+        <h1 className="text-xl font-semibold">{title}</h1>
+      </div>
+      <div className="flex items-center gap-3">
+        <button onClick={toggleTheme} className="p-2 rounded-lg hover:bg-gray-100" title={`Theme: ${settings.theme}`}>
+          {settings.theme === "dark" ? "🌙" : settings.theme === "light" ? "☀️" : "💻"}
+        </button>
+        {currentUser && (
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-medium">
+              {currentUser.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="hidden md:block">
+              <p className="text-sm font-medium">{currentUser.name}</p>
+              <p className="text-xs text-gray-500">{currentUser.role}</p>
+            </div>
+            <button onClick={logout} className="ml-2 text-xs text-gray-400 hover:text-red-500">
+              Sign out
+            </button>
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
+HEADEREOF
+
+  cat > "$DEMO_DIR/src/components/ui/SearchBar.tsx" << 'SEARCHEOF'
+import { useState, useCallback, useRef, useEffect } from "react";
+import { debounce } from "../../lib/utils";
+
+export interface SearchBarProps {
+  placeholder?: string;
+  onSearch: (query: string) => void;
+  debounceMs?: number;
+  className?: string;
+}
+
+export function SearchBar({ placeholder = "Search...", onSearch, debounceMs = 300, className }: SearchBarProps) {
+  const [value, setValue] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const debouncedSearch = useCallback(
+    debounce((q: string) => onSearch(q), debounceMs),
+    [onSearch, debounceMs],
+  );
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setValue(newValue);
+    debouncedSearch(newValue);
+  };
+
+  const handleClear = () => {
+    setValue("");
+    onSearch("");
+    inputRef.current?.focus();
+  };
+
+  useEffect(() => {
+    const handleKeydown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeydown);
+    return () => document.removeEventListener("keydown", handleKeydown);
+  }, []);
+
+  return (
+    <div className={`relative ${className ?? ""}`}>
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={handleChange}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        placeholder={placeholder}
+        className={`w-full pl-9 pr-16 py-2 border rounded-lg text-sm transition-colors ${isFocused ? "border-blue-500 ring-1 ring-blue-500" : "border-gray-300"}`}
+      />
+      {value ? (
+        <button onClick={handleClear} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">✕</button>
+      ) : (
+        <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 border rounded px-1.5 py-0.5">⌘K</kbd>
+      )}
+    </div>
+  );
+}
+SEARCHEOF
+
+  cat > "$DEMO_DIR/src/components/ui/NotificationBell.tsx" << 'BELLEOF'
+import { useState, useEffect, useRef } from "react";
+import type { Notification } from "../../types";
+
+export interface NotificationBellProps {
+  notifications: Notification[];
+  onMarkRead: (id: string) => void;
+  onMarkAllRead: () => void;
+}
+
+export function NotificationBell({ notifications, onMarkRead, onMarkAllRead }: NotificationBellProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setIsOpen(!isOpen)} className="relative p-2 rounded-lg hover:bg-gray-100">
+        <span className="text-lg">🔔</span>
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-2 w-80 bg-white border rounded-xl shadow-lg z-50">
+          <div className="flex items-center justify-between p-3 border-b">
+            <h3 className="font-semibold text-sm">Notifications</h3>
+            {unreadCount > 0 && (
+              <button onClick={onMarkAllRead} className="text-xs text-blue-600 hover:underline">Mark all read</button>
+            )}
+          </div>
+          <div className="max-h-80 overflow-y-auto">
+            {notifications.length === 0 ? (
+              <p className="p-4 text-sm text-gray-500 text-center">No notifications</p>
+            ) : (
+              notifications.slice(0, 10).map((n) => (
+                <button
+                  key={n.id}
+                  onClick={() => onMarkRead(n.id)}
+                  className={`w-full text-left p-3 border-b last:border-0 hover:bg-gray-50 ${!n.read ? "bg-blue-50" : ""}`}
+                >
+                  <p className="text-sm font-medium">{n.title}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{n.message}</p>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+BELLEOF
+
+  cat > "$DEMO_DIR/src/components/ui/Table.tsx" << 'TABLEEOF'
+import { useState } from "react";
+
+interface Column<T> {
+  key: string;
+  header: string;
+  render?: (row: T) => React.ReactNode;
+  sortable?: boolean;
+  width?: string;
+}
+
+export interface TableProps<T> {
+  columns: Column<T>[];
+  data: T[];
+  rowKey: (row: T) => string;
+  onRowClick?: (row: T) => void;
+  emptyMessage?: string;
+  className?: string;
+}
+
+export function Table<T>({ columns, data, rowKey, onRowClick, emptyMessage = "No data", className }: TableProps<T>) {
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (key: string) => {
+    if (sortCol === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortCol(key);
+      setSortDir("asc");
+    }
+  };
+
+  const sortedData = sortCol
+    ? [...data].sort((a, b) => {
+        const av = (a as Record<string, unknown>)[sortCol];
+        const bv = (b as Record<string, unknown>)[sortCol];
+        const cmp = String(av).localeCompare(String(bv));
+        return sortDir === "asc" ? cmp : -cmp;
+      })
+    : data;
+
+  if (data.length === 0) {
+    return <div className="p-8 text-center text-gray-500">{emptyMessage}</div>;
+  }
+
+  return (
+    <div className={`overflow-x-auto ${className ?? ""}`}>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b bg-gray-50">
+            {columns.map((col) => (
+              <th
+                key={col.key}
+                onClick={col.sortable ? () => handleSort(col.key) : undefined}
+                className={`px-4 py-3 text-left font-medium text-gray-600 ${col.sortable ? "cursor-pointer hover:text-gray-900" : ""}`}
+                style={col.width ? { width: col.width } : undefined}
+              >
+                {col.header}
+                {sortCol === col.key && <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sortedData.map((row) => (
+            <tr
+              key={rowKey(row)}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              className={`border-b ${onRowClick ? "cursor-pointer hover:bg-gray-50" : ""}`}
+            >
+              {columns.map((col) => (
+                <td key={col.key} className="px-4 py-3">
+                  {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? "")}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+TABLEEOF
+
+  cat > "$DEMO_DIR/src/components/ui/Dialog.tsx" << 'DIALOGEOF'
+import { useEffect, useCallback, type ReactNode } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+
+export interface DialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  description?: string;
+  children?: ReactNode;
+  actions?: ReactNode;
+  variant?: "default" | "danger";
+}
+
+export function Dialog({ isOpen, onClose, title, description, children, actions, variant = "default" }: DialogProps) {
+  const handleEscape = useCallback((e: KeyboardEvent) => {
+    if (e.key === "Escape") onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.addEventListener("keydown", handleEscape);
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "";
+    };
+  }, [isOpen, handleEscape]);
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/50"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            className="relative bg-white rounded-xl shadow-xl max-w-md w-full"
+          >
+            <div className="p-6">
+              <h2 className={`text-lg font-semibold ${variant === "danger" ? "text-red-600" : ""}`}>{title}</h2>
+              {description && <p className="mt-2 text-sm text-gray-500">{description}</p>}
+              {children && <div className="mt-4">{children}</div>}
+            </div>
+            {actions && (
+              <div className="flex justify-end gap-2 p-4 border-t bg-gray-50 rounded-b-xl">
+                {actions}
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+DIALOGEOF
+
+  cat > "$DEMO_DIR/src/components/ui/Dropdown.tsx" << 'DROPDOWNEOF'
+import { useState, useRef, useEffect, type ReactNode } from "react";
+
+interface DropdownItem {
+  label: string;
+  value: string;
+  icon?: ReactNode;
+  disabled?: boolean;
+  danger?: boolean;
+}
+
+export interface DropdownProps {
+  trigger: ReactNode;
+  items: DropdownItem[];
+  onSelect: (value: string) => void;
+  align?: "left" | "right";
+}
+
+export function Dropdown({ trigger, items, onSelect, align = "left" }: DropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <div onClick={() => setIsOpen(!isOpen)}>{trigger}</div>
+      {isOpen && (
+        <div className={`absolute top-full mt-1 min-w-[160px] bg-white border rounded-lg shadow-lg z-50 py-1 ${align === "right" ? "right-0" : "left-0"}`}>
+          {items.map((item) => (
+            <button
+              key={item.value}
+              disabled={item.disabled}
+              onClick={() => { onSelect(item.value); setIsOpen(false); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                item.disabled ? "opacity-50 cursor-not-allowed" :
+                item.danger ? "text-red-600 hover:bg-red-50" :
+                "text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              {item.icon && <span className="w-4 h-4">{item.icon}</span>}
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+DROPDOWNEOF
+
+  cat > "$DEMO_DIR/src/components/ui/Badge.tsx" << 'BADGEEOF'
+import type { ReactNode } from "react";
+
+type BadgeVariant = "default" | "success" | "warning" | "danger" | "info";
+
+export interface BadgeProps {
+  children: ReactNode;
+  variant?: BadgeVariant;
+  size?: "sm" | "md";
+  dot?: boolean;
+  removable?: boolean;
+  onRemove?: () => void;
+  className?: string;
+}
+
+const VARIANT_STYLES: Record<BadgeVariant, string> = {
+  default: "bg-gray-100 text-gray-700",
+  success: "bg-green-100 text-green-700",
+  warning: "bg-yellow-100 text-yellow-700",
+  danger: "bg-red-100 text-red-700",
+  info: "bg-blue-100 text-blue-700",
+};
+
+export function Badge({ children, variant = "default", size = "sm", dot, removable, onRemove, className }: BadgeProps) {
+  const sizeClass = size === "sm" ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-sm";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full font-medium ${VARIANT_STYLES[variant]} ${sizeClass} ${className ?? ""}`}>
+      {dot && <span className={`w-1.5 h-1.5 rounded-full ${variant === "success" ? "bg-green-500" : variant === "danger" ? "bg-red-500" : "bg-gray-500"}`} />}
+      {children}
+      {removable && (
+        <button onClick={onRemove} className="ml-0.5 hover:opacity-70 text-current">
+          ✕
+        </button>
+      )}
+    </span>
+  );
+}
+BADGEEOF
+
+  cat > "$DEMO_DIR/src/components/ui/Spinner.tsx" << 'SPINNEREOF'
+export interface SpinnerProps {
+  size?: "sm" | "md" | "lg";
+  label?: string;
+  className?: string;
+  fullPage?: boolean;
+}
+
+const SIZE_MAP = {
+  sm: "w-4 h-4 border-2",
+  md: "w-8 h-8 border-3",
+  lg: "w-12 h-12 border-4",
+};
+
+export function Spinner({ size = "md", label, className, fullPage }: SpinnerProps) {
+  const spinner = (
+    <div className={`flex flex-col items-center gap-3 ${className ?? ""}`}>
+      <div className={`${SIZE_MAP[size]} border-blue-600 border-t-transparent rounded-full animate-spin`} />
+      {label && <p className="text-sm text-gray-500">{label}</p>}
+    </div>
+  );
+
+  if (fullPage) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-white/80 z-50">
+        {spinner}
+      </div>
+    );
+  }
+
+  return spinner;
+}
+SPINNEREOF
+
+  # Remaining UI stubs (simple one-line components for realistic noise)
+  for f in UserAvatar Tooltip Card Alert Popover Tabs Accordion Pagination Input Select Checkbox Radio Switch TextArea Form FormField Label ErrorMessage; do
     cat > "$DEMO_DIR/src/components/ui/${f}.tsx" << INNEREOF
 import type { ReactNode } from "react";
 export interface ${f}Props { children?: ReactNode; className?: string; }
@@ -1263,6 +1793,147 @@ PLAYWRIGHTEOF
 export default { plugins: { tailwindcss: {}, autoprefixer: {} } };
 POSTCSSEOF
 
+  # ── Realistic project files (7b) ──
+
+  cat > "$DEMO_DIR/.env.example" << 'ENVEOF'
+VITE_API_URL=http://localhost:3001/api
+VITE_WS_URL=ws://localhost:3001
+VITE_SENTRY_DSN=
+VITE_ANALYTICS_ENABLED=false
+ENVEOF
+
+  cat > "$DEMO_DIR/.prettierrc" << 'PRETTIEREOF'
+{
+  "semi": true,
+  "singleQuote": false,
+  "tabWidth": 2,
+  "trailingComma": "all",
+  "printWidth": 100
+}
+PRETTIEREOF
+
+  mkdir -p "$DEMO_DIR/.github/workflows"
+  cat > "$DEMO_DIR/.github/workflows/ci.yml" << 'CIEOF'
+name: CI
+on: [push, pull_request]
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+CIEOF
+
+  mkdir -p "$DEMO_DIR/docs"
+  cat > "$DEMO_DIR/docs/seed-data.sql" << 'SQLEOF'
+-- Seed data for development
+INSERT INTO teams (id, name, slug) VALUES
+  ('t1', 'Engineering', 'engineering'),
+  ('t2', 'Design', 'design'),
+  ('t3', 'Product', 'product');
+
+INSERT INTO users (id, name, email, role, team_id) VALUES
+  ('u1', 'Alice Chen', 'alice@acme.co', 'admin', 't1'),
+  ('u2', 'Bob Smith', 'bob@acme.co', 'member', 't1'),
+  ('u3', 'Carol Davis', 'carol@acme.co', 'member', 't2');
+
+INSERT INTO projects (id, name, description, status, team_id) VALUES
+  ('p1', 'Dashboard Redesign', 'Modernize the main dashboard', 'active', 't1'),
+  ('p2', 'Mobile App', 'React Native mobile client', 'active', 't1'),
+  ('p3', 'Design System', 'Shared component library', 'draft', 't2');
+SQLEOF
+
+  cat > "$DEMO_DIR/Dockerfile" << 'DOCKEREOF'
+# Build stage
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Production stage
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+DOCKEREOF
+
+  cat > "$DEMO_DIR/src/App.tsx" << 'APPEOF'
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "sonner";
+import { useAppStore } from "./stores/app-store";
+import { Dashboard } from "./components/dashboard/Dashboard";
+import { LoginForm } from "./components/auth/LoginForm";
+import { Sidebar } from "./components/ui/Sidebar";
+import { Header } from "./components/ui/Header";
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 5 * 60 * 1000, retry: 1 } },
+});
+
+function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-screen bg-gray-50">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-y-auto">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const isAuthenticated = useAppStore((s) => s.isAuthenticated);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <LoginForm />} />
+          <Route path="/*" element={
+            isAuthenticated ? (
+              <AppLayout>
+                <Routes>
+                  <Route path="/" element={<Dashboard projects={[]} recentTasks={[]} onProjectSelect={() => {}} onTaskToggle={() => {}} />} />
+                </Routes>
+              </AppLayout>
+            ) : <Navigate to="/login" />
+          } />
+        </Routes>
+      </BrowserRouter>
+      <Toaster position="bottom-right" />
+    </QueryClientProvider>
+  );
+}
+APPEOF
+
+  cat > "$DEMO_DIR/src/main.tsx" << 'MAINEOF'
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import { restoreSession } from "./services/auth";
+import "./index.css";
+
+restoreSession();
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
+MAINEOF
+
+  # ── Cleanup (7c): remove any leftover config ──
+  rm -f "$DEMO_DIR/.context-pilot.json"
+
   # Add README and docs
   mkdir -p "$DEMO_DIR/docs"
   cat > "$DEMO_DIR/README.md" << 'READMEEOF'
@@ -1338,8 +2009,9 @@ do_record() {
   echo "Switch to Ghostty NOW and keep it focused!" >&2
   echo "" >&2
 
-  # Clean up any IDE config from previous runs
+  # Clean up any IDE config / saved state from previous runs
   rm -rf "$DEMO_DIR/.cursor" "$DEMO_DIR/.windsurf" "$DEMO_DIR/CLAUDE.md" "$DEMO_DIR/.aider.conf.yml" 2>/dev/null || true
+  rm -f "$DEMO_DIR/.context-pilot.json" 2>/dev/null || true
 
   sleep 7
 
