@@ -1,5 +1,5 @@
 import pc from "picocolors";
-import type { CodeSnapshot, ContextAnalysis, DetectedContext, ExportCoverage, GeneratedFile } from "./types.js";
+import type { CodeSnapshot, ContextAnalysis, DetectedContext, GeneratedFile } from "./types.js";
 import { estimateTokens, formatBytes } from "./utils.js";
 
 /**
@@ -10,7 +10,6 @@ export function printSummary(
   ctx: DetectedContext,
   snapshot?: CodeSnapshot | null,
   analysis?: ContextAnalysis,
-  exportCoverage?: ExportCoverage[],
 ): void {
   if (files.length === 0) return;
 
@@ -158,6 +157,7 @@ export function printSummary(
   }
 
   // Export coverage summary
+  const exportCoverage = analysis?.exportCoverage;
   if (exportCoverage && exportCoverage.length > 0) {
     const totalExports = exportCoverage.reduce((sum, e) => sum + e.totalExports, 0);
     const totalUsed = exportCoverage.reduce((sum, e) => sum + e.usedExports, 0);
@@ -193,8 +193,8 @@ function estimateExplorationCost(ctx: DetectedContext): number {
 
   // Agents typically read ~40% of source files to understand a project
   const bytesRead = ctx.totalSourceBytes * 0.4;
-  // Convert to tokens (1 token ~4 chars)
-  const readTokens = Math.ceil(bytesRead / 4);
+  // Convert to tokens — source code is typically symbol-heavy (~3.2 chars/token)
+  const readTokens = Math.ceil(bytesRead / 3.2);
 
   // Add overhead for search commands, tool calls, etc (~30% overhead)
   const overhead = Math.ceil(readTokens * 0.3);
