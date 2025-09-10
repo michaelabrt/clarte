@@ -1,7 +1,18 @@
 import path from "node:path";
 import fg from "fast-glob";
 import { readFileOr } from "./utils.js";
-import type { ImportEdge, ImportGraph, Language } from "./types.js";
+import type {
+  ArchitecturalLayer,
+  CircularDependency,
+  Community,
+  ExportCoverage,
+  FileInstability,
+  HubFile,
+  ImportEdge,
+  ImportGraph,
+  Language,
+  ProgressCallback,
+} from "./types.js";
 
 // ── Import regex patterns per language ────────────────────────────────
 
@@ -318,6 +329,7 @@ function computePageRank(
 export async function buildImportGraph(
   rootDir: string,
   language: Language,
+  onProgress?: ProgressCallback,
 ): Promise<ImportGraph> {
   const globs = getSourceGlob(language);
   const files = await fg(globs, {
@@ -336,6 +348,8 @@ export async function buildImportGraph(
     absolute: false,
   });
 
+  onProgress?.(`Found ${files.length} source files to analyze`);
+
   const fileSet = new Set(files);
   const edges: ImportEdge[] = [];
   const inDegree = new Map<string, number>();
@@ -344,7 +358,13 @@ export async function buildImportGraph(
   // Init in-degree
   for (const file of files) inDegree.set(file, 0);
 
-  for (const file of files) {
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+
+    if ((i + 1) % 50 === 0 || i === files.length - 1) {
+      onProgress?.(`Parsing imports... ${i + 1}/${files.length} files`);
+    }
+
     const absPath = path.join(rootDir, file);
     const content = await readFileOr(absPath);
     if (!content) continue;
@@ -385,6 +405,7 @@ export async function buildImportGraph(
     }
   }
 
+  onProgress?.("Computing centrality (PageRank)...");
   const centrality = computePageRank(files, edges);
 
   return { edges, inDegree, centrality, externalImportCounts };
@@ -417,4 +438,377 @@ export function findUsedExports(edges: ImportEdge[]): Set<string> {
     }
   }
   return used;
+}
+
+/**
+ * Get the most interconnected files (hub files) sorted by centrality.
+ */
+export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[] {
+  // Count outgoing internal imports per file
+  const outCount = new Map<string, number>();
+  for (const edge of graph.edges) {
+    if (!edge.isExternal) {
+      outCount.set(edge.from, (outCount.get(edge.from) ?? 0) + 1);
+    }
+  }
+
+  // Build list of all files with their scores
+  const files: HubFile[] = [];
+  for (const [filePath, centrality] of graph.centrality) {
+    const importedBy = graph.inDegree.get(filePath) ?? 0;
+    const imports = outCount.get(filePath) ?? 0;
+    // Only include files that have some connectivity
+    if (importedBy > 0 || imports > 0) {
+      files.push({ path: filePath, centrality, importedBy, imports });
+    }
+  }
+
+  // Sort by centrality descending
+  files.sort((a, b) => b.centrality - a.centrality);
+
+  return files.slice(0, limit);
+}
+
+/**
+ * Find all strongly connected components using Tarjan's algorithm.
+ * Returns SCCs with size > 1 (i.e. actual cycles).
+ */
+export function findSCCs(graph: ImportGraph): string[][] {
+  // Build adjacency list from internal edges only
+  const adj = new Map<string, string[]>();
+  const allFiles = new Set<string>();
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    allFiles.add(edge.from);
+    allFiles.add(edge.to);
+    const list = adj.get(edge.from) ?? [];
+    list.push(edge.to);
+    adj.set(edge.from, list);
+  }
+
+  let index = 0;
+  const indices = new Map<string, number>();
+  const lowlinks = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const sccs: string[][] = [];
+
+  function strongconnect(v: string): void {
+    indices.set(v, index);
+    lowlinks.set(v, index);
+    index++;
+    stack.push(v);
+    onStack.add(v);
+
+    for (const w of adj.get(v) ?? []) {
+      if (!indices.has(w)) {
+        strongconnect(w);
+        lowlinks.set(v, Math.min(lowlinks.get(v)!, lowlinks.get(w)!));
+      } else if (onStack.has(w)) {
+        lowlinks.set(v, Math.min(lowlinks.get(v)!, indices.get(w)!));
+      }
+    }
+
+    if (lowlinks.get(v) === indices.get(v)) {
+      const scc: string[] = [];
+      let w: string;
+      do {
+        w = stack.pop()!;
+        onStack.delete(w);
+        scc.push(w);
+      } while (w !== v);
+      if (scc.length > 1) {
+        sccs.push(scc);
+      }
+    }
+  }
+
+  for (const file of allFiles) {
+    if (!indices.has(file)) {
+      strongconnect(file);
+    }
+  }
+
+  return sccs;
+}
+
+/**
+ * Detect circular dependencies using Tarjan's SCC algorithm.
+ * Each SCC with size > 1 is reported as a circular dependency chain.
+ * Returns up to maxCycles results.
+ */
+export function findCircularDeps(
+  graph: ImportGraph,
+  maxCycles = 10,
+): CircularDependency[] {
+  const sccs = findSCCs(graph);
+
+  // Convert SCCs to circular dependency chains
+  // Sort by size (smallest first — more actionable)
+  sccs.sort((a, b) => a.length - b.length);
+
+  const cycles: CircularDependency[] = [];
+  for (const scc of sccs) {
+    if (cycles.length >= maxCycles) break;
+    // Create a chain by closing the loop
+    cycles.push({ chain: [...scc, scc[0]] });
+  }
+
+  return cycles;
+}
+
+/** Directory patterns for classifying files into architectural layers */
+const LAYER_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
+  { name: "types", pattern: /(?:^|\/)types?\// },
+  { name: "stores", pattern: /(?:^|\/)stores?\// },
+  { name: "hooks", pattern: /(?:^|\/)hooks?\// },
+  { name: "services", pattern: /(?:^|\/)(?:services?|api)\// },
+  { name: "components", pattern: /(?:^|\/)components?\// },
+  { name: "pages", pattern: /(?:^|\/)(?:pages?|app|routes?)\// },
+  { name: "utils", pattern: /(?:^|\/)(?:utils?|lib|helpers?)\// },
+  { name: "config", pattern: /(?:^|\/)config\// },
+];
+
+/**
+ * Classify files into architectural layers and determine their dependency ordering.
+ */
+export function detectArchitecturalLayers(graph: ImportGraph): ArchitecturalLayer[] {
+  // Classify each internal file into a layer
+  const layerFiles = new Map<string, string[]>();
+  const fileToLayer = new Map<string, string>();
+
+  for (const [filePath] of graph.centrality) {
+    for (const { name, pattern } of LAYER_PATTERNS) {
+      if (pattern.test(filePath)) {
+        const files = layerFiles.get(name) ?? [];
+        files.push(filePath);
+        layerFiles.set(name, files);
+        fileToLayer.set(filePath, name);
+        break; // First match wins
+      }
+    }
+  }
+
+  // Count how many other layers import each layer
+  const layerImportedBy = new Map<string, Set<string>>();
+  for (const name of layerFiles.keys()) {
+    layerImportedBy.set(name, new Set());
+  }
+
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    const fromLayer = fileToLayer.get(edge.from);
+    const toLayer = fileToLayer.get(edge.to);
+    if (fromLayer && toLayer && fromLayer !== toLayer) {
+      layerImportedBy.get(toLayer)?.add(fromLayer);
+    }
+  }
+
+  // Build result sorted by importedByLayers descending (most foundational first)
+  const layers: ArchitecturalLayer[] = [];
+  for (const [name, files] of layerFiles) {
+    layers.push({
+      name,
+      files,
+      importedByLayers: layerImportedBy.get(name)?.size ?? 0,
+    });
+  }
+
+  // Sort: most imported layers first (foundational), then by name
+  layers.sort((a, b) => b.importedByLayers - a.importedByLayers || a.name.localeCompare(b.name));
+
+  return layers;
+}
+
+/**
+ * Compute instability metric (Robert C. Martin) for each file.
+ * instability = fanOut / (fanIn + fanOut)
+ * Returns files with instability > 0.7 and fanIn >= 3 (high-risk zones).
+ */
+export function computeInstability(graph: ImportGraph): FileInstability[] {
+  // Count outgoing internal edges per file
+  const fanOutMap = new Map<string, number>();
+  for (const edge of graph.edges) {
+    if (!edge.isExternal) {
+      fanOutMap.set(edge.from, (fanOutMap.get(edge.from) ?? 0) + 1);
+    }
+  }
+
+  const results: FileInstability[] = [];
+  for (const [filePath, fanIn] of graph.inDegree) {
+    const fanOut = fanOutMap.get(filePath) ?? 0;
+    const total = fanIn + fanOut;
+    if (total === 0) continue;
+    const instability = fanOut / total;
+    if (instability > 0.7 && fanIn >= 3) {
+      results.push({ path: filePath, fanIn, fanOut, instability });
+    }
+  }
+
+  // Sort by instability descending
+  results.sort((a, b) => b.instability - a.instability);
+  return results;
+}
+
+/**
+ * Detect communities of tightly-connected files using label propagation.
+ * Each file starts with a unique label; iteratively adopts the most common
+ * label among its neighbors (both directions). Returns communities with size >= 3.
+ */
+export function detectCommunities(graph: ImportGraph): Community[] {
+  // Build undirected adjacency from internal edges
+  const adj = new Map<string, Set<string>>();
+  const allFiles = new Set<string>();
+
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    allFiles.add(edge.from);
+    allFiles.add(edge.to);
+
+    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
+    if (!adj.has(edge.to)) adj.set(edge.to, new Set());
+    adj.get(edge.from)!.add(edge.to);
+    adj.get(edge.to)!.add(edge.from);
+  }
+
+  const files = [...allFiles];
+  if (files.length === 0) return [];
+
+  // Initialize: each file gets its own numeric label
+  const labels = new Map<string, number>();
+  for (let i = 0; i < files.length; i++) {
+    labels.set(files[i], i);
+  }
+
+  // Iterate label propagation (~10 rounds)
+  for (let iter = 0; iter < 10; iter++) {
+    let changed = false;
+    // Shuffle order for better convergence
+    const shuffled = [...files];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    for (const file of shuffled) {
+      const neighbors = adj.get(file);
+      if (!neighbors || neighbors.size === 0) continue;
+
+      // Count neighbor labels
+      const labelCounts = new Map<number, number>();
+      for (const neighbor of neighbors) {
+        const lbl = labels.get(neighbor)!;
+        labelCounts.set(lbl, (labelCounts.get(lbl) ?? 0) + 1);
+      }
+
+      // Find most common label
+      let maxCount = 0;
+      let bestLabel = labels.get(file)!;
+      for (const [lbl, count] of labelCounts) {
+        if (count > maxCount) {
+          maxCount = count;
+          bestLabel = lbl;
+        }
+      }
+
+      if (bestLabel !== labels.get(file)) {
+        labels.set(file, bestLabel);
+        changed = true;
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  // Group files by label
+  const groups = new Map<number, string[]>();
+  for (const [file, label] of labels) {
+    const group = groups.get(label) ?? [];
+    group.push(file);
+    groups.set(label, group);
+  }
+
+  // Filter to communities with size >= 3, derive labels from common dir prefix
+  const communities: Community[] = [];
+  let id = 0;
+  for (const files of groups.values()) {
+    if (files.length < 3) continue;
+    const label = deriveLabel(files);
+    communities.push({ id: id++, files: files.sort(), label });
+  }
+
+  // Sort by size descending
+  communities.sort((a, b) => b.files.length - a.files.length);
+  return communities;
+}
+
+/**
+ * Derive a human-readable label from a group of file paths
+ * by finding their common directory prefix.
+ */
+function deriveLabel(files: string[]): string {
+  if (files.length === 0) return "unknown";
+
+  const dirs = files.map((f) => {
+    const parts = f.split("/");
+    return parts.slice(0, -1).join("/");
+  });
+
+  // Find common prefix
+  const first = dirs[0];
+  let prefixLen = first.length;
+  for (const dir of dirs) {
+    let i = 0;
+    while (i < prefixLen && i < dir.length && first[i] === dir[i]) i++;
+    prefixLen = i;
+  }
+
+  let common = first.slice(0, prefixLen);
+  // Trim to last full directory segment
+  if (common.includes("/")) {
+    common = common.slice(0, common.lastIndexOf("/") + 1);
+  }
+  common = common.replace(/\/$/, "");
+
+  return common || files[0].split("/")[0] || "root";
+}
+
+/**
+ * Compute export coverage for each file — how many of its exports
+ * are actually imported by other files in the project.
+ */
+export function computeExportCoverage(graph: ImportGraph): ExportCoverage[] {
+  const usedExports = findUsedExports(graph.edges);
+
+  // Count total named exports per file (from outgoing edges' importedNames at target)
+  // We know a file exports a name if any edge targets it with that name
+  const allExportsByFile = new Map<string, Set<string>>();
+
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    for (const name of edge.importedNames) {
+      if (!allExportsByFile.has(edge.to)) allExportsByFile.set(edge.to, new Set());
+      allExportsByFile.get(edge.to)!.add(name);
+    }
+  }
+
+  const results: ExportCoverage[] = [];
+  for (const [file, exports] of allExportsByFile) {
+    const totalExports = exports.size;
+    if (totalExports === 0) continue;
+    let usedCount = 0;
+    for (const name of exports) {
+      if (usedExports.has(`${file}::${name}`)) usedCount++;
+    }
+    results.push({
+      file,
+      totalExports,
+      usedExports: usedCount,
+      coverage: usedCount / totalExports,
+    });
+  }
+
+  // Sort by coverage ascending (worst coverage first)
+  results.sort((a, b) => a.coverage - b.coverage);
+  return results;
 }

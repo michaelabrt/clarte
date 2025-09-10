@@ -392,9 +392,12 @@ export interface TaskFilters {
 EOF
 
   # ── src/stores/app-store.ts — Zustand root store ──
+  # NOTE: This file deliberately imports from services/auth.ts, creating
+  # a circular dependency with hooks/useAuth.ts for demo purposes.
   cat > "$DEMO_DIR/src/stores/app-store.ts" << 'EOF'
 import { create } from "zustand";
 import type { AppSettings, User } from "../types";
+import { restoreSession } from "../services/auth";
 
 interface AppState {
   currentUser: User | null;
@@ -404,6 +407,7 @@ interface AppState {
   setCurrentUser: (user: User | null) => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
   logout: () => void;
+  initSession: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -421,6 +425,10 @@ export const useAppStore = create<AppState>((set) => ({
   updateSettings: (updates) =>
     set((state) => ({ settings: { ...state.settings, ...updates } })),
   logout: () => set({ currentUser: null, isAuthenticated: false }),
+  initSession: () => {
+    const token = restoreSession();
+    if (token) set({ isAuthenticated: true });
+  },
 }));
 EOF
 
@@ -541,8 +549,11 @@ export function isApiError(error: unknown): error is { response: { data: ApiErro
 EOF
 
   # ── src/services/auth.ts — auth service ──
+  # NOTE: This imports from stores/app-store.ts, which imports back from
+  # this file, creating a deliberate circular dependency for demo purposes.
   cat > "$DEMO_DIR/src/services/auth.ts" << 'EOF'
 import { apiClient, setAuthToken } from "./api";
+import { useAppStore } from "../stores/app-store";
 import type { LoginRequest, LoginResponse } from "../types/api";
 import type { User } from "../types";
 
@@ -550,6 +561,7 @@ export async function login(credentials: LoginRequest): Promise<LoginResponse> {
   const { data } = await apiClient.post<LoginResponse>("/auth/login", credentials);
   setAuthToken(data.token);
   localStorage.setItem("auth_token", data.token);
+  useAppStore.getState().setCurrentUser(data.user);
   return data;
 }
 
@@ -559,6 +571,7 @@ export async function logout(): Promise<void> {
   } finally {
     setAuthToken(null);
     localStorage.removeItem("auth_token");
+    useAppStore.getState().logout();
   }
 }
 
@@ -1763,8 +1776,10 @@ INNEREOF
   # Add fixtures and mock data
   mkdir -p "$DEMO_DIR/src/fixtures"
   for f in users projects tasks teams comments notifications; do
+    local capitalized
+    capitalized="$(echo "${f:0:1}" | tr '[:lower:]' '[:upper:]')${f:1}"
     cat > "$DEMO_DIR/src/fixtures/${f}.ts" << INNEREOF
-export const mock${f^} = [{ id: "1", name: "Test" }];
+export const mock${capitalized} = [{ id: "1", name: "Test" }];
 INNEREOF
   done
 
@@ -1974,6 +1989,125 @@ ARCHEOF
   # ── Remove any leftover IDE config directories ──
   rm -rf "$DEMO_DIR/.cursor" "$DEMO_DIR/.windsurf" 2>/dev/null || true
 
+  # ── Initialize git repo with realistic commit history ──
+  # This enables the "Recently Active Files" and git analysis features.
+  echo "Creating git history..." >&2
+  cd "$DEMO_DIR"
+  git init -q
+  git config user.email "dev@acme.co"
+  git config user.name "Acme Dev"
+
+  # Add .gitignore first
+  cat > "$DEMO_DIR/.gitignore" << 'GITIGNOREEOF'
+node_modules/
+dist/
+.env
+*.local
+GITIGNOREEOF
+
+  # Helper: compute ISO date N days ago (macOS date)
+  days_ago() { date -v-"${1}"d +%Y-%m-%dT%H:%M:%S; }
+
+  # Commit 1: Initial project setup (60 days ago)
+  local d; d=$(days_ago 60)
+  git add package.json tsconfig.json tailwind.config.js vite.config.ts .eslintrc.cjs .gitignore README.md
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "chore: initial project setup"
+
+  # Commit 2: Core types and stores (55 days ago)
+  d=$(days_ago 55)
+  git add src/types/ src/stores/
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "feat: add domain types and Zustand stores"
+
+  # Commit 3: Services layer (50 days ago)
+  d=$(days_ago 50)
+  git add src/services/
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "feat: add API client and service layer"
+
+  # Commit 4: Hooks (45 days ago)
+  d=$(days_ago 45)
+  git add src/hooks/
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "feat: add React Query hooks for data fetching"
+
+  # Commit 5: UI components (40 days ago)
+  d=$(days_ago 40)
+  git add src/components/ui/
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "feat: add shared UI component library"
+
+  # Commit 6: Feature components (35 days ago)
+  d=$(days_ago 35)
+  git add src/components/ src/App.tsx src/main.tsx
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "feat: add dashboard, auth, and project views"
+
+  # Commit 7: Utils, lib, docs (30 days ago)
+  d=$(days_ago 30)
+  git add src/lib/ src/utils/ src/fixtures/ docs/
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "feat: add utilities, validators, and documentation"
+
+  # Commit 8: Testing setup (25 days ago)
+  d=$(days_ago 25)
+  git add src/__tests__/ e2e/ vitest.config.ts playwright.config.ts
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "test: add unit and E2E test infrastructure"
+
+  # Commit 9: CI and DevOps (20 days ago)
+  d=$(days_ago 20)
+  git add .github/ Dockerfile postcss.config.js .prettierrc .env.example
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "ci: add GitHub Actions workflow and Docker setup"
+
+  # Now simulate ongoing development with frequent edits to hot files.
+  # We append a trailing comment to each file to create real content diffs.
+
+  tweak() { echo "// updated $(date -v-"${1}"d +%Y-%m-%d)" >> "$2"; }
+
+  # Commit 10: Task store improvements (15 days ago)
+  d=$(days_ago 15)
+  tweak 15 src/stores/task-store.ts
+  git add src/stores/task-store.ts
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "feat: add bulk task operations and filters"
+
+  # Commit 11: Auth flow updates (12 days ago)
+  d=$(days_ago 12)
+  tweak 12 src/services/auth.ts; tweak 12 src/hooks/useAuth.ts; tweak 12 src/stores/app-store.ts
+  git add src/services/auth.ts src/hooks/useAuth.ts src/stores/app-store.ts
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "fix: improve session restore and auth state sync"
+
+  # Commit 12: Dashboard redesign (10 days ago)
+  d=$(days_ago 10)
+  tweak 10 src/components/dashboard/Dashboard.tsx; tweak 10 src/components/ui/Sidebar.tsx; tweak 10 src/components/ui/Header.tsx
+  git add src/components/dashboard/Dashboard.tsx src/components/ui/Sidebar.tsx src/components/ui/Header.tsx
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "feat: redesign dashboard layout with collapsible sidebar"
+
+  # Commit 13: Type updates (8 days ago)
+  d=$(days_ago 8)
+  tweak 8 src/types/index.ts; tweak 8 src/types/api.ts
+  git add src/types/index.ts src/types/api.ts
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "refactor: extend API types with pagination and filters"
+
+  # Commit 14: Task board improvements (5 days ago)
+  d=$(days_ago 5)
+  tweak 5 src/stores/task-store.ts; tweak 5 src/hooks/useTasks.ts; tweak 5 src/components/tasks/TaskList.tsx
+  git add src/stores/task-store.ts src/hooks/useTasks.ts src/components/tasks/TaskList.tsx
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "feat: add task filtering and drag-to-reorder"
+
+  # Commit 15: Auth bugfix (3 days ago)
+  d=$(days_ago 3)
+  tweak 3 src/services/auth.ts; tweak 3 src/stores/app-store.ts
+  git add src/services/auth.ts src/stores/app-store.ts
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "fix: prevent auth token race condition on refresh"
+
+  # Commit 16: Search and notifications (2 days ago)
+  d=$(days_ago 2)
+  tweak 2 src/components/ui/SearchBar.tsx; tweak 2 src/components/ui/NotificationBell.tsx; tweak 2 src/services/notifications.ts
+  git add src/components/ui/SearchBar.tsx src/components/ui/NotificationBell.tsx src/services/notifications.ts
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "feat: add global search and notification dropdown"
+
+  # Commit 17: Project service updates (1 day ago)
+  d=$(days_ago 1)
+  tweak 1 src/services/projects.ts; tweak 1 src/hooks/useProjects.ts; tweak 1 src/components/projects/ProjectCard.tsx
+  git add src/services/projects.ts src/hooks/useProjects.ts src/components/projects/ProjectCard.tsx
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git commit -q -m "feat: add project archiving and tag management"
+
+  echo "  Created 17 commits spanning 60 days." >&2
+
   # ── Count files for the summary ──
   local file_count
   file_count=$(find "$DEMO_DIR/src" "$DEMO_DIR/e2e" -name "*.ts" -o -name "*.tsx" 2>/dev/null | wc -l | tr -d ' ')
@@ -1988,12 +2122,20 @@ ARCHEOF
   echo "✅ Setup complete!" >&2
   echo "   Demo project: $DEMO_DIR" >&2
   echo "   Source files: $file_count" >&2
+  echo "   Git commits:  17 (spanning 60 days)" >&2
   echo "   Project type: Large React + TypeScript dashboard app" >&2
   echo "   Includes: Components, services, stores, hooks, tests, E2E, docs" >&2
+  echo "   Features:  Circular dep (auth<->store), git history, hub files" >&2
   echo "   context-pilot linked globally" >&2
   echo "" >&2
-  echo "This large project is perfect for demonstrating context-pilot's" >&2
-  echo "optimization and reduction capabilities!" >&2
+  echo "This project showcases all context-pilot features:" >&2
+  echo "  - Progress feedback with granular spinner messages" >&2
+  echo "  - Detected Stack discovery box" >&2
+  echo "  - Key Files (hub detection via PageRank)" >&2
+  echo "  - Architecture (layer dependency flow)" >&2
+  echo "  - Recently Active Files (git history analysis)" >&2
+  echo "  - Circular Dependencies detection" >&2
+  echo "  - Import count annotations on snapshots" >&2
   echo "" >&2
   echo "Next steps:" >&2
   echo "  1. Open Ghostty, resize window to ~80x24" >&2
@@ -2010,8 +2152,9 @@ do_record() {
   echo "" >&2
 
   # Clean up any IDE config / saved state from previous runs
-  rm -rf "$DEMO_DIR/.cursor" "$DEMO_DIR/.windsurf" "$DEMO_DIR/CLAUDE.md" "$DEMO_DIR/.aider.conf.yml" 2>/dev/null || true
+  rm -rf "$DEMO_DIR/.cursor" "$DEMO_DIR/.windsurf" "$DEMO_DIR/CLAUDE.md" "$DEMO_DIR/AGENTS.md" "$DEMO_DIR/.aider.conf.yml" 2>/dev/null || true
   rm -f "$DEMO_DIR/.context-pilot.json" 2>/dev/null || true
+  rm -f "$DEMO_DIR/.windsurfrules" "$DEMO_DIR/.clinerules" "$DEMO_DIR/.continuerules" "$DEMO_DIR/CONTEXT.md" 2>/dev/null || true
 
   sleep 7
 
@@ -2028,7 +2171,7 @@ do_record() {
 
   type_cmd "context-pilot"
   press_enter
-  wait_s 2.5 "detection"
+  wait_s 4.5 "detection + graph + analysis"
 
   # ── 1. IDE selection: browse options then pick Claude Code ──
   # Show we're looking through options, then select Claude Code (index 0)
@@ -2085,7 +2228,7 @@ do_record() {
 
   wait_s 0.3 "before snapshot"
   press_enter
-  wait_s 4.5 "snapshot + generation (large project)"
+  wait_s 5.5 "snapshot + generation (large project)"
 
   # ── 7. Overwrite existing context? → Yes ──
   # Default is Yes, just press enter to accept.
@@ -2097,14 +2240,23 @@ do_record() {
   # ── 8. Done! ──
   # Show final summary
 
-  wait_s 3.5 "final summary visible"
+  wait_s 4.0 "final summary visible"
 
-  # ── 9. Optional: Show the generated file ──
-  # Uncomment to show file contents at end of demo
-  # echo ""
-  # type_cmd "head -30 CLAUDE.md"
-  # press_enter
-  # wait_s 3.0 "showing generated file"
+  # ── 9. Show the generated file ──
+  # Display the new sections (Key Files, Architecture, Recently Active, etc.)
+
+  wait_s 0.8 "pause before showing file"
+  clear_screen
+  wait_s 0.3 "cleared"
+
+  type_cmd "head -80 CLAUDE.md"
+  press_enter
+  wait_s 4.0 "showing generated file top"
+
+  # Scroll down to show the analysis sections
+  type_cmd "sed -n '/## Key Files/,/## Development/p' CLAUDE.md | head -40"
+  press_enter
+  wait_s 5.0 "showing analysis sections"
 
   echo "" >&2
   echo "✅ Recording sequence complete!" >&2

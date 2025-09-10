@@ -1,5 +1,4 @@
 import path from "node:path";
-import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
@@ -14,7 +13,18 @@ import {
   computeSnapshotHash,
 } from "./config.js";
 import { refreshSnapshot } from "./refresh.js";
-import { buildImportGraph } from "./graph.js";
+import {
+  buildImportGraph,
+  getHubFiles,
+  findCircularDeps,
+  detectArchitecturalLayers,
+  computeInstability,
+  detectCommunities,
+  computeExportCoverage,
+} from "./graph.js";
+import { analyzeGitActivity } from "./git-analysis.js";
+import { formatBytes } from "./utils.js";
+import type { ContextAnalysis, ExportCoverage, ProgressCallback } from "./types.js";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -22,10 +32,30 @@ async function main() {
   const dryRun = args.includes("--dry-run");
   const refresh = args.includes("--refresh-snapshot");
   const reconfigure = args.includes("--reconfigure");
+  const check = args.includes("--check");
   const maxTokensArg = args.find((a) => a.startsWith("--max-tokens="));
   const maxTokens = maxTokensArg ? parseInt(maxTokensArg.split("=")[1], 10) : undefined;
   const targetDir = args.find((a) => !a.startsWith("-")) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
+
+  // --check: fast path for shell integration (silent, exit code only)
+  if (check) {
+    const config = await loadConfig(rootDir);
+    if (!config?.snapshotHash) {
+      process.exit(0); // No config or no hash — nothing to check
+    }
+    const lang = config.language ?? "other";
+    const currentHash = await computeSnapshotHash(rootDir, lang);
+    if (currentHash !== config.snapshotHash) {
+      const daysSince = config.snapshotGeneratedAt
+        ? Math.floor((Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24))
+        : 0;
+      const staleMsg = daysSince > 0 ? ` (last generated ${daysSince}d ago)` : "";
+      console.log(`context-pilot: snapshot is stale${staleMsg}. Run npx context-pilot --refresh-snapshot`);
+      process.exit(1);
+    }
+    process.exit(0);
+  }
 
   console.log("");
   p.intro(pc.bold(" context-pilot "));
@@ -45,21 +75,71 @@ async function main() {
 
   // Step 1: Auto-detect
   const spinner = p.spinner();
+  const spinnerProgress: ProgressCallback = (msg) => spinner.message(msg);
+
   spinner.start("Detecting tech stack...");
-  const detected = await detectContext(rootDir);
+  const detected = await detectContext(rootDir, spinnerProgress);
   spinner.stop("Detection complete.");
 
   // Step 1.5: Build import graph
   spinner.start("Building import graph...");
-  const graph = await buildImportGraph(rootDir, detected.language);
+  const graph = await buildImportGraph(rootDir, detected.language, spinnerProgress);
+  const topHub = getHubFiles(graph, 1)[0];
   spinner.stop(
-    `Import graph: ${graph.edges.length} edges, ${graph.externalImportCounts.size} external packages.`,
+    `Import graph: ${graph.edges.length} edges, ${graph.externalImportCounts.size} packages.` +
+      (topHub ? ` Top hub: ${topHub.path}` : ""),
   );
 
   // Step 1.6: Enrich framework detection with actual import usage
   detected.frameworks = enrichFrameworksWithUsage(
     detected.frameworks,
     graph.externalImportCounts,
+  );
+
+  // Discovery log
+  {
+    const lines: string[] = [];
+    const lang = detected.hasTypeScript ? "TypeScript" : detected.language !== "other" ? detected.language.charAt(0).toUpperCase() + detected.language.slice(1) : "";
+    if (lang) lines.push(`  Language:   ${lang}`);
+    if (detected.frameworks.length > 0) {
+      lines.push(`  Frameworks: ${detected.frameworks.map((f) => f.name).join(", ")}`);
+    }
+    if (detected.linter !== "none") {
+      lines.push(`  Linter:     ${detected.linter.charAt(0).toUpperCase() + detected.linter.slice(1)}`);
+    }
+    if (detected.packageManager !== "none") {
+      lines.push(`  Pkg mgr:    ${detected.packageManager}`);
+    }
+    if (detected.sourceFileCount > 0) {
+      lines.push(`  Files:      ${detected.sourceFileCount} (${formatBytes(detected.totalSourceBytes)})`);
+    }
+    if (lines.length > 0) {
+      p.note(lines.join("\n"), "Detected Stack");
+    }
+  }
+
+  // Step 1.7: Structural analysis
+  spinner.start("Analyzing project structure...");
+  const hubFiles = getHubFiles(graph);
+  const circularDeps = findCircularDeps(graph);
+  const layers = detectArchitecturalLayers(graph);
+  const instabilities = computeInstability(graph);
+  const communities = detectCommunities(graph);
+  const exportCoverage: ExportCoverage[] = computeExportCoverage(graph);
+  const gitActivity = detected.isGitRepo ? analyzeGitActivity(rootDir, spinnerProgress) : null;
+
+  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, gitActivity, instabilities, communities };
+
+  const analysisParts: string[] = [];
+  if (hubFiles.length > 0) analysisParts.push(`${hubFiles.length} hub files`);
+  if (layers.length > 0) analysisParts.push(`${layers.length} layers`);
+  if (circularDeps.length > 0) analysisParts.push(`${circularDeps.length} circular dep${circularDeps.length === 1 ? "" : "s"}`);
+  if (communities.length > 0) analysisParts.push(`${communities.length} module cluster${communities.length === 1 ? "" : "s"}`);
+  if (gitActivity) analysisParts.push(`${gitActivity.hotFiles.length} active files`);
+  spinner.stop(
+    analysisParts.length > 0
+      ? `Analysis: ${analysisParts.join(", ")}.`
+      : "Analysis complete.",
   );
 
   // Step 1.7: Check for saved config + staleness
@@ -105,7 +185,7 @@ async function main() {
     // Save config for future runs
     if (!dryRun) {
       const hash = await computeSnapshotHash(rootDir, detected.language);
-      await saveConfig(rootDir, answers, hash);
+      await saveConfig(rootDir, answers, hash, detected.language);
       p.log.info(
         pc.dim("Saved config to .context-pilot.json for future runs."),
       );
@@ -116,7 +196,7 @@ async function main() {
   let snapshot = null;
   if (answers.generateSnapshot) {
     spinner.start("Scanning source files for code snapshot...");
-    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens);
+    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens, spinnerProgress, gitActivity);
     const count = snapshot.entries.length;
     const budgetNote = snapshot.budgetExcluded
       ? ` (${snapshot.budgetExcluded} excluded by token budget)`
@@ -136,7 +216,7 @@ async function main() {
   spinner.start(
     dryRun ? "Preparing context files..." : "Generating context files...",
   );
-  const files = await generateFiles(detected, answers, snapshot, force, dryRun);
+  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis);
   spinner.stop(
     dryRun
       ? `Would generate ${files.length} file${files.length === 1 ? "" : "s"}.`
@@ -149,7 +229,7 @@ async function main() {
   }
 
   // Step 5: Summary + token estimate
-  printSummary(files, detected, snapshot);
+  printSummary(files, detected, snapshot, analysis, exportCoverage);
 
   if (dryRun) {
     p.outro(

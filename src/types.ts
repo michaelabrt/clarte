@@ -143,6 +143,8 @@ export interface ProjectConfig {
   snapshotHash?: string;
   /** Timestamp of last snapshot generation */
   snapshotGeneratedAt?: number;
+  /** Detected language (for --check fast path) */
+  language?: Language;
 }
 
 /** A generated file ready to be written */
@@ -155,6 +157,9 @@ export interface GeneratedFile {
   existed: boolean;
 }
 
+/** Progress callback for reporting sub-step progress */
+export type ProgressCallback = (message: string) => void;
+
 /** Extracted code snapshot entry */
 export interface SnapshotEntry {
   /** Source file path (relative) */
@@ -163,6 +168,8 @@ export interface SnapshotEntry {
   category: "type" | "interface" | "function" | "component" | "store" | "hook";
   /** The extracted signature or declaration */
   signature: string;
+  /** Number of files that import this file (from import graph) */
+  importedByCount?: number;
 }
 
 /** Full code snapshot result */
@@ -200,4 +207,104 @@ export interface ImportGraph {
   centrality: Map<string, number>;
   /** How many files import each external package */
   externalImportCounts: Map<string, number>;
+}
+
+/** A highly-connected file identified by centrality analysis */
+export interface HubFile {
+  /** Relative file path */
+  path: string;
+  /** PageRank centrality score (0–1) */
+  centrality: number;
+  /** Number of files that import this file */
+  importedBy: number;
+  /** Number of internal files this file imports */
+  imports: number;
+}
+
+/** A detected circular dependency chain */
+export interface CircularDependency {
+  /** File paths forming the cycle */
+  chain: string[];
+}
+
+/** Instability metric (Robert C. Martin) for a file */
+export interface FileInstability {
+  /** Relative file path */
+  path: string;
+  /** Number of incoming dependencies */
+  fanIn: number;
+  /** Number of outgoing dependencies */
+  fanOut: number;
+  /** Instability score: fanOut / (fanIn + fanOut), range 0–1 */
+  instability: number;
+}
+
+/** Co-change coupling between two files */
+export interface ChangeCoupling {
+  fileA: string;
+  fileB: string;
+  /** Number of commits both files appeared in together */
+  coChangeCount: number;
+  /** Fraction of commits containing either file that contain both */
+  support: number;
+  /** Confidence: coChangeCount / max(commitsA, commitsB) */
+  confidence: number;
+}
+
+/** A detected community/cluster of tightly-connected files */
+export interface Community {
+  /** Auto-assigned numeric ID */
+  id: number;
+  /** Files in this community */
+  files: string[];
+  /** Auto-derived label from common directory prefix */
+  label: string;
+}
+
+/** Export coverage metric for a file */
+export interface ExportCoverage {
+  /** Relative file path */
+  file: string;
+  /** Total number of named exports */
+  totalExports: number;
+  /** Number of exports used by other files */
+  usedExports: number;
+  /** Coverage ratio: usedExports / totalExports */
+  coverage: number;
+}
+
+/** A detected architectural layer (e.g. types, stores, hooks) */
+export interface ArchitecturalLayer {
+  /** Layer name (e.g. "types", "stores", "hooks", "components", "pages") */
+  name: string;
+  /** Files belonging to this layer */
+  files: string[];
+  /** Number of other layers that import this layer */
+  importedByLayers: number;
+}
+
+/** Git activity analysis results */
+export interface GitAnalysis {
+  /** Map of relative file path -> commit count in analysis window */
+  commitCounts: Map<string, number>;
+  /** Files sorted by commit count descending */
+  hotFiles: Array<{
+    path: string;
+    commits: number;
+    lastChanged: string;
+  }>;
+  /** Co-change coupling pairs (files that change together) */
+  changeCoupling: ChangeCoupling[];
+}
+
+/** Bundle of all structural analysis results */
+export interface ContextAnalysis {
+  hubFiles: HubFile[];
+  circularDeps: CircularDependency[];
+  layers: ArchitecturalLayer[];
+  gitActivity: GitAnalysis | null;
+  /** Instability scores for files */
+  instabilities: FileInstability[];
+  /** Detected module clusters/communities */
+  communities: Community[];
 }

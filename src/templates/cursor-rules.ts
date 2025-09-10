@@ -1,4 +1,4 @@
-import type { DetectedContext, UserAnswers } from "../types.js";
+import type { ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
 import { getFrameworkHints } from "./framework-hints.js";
 
 interface CursorRule {
@@ -18,11 +18,12 @@ interface CursorRule {
 export function buildCursorRules(
   ctx: DetectedContext,
   answers: UserAnswers,
+  analysis?: ContextAnalysis,
 ): CursorRule[] {
   const rules: CursorRule[] = [];
 
   // Always create a global rule
-  rules.push(buildGlobalRule(ctx, answers));
+  rules.push(buildGlobalRule(ctx, answers, analysis));
 
   // Component rule (if components/ directory exists)
   const hasComponents = ctx.directories.some(
@@ -59,7 +60,7 @@ export function buildCursorRules(
   return rules;
 }
 
-function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers): CursorRule {
+function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analysis?: ContextAnalysis): CursorRule {
   const bodyLines: string[] = [
     "# Global Rules",
     "",
@@ -77,6 +78,48 @@ function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers): CursorRule
       .filter(Boolean);
     for (const g of gotchas) {
       bodyLines.push(`- ${g}`);
+    }
+    bodyLines.push("");
+  }
+
+  // Instability warnings
+  if (analysis?.instabilities && analysis.instabilities.length > 0) {
+    bodyLines.push("## High-Instability Files");
+    bodyLines.push("");
+    bodyLines.push(
+      "> These files have many dependents but also many dependencies (unstable). Changes here have high blast radius.",
+    );
+    bodyLines.push("");
+    for (const inst of analysis.instabilities) {
+      bodyLines.push(`- \`${inst.path}\` — ${(inst.instability * 100).toFixed(0)}% unstable (${inst.fanIn} dependents, ${inst.fanOut} dependencies)`);
+    }
+    bodyLines.push("");
+  }
+
+  // Change coupling warnings
+  if (analysis?.gitActivity?.changeCoupling && analysis.gitActivity.changeCoupling.length > 0) {
+    bodyLines.push("## Change Coupling");
+    bodyLines.push("");
+    bodyLines.push(
+      "> These file pairs frequently change together. When modifying one, check the other.",
+    );
+    bodyLines.push("");
+    for (const pair of analysis.gitActivity.changeCoupling.slice(0, 5)) {
+      bodyLines.push(`- \`${pair.fileA}\` ↔ \`${pair.fileB}\` (${pair.coChangeCount} co-changes, ${(pair.confidence * 100).toFixed(0)}% confidence)`);
+    }
+    bodyLines.push("");
+  }
+
+  // Circular dependency warnings
+  if (analysis?.circularDeps && analysis.circularDeps.length > 0) {
+    bodyLines.push("## Circular Dependencies");
+    bodyLines.push("");
+    bodyLines.push(
+      "> These circular import chains may cause unexpected behavior. Avoid adding to them.",
+    );
+    bodyLines.push("");
+    for (const dep of analysis.circularDeps) {
+      bodyLines.push(`- ${dep.chain.join(" -> ")}`);
     }
     bodyLines.push("");
   }

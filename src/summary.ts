@@ -1,5 +1,5 @@
 import pc from "picocolors";
-import type { CodeSnapshot, DetectedContext, GeneratedFile } from "./types.js";
+import type { CodeSnapshot, ContextAnalysis, DetectedContext, ExportCoverage, GeneratedFile } from "./types.js";
 import { estimateTokens, formatBytes } from "./utils.js";
 
 /**
@@ -9,6 +9,8 @@ export function printSummary(
   files: GeneratedFile[],
   ctx: DetectedContext,
   snapshot?: CodeSnapshot | null,
+  analysis?: ContextAnalysis,
+  exportCoverage?: ExportCoverage[],
 ): void {
   if (files.length === 0) return;
 
@@ -82,6 +84,21 @@ export function printSummary(
     );
   }
 
+  // Analysis summary
+  if (analysis) {
+    const parts: string[] = [];
+    if (analysis.hubFiles.length > 0) parts.push(`${analysis.hubFiles.length} key files`);
+    if (analysis.layers.length > 0) parts.push(`${analysis.layers.length} architecture layers`);
+    if (analysis.circularDeps.length > 0) parts.push(`${analysis.circularDeps.length} circular deps`);
+    if (analysis.communities.length > 0) parts.push(`${analysis.communities.length} module clusters`);
+    if (analysis.gitActivity) parts.push(`${analysis.gitActivity.hotFiles.length} recently active files`);
+    if (parts.length > 0) {
+      console.log(
+        pc.dim(`    Includes: ${parts.join(", ")}`),
+      );
+    }
+  }
+
   // -- Token estimate comparison --
   console.log("");
   console.log(pc.bold("  Estimated context cost per conversation:"));
@@ -105,7 +122,8 @@ export function printSummary(
         )
       : 0;
 
-  const afterTotal = alwaysOnTokens + avgScopedTokens;
+  const residualExploration = Math.round(explorationTokens * 0.05);
+  const afterTotal = alwaysOnTokens + avgScopedTokens + residualExploration;
   const savings = Math.round(
     ((explorationTokens - afterTotal) / explorationTokens) * 100,
   );
@@ -122,7 +140,7 @@ export function printSummary(
   }
 
   console.log(
-    `      Exploration      mostly eliminated            ${pc.green("~0 tokens")}`,
+    `      Exploration      mostly eliminated            ${pc.green(`~${formatNumber(residualExploration)} tokens`)}`,
   );
 
   console.log(
@@ -137,6 +155,24 @@ export function printSummary(
         `    Estimated savings: ~${savings}% fewer tokens before real work begins`,
       ),
     );
+  }
+
+  // Export coverage summary
+  if (exportCoverage && exportCoverage.length > 0) {
+    const totalExports = exportCoverage.reduce((sum, e) => sum + e.totalExports, 0);
+    const totalUsed = exportCoverage.reduce((sum, e) => sum + e.usedExports, 0);
+    const unusedExports = totalExports - totalUsed;
+    const coveragePct = totalExports > 0 ? Math.round((totalUsed / totalExports) * 100) : 100;
+    const filesWithUnused = exportCoverage.filter((e) => e.usedExports < e.totalExports).length;
+
+    if (unusedExports > 0) {
+      console.log("");
+      console.log(
+        pc.dim(
+          `    Export coverage: ${coveragePct}% of exports are used (${unusedExports} unused exports in ${filesWithUnused} file${filesWithUnused === 1 ? "" : "s"})`,
+        ),
+      );
+    }
   }
 
   console.log("");

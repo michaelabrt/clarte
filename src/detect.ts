@@ -8,6 +8,7 @@ import type {
   MonorepoInfo,
   MonorepoPackage,
   PackageManager,
+  ProgressCallback,
 } from "./types.js";
 import { fileExists, readFileOr, readJsonFile, readDirSafe } from "./utils.js";
 
@@ -98,7 +99,7 @@ const PYTHON_FRAMEWORK_MAP: Record<string, string> = {
 /**
  * Auto-detect the tech stack of a project at the given root directory.
  */
-export async function detectContext(rootDir: string): Promise<DetectedContext> {
+export async function detectContext(rootDir: string, onProgress?: ProgressCallback): Promise<DetectedContext> {
   const ctx: DetectedContext = {
     rootDir,
     language: "other",
@@ -115,6 +116,7 @@ export async function detectContext(rootDir: string): Promise<DetectedContext> {
   };
 
   // Parallel checks for common project markers
+  onProgress?.("Checking project markers...");
   const [
     hasGit,
     hasPackageJson,
@@ -227,7 +229,16 @@ export async function detectContext(rootDir: string): Promise<DetectedContext> {
     else ctx.linter = "none";
   }
 
+  // Report detected stack
+  if (ctx.frameworks.length > 0) {
+    const fwNames = ctx.frameworks.map((f) => f.name).join(", ");
+    const lang = ctx.hasTypeScript ? "TypeScript" : ctx.language !== "other" ? ctx.language : "";
+    const parts = [lang, fwNames].filter(Boolean);
+    onProgress?.(`Detected: ${parts.join(" + ")}`);
+  }
+
   // -- Detect directories --
+  onProgress?.("Scanning directories...");
 
   for (const dir of KNOWN_DIRS) {
     if (topEntries.includes(dir)) {
@@ -269,6 +280,7 @@ export async function detectContext(rootDir: string): Promise<DetectedContext> {
     );
 
     ctx.sourceFileCount = sourceFiles.length;
+    onProgress?.(`Counting ${sourceFiles.length} source files...`);
     ctx.totalSourceBytes = sourceFiles.reduce(
       (sum, f) => sum + (f.stats?.size ?? 0),
       0,

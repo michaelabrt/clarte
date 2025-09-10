@@ -2,7 +2,7 @@ import path from "node:path";
 import fg from "fast-glob";
 import { estimateTokens, readFileOr } from "./utils.js";
 import { findUsedExports } from "./graph.js";
-import type { CodeSnapshot, DetectedContext, ImportGraph, SnapshotEntry } from "./types.js";
+import type { CodeSnapshot, DetectedContext, GitAnalysis, ImportGraph, ProgressCallback, SnapshotEntry } from "./types.js";
 
 /**
  * Auto-detect which directories to scan for code snapshots.
@@ -209,6 +209,20 @@ function extractSignatureLine(lines: string[], startIdx: number): string {
 }
 
 /**
+ * Append an "imported by N files" comment to signatures of highly-imported entries.
+ */
+function annotateSignature(entry: SnapshotEntry): string {
+  if (entry.importedByCount && entry.importedByCount > 2) {
+    // Add comment to first line of the signature
+    const firstLine = entry.signature.split("\n")[0];
+    const rest = entry.signature.split("\n").slice(1);
+    const annotated = `${firstLine}  // imported by ${entry.importedByCount} files`;
+    return rest.length > 0 ? [annotated, ...rest].join("\n") : annotated;
+  }
+  return entry.signature;
+}
+
+/**
  * Condense snapshot entries into a readable markdown block.
  */
 function renderSnapshot(entries: SnapshotEntry[]): string {
@@ -233,31 +247,31 @@ function renderSnapshot(entries: SnapshotEntry[]): string {
 
   if (types.length > 0) {
     md += "### Core Types\n\n```ts\n";
-    md += types.map((e) => e.signature).join("\n\n");
+    md += types.map((e) => annotateSignature(e)).join("\n\n");
     md += "\n```\n\n";
   }
 
   if (stores.length > 0) {
     md += "### Store Shape\n\n```ts\n";
-    md += stores.map((e) => e.signature).join("\n\n");
+    md += stores.map((e) => annotateSignature(e)).join("\n\n");
     md += "\n```\n\n";
   }
 
   if (components.length > 0) {
     md += "### Component Props\n\n```ts\n";
-    md += components.map((e) => e.signature).join("\n\n");
+    md += components.map((e) => annotateSignature(e)).join("\n\n");
     md += "\n```\n\n";
   }
 
   if (hooks.length > 0) {
     md += "### Hooks\n\n```ts\n";
-    md += hooks.map((e) => e.signature).join("\n\n");
+    md += hooks.map((e) => annotateSignature(e)).join("\n\n");
     md += "\n```\n\n";
   }
 
   if (functions.length > 0) {
     md += "### Key Functions\n\n```ts\n";
-    md += functions.map((e) => e.signature).join("\n\n");
+    md += functions.map((e) => annotateSignature(e)).join("\n\n");
     md += "\n```\n\n";
   }
 
@@ -272,6 +286,8 @@ export async function generateSnapshot(
   customPaths: string[],
   graph?: ImportGraph,
   maxTokens?: number,
+  onProgress?: ProgressCallback,
+  gitActivity?: GitAnalysis | null,
 ): Promise<CodeSnapshot> {
   const scanPaths =
     customPaths.length > 0 ? customPaths : getDefaultScanPaths(ctx);
@@ -279,6 +295,10 @@ export async function generateSnapshot(
   if (scanPaths.length === 0) {
     return { entries: [], markdown: "" };
   }
+
+  // Report which directories we're scanning
+  const dirNames = scanPaths.map((p) => p.split("/").pop() ?? p);
+  onProgress?.(`Scanning ${scanPaths.length} directories: ${dirNames.join(", ")}...`);
 
   // Find all TS/JS files in the scan paths
   const patterns = scanPaths.map((p) => `${p}/**/*.{ts,tsx,js,jsx}`);
@@ -298,20 +318,39 @@ export async function generateSnapshot(
 
   const allEntries: SnapshotEntry[] = [];
 
-  for (const file of files) {
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+
+    if ((i + 1) % 20 === 0 || i === files.length - 1) {
+      const dir = path.dirname(file).split("/").pop() ?? "";
+      onProgress?.(`Extracting signatures... ${i + 1}/${files.length} files (${dir}/)`);
+    }
+
     const absPath = path.join(ctx.rootDir, file);
     const entries = await extractFromFile(absPath, file);
     allEntries.push(...entries);
   }
 
+  // Populate importedByCount from graph
+  if (graph) {
+    for (const entry of allEntries) {
+      const count = graph.inDegree.get(entry.file) ?? 0;
+      if (count > 0) {
+        entry.importedByCount = count;
+      }
+    }
+  }
+
   // Filter dead exports using import graph
+  onProgress?.("Filtering dead exports...");
   const liveEntries = filterDeadExports(allEntries, graph);
 
   // Apply token budget if graph is available
   const budget =
     maxTokens ??
     Math.min(16000, 4000 + Math.floor(ctx.sourceFileCount / 25) * 500);
-  const { selected, excluded } = applyTokenBudget(liveEntries, budget, graph);
+  onProgress?.(`Applying token budget (${budget.toLocaleString()} tokens)...`);
+  const { selected, excluded } = applyTokenBudget(liveEntries, budget, graph, gitActivity);
 
   const markdown = renderSnapshot(selected);
 
@@ -386,6 +425,7 @@ function applyTokenBudget(
   entries: SnapshotEntry[],
   budget: number,
   graph?: ImportGraph,
+  gitActivity?: GitAnalysis | null,
 ): { selected: SnapshotEntry[]; excluded: number } {
   if (entries.length === 0) return { selected: [], excluded: 0 };
 
@@ -395,10 +435,17 @@ function applyTokenBudget(
     const centrality = graph?.centrality.get(entry.file) ?? 0.5;
 
     // Category boost: types/interfaces are more valuable for context
-    let boost = 1.0;
-    if (entry.category === "type" || entry.category === "interface") boost = 1.3;
+    let categoryBoost = 1.0;
+    if (entry.category === "type" || entry.category === "interface") categoryBoost = 1.3;
 
-    const value = (centrality * boost) / tokens;
+    // Git boost: files changed recently get priority
+    let gitBoost = 1.0;
+    if (gitActivity) {
+      const commits = gitActivity.commitCounts.get(entry.file) ?? 0;
+      gitBoost = 1.0 + Math.min(0.5, commits / 20);
+    }
+
+    const value = (centrality * categoryBoost * gitBoost) / tokens;
     return { entry, tokens, value };
   });
 

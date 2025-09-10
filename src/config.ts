@@ -39,6 +39,7 @@ export async function loadConfig(
     generatePerPackage: cfg.generatePerPackage ?? false,
     snapshotHash: cfg.snapshotHash,
     snapshotGeneratedAt: cfg.snapshotGeneratedAt,
+    language: cfg.language,
   };
 }
 
@@ -50,6 +51,7 @@ export async function saveConfig(
   rootDir: string,
   answers: UserAnswers,
   snapshotHash?: string,
+  language?: Language,
 ): Promise<void> {
   const configPath = path.join(rootDir, CONFIG_FILENAME);
   const cfg: ConfigFile = {
@@ -65,6 +67,7 @@ export async function saveConfig(
     ...(snapshotHash
       ? { snapshotHash, snapshotGeneratedAt: Date.now() }
       : {}),
+    ...(language ? { language } : {}),
   };
   await writeFileSafe(configPath, JSON.stringify(cfg, null, 2) + "\n");
 }

@@ -3,8 +3,10 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { detectContext } from "./detect.js";
 import { generateSnapshot } from "./snapshot.js";
+import { buildImportGraph } from "./graph.js";
 import { loadConfig } from "./config.js";
 import { fileExists, readFileOr, writeFileSafe } from "./utils.js";
+import type { ProgressCallback } from "./types.js";
 
 /** Known context files in priority order */
 const CONTEXT_FILES = [
@@ -98,13 +100,17 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
 
   // 3. Detect context and generate new snapshot
   spinner.start("Scanning source files...");
-  const detected = await detectContext(rootDir);
+  const progress: ProgressCallback = (msg) => spinner.message(msg);
+  const detected = await detectContext(rootDir, progress);
+
+  // Build import graph for better snapshot quality
+  const graph = await buildImportGraph(rootDir, detected.language, progress);
 
   // Load snapshot paths from config if available
   const config = await loadConfig(rootDir);
   const snapshotPaths = config?.snapshotPaths ?? [];
 
-  const snapshot = await generateSnapshot(detected, snapshotPaths);
+  const snapshot = await generateSnapshot(detected, snapshotPaths, graph, undefined, progress);
   spinner.stop(
     snapshot.entries.length > 0
       ? `Found ${snapshot.entries.length} type${snapshot.entries.length === 1 ? "" : "s"}/signature${snapshot.entries.length === 1 ? "" : "s"}.`

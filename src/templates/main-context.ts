@@ -1,4 +1,4 @@
-import type { CodeSnapshot, DetectedContext, UserAnswers } from "../types.js";
+import type { CodeSnapshot, ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
 import { summarizeDetection } from "../detect.js";
 import { getFrameworkHintsSection } from "./framework-hints.js";
 
@@ -9,6 +9,7 @@ export function buildMainContext(
   ctx: DetectedContext,
   answers: UserAnswers,
   snapshot: CodeSnapshot | null,
+  analysis?: ContextAnalysis,
 ): string {
   const projectName = getProjectName(ctx);
   const stackSummary = answers.stackConfirmed
@@ -91,6 +92,107 @@ export function buildMainContext(
     sections.push(snapshot.markdown);
     sections.push("");
     sections.push("<!-- /CODE SNAPSHOT -->");
+    sections.push("");
+  }
+
+  // -- Key Files (hub files) --
+  if (analysis?.hubFiles && analysis.hubFiles.length > 0) {
+    // Build instability lookup for flagging risky files
+    const instabilityMap = new Map<string, number>();
+    if (analysis.instabilities) {
+      for (const inst of analysis.instabilities) {
+        instabilityMap.set(inst.path, inst.instability);
+      }
+    }
+
+    sections.push("## Key Files");
+    sections.push("");
+    sections.push(
+      "These are the most interconnected files. Read these first for architectural understanding.",
+    );
+    sections.push("");
+    sections.push("| File | Imported By | Stability |");
+    sections.push("|------|-------------|-----------|");
+    for (const hub of analysis.hubFiles) {
+      const inst = instabilityMap.get(hub.path);
+      const stabilityCell = inst != null
+        ? `${(inst * 100).toFixed(0)}% unstable ⚠️`
+        : "stable";
+      sections.push(
+        `| \`${hub.path}\` | ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"} | ${stabilityCell} |`,
+      );
+    }
+    sections.push("");
+  }
+
+  // -- Architecture (layer ordering) --
+  if (analysis?.layers && analysis.layers.length > 1) {
+    sections.push("## Architecture");
+    sections.push("");
+    sections.push("Dependency flow (foundational → consumer):");
+    sections.push("");
+    const layerNames = analysis.layers.map((l) => `\`${l.name}\``);
+    sections.push(layerNames.join(" → "));
+    sections.push("");
+  }
+
+  // -- Recently Active Files --
+  if (analysis?.gitActivity && analysis.gitActivity.hotFiles.length > 0) {
+    sections.push("## Recently Active Files");
+    sections.push("");
+    sections.push("| File | Commits (90d) | Last Changed |");
+    sections.push("|------|--------------|--------------|");
+    for (const hot of analysis.gitActivity.hotFiles.slice(0, 10)) {
+      sections.push(
+        `| \`${hot.path}\` | ${hot.commits} | ${hot.lastChanged} |`,
+      );
+    }
+    sections.push("");
+  }
+
+  // -- Change Coupling --
+  if (analysis?.gitActivity?.changeCoupling && analysis.gitActivity.changeCoupling.length > 0) {
+    sections.push("## Change Coupling");
+    sections.push("");
+    sections.push(
+      "Files that frequently change together. Consider whether they should be colocated or decoupled.",
+    );
+    sections.push("");
+    sections.push("| File A | File B | Co-changes | Confidence |");
+    sections.push("|--------|--------|------------|------------|");
+    for (const pair of analysis.gitActivity.changeCoupling) {
+      sections.push(
+        `| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${(pair.confidence * 100).toFixed(0)}% |`,
+      );
+    }
+    sections.push("");
+  }
+
+  // -- Circular Dependencies --
+  if (analysis?.circularDeps && analysis.circularDeps.length > 0) {
+    sections.push("## Circular Dependencies");
+    sections.push("");
+    sections.push(
+      "> These circular import chains may cause unexpected behavior when modified.",
+    );
+    sections.push("");
+    for (const dep of analysis.circularDeps) {
+      sections.push(`- ${dep.chain.map((f) => `\`${f}\``).join(" -> ")}`);
+    }
+    sections.push("");
+  }
+
+  // -- Module Clusters --
+  if (analysis?.communities && analysis.communities.length > 0) {
+    sections.push("## Module Clusters");
+    sections.push("");
+    sections.push(
+      "Automatically detected groups of tightly-connected files.",
+    );
+    sections.push("");
+    for (const community of analysis.communities) {
+      sections.push(`- **${community.label}** (${community.files.length} files): ${community.files.map((f) => `\`${f}\``).join(", ")}`);
+    }
     sections.push("");
   }
 

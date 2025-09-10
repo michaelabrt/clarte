@@ -2,6 +2,7 @@ import path from "node:path";
 import * as p from "@clack/prompts";
 import type {
   CodeSnapshot,
+  ContextAnalysis,
   DetectedContext,
   GeneratedFile,
   UserAnswers,
@@ -30,6 +31,7 @@ export async function generateFiles(
   snapshot: CodeSnapshot | null,
   force: boolean = false,
   dryRun: boolean = false,
+  analysis?: ContextAnalysis,
 ): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [];
 
@@ -40,8 +42,8 @@ export async function generateFiles(
   // Aider uses YAML format, everything else uses markdown
   const mainContent =
     answers.ide === "aider"
-      ? buildAiderContext(ctx, answers, snapshot)
-      : buildMainContext(ctx, answers, snapshot);
+      ? buildAiderContext(ctx, answers, snapshot, analysis)
+      : buildMainContext(ctx, answers, snapshot, analysis);
 
   files.push({
     path: mainFilename,
@@ -51,7 +53,7 @@ export async function generateFiles(
 
   // 2. Cursor-specific scoped rules
   if (answers.ide === "cursor") {
-    const rules = buildCursorRules(ctx, answers);
+    const rules = buildCursorRules(ctx, answers, analysis);
     for (const rule of rules) {
       const rulePath = `.cursor/rules/${rule.filename}`;
       const absPath = path.join(ctx.rootDir, rulePath);

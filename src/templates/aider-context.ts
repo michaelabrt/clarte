@@ -1,4 +1,4 @@
-import type { CodeSnapshot, DetectedContext, UserAnswers } from "../types.js";
+import type { CodeSnapshot, ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
 import { summarizeDetection } from "../detect.js";
 import { getFrameworkHints } from "./framework-hints.js";
 
@@ -10,6 +10,7 @@ export function buildAiderContext(
   ctx: DetectedContext,
   answers: UserAnswers,
   snapshot: CodeSnapshot | null,
+  analysis?: ContextAnalysis,
 ): string {
   const lines: string[] = [];
 
@@ -94,6 +95,47 @@ export function buildAiderContext(
           : "";
       lines.push(`  - "Package: ${escapeYaml(pkg.name)} at ${escapeYaml(pkg.path)}${escapeYaml(fws)}"`);
     }
+  }
+
+  // Key files
+  if (analysis?.hubFiles && analysis.hubFiles.length > 0) {
+    lines.push(`  - "Key files (read these first for architecture): ${escapeYaml(analysis.hubFiles.map((h) => h.path).join(", "))}"`);
+  }
+
+  // Architecture
+  if (analysis?.layers && analysis.layers.length > 1) {
+    const flow = analysis.layers.map((l) => l.name).join(" → ");
+    lines.push(`  - "Architecture dependency flow: ${escapeYaml(flow)}"`);
+  }
+
+  // Instability warnings
+  if (analysis?.instabilities && analysis.instabilities.length > 0) {
+    for (const inst of analysis.instabilities) {
+      lines.push(`  - "UNSTABLE: ${escapeYaml(inst.path)} — ${(inst.instability * 100).toFixed(0)}% unstable (${inst.fanIn} dependents, ${inst.fanOut} deps)"`);
+    }
+  }
+
+  // Change coupling
+  if (analysis?.gitActivity?.changeCoupling && analysis.gitActivity.changeCoupling.length > 0) {
+    for (const pair of analysis.gitActivity.changeCoupling.slice(0, 5)) {
+      lines.push(`  - "CO-CHANGE: ${escapeYaml(pair.fileA)} <-> ${escapeYaml(pair.fileB)} (${pair.coChangeCount} co-changes, ${(pair.confidence * 100).toFixed(0)}% confidence)"`);
+    }
+  }
+
+  // Circular dependencies
+  if (analysis?.circularDeps && analysis.circularDeps.length > 0) {
+    for (const dep of analysis.circularDeps) {
+      lines.push(`  - "CIRCULAR DEP: ${escapeYaml(dep.chain.join(" -> "))}"`);
+    }
+  }
+
+  // Recently active files
+  if (analysis?.gitActivity && analysis.gitActivity.hotFiles.length > 0) {
+    const hot = analysis.gitActivity.hotFiles
+      .slice(0, 5)
+      .map((h) => `${h.path} (${h.commits} commits)`)
+      .join(", ");
+    lines.push(`  - "Recently active: ${escapeYaml(hot)}"`);
   }
 
   // Code snapshot
