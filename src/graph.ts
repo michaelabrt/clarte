@@ -16,8 +16,8 @@ import type {
 
 // ── Import regex patterns per language ────────────────────────────────
 
-/** JS/TS: import ... from '...' */
-const JS_IMPORT_FROM = /import\s+(?:\{([^}]*)\}|(\w+)(?:\s*,\s*\{([^}]*)\})?)\s+from\s+['"]([^'"]+)['"]/g;
+/** JS/TS: import ... from '...' (including type-only and namespace imports) */
+const JS_IMPORT_FROM = /import\s+(?:type\s+)?(?:\{([^}]*)\}|(\*\s+as\s+\w+|\w+)(?:\s*,\s*\{([^}]*)\})?)\s+from\s+['"]([^'"]+)['"]/g;
 /** JS/TS: import '...' (side-effect) */
 const JS_IMPORT_SIDE = /import\s+['"]([^'"]+)['"]/g;
 /** JS/TS: require('...') */
@@ -25,8 +25,8 @@ const JS_REQUIRE = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
 /** JS/TS: dynamic import('...') */
 const JS_DYNAMIC = /import\(\s*['"]([^'"]+)['"]\s*\)/g;
 
-/** Python: from foo.bar import baz, qux */
-const PY_FROM_IMPORT = /^from\s+([\w.]+)\s+import\s+(.+)/gm;
+/** Python: from foo.bar import baz, qux (including relative imports like from . import x) */
+const PY_FROM_IMPORT = /^from\s+(\.+[\w.]*|[\w][\w.]*)\s+import\s+(.+)/gm;
 /** Python: import foo, bar */
 const PY_IMPORT = /^import\s+([\w., ]+)/gm;
 
@@ -34,8 +34,8 @@ const PY_IMPORT = /^import\s+([\w., ]+)/gm;
 const GO_IMPORT_SINGLE = /import\s+"([^"]+)"/g;
 const GO_IMPORT_BLOCK = /import\s*\(([^)]+)\)/gs;
 
-/** Rust: use crate::foo::bar */
-const RUST_USE = /use\s+((?:crate|super|self)::[\w:]+)/g;
+/** Rust: use crate::foo::bar (including pub use and glob imports) */
+const RUST_USE = /(?:pub\s+)?use\s+((?:crate|super|self)(?:::\w+)*(?:::\{[^}]*\})?)/g;
 /** Rust: mod foo; */
 const RUST_MOD = /mod\s+(\w+)\s*;/g;
 
@@ -64,19 +64,25 @@ function getSourceGlob(lang: Language): string[] {
 
 // ── Parse imports from a single file ──────────────────────────────────
 
-interface RawImport {
+export interface RawImport {
   specifier: string;
   importedNames: string[];
 }
 
-function parseJsImports(content: string): RawImport[] {
+export function parseJsImports(content: string): RawImport[] {
   const imports: RawImport[] = [];
 
-  // import { a, b } from '...' / import Foo from '...' / import Foo, { a } from '...'
+  // import { a, b } from '...' / import Foo from '...' / import Foo, { a } from '...' / import * as Foo from '...'
   for (const m of content.matchAll(JS_IMPORT_FROM)) {
     const names: string[] = [];
     if (m[1]) names.push(...m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
-    if (m[2]) names.push(m[2].trim());
+    if (m[2]) {
+      const group2 = m[2].trim();
+      // Namespace import (* as foo) — edge is valid but no named import to extract
+      if (!group2.startsWith("*")) {
+        names.push(group2);
+      }
+    }
     if (m[3]) names.push(...m[3].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
     imports.push({ specifier: m[4], importedNames: names });
   }
@@ -102,7 +108,7 @@ function parseJsImports(content: string): RawImport[] {
   return imports;
 }
 
-function parsePythonImports(content: string): RawImport[] {
+export function parsePythonImports(content: string): RawImport[] {
   const imports: RawImport[] = [];
 
   for (const m of content.matchAll(PY_FROM_IMPORT)) {
@@ -121,7 +127,7 @@ function parsePythonImports(content: string): RawImport[] {
   return imports;
 }
 
-function parseGoImports(content: string): RawImport[] {
+export function parseGoImports(content: string): RawImport[] {
   const imports: RawImport[] = [];
 
   for (const m of content.matchAll(GO_IMPORT_SINGLE)) {
@@ -131,6 +137,8 @@ function parseGoImports(content: string): RawImport[] {
   for (const m of content.matchAll(GO_IMPORT_BLOCK)) {
     const block = m[1];
     for (const line of block.split("\n")) {
+      // Skip comment lines
+      if (line.trim().startsWith("//")) continue;
       const match = line.match(/["']([^"']+)["']/);
       if (match) {
         imports.push({ specifier: match[1], importedNames: [] });
@@ -141,14 +149,21 @@ function parseGoImports(content: string): RawImport[] {
   return imports;
 }
 
-function parseRustImports(content: string): RawImport[] {
+export function parseRustImports(content: string): RawImport[] {
   const imports: RawImport[] = [];
 
   for (const m of content.matchAll(RUST_USE)) {
-    const path = m[1];
-    const parts = path.split("::");
-    const name = parts[parts.length - 1];
-    imports.push({ specifier: path, importedNames: name ? [name] : [] });
+    const usePath = m[1];
+    // Check for glob imports like crate::foo::{Bar, Baz}
+    const globMatch = usePath.match(/::\{([^}]*)\}$/);
+    if (globMatch) {
+      const names = globMatch[1].split(",").map((n) => n.trim()).filter(Boolean);
+      imports.push({ specifier: usePath, importedNames: names });
+    } else {
+      const parts = usePath.split("::");
+      const name = parts[parts.length - 1];
+      imports.push({ specifier: usePath, importedNames: name ? [name] : [] });
+    }
   }
 
   for (const m of content.matchAll(RUST_MOD)) {
