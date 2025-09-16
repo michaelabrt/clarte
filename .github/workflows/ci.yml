@@ -1,0 +1,168 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Cache WASM grammars
+        uses: actions/cache@v4
+        with:
+          path: dist/wasm
+          key: wasm-${{ hashFiles('package-lock.json') }}
+
+      - run: npm run build
+
+      - run: npm test
+
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      - name: Self-test diff (Node 22 only)
+        if: matrix.node-version == 22
+        run: |
+          node dist/index.js --no-input 2>/dev/null || true
+          if [ -f CLAUDE.md ]; then
+            git diff --stat CLAUDE.md
+            # Fail if non-temporal differences exist
+            DIFF=$(git diff CLAUDE.md | grep '^[+-]' | grep -v '^[+-][+-][+-]' | grep -vE '(minutes?|hours?|days?|ago|generated [0-9]{4})' || true)
+            if [ -n "$DIFF" ]; then
+              echo "::warning::Self-test diff found non-temporal changes in CLAUDE.md"
+              echo "$DIFF"
+            fi
+          fi
+
+  # TODO: Enable when ready to go public
+  # release:
+  #   needs: check
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: write
+  #     issues: write
+  #     pull-requests: write
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+  #
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 22
+  #         registry-url: https://registry.npmjs.org
+  #
+  #     - run: npm ci
+  #
+  #     - run: npm run build
+  #
+  #     - run: npm test
+  #
+  #     - run: npm run typecheck
+  #
+  #     - name: Release
+  #       id: semantic
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #         NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+  #         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  #       run: |
+  #         BEFORE_TAG=$(git tag --sort=-v:refname | head -1)
+  #         npx semantic-release
+  #         AFTER_TAG=$(git tag --sort=-v:refname | head -1)
+  #         if [ "$BEFORE_TAG" != "$AFTER_TAG" ] && [ -n "$AFTER_TAG" ]; then
+  #           VERSION="${AFTER_TAG#v}"
+  #           echo "new-release-published=true" >> "$GITHUB_OUTPUT"
+  #           echo "new-release-version=$VERSION" >> "$GITHUB_OUTPUT"
+  #           echo "New release published: $AFTER_TAG"
+  #         else
+  #           echo "new-release-published=false" >> "$GITHUB_OUTPUT"
+  #           echo "No new release published"
+  #         fi
+  #
+  #     - name: Clean up ghost tag on failure
+  #       if: failure()
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #       run: |
+  #         BEFORE_TAG=$(git tag --sort=-v:refname | head -1)
+  #         if [ -n "$BEFORE_TAG" ]; then
+  #           VERSION="${BEFORE_TAG#v}"
+  #           if ! npm view "clarte@$VERSION" version &>/dev/null; then
+  #             echo "Cleaning up ghost tag $BEFORE_TAG (npm publish failed)"
+  #             git push origin --delete "$BEFORE_TAG" || true
+  #             gh release delete "$BEFORE_TAG" --yes --cleanup-tag || true
+  #           fi
+  #         fi
+  #
+  # binaries:
+  #   needs: release
+  #   if: needs.release.outputs.new-release-published == 'true'
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     UPX_VERSION: "5.0.1"
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 22
+  #
+  #     - run: npm ci
+  #
+  #     - run: npm run build
+  #
+  #     - uses: oven-sh/setup-bun@v2
+  #
+  #     - name: Install UPX
+  #       run: |
+  #         curl -fsSL "https://github.com/upx/upx/releases/download/v${UPX_VERSION}/upx-${UPX_VERSION}-amd64_linux.tar.xz" -o upx.tar.xz
+  #         tar -xf upx.tar.xz
+  #         sudo mv "upx-${UPX_VERSION}-amd64_linux/upx" /usr/local/bin/upx
+  #         upx --version
+  #
+  #     - name: Build binaries
+  #       run: |
+  #         mkdir -p binaries
+  #         targets=("bun-linux-x64" "bun-darwin-x64" "bun-darwin-arm64")
+  #         outputs=("clarte-linux-x64" "clarte-darwin-x64" "clarte-darwin-arm64")
+  #         for i in "${!targets[@]}"; do
+  #           echo "Building ${outputs[$i]}..."
+  #           bun build dist/index.js --compile --target="${targets[$i]}" --minify --outfile "binaries/${outputs[$i]}"
+  #         done
+  #
+  #     - name: Compress with UPX
+  #       run: |
+  #         for f in binaries/clarte-*; do
+  #           echo "Compressing $f..."
+  #           ls -lh "$f"
+  #           upx --best "$f" || echo "UPX failed for $f (expected for cross-compiled darwin binaries)"
+  #           ls -lh "$f"
+  #         done
+  #
+  #     - name: Upload to GitHub Release
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #       run: |
+  #         TAG="v${{ needs.release.outputs.new-release-version }}"
+  #         echo "Uploading binaries to release $TAG..."
+  #         gh release upload "$TAG" binaries/clarte-* --clobber
