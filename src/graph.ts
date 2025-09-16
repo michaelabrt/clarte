@@ -214,21 +214,21 @@ function resolveJsImport(
   allFiles: Set<string>,
 ): string | null {
   const dir = path.dirname(fromFile);
-  const base = path.join(dir, specifier).replace(/\\/g, "/");
+  const raw = path.join(dir, specifier).replace(/\\/g, "/");
 
-  // Exact match (already has extension)
-  if (allFiles.has(base)) return base;
+  // Try with original path, then with JS extension stripped (TS ESM convention:
+  // source uses `.js` specifiers but actual files are `.ts`)
+  const stripped = raw.replace(/\.(jsx?|mjs)$/, "");
+  const bases = stripped !== raw ? [raw, stripped] : [raw];
 
-  // Try adding extensions
-  for (const ext of JS_EXTENSIONS) {
-    const candidate = base + ext;
-    if (allFiles.has(candidate)) return candidate;
-  }
-
-  // Try index files
-  for (const idx of INDEX_FILES) {
-    const candidate = base + idx;
-    if (allFiles.has(candidate)) return candidate;
+  for (const base of bases) {
+    if (allFiles.has(base)) return base;
+    for (const ext of JS_EXTENSIONS) {
+      if (allFiles.has(base + ext)) return base + ext;
+    }
+    for (const idx of INDEX_FILES) {
+      if (allFiles.has(base + idx)) return base + idx;
+    }
   }
 
   return null;
