@@ -11,7 +11,7 @@ import { summarizeDetection } from "./detect.js";
  * Run the interactive prompt flow. Takes the auto-detected context
  * and asks the user to fill in what couldn't be auto-detected.
  *
- * When `defaults` is provided (from .context-pilot.json + --reconfigure),
+ * When `defaults` is provided (from .codebrief.json + --reconfigure),
  * prompt values are pre-filled so the user can just press Enter to keep them.
  */
 export async function runPrompts(

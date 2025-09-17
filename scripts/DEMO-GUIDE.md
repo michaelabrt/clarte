@@ -20,7 +20,7 @@ clear
 bash scripts/record-demo.sh setup
 ```
 
-This creates `/tmp/context-pilot-demo` with 200+ TypeScript files.
+This creates `/tmp/codebrief-demo` with 200+ TypeScript files.
 
 ### 3. Start Recording
 - Open Kap (or Cmd+Shift+5)
@@ -38,7 +38,7 @@ bash scripts/record-demo.sh record
 The script will automatically:
 
 1. **Navigate** to demo project (2s)
-2. **Run** `context-pilot` (3s wait for detection)
+2. **Run** `codebrief` (3s wait for detection)
 3. **Browse IDE options** — Shows Cursor, OpenCode, Copilot, then selects Claude Code (3s)
 4. **Confirm stack** — Detected React + TypeScript (1s)
 5. **Enter purpose** — Types project description (5s)
@@ -148,7 +148,7 @@ Add:
 ### Comparison Demo (45 seconds)
 Split screen:
 - **Left:** Traditional approach (Claude reading files manually)
-- **Right:** With context-pilot (instant context)
+- **Right:** With codebrief (instant context)
 
 ## Post-Production (Optional)
 
@@ -164,7 +164,7 @@ If editing in video software:
 
 ### GitHub README
 ```markdown
-![context-pilot demo](demo.gif)
+![codebrief demo](demo.gif)
 ```
 
 ### Twitter
