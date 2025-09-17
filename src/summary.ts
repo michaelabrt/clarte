@@ -27,7 +27,16 @@ export function printSummary(
   const mainFiles = files.filter((f) => !f.path.includes(".cursor/rules/"));
   const ruleFiles = files.filter((f) => f.path.includes(".cursor/rules/"));
 
-  // Print main files
+  // Pre-compute row data for aligned output
+  const fileRows: Array<{
+    indent: string;
+    name: string;
+    size: string;
+    tokens: string;
+    isUpdated: boolean;
+    isHeader: boolean;
+  }> = [];
+
   for (const file of mainFiles) {
     const bytes = Buffer.byteLength(file.content, "utf-8");
     const tokens = estimateTokens(file.content);
@@ -35,15 +44,25 @@ export function printSummary(
     totalTokens += tokens;
     alwaysOnTokens += tokens;
 
-    const status = file.existed ? pc.yellow("(updated)") : pc.green("(new)");
-    console.log(
-      `    ${pc.cyan(file.path.padEnd(28))} ${formatBytes(bytes).padStart(8)}  ${pc.dim(`(~${formatNumber(tokens)} tokens)`)}  ${status}`,
-    );
+    fileRows.push({
+      indent: "    ",
+      name: file.path,
+      size: formatBytes(bytes),
+      tokens: `(~${formatNumber(tokens)} tokens)`,
+      isUpdated: !!file.existed,
+      isHeader: false,
+    });
   }
 
-  // Print rule files grouped
   if (ruleFiles.length > 0) {
-    console.log(`    ${pc.cyan(".cursor/rules/")}`);
+    fileRows.push({
+      indent: "    ",
+      name: ".cursor/rules/",
+      size: "",
+      tokens: "",
+      isUpdated: false,
+      isHeader: true,
+    });
 
     // global.md is always-on, others are scoped
     for (const file of ruleFiles) {
@@ -61,9 +80,32 @@ export function printSummary(
         scopedRuleTokens.push(tokens);
       }
 
-      const status = file.existed ? pc.yellow("(updated)") : pc.green("(new)");
+      fileRows.push({
+        indent: "      ",
+        name: filename,
+        size: formatBytes(bytes),
+        tokens: `(~${formatNumber(tokens)} tokens)`,
+        isUpdated: !!file.existed,
+        isHeader: false,
+      });
+    }
+  }
+
+  // Derive column widths from row data
+  const dataFileRows = fileRows.filter((r) => !r.isHeader);
+  const maxNameCol = Math.max(...fileRows.map((r) => r.indent.length + r.name.length));
+  const maxSizeWidth = Math.max(...dataFileRows.map((r) => r.size.length));
+  const maxTokenWidth = Math.max(...dataFileRows.map((r) => r.tokens.length));
+
+  // Print aligned rows
+  for (const row of fileRows) {
+    if (row.isHeader) {
+      console.log(`${row.indent}${pc.cyan(row.name)}`);
+    } else {
+      const status = row.isUpdated ? pc.yellow("(updated)") : pc.green("(new)");
+      const paddedName = row.name.padEnd(maxNameCol - row.indent.length);
       console.log(
-        `      ${pc.cyan(filename.padEnd(26))} ${formatBytes(bytes).padStart(8)}  ${pc.dim(`(~${formatNumber(tokens)} tokens)`)}  ${status}`,
+        `${row.indent}${pc.cyan(paddedName)}  ${row.size.padStart(maxSizeWidth)}  ${pc.dim(row.tokens.padEnd(maxTokenWidth))}  ${status}`,
       );
     }
   }
@@ -106,12 +148,6 @@ export function printSummary(
   // Before: estimate exploration cost from source file count + size
   const explorationTokens = estimateExplorationCost(ctx);
 
-  console.log(pc.dim("    Before (no context files):"));
-  console.log(
-    `      Exploration to understand codebase    ${pc.red(`~${formatNumber(explorationTokens)} tokens`)}`,
-  );
-  console.log("");
-
   // After
   const avgScopedTokens =
     scopedRuleTokens.length > 0
@@ -127,23 +163,53 @@ export function printSummary(
     ((explorationTokens - afterTotal) / explorationTokens) * 100,
   );
 
-  console.log(pc.dim("    After:"));
-  console.log(
-    `      Always loaded    main context + global rule  ${pc.green(`~${formatNumber(alwaysOnTokens)} tokens`)}`,
-  );
+  // Build cost rows for dynamic alignment
+  const costRows: Array<{ label: string; desc: string; value: string }> = [
+    { label: "Always loaded", desc: "main context + global rule", value: `~${formatNumber(alwaysOnTokens)} tokens` },
+  ];
 
   if (avgScopedTokens > 0) {
+    costRows.push({ label: "Per-task (avg)", desc: "1 scoped rule", value: `~${formatNumber(avgScopedTokens)} tokens` });
+  }
+
+  costRows.push({ label: "Exploration", desc: "mostly eliminated", value: `~${formatNumber(residualExploration)} tokens` });
+
+  const maxCostLabel = Math.max(...costRows.map((r) => r.label.length));
+  const maxCostDesc = Math.max(...costRows.map((r) => r.desc.length));
+  const maxCostValue = Math.max(...costRows.map((r) => r.value.length));
+  const afterContentWidth = maxCostLabel + 3 + maxCostDesc + 2 + maxCostValue;
+
+  // "Before" section — right-align value with After's value column
+  const beforeValue = `~${formatNumber(explorationTokens)} tokens`;
+  const beforeLabel = "Exploration to understand codebase";
+  const beforeGap = afterContentWidth - beforeLabel.length - beforeValue.length;
+
+  console.log(pc.dim("    Before (no context files):"));
+  if (beforeGap >= 2) {
     console.log(
-      `      Per-task (avg)   1 scoped rule               ${pc.green(`~${formatNumber(avgScopedTokens)} tokens`)}`,
+      `      ${beforeLabel}${" ".repeat(beforeGap)}${pc.red(beforeValue)}`,
+    );
+  } else {
+    console.log(
+      `      ${beforeLabel}  ${pc.red(beforeValue)}`,
+    );
+  }
+  console.log("");
+
+  // "After" section
+  console.log(pc.dim("    After:"));
+  for (const row of costRows) {
+    console.log(
+      `      ${row.label.padEnd(maxCostLabel)}   ${row.desc.padEnd(maxCostDesc)}  ${pc.green(row.value.padStart(maxCostValue))}`,
     );
   }
 
+  const totalText = `Total: ~${formatNumber(afterTotal)} tokens`;
+  const totalPad = afterContentWidth > totalText.length
+    ? " ".repeat(afterContentWidth - totalText.length)
+    : "";
   console.log(
-    `      Exploration      mostly eliminated            ${pc.green(`~${formatNumber(residualExploration)} tokens`)}`,
-  );
-
-  console.log(
-    `                                            ${pc.bold(`Total: ~${formatNumber(afterTotal)} tokens`)}`,
+    `      ${totalPad}${pc.bold(totalText)}`,
   );
 
   console.log("");
