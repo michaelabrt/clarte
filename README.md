@@ -1,13 +1,13 @@
-# context-pilot
+# codebrief
 
 Bootstrap optimized AI context files for any project. Auto-detects your tech stack, generates code snapshots, and produces config for Claude Code, Cursor, Copilot, Windsurf, Cline, Continue, Aider, and more.
 
-![context-pilot demo](demo.gif)
+![codebrief demo](demo.gif)
 
 ## Quick Start
 
 ```bash
-npx context-pilot
+npx codebrief
 ```
 
 Run in your project root. It will:
@@ -18,11 +18,11 @@ Run in your project root. It will:
 4. **Generate** optimized context files for your chosen tool
 5. **Show** a summary with token savings estimate
 
-On first run, your answers are saved to `.context-pilot.json` so future runs skip the prompts entirely.
+On first run, your answers are saved to `.codebrief.json` so future runs skip the prompts entirely.
 
 ## What It Does
 
-context-pilot builds a comprehensive understanding of your codebase and distills it into context files that AI agents can load instantly — eliminating the expensive exploration phase where agents read dozens of files just to understand the architecture.
+codebrief builds a comprehensive understanding of your codebase and distills it into context files that AI agents can load instantly — eliminating the expensive exploration phase where agents read dozens of files just to understand the architecture.
 
 The generated context includes:
 
@@ -38,73 +38,73 @@ The generated context includes:
 
 ## How It Works
 
-context-pilot runs a pipeline of static analysis on your codebase. Here's what each step does and why it matters.
+codebrief runs a pipeline of static analysis on your codebase. Here's what each step does and why it matters.
 
 ### Mapping dependencies
 
 **Problem:** AI agents don't know which files depend on each other, so they waste time reading unrelated code.
 
-context-pilot parses all `import`/`require`/`use` statements across your source files and builds a dependency graph. This graph powers most of the analysis below — it's how context-pilot understands the structure of your project without running it.
+codebrief parses all `import`/`require`/`use` statements across your source files and builds a dependency graph. This graph powers most of the analysis below — it's how codebrief understands the structure of your project without running it.
 
 ### Ranking files by importance (PageRank)
 
 **Problem:** In a project with hundreds of files, which ones should an agent read first?
 
-context-pilot runs the same algorithm Google uses to rank web pages — but on your import graph instead of the internet. Files that are imported by many important files get a high score. For example, your main `types.ts` or a shared `api-client.ts` would rank near the top because they sit at the center of your dependency tree. These high-centrality files are surfaced first so agents understand your architecture before diving into details.
+codebrief runs the same algorithm Google uses to rank web pages — but on your import graph instead of the internet. Files that are imported by many important files get a high score. For example, your main `types.ts` or a shared `api-client.ts` would rank near the top because they sit at the center of your dependency tree. These high-centrality files are surfaced first so agents understand your architecture before diving into details.
 
 ### Removing dead exports
 
 **Problem:** Source files often contain exported functions, types, or constants that nothing actually imports — leftover refactors, unused utilities, or over-exported modules. Including these in context wastes tokens.
 
-context-pilot cross-references every named export against the import graph. If no file in the project imports it, it's excluded from the code snapshot.
+codebrief cross-references every named export against the import graph. If no file in the project imports it, it's excluded from the code snapshot.
 
 ### Fitting context into a token budget
 
 **Problem:** A full code snapshot of every type, interface, and function signature might exceed the token budget — especially in large projects.
 
-context-pilot uses a greedy knapsack approach: it prioritizes entries from the most central files, recently active files, and core categories (types, store shapes) first, then fills the remaining budget with lower-priority items. This ensures the most valuable context always makes it in, even under tight limits.
+codebrief uses a greedy knapsack approach: it prioritizes entries from the most central files, recently active files, and core categories (types, store shapes) first, then fills the remaining budget with lower-priority items. This ensures the most valuable context always makes it in, even under tight limits.
 
 ### Detecting architectural layers
 
 **Problem:** Agents need to understand the high-level shape of a project — where the types live, where the API calls happen, where the UI components are.
 
-context-pilot classifies files into layers (types, stores, hooks, services, components, pages, utils, config) based on directory and naming conventions, then analyzes how those layers depend on each other. This gives agents a quick mental model like "services call the API, components use hooks, hooks read from stores."
+codebrief classifies files into layers (types, stores, hooks, services, components, pages, utils, config) based on directory and naming conventions, then analyzes how those layers depend on each other. This gives agents a quick mental model like "services call the API, components use hooks, hooks read from stores."
 
 ### Finding circular dependencies (Tarjan's SCC)
 
 **Problem:** Circular imports cause subtle bugs, make refactoring dangerous, and confuse AI agents trying to understand dependency flow.
 
-context-pilot uses Tarjan's algorithm to find groups of files that form import cycles. For example, if `auth.ts → user.ts → permissions.ts → auth.ts`, all three files are reported as a circular dependency cluster. This is surfaced in the context so agents avoid introducing more cycles.
+codebrief uses Tarjan's algorithm to find groups of files that form import cycles. For example, if `auth.ts → user.ts → permissions.ts → auth.ts`, all three files are reported as a circular dependency cluster. This is surfaced in the context so agents avoid introducing more cycles.
 
 ### Flagging unstable files
 
 **Problem:** Some files change frequently but are imported by many others — any modification risks breaking things across the project.
 
-context-pilot computes an instability score for each file based on how many files it imports vs. how many files import it. Files that are both highly unstable and widely depended on are flagged as risk zones — agents will know to be extra careful when modifying them.
+codebrief computes an instability score for each file based on how many files it imports vs. how many files import it. Files that are both highly unstable and widely depended on are flagged as risk zones — agents will know to be extra careful when modifying them.
 
 ### Detecting change coupling
 
 **Problem:** Some files always need to change together (e.g., a component and its test, or a route and its handler) but there's no import relationship between them.
 
-context-pilot analyzes 90 days of git history to find file pairs that frequently appear in the same commits. If two files were changed together in many commits, they're reported as coupled — so agents know that touching one likely means touching the other.
+codebrief analyzes 90 days of git history to find file pairs that frequently appear in the same commits. If two files were changed together in many commits, they're reported as coupled — so agents know that touching one likely means touching the other.
 
 ### Discovering module clusters
 
 **Problem:** Large projects have natural groupings of related files (an auth module, a payments module) but these aren't always obvious from the folder structure.
 
-context-pilot uses label propagation on the import graph: each file starts with its own label and iteratively adopts the most common label among its neighbors. Files that end up sharing a label form a natural cluster. This reveals logical modules even when the folder layout doesn't match.
+codebrief uses label propagation on the import graph: each file starts with its own label and iteratively adopts the most common label among its neighbors. Files that end up sharing a label form a natural cluster. This reveals logical modules even when the folder layout doesn't match.
 
 ### Tracking git activity
 
 **Problem:** Agents don't know which parts of the codebase are actively being worked on vs. which are stable.
 
-context-pilot counts commits per file over the last 90 days to surface hot spots and recently active files. This helps agents understand where current development is focused.
+codebrief counts commits per file over the last 90 days to surface hot spots and recently active files. This helps agents understand where current development is focused.
 
 ### Detecting stale snapshots
 
 **Problem:** After a refactor, the code snapshot in your context file may be outdated — describing types and signatures that no longer exist.
 
-context-pilot hashes all source file paths and modification times. When you run `--check`, it compares this hash against the stored one to tell you if the snapshot needs refreshing.
+codebrief hashes all source file paths and modification times. When you run `--check`, it compares this hash against the stored one to tell you if the snapshot needs refreshing.
 
 ## Supported Tools
 
@@ -123,7 +123,7 @@ context-pilot hashes all source file paths and modification times. When you run 
 ## Options
 
 ```bash
-npx context-pilot [directory] [options]
+npx codebrief [directory] [options]
 ```
 
 | Flag | Description |
@@ -132,7 +132,7 @@ npx context-pilot [directory] [options]
 | `--force` | Overwrite existing files without asking |
 | `--dry-run` | Show what would be generated without writing any files |
 | `--refresh-snapshot` | Re-scan source files and update the code snapshot in your existing context file |
-| `--reconfigure` | Force re-prompting even if `.context-pilot.json` exists |
+| `--reconfigure` | Force re-prompting even if `.codebrief.json` exists |
 | `--check` | Check if the snapshot is stale (exit code 0 = fresh, 1 = stale). Designed for shell integration. |
 | `--max-tokens=N` | Set the token budget for the code snapshot |
 
@@ -141,7 +141,7 @@ npx context-pilot [directory] [options]
 After a refactor, update just the code snapshot without re-generating the entire file:
 
 ```bash
-npx context-pilot --refresh-snapshot
+npx codebrief --refresh-snapshot
 ```
 
 This auto-detects your context file (CLAUDE.md, AGENTS.md, etc.), finds the `<!-- CODE SNAPSHOT -->` markers, re-scans source files, and replaces just that section in-place.
@@ -155,8 +155,8 @@ Use `--check` to automatically detect stale snapshots when you `cd` into a proje
 ```zsh
 # Add to ~/.zshrc
 chpwd() {
-  if [[ -f .context-pilot.json ]]; then
-    npx --yes context-pilot --check 2>/dev/null
+  if [[ -f .codebrief.json ]]; then
+    npx --yes codebrief --check 2>/dev/null
   fi
 }
 ```
@@ -167,8 +167,8 @@ chpwd() {
 # Add to ~/.bashrc
 cd() {
   builtin cd "$@" || return
-  if [[ -f .context-pilot.json ]]; then
-    npx --yes context-pilot --check 2>/dev/null
+  if [[ -f .codebrief.json ]]; then
+    npx --yes codebrief --check 2>/dev/null
   fi
 }
 ```
@@ -176,17 +176,17 @@ cd() {
 ### fish
 
 ```fish
-# Add to ~/.config/fish/conf.d/context-pilot.fish
-function __context_pilot_check --on-variable PWD
-  if test -f .context-pilot.json
-    npx --yes context-pilot --check 2>/dev/null
+# Add to ~/.config/fish/conf.d/codebrief.fish
+function __codebrief_check --on-variable PWD
+  if test -f .codebrief.json
+    npx --yes codebrief --check 2>/dev/null
   end
 end
 ```
 
 ## Config File
 
-On first run, context-pilot saves your answers to `.context-pilot.json`:
+On first run, codebrief saves your answers to `.codebrief.json`:
 
 ```json
 {
@@ -204,11 +204,11 @@ On first run, context-pilot saves your answers to `.context-pilot.json`:
 
 Subsequent runs load this config and skip all prompts. Use `--reconfigure` to re-prompt with your saved values as defaults.
 
-Add `.context-pilot.json` to your `.gitignore` — it's a local tool config, not project documentation.
+Add `.codebrief.json` to your `.gitignore` — it's a local tool config, not project documentation.
 
 ## Framework Conventions
 
-context-pilot detects specific frameworks and automatically includes relevant best practices in the generated output:
+codebrief detects specific frameworks and automatically includes relevant best practices in the generated output:
 
 - **Next.js** — App Router vs Pages Router patterns, server components, route handlers
 - **Express** — middleware chain, error handling, router organization
@@ -222,7 +222,7 @@ context-pilot detects specific frameworks and automatically includes relevant be
 
 ## Monorepo Support
 
-context-pilot detects monorepo tooling and can generate per-package context files:
+codebrief detects monorepo tooling and can generate per-package context files:
 
 - **pnpm workspaces** (`pnpm-workspace.yaml`)
 - **Turborepo** (`turbo.json`)

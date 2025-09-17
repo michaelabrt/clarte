@@ -1,4 +1,4 @@
-# context-pilot Improvements
+# codebrief Improvements
 
 ## 🚀 Tool Improvements
 
@@ -6,7 +6,7 @@
 
 #### 1. Interactive Preview Mode
 ```bash
-npx context-pilot --preview
+npx codebrief --preview
 ```
 - Show diff of what would be generated before writing
 - Let users edit in `$EDITOR` before saving
@@ -14,7 +14,7 @@ npx context-pilot --preview
 
 #### 2. AI-Powered Optimization
 ```bash
-npx context-pilot --optimize
+npx codebrief --optimize
 ```
 - Use Claude API to analyze generated context
 - Suggest improvements, catch redundancies
@@ -23,7 +23,7 @@ npx context-pilot --optimize
 
 #### 3. Template System
 ```
-.context-pilot-templates/
+.codebrief-templates/
   ├── base.md
   ├── fintech.md
   ├── healthcare-hipaa.md
@@ -61,7 +61,7 @@ Detect and document:
 
 #### 6. Smart File Watching
 ```bash
-npx context-pilot --watch
+npx codebrief --watch
 ```
 - Auto-refresh snapshot when source files change significantly
 - Use chokidar to watch for new types/interfaces
@@ -69,7 +69,7 @@ npx context-pilot --watch
 
 #### 7. Context Health Check
 ```bash
-npx context-pilot --check
+npx codebrief --check
 ```
 - Validate existing context files
 - Find outdated sections (compare with current codebase)
@@ -93,7 +93,7 @@ Generate `ONBOARDING.md`:
 
 #### 10. Snapshot Comparison
 ```bash
-npx context-pilot --compare [old-snapshot]
+npx codebrief --compare [old-snapshot]
 ```
 - Show what changed since last run
 - Highlight new types, removed functions
@@ -101,9 +101,9 @@ npx context-pilot --compare [old-snapshot]
 
 #### 11. Export Formats
 ```bash
-npx context-pilot --format json
-npx context-pilot --format yaml
-npx context-pilot --format confluence
+npx codebrief --format json
+npx codebrief --format yaml
+npx codebrief --format confluence
 ```
 - Export for wikis, Notion, Confluence
 - JSON/YAML for programmatic use
@@ -113,7 +113,7 @@ npx context-pilot --format confluence
 
 #### 12. Context Token Budget
 ```bash
-npx context-pilot --max-tokens 50000
+npx codebrief --max-tokens 50000
 ```
 - Let users specify token budget
 - Auto-prioritize important sections
@@ -127,8 +127,8 @@ Better handling for:
 
 #### 14. Plugin System
 ```bash
-npm install @context-pilot/plugin-stripe
-npm install @context-pilot/plugin-supabase
+npm install @codebrief/plugin-stripe
+npm install @codebrief/plugin-supabase
 ```
 - Community-maintained plugins for specific tools
 - Auto-document integration patterns
@@ -136,7 +136,7 @@ npm install @context-pilot/plugin-supabase
 
 #### 15. Crowdsourced Gotchas
 ```bash
-npx context-pilot --suggest-gotchas
+npx codebrief --suggest-gotchas
 ```
 - Query community database of known issues
 - "Based on Next.js 14 + Vercel, here are common gotchas..."
@@ -144,7 +144,7 @@ npx context-pilot --suggest-gotchas
 
 #### 16. Visual Context Map
 ```bash
-npx context-pilot --map
+npx codebrief --map
 ```
 - Generate ASCII/Mermaid diagram of project structure
 - Show relationships between modules
@@ -198,10 +198,10 @@ claude "Add a dark mode toggle to the navbar"
 #### Structure
 1. **Problem** (5 sec): "AI agents waste tokens exploring codebases"
 2. **Show Problem** (8 sec): Terminal showing agent reading dozens of files
-3. **Introduce Solution** (3 sec): "context-pilot changes that"
+3. **Introduce Solution** (3 sec): "codebrief changes that"
 4. **Demo** (15 sec): Quick run of the tool
 5. **Results** (5 sec): Token savings, time saved
-6. **CTA** (3 sec): "Try it: npx context-pilot"
+6. **CTA** (3 sec): "Try it: npx codebrief"
 
 #### Add Metrics
 - Timer in corner: "0:12s — From zero to optimized"
@@ -233,7 +233,7 @@ Create variations:
 Show typed commands in footer:
 ```
 ┌─────────────────────────────┐
-│ $ npx context-pilot         │
+│ $ npx codebrief         │
 └─────────────────────────────┘
 ```
 
@@ -241,13 +241,13 @@ Show typed commands in footer:
 ```
 ╔══════════════════════════════════════════╗
 ║                                          ║
-║        context-pilot                     ║
+║        codebrief                     ║
 ║                                          ║
-║   github.com/yourname/context-pilot      ║
+║   github.com/yourname/codebrief      ║
 ║                                          ║
 ║   ⭐ Star if useful!                     ║
 ║                                          ║
-║   Try it: npx context-pilot              ║
+║   Try it: npx codebrief              ║
 ║                                          ║
 ╚══════════════════════════════════════════╝
 ```

@@ -1,10 +1,10 @@
 {
-  "name": "context-pilot",
-  "version": "0.3.0",
+  "name": "codebrief",
+  "version": "1.0.1",
   "description": "Bootstrap optimized AI context files for any project — auto-detect stack, generate code snapshots, produce config for Claude Code, Cursor, Copilot, Windsurf, Cline, Continue, Aider, and more.",
   "type": "module",
   "bin": {
-    "context-pilot": "dist/index.js"
+    "codebrief": "dist/index.js"
   },
   "scripts": {
     "build": "tsup",
@@ -33,11 +33,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/michaelabrt/context-pilot.git"
+    "url": "git+https://github.com/michaelabrt/codebrief.git"
   },
-  "homepage": "https://github.com/michaelabrt/context-pilot#readme",
+  "homepage": "https://github.com/michaelabrt/codebrief#readme",
   "bugs": {
-    "url": "https://github.com/michaelabrt/context-pilot/issues"
+    "url": "https://github.com/michaelabrt/codebrief/issues"
   },
   "engines": {
     "node": ">=18"
