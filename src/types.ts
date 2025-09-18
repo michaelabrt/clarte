@@ -97,6 +97,10 @@ export interface DetectedContext {
   sourceFileCount: number;
   /** Monorepo info (null if not a monorepo) */
   monorepo: MonorepoInfo | null;
+  /** Detected testing framework (e.g. "Vitest", "Jest") */
+  testFramework?: string;
+  /** Detected CI provider (e.g. "GitHub Actions") */
+  ciProvider?: string;
 }
 
 /** User-provided answers from the interactive prompts */
@@ -121,7 +125,7 @@ export interface UserAnswers {
   generatePerPackage: boolean;
 }
 
-/** Persisted project config (.context-pilot.json) */
+/** Persisted project config (.codebrief.json) */
 export interface ProjectConfig {
   /** Which IDE/tool to generate config for */
   ide: IDETarget;
@@ -273,6 +277,12 @@ export interface ExportCoverage {
   coverage: number;
 }
 
+/** A directed edge between two architectural layers */
+export interface LayerEdge {
+  from: string;
+  to: string;
+}
+
 /** A detected architectural layer (e.g. types, stores, hooks) */
 export interface ArchitecturalLayer {
   /** Layer name (e.g. "types", "stores", "hooks", "components", "pages") */
@@ -281,6 +291,8 @@ export interface ArchitecturalLayer {
   files: string[];
   /** Number of other layers that import this layer */
   importedByLayers: number;
+  /** Names of layers this layer depends on (imports from) */
+  dependsOn: string[];
 }
 
 /** Git activity analysis results */
@@ -316,6 +328,8 @@ export interface ContextAnalysis {
   hubFiles: HubFile[];
   circularDeps: CircularDependency[];
   layers: ArchitecturalLayer[];
+  /** Directed edges between architectural layers */
+  layerEdges: LayerEdge[];
   gitActivity: GitAnalysis | null;
   /** Instability scores for files */
   instabilities: FileInstability[];

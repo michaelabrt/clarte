@@ -11,6 +11,7 @@ import type {
   ImportEdge,
   ImportGraph,
   Language,
+  LayerEdge,
   ProgressCallback,
 } from "./types.js";
 
@@ -586,8 +587,9 @@ const LAYER_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
 
 /**
  * Classify files into architectural layers and determine their dependency ordering.
+ * Returns both the layers and directed edges between them.
  */
-export function detectArchitecturalLayers(graph: ImportGraph): ArchitecturalLayer[] {
+export function detectArchitecturalLayers(graph: ImportGraph): { layers: ArchitecturalLayer[]; layerEdges: LayerEdge[] } {
   // Classify each internal file into a layer
   const layerFiles = new Map<string, string[]>();
   const fileToLayer = new Map<string, string>();
@@ -604,10 +606,12 @@ export function detectArchitecturalLayers(graph: ImportGraph): ArchitecturalLaye
     }
   }
 
-  // Count how many other layers import each layer
+  // Track both directions: who imports each layer, and who each layer depends on
   const layerImportedBy = new Map<string, Set<string>>();
+  const layerDependsOn = new Map<string, Set<string>>();
   for (const name of layerFiles.keys()) {
     layerImportedBy.set(name, new Set());
+    layerDependsOn.set(name, new Set());
   }
 
   for (const edge of graph.edges) {
@@ -616,6 +620,20 @@ export function detectArchitecturalLayers(graph: ImportGraph): ArchitecturalLaye
     const toLayer = fileToLayer.get(edge.to);
     if (fromLayer && toLayer && fromLayer !== toLayer) {
       layerImportedBy.get(toLayer)?.add(fromLayer);
+      layerDependsOn.get(fromLayer)?.add(toLayer);
+    }
+  }
+
+  // Build layer edges from dependsOn data
+  const layerEdges: LayerEdge[] = [];
+  const edgeSet = new Set<string>();
+  for (const [from, deps] of layerDependsOn) {
+    for (const to of deps) {
+      const key = `${from}->${to}`;
+      if (!edgeSet.has(key)) {
+        edgeSet.add(key);
+        layerEdges.push({ from, to });
+      }
     }
   }
 
@@ -626,13 +644,14 @@ export function detectArchitecturalLayers(graph: ImportGraph): ArchitecturalLaye
       name,
       files,
       importedByLayers: layerImportedBy.get(name)?.size ?? 0,
+      dependsOn: [...(layerDependsOn.get(name) ?? [])],
     });
   }
 
   // Sort: most imported layers first (foundational), then by name
   layers.sort((a, b) => b.importedByLayers - a.importedByLayers || a.name.localeCompare(b.name));
 
-  return layers;
+  return { layers, layerEdges };
 }
 
 /**
