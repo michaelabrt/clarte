@@ -5,6 +5,7 @@ import type {
   ContextAnalysis,
   DetectedContext,
   GeneratedFile,
+  ProgressCallback,
   UserAnswers,
 } from "./types.js";
 import { fileExists, readJsonFile, writeFileSafe } from "./utils.js";
@@ -37,6 +38,7 @@ export async function generateFiles(
   dryRun: boolean = false,
   analysis?: ContextAnalysis,
   generateSkills: boolean = false,
+  onVerbose?: ProgressCallback,
 ): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [];
 
@@ -55,6 +57,7 @@ export async function generateFiles(
     content: mainContent,
     existed: await fileExists(mainPath),
   });
+  onVerbose?.(`Prepared ${mainFilename} (${mainContent.length} bytes)`);
 
   // 2. Cursor-specific scoped rules
   if (answers.ide === "cursor") {
@@ -62,11 +65,13 @@ export async function generateFiles(
     for (const rule of rules) {
       const rulePath = `.cursor/rules/${rule.filename}`;
       const absPath = path.join(ctx.rootDir, rulePath);
+      const ruleContent = renderCursorRule(rule);
       files.push({
         path: rulePath,
-        content: renderCursorRule(rule),
+        content: ruleContent,
         existed: await fileExists(absPath),
       });
+      onVerbose?.(`Prepared ${rulePath} (${ruleContent.length} bytes)`);
     }
   }
 
@@ -78,11 +83,13 @@ export async function generateFiles(
     for (const skill of skills) {
       const skillPath = `.claude/skills/${skill.name}/SKILL.md`;
       const absPath = path.join(ctx.rootDir, skillPath);
+      const skillContent = renderClaudeSkill(skill);
       files.push({
         path: skillPath,
-        content: renderClaudeSkill(skill),
+        content: skillContent,
         existed: await fileExists(absPath),
       });
+      onVerbose?.(`Prepared ${skillPath} (${skillContent.length} bytes)`);
     }
   }
 
@@ -178,6 +185,7 @@ export async function generateFiles(
   // Write all files
   for (const file of files) {
     await writeFileSafe(path.join(ctx.rootDir, file.path), file.content);
+    onVerbose?.(`Wrote ${file.path}`);
   }
 
   return files;

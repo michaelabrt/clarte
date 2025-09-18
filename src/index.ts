@@ -27,17 +27,24 @@ import { formatBytes } from "./utils.js";
 import type { ContextAnalysis, ProgressCallback } from "./types.js";
 
 async function main() {
+  const startTime = performance.now();
   const args = process.argv.slice(2);
   const force = args.includes("--force");
   const dryRun = args.includes("--dry-run");
   const refresh = args.includes("--refresh-snapshot");
   const reconfigure = args.includes("--reconfigure");
   const check = args.includes("--check");
+  const verbose = args.includes("--verbose") || args.includes("-v");
   const generateSkills = args.includes("--generate-skills");
   const maxTokensArg = args.find((a) => a.startsWith("--max-tokens="));
   const maxTokens = maxTokensArg ? parseInt(maxTokensArg.split("=")[1], 10) : undefined;
-  const targetDir = args.find((a) => !a.startsWith("-")) ?? process.cwd();
+  const targetDir = args.find((a) => !a.startsWith("-") && a !== "-v") ?? process.cwd();
   const rootDir = path.resolve(targetDir);
+
+  // Verbose logger: persists messages on screen (not swallowed by spinner)
+  const verboseLog: ProgressCallback = (msg) => {
+    if (verbose) p.log.info(pc.dim(msg));
+  };
 
   // --check: fast path for shell integration (silent, exit code only)
   if (check) {
@@ -52,14 +59,14 @@ async function main() {
         ? Math.floor((Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24))
         : 0;
       const staleMsg = daysSince > 0 ? ` (last generated ${daysSince}d ago)` : "";
-      console.log(`context-pilot: snapshot is stale${staleMsg}. Run npx context-pilot --refresh-snapshot`);
+      console.log(`codebrief: snapshot is stale${staleMsg}. Run npx codebrief --refresh-snapshot`);
       process.exit(1);
     }
     process.exit(0);
   }
 
   console.log("");
-  p.intro(pc.bold(" context-pilot "));
+  p.intro(pc.bold(" codebrief "));
 
   // --refresh-snapshot: fast path — update snapshot in existing context file
   if (refresh) {
@@ -83,8 +90,8 @@ async function main() {
   spinner.stop("Detection complete.");
 
   // Step 1.5: Build import graph
-  spinner.start("Building import graph...");
-  const graph = await buildImportGraph(rootDir, detected.language, spinnerProgress);
+  spinner.start(`Building import graph (${detected.sourceFileCount} files)...`);
+  const graph = await buildImportGraph(rootDir, detected.language, verbose ? verboseLog : spinnerProgress);
   const topHub = getHubFiles(graph, 1)[0];
   spinner.stop(
     `Import graph: ${graph.edges.length} edges, ${graph.externalImportCounts.size} packages.` +
@@ -97,7 +104,7 @@ async function main() {
     graph.externalImportCounts,
   );
 
-  // Discovery log
+  // Discovery log (enhanced stack box)
   {
     const lines: string[] = [];
     const lang = detected.hasTypeScript ? "TypeScript" : detected.language !== "other" ? detected.language.charAt(0).toUpperCase() + detected.language.slice(1) : "";
@@ -111,6 +118,15 @@ async function main() {
     if (detected.packageManager !== "none") {
       lines.push(`  Pkg mgr:    ${detected.packageManager}`);
     }
+    if (detected.testFramework) {
+      lines.push(`  Testing:    ${detected.testFramework}`);
+    }
+    if (detected.ciProvider) {
+      lines.push(`  CI:         ${detected.ciProvider}`);
+    }
+    if (detected.monorepo) {
+      lines.push(`  Monorepo:   ${detected.monorepo.type} (${detected.monorepo.packages.length} package${detected.monorepo.packages.length === 1 ? "" : "s"})`);
+    }
     if (detected.sourceFileCount > 0) {
       lines.push(`  Files:      ${detected.sourceFileCount} (${formatBytes(detected.totalSourceBytes)})`);
     }
@@ -119,17 +135,38 @@ async function main() {
     }
   }
 
-  // Step 1.7: Structural analysis
-  spinner.start("Analyzing project structure...");
-  const hubFiles = getHubFiles(graph);
-  const circularDeps = findCircularDeps(graph);
-  const layers = detectArchitecturalLayers(graph);
-  const instabilities = computeInstability(graph);
-  const communities = detectCommunities(graph);
-  const exportCoverage = computeExportCoverage(graph);
-  const gitActivity = detected.isGitRepo ? analyzeGitActivity(rootDir, spinnerProgress) : null;
+  // Step 1.7: Structural analysis (per-algorithm messages)
+  const fileCount = graph.centrality.size;
 
-  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, gitActivity, instabilities, communities, exportCoverage };
+  spinner.start(`Running PageRank on ${fileCount} files...`);
+  const hubFiles = getHubFiles(graph);
+  verboseLog(`PageRank: found ${hubFiles.length} hub files`);
+
+  spinner.message("Finding circular dependencies...");
+  const circularDeps = findCircularDeps(graph);
+  verboseLog(`Tarjan SCC: ${circularDeps.length === 0 ? "no cycles found" : `${circularDeps.length} cycle(s)`}`);
+
+  spinner.message("Detecting architecture layers...");
+  const { layers, layerEdges } = detectArchitecturalLayers(graph);
+  verboseLog(`Layers: ${layers.map((l) => l.name).join(", ") || "none detected"}`);
+
+  spinner.message("Computing instability metrics...");
+  const instabilities = computeInstability(graph);
+  verboseLog(`Instability: ${instabilities.length} high-risk file(s)`);
+
+  spinner.message("Detecting module communities...");
+  const communities = detectCommunities(graph);
+  verboseLog(`Communities: ${communities.length} cluster(s)`);
+
+  spinner.message("Computing export coverage...");
+  const exportCoverage = computeExportCoverage(graph);
+  verboseLog(`Export coverage: ${exportCoverage.length} files analyzed`);
+
+  spinner.message("Analyzing git history...");
+  const gitActivity = detected.isGitRepo ? analyzeGitActivity(rootDir, verbose ? verboseLog : spinnerProgress) : null;
+  if (gitActivity) verboseLog(`Git: ${gitActivity.hotFiles.length} active files, ${gitActivity.changeCoupling.length} coupled pairs`);
+
+  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, exportCoverage };
 
   const analysisParts: string[] = [];
   if (hubFiles.length > 0) analysisParts.push(`${hubFiles.length} hub files`);
@@ -143,7 +180,7 @@ async function main() {
       : "Analysis complete.",
   );
 
-  // Step 1.7: Check for saved config + staleness
+  // Step 1.8: Check for saved config + staleness
   const savedConfig = await loadConfig(rootDir);
 
   if (savedConfig?.snapshotHash) {
@@ -166,7 +203,7 @@ async function main() {
   if (savedConfig && !reconfigure) {
     // Use saved config — skip prompts
     p.log.info(
-      `Using saved config from ${pc.cyan(".context-pilot.json")} ` +
+      `Using saved config from ${pc.cyan(".codebrief.json")} ` +
         pc.dim("(run with --reconfigure to change)"),
     );
     answers = configToAnswers(savedConfig);
@@ -188,7 +225,7 @@ async function main() {
       const hash = await computeSnapshotHash(rootDir, detected.language);
       await saveConfig(rootDir, answers, hash, detected.language);
       p.log.info(
-        pc.dim("Saved config to .context-pilot.json for future runs."),
+        pc.dim("Saved config to .codebrief.json for future runs."),
       );
     }
   }
@@ -197,7 +234,7 @@ async function main() {
   let snapshot = null;
   if (answers.generateSnapshot) {
     spinner.start("Scanning source files for code snapshot...");
-    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens, spinnerProgress, gitActivity);
+    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens, verbose ? verboseLog : spinnerProgress, gitActivity);
     const count = snapshot.entries.length;
     const budgetNote = snapshot.budgetExcluded
       ? ` (${snapshot.budgetExcluded} excluded by token budget)`
@@ -218,7 +255,7 @@ async function main() {
     dryRun ? "Preparing context files..." : "Generating context files...",
   );
   const shouldGenerateSkills = generateSkills || answers.ide === "claude";
-  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills);
+  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills, verbose ? verboseLog : undefined);
   spinner.stop(
     dryRun
       ? `Would generate ${files.length} file${files.length === 1 ? "" : "s"}.`
@@ -233,61 +270,24 @@ async function main() {
   // Step 5: Summary + token estimate
   printSummary(files, detected, snapshot, analysis);
 
+  // Elapsed time
+  const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+
   if (dryRun) {
     p.outro(
       pc.yellow("DRY RUN complete — ") +
-        pc.dim("no files were written. Remove --dry-run to generate."),
+        pc.dim(`no files were written. Remove --dry-run to generate. (${elapsed}s)`),
     );
     return;
   }
 
   // Step 6: Done!
   p.outro(
-    pc.green("Done! ") +
+    pc.green(`Done in ${elapsed}s! `) +
       pc.dim(
         "Your context files are ready. They are living documents — keep them up to date as your project evolves.",
       ),
   );
-}
-
-function getToolCommand(ide: string): string | null {
-  switch (ide) {
-    case "claude":
-      return "claude";
-    case "cursor":
-      return "cursor .";
-    case "opencode":
-      return "opencode";
-    case "windsurf":
-      return "windsurf .";
-    case "aider":
-      return "aider";
-    default:
-      return null;
-  }
-}
-
-function getToolName(ide: string): string {
-  switch (ide) {
-    case "claude":
-      return "Claude Code";
-    case "cursor":
-      return "Cursor";
-    case "opencode":
-      return "OpenCode";
-    case "copilot":
-      return "GitHub Copilot";
-    case "windsurf":
-      return "Windsurf";
-    case "cline":
-      return "Cline";
-    case "continue":
-      return "Continue.dev";
-    case "aider":
-      return "Aider";
-    default:
-      return ide;
-  }
 }
 
 main().catch((err) => {

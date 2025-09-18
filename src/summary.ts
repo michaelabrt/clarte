@@ -222,6 +222,58 @@ export function printSummary(
     );
   }
 
+  // "What we analyzed" recap
+  if (analysis) {
+    console.log("");
+    console.log(pc.bold("  What we analyzed:"));
+
+    const recapRows: Array<{ label: string; result: string }> = [];
+
+    if (analysis.hubFiles.length > 0) {
+      recapRows.push({ label: "PageRank hub detection", result: `found ${analysis.hubFiles.length} key architectural files` });
+    }
+
+    recapRows.push({
+      label: "Tarjan cycle detection",
+      result: analysis.circularDeps.length === 0
+        ? "no circular dependencies found"
+        : `${analysis.circularDeps.length} circular dep${analysis.circularDeps.length === 1 ? "" : "s"} found`,
+    });
+
+    if (analysis.layers.length > 0) {
+      const tierNames = analysis.layers.map((l) => l.name).join(" → ");
+      recapRows.push({ label: "Layer analysis", result: `${analysis.layers.length} tiers: ${tierNames}` });
+    }
+
+    if (analysis.gitActivity) {
+      const coupledPairs = analysis.gitActivity.changeCoupling.length;
+      recapRows.push({
+        label: "Git history (90 days)",
+        result: `${analysis.gitActivity.hotFiles.length} hot files, ${coupledPairs} change-coupled pair${coupledPairs === 1 ? "" : "s"}`,
+      });
+    }
+
+    const ec = analysis.exportCoverage;
+    if (ec && ec.length > 0) {
+      const totalExports = ec.reduce((sum, e) => sum + e.totalExports, 0);
+      const totalUsed = ec.reduce((sum, e) => sum + e.usedExports, 0);
+      const coveragePct = totalExports > 0 ? Math.round((totalUsed / totalExports) * 100) : 100;
+      const unused = totalExports - totalUsed;
+      recapRows.push({ label: "Export coverage", result: `${coveragePct}% (${unused} unused export${unused === 1 ? "" : "s"})` });
+    }
+
+    if (analysis.communities.length > 0) {
+      recapRows.push({ label: "Community detection", result: `${analysis.communities.length} module cluster${analysis.communities.length === 1 ? "" : "s"}` });
+    }
+
+    const maxRecapLabel = Math.max(...recapRows.map((r) => r.label.length));
+    for (const row of recapRows) {
+      console.log(
+        pc.dim(`    ${row.label.padEnd(maxRecapLabel)} → ${row.result}`),
+      );
+    }
+  }
+
   // Export coverage summary
   const exportCoverage = analysis?.exportCoverage;
   if (exportCoverage && exportCoverage.length > 0) {
