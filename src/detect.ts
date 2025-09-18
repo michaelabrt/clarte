@@ -289,11 +289,55 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     // Non-critical, leave at 0
   }
 
+  // -- Detect testing framework --
+  ctx.testFramework = detectTestFramework(ctx.dependencies);
+
+  // -- Detect CI provider --
+  ctx.ciProvider = await detectCiProvider(rootDir, topEntries);
+
   // -- Detect monorepo --
 
   ctx.monorepo = await detectMonorepo(rootDir, topEntries);
 
   return ctx;
+}
+
+/** Test framework detection: dependency name -> display name */
+const TEST_FRAMEWORK_MAP: Record<string, string> = {
+  vitest: "Vitest",
+  jest: "Jest",
+  playwright: "Playwright",
+  cypress: "Cypress",
+  mocha: "Mocha",
+  pytest: "pytest",
+};
+
+function detectTestFramework(dependencies: string[]): string | undefined {
+  for (const [dep, name] of Object.entries(TEST_FRAMEWORK_MAP)) {
+    if (dependencies.includes(dep)) return name;
+  }
+  return undefined;
+}
+
+/** CI provider detection: file/dir pattern -> display name */
+const CI_PATTERNS: Array<{ path: string; name: string; isDir?: boolean }> = [
+  { path: ".github/workflows", name: "GitHub Actions", isDir: true },
+  { path: ".gitlab-ci.yml", name: "GitLab CI" },
+  { path: ".circleci", name: "CircleCI", isDir: true },
+  { path: "Jenkinsfile", name: "Jenkins" },
+  { path: ".travis.yml", name: "Travis CI" },
+];
+
+async function detectCiProvider(rootDir: string, topEntries: string[]): Promise<string | undefined> {
+  for (const ci of CI_PATTERNS) {
+    if (ci.isDir) {
+      // Check if directory exists
+      if (await fileExists(path.join(rootDir, ci.path))) return ci.name;
+    } else {
+      if (topEntries.includes(ci.path)) return ci.name;
+    }
+  }
+  return undefined;
 }
 
 function getExtensionsForLanguage(lang: Language): string[] {
