@@ -43,9 +43,10 @@ function mockAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
     ],
     circularDeps: [],
     layers: [
-      { name: "types", files: ["src/types.ts"], importedByLayers: 3 },
-      { name: "utils", files: ["src/utils.ts"], importedByLayers: 2 },
+      { name: "types", files: ["src/types.ts"], importedByLayers: 3, dependsOn: [] },
+      { name: "utils", files: ["src/utils.ts"], importedByLayers: 2, dependsOn: ["types"] },
     ],
+    layerEdges: [{ from: "utils", to: "types" }],
     gitActivity: null,
     instabilities: [],
     communities: [],
