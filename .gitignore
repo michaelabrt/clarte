@@ -2,9 +2,3 @@ node_modules/
 dist/
 *.tsbuildinfo
 .npmrc
-
-# Demo / recording artifacts
-demo.tape
-demo.gif
-scripts/demo-helpers.sh
-scripts/record-demo.sh
