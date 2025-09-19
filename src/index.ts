@@ -151,50 +151,140 @@ async function main() {
     }
   }
 
-  // Step 1.7: Structural analysis (per-algorithm messages)
+  // Step 1.7: Structural analysis (progressive reveal — one spinner per algorithm)
   const fileCount = graph.centrality.size;
 
   spinner.start(`Running PageRank on ${fileCount} files...`);
   const hubFiles = getHubFiles(graph);
-  verboseLog(`PageRank: found ${hubFiles.length} hub files`);
+  const topHubName = hubFiles[0]?.path ?? "";
+  spinner.stop(
+    hubFiles.length > 0
+      ? `${pc.green("PageRank")}       found ${pc.bold(String(hubFiles.length))} hub files` +
+        (topHubName ? pc.dim(` (top: ${topHubName})`) : "")
+      : `${pc.green("PageRank")}       ${pc.dim("no hub files detected")}`,
+  );
+  if (verbose && hubFiles.length > 0) {
+    for (const h of hubFiles.slice(0, 5)) {
+      p.log.info(pc.dim(`  ${h.path} (centrality: ${h.centrality.toFixed(3)}, imported by ${h.importedBy})`));
+    }
+  }
 
-  spinner.message("Finding circular dependencies...");
+  spinner.start("Finding circular dependencies...");
   const circularDeps = findCircularDeps(graph);
-  verboseLog(`Tarjan SCC: ${circularDeps.length === 0 ? "no cycles found" : `${circularDeps.length} cycle(s)`}`);
+  spinner.stop(
+    circularDeps.length === 0
+      ? `${pc.green("Tarjan SCC")}     no cycles found ${pc.green("✓")}`
+      : `${pc.yellow("Tarjan SCC")}     ${pc.bold(String(circularDeps.length))} cycle${circularDeps.length === 1 ? "" : "s"} found`,
+  );
+  if (verbose && circularDeps.length > 0) {
+    for (const c of circularDeps.slice(0, 3)) {
+      p.log.info(pc.dim(`  ${c.chain.join(" → ")}`));
+    }
+  }
 
-  spinner.message("Detecting architecture layers...");
+  spinner.start("Detecting architecture layers...");
   const { layers, layerEdges } = detectArchitecturalLayers(graph);
-  verboseLog(`Layers: ${layers.map((l) => l.name).join(", ") || "none detected"}`);
+  spinner.stop(
+    layers.length > 0
+      ? `${pc.green("Layers")}         ${layers.map((l) => l.name).join(" → ")}`
+      : `${pc.green("Layers")}         ${pc.dim("no clear layers detected")}`,
+  );
+  if (verbose && layers.length > 0) {
+    for (const l of layers) {
+      p.log.info(pc.dim(`  ${l.name}: ${l.files.length} files, depends on: ${l.dependsOn.join(", ") || "none"}`));
+    }
+  }
 
-  spinner.message("Computing instability metrics...");
+  spinner.start("Computing instability metrics...");
   const instabilities = computeInstability(graph);
-  verboseLog(`Instability: ${instabilities.length} high-risk file(s)`);
+  const highInstability = instabilities.filter((f) => f.instability > 0.8);
+  spinner.stop(
+    highInstability.length > 0
+      ? `${pc.yellow("Instability")}    ${pc.bold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"}`
+      : `${pc.green("Instability")}    ${pc.dim("all files within healthy range")} ${pc.green("✓")}`,
+  );
+  if (verbose && highInstability.length > 0) {
+    for (const f of highInstability.slice(0, 5)) {
+      p.log.info(pc.dim(`  ${f.path} (I=${f.instability.toFixed(2)}, fan-in=${f.fanIn}, fan-out=${f.fanOut})`));
+    }
+  }
 
-  spinner.message("Detecting module communities...");
+  spinner.start("Detecting module communities...");
   const communities = detectCommunities(graph);
-  verboseLog(`Communities: ${communities.length} cluster(s)`);
+  spinner.stop(
+    communities.length > 0
+      ? `${pc.green("Communities")}    ${pc.bold(String(communities.length))} module cluster${communities.length === 1 ? "" : "s"}`
+      : `${pc.green("Communities")}    ${pc.dim("single cohesive module")}`,
+  );
+  if (verbose && communities.length > 0) {
+    for (const c of communities.slice(0, 5)) {
+      p.log.info(pc.dim(`  ${c.label} (${c.files.length} files)`));
+    }
+  }
 
-  spinner.message("Computing export coverage...");
+  spinner.start("Computing export coverage...");
   const exportCoverage = computeExportCoverage(graph);
-  verboseLog(`Export coverage: ${exportCoverage.length} files analyzed`);
+  {
+    const totalExp = exportCoverage.reduce((s, e) => s + e.totalExports, 0);
+    const totalUsed = exportCoverage.reduce((s, e) => s + e.usedExports, 0);
+    const unusedCount = totalExp - totalUsed;
+    const filesWithUnused = exportCoverage.filter((e) => e.usedExports < e.totalExports).length;
+    spinner.stop(
+      unusedCount > 0
+        ? `${pc.yellow("Exports")}        ${pc.bold(String(unusedCount))} unused export${unusedCount === 1 ? "" : "s"} in ${filesWithUnused} file${filesWithUnused === 1 ? "" : "s"}`
+        : `${pc.green("Exports")}        ${pc.dim("all exports used")} ${pc.green("✓")}`,
+    );
+    if (verbose && unusedCount > 0) {
+      for (const e of exportCoverage.filter((e) => e.usedExports < e.totalExports).slice(0, 5)) {
+        p.log.info(pc.dim(`  ${e.file}: ${e.totalExports - e.usedExports} unused of ${e.totalExports}`));
+      }
+    }
+  }
 
-  spinner.message("Analyzing git history...");
+  spinner.start("Analyzing git history...");
   const gitActivity = detected.isGitRepo ? analyzeGitActivity(rootDir, verbose ? verboseLog : spinnerProgress) : null;
-  if (gitActivity) verboseLog(`Git: ${gitActivity.hotFiles.length} active files, ${gitActivity.changeCoupling.length} coupled pairs`);
+  if (gitActivity) {
+    const coupledPairs = gitActivity.changeCoupling.length;
+    spinner.stop(
+      `${pc.green("Git (90d)")}      ${pc.bold(String(gitActivity.hotFiles.length))} active file${gitActivity.hotFiles.length === 1 ? "" : "s"}, ${pc.bold(String(coupledPairs))} coupled pair${coupledPairs === 1 ? "" : "s"}`,
+    );
+    if (verbose) {
+      for (const h of gitActivity.hotFiles.slice(0, 5)) {
+        p.log.info(pc.dim(`  ${h.path} (${h.commits} commits, last: ${h.lastChanged})`));
+      }
+    }
+  } else {
+    spinner.stop(`${pc.green("Git")}            ${pc.dim("not a git repo — skipped")}`);
+  }
 
   const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, exportCoverage };
 
-  const analysisParts: string[] = [];
-  if (hubFiles.length > 0) analysisParts.push(`${hubFiles.length} hub files`);
-  if (layers.length > 0) analysisParts.push(`${layers.length} layers`);
-  if (circularDeps.length > 0) analysisParts.push(`${circularDeps.length} circular dep${circularDeps.length === 1 ? "" : "s"}`);
-  if (communities.length > 0) analysisParts.push(`${communities.length} module cluster${communities.length === 1 ? "" : "s"}`);
-  if (gitActivity) analysisParts.push(`${gitActivity.hotFiles.length} active files`);
-  spinner.stop(
-    analysisParts.length > 0
-      ? `Analysis: ${analysisParts.join(", ")}.`
-      : "Analysis complete.",
-  );
+  // Analysis report box
+  {
+    const reportLines: string[] = [];
+    reportLines.push(`  Files analyzed:  ${fileCount}`);
+    reportLines.push(`  Import edges:    ${graph.edges.length}`);
+    reportLines.push(`  External pkgs:   ${graph.externalImportCounts.size}`);
+    if (hubFiles.length > 0) {
+      reportLines.push(`  Hub files:       ${hubFiles.length}` + (hubFiles[0] ? ` (most connected: ${hubFiles[0].path})` : ""));
+    }
+    if (layers.length > 0) {
+      reportLines.push(`  Architecture:    ${layers.map((l) => l.name).join(" → ")}`);
+    }
+    reportLines.push(`  Circular deps:   ${circularDeps.length === 0 ? "none" : `${circularDeps.length} chain${circularDeps.length === 1 ? "" : "s"}`}`);
+    if (gitActivity) {
+      reportLines.push(`  Hot files (90d): ${gitActivity.hotFiles.length}`);
+    }
+    p.note(reportLines.join("\n"), "Analysis Report");
+
+    // Show cycle chains inline below the box (max 2)
+    if (circularDeps.length > 0) {
+      for (const c of circularDeps.slice(0, 2)) {
+        const shortChain = c.chain.map((f) => f.split("/").pop() ?? f);
+        p.log.warn(pc.yellow(`Cycle: ${shortChain.join(" → ")}`));
+      }
+    }
+  }
 
   // Step 1.8: Check for saved config + staleness
   const savedConfig = await loadConfig(rootDir);
