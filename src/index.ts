@@ -1,6 +1,7 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
+import { fileExists } from "./utils.js";
 import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import { runPrompts } from "./prompts.js";
 import { generateSnapshot } from "./snapshot.js";
@@ -40,6 +41,21 @@ async function main() {
   const maxTokens = maxTokensArg ? parseInt(maxTokensArg.split("=")[1], 10) : undefined;
   const targetDir = args.find((a) => !a.startsWith("-") && a !== "-v") ?? process.cwd();
   const rootDir = path.resolve(targetDir);
+
+  // Early validation: ensure this looks like a project directory
+  const PROJECT_MARKERS = ["package.json", "go.mod", "Cargo.toml", "pyproject.toml", "requirements.txt"];
+  const hasProjectMarker = (await Promise.all(
+    PROJECT_MARKERS.map(f => fileExists(path.join(rootDir, f)))
+  )).some(Boolean);
+
+  if (!hasProjectMarker) {
+    console.log("");
+    p.intro(pc.bold(" codebrief "));
+    p.log.error(`No project found at ${pc.cyan(rootDir)}`);
+    p.log.info(`Run ${pc.bold("npx codebrief")} from a project directory, or pass a path:\n  ${pc.dim("npx codebrief ./my-project")}`);
+    p.outro("");
+    process.exit(1);
+  }
 
   // Verbose logger: persists messages on screen (not swallowed by spinner)
   const verboseLog: ProgressCallback = (msg) => {
