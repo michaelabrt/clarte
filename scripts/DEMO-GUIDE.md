@@ -24,7 +24,7 @@ This creates `/tmp/codebrief-demo` with 200+ TypeScript files.
 
 ### 3. Start Recording
 - Open Kap (or Cmd+Shift+5)
-- Resize terminal to ~80x24 or full screen
+- Resize terminal to ~120x36 or full screen
 - Start recording
 - Focus terminal
 
@@ -124,7 +124,7 @@ wait_s 2.0 "showing Claude using context"
 
 ### Terminal too small
 - **Issue:** Output gets cut off or wrapped badly
-- **Fix:** Resize to at least 80x24 before recording
+- **Fix:** Resize to at least 120x36 before recording (progressive reveal adds many lines)
 
 ### Demo project missing
 - **Issue:** Forgot to run `setup`

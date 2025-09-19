@@ -140,7 +140,7 @@ export function printSummary(
     }
   }
 
-  // -- Token estimate comparison --
+  // -- Token estimate comparison (bar chart) --
   console.log("");
   console.log(pc.bold("  Estimated context cost per conversation:"));
   console.log("");
@@ -163,61 +163,26 @@ export function printSummary(
     ((explorationTokens - afterTotal) / explorationTokens) * 100,
   );
 
-  // Build cost rows for dynamic alignment
-  const costRows: Array<{ label: string; desc: string; value: string }> = [
-    { label: "Always loaded", desc: "main context + global rule", value: `~${formatNumber(alwaysOnTokens)} tokens` },
-  ];
+  // Bar chart: proportional bars, max 40 chars wide
+  const BAR_MAX = 40;
+  const maxVal = Math.max(explorationTokens, afterTotal);
+  const beforeBarLen = Math.max(1, Math.round((explorationTokens / maxVal) * BAR_MAX));
+  const afterBarLen = Math.max(1, Math.round((afterTotal / maxVal) * BAR_MAX));
+  const BLOCK = "\u2588";
 
-  if (avgScopedTokens > 0) {
-    costRows.push({ label: "Per-task (avg)", desc: "1 scoped rule", value: `~${formatNumber(avgScopedTokens)} tokens` });
-  }
+  const beforeBar = BLOCK.repeat(beforeBarLen);
+  const afterBar = BLOCK.repeat(afterBarLen);
+  const afterPad = " ".repeat(Math.max(0, beforeBarLen - afterBarLen));
 
-  costRows.push({ label: "Exploration", desc: "mostly eliminated", value: `~${formatNumber(residualExploration)} tokens` });
-
-  const maxCostLabel = Math.max(...costRows.map((r) => r.label.length));
-  const maxCostDesc = Math.max(...costRows.map((r) => r.desc.length));
-  const maxCostValue = Math.max(...costRows.map((r) => r.value.length));
-  const afterContentWidth = maxCostLabel + 3 + maxCostDesc + 2 + maxCostValue;
-
-  // "Before" section — right-align value with After's value column
-  const beforeValue = `~${formatNumber(explorationTokens)} tokens`;
-  const beforeLabel = "Exploration to understand codebase";
-  const beforeGap = afterContentWidth - beforeLabel.length - beforeValue.length;
-
-  console.log(pc.dim("    Before (no context files):"));
-  if (beforeGap >= 2) {
-    console.log(
-      `      ${beforeLabel}${" ".repeat(beforeGap)}${pc.red(beforeValue)}`,
-    );
-  } else {
-    console.log(
-      `      ${beforeLabel}  ${pc.red(beforeValue)}`,
-    );
-  }
-  console.log("");
-
-  // "After" section
-  console.log(pc.dim("    After:"));
-  for (const row of costRows) {
-    console.log(
-      `      ${row.label.padEnd(maxCostLabel)}   ${row.desc.padEnd(maxCostDesc)}  ${pc.green(row.value.padStart(maxCostValue))}`,
-    );
-  }
-
-  const totalText = `Total: ~${formatNumber(afterTotal)} tokens`;
-  const totalPad = afterContentWidth > totalText.length
-    ? " ".repeat(afterContentWidth - totalText.length)
-    : "";
-  console.log(
-    `      ${totalPad}${pc.bold(totalText)}`,
-  );
+  console.log(`    Before: ${pc.red(beforeBar)}  ~${formatNumber(explorationTokens)} tokens`);
+  console.log(`    After:  ${pc.green(afterBar)}${afterPad}  ~${formatNumber(afterTotal)} tokens`);
 
   console.log("");
 
   if (savings > 0) {
     console.log(
       pc.green(
-        `    Estimated savings: ~${savings}% fewer tokens before real work begins`,
+        `    Estimated savings: ~${savings}% fewer tokens`,
       ),
     );
   }
@@ -274,22 +239,47 @@ export function printSummary(
     }
   }
 
-  // Export coverage summary
-  const exportCoverage = analysis?.exportCoverage;
-  if (exportCoverage && exportCoverage.length > 0) {
-    const totalExports = exportCoverage.reduce((sum, e) => sum + e.totalExports, 0);
-    const totalUsed = exportCoverage.reduce((sum, e) => sum + e.usedExports, 0);
-    const unusedExports = totalExports - totalUsed;
-    const coveragePct = totalExports > 0 ? Math.round((totalUsed / totalExports) * 100) : 100;
-    const filesWithUnused = exportCoverage.filter((e) => e.usedExports < e.totalExports).length;
+  // Findings summary — actionable issues worth fixing
+  if (analysis) {
+    const findings: string[] = [];
 
-    if (unusedExports > 0) {
-      console.log("");
-      console.log(
-        pc.dim(
-          `    Export coverage: ${coveragePct}% of exports are used (${unusedExports} unused exports in ${filesWithUnused} file${filesWithUnused === 1 ? "" : "s"})`,
-        ),
-      );
+    // Circular dependencies (always a finding)
+    if (analysis.circularDeps.length > 0) {
+      for (const c of analysis.circularDeps.slice(0, 3)) {
+        const names = c.chain.map((f) => f.split("/").pop()?.replace(/\.[jt]sx?$/, "") ?? f);
+        findings.push(`${analysis.circularDeps.length > 1 ? "" : ""}1 circular dependency chain (${names.slice(0, 2).join(" \u2194 ")})`);
+      }
+      if (analysis.circularDeps.length > 1) {
+        findings[0] = `${analysis.circularDeps.length} circular dependency chain${analysis.circularDeps.length === 1 ? "" : "s"}`;
+      }
+    }
+
+    // High-instability files (instability > 0.8)
+    const highInstabilityFiles = analysis.instabilities.filter((f) => f.instability > 0.8);
+    if (highInstabilityFiles.length > 0) {
+      findings.push(`${highInstabilityFiles.length} high-instability file${highInstabilityFiles.length === 1 ? "" : "s"}`);
+    }
+
+    // Unused exports
+    const ec = analysis.exportCoverage;
+    if (ec && ec.length > 0) {
+      const totalExports = ec.reduce((sum, e) => sum + e.totalExports, 0);
+      const totalUsed = ec.reduce((sum, e) => sum + e.usedExports, 0);
+      const unusedExports = totalExports - totalUsed;
+      const filesWithUnused = ec.filter((e) => e.usedExports < e.totalExports).length;
+      if (unusedExports > 0) {
+        findings.push(`${unusedExports} unused export${unusedExports === 1 ? "" : "s"} in ${filesWithUnused} file${filesWithUnused === 1 ? "" : "s"}`);
+      }
+    }
+
+    console.log("");
+    if (findings.length > 0) {
+      console.log(pc.yellow(`  \u26A0  ${findings.length} finding${findings.length === 1 ? "" : "s"}`));
+      for (const f of findings) {
+        console.log(pc.dim(`     \u25CF ${f}`));
+      }
+    } else {
+      console.log(pc.green(`  \u2713  No structural issues detected`));
     }
   }
 
