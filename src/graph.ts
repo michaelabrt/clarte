@@ -348,21 +348,35 @@ export async function buildImportGraph(
   onProgress?: ProgressCallback,
 ): Promise<ImportGraph> {
   const globs = getSourceGlob(language);
-  const files = await fg(globs, {
-    cwd: rootDir,
-    ignore: [
-      "**/node_modules/**",
-      "**/dist/**",
-      "**/build/**",
-      "**/.next/**",
-      "**/target/**",
-      "**/vendor/**",
-      "**/__pycache__/**",
-      "**/venv/**",
-      "**/.venv/**",
-    ],
-    absolute: false,
-  });
+  let files: string[];
+  try {
+    files = await fg(globs, {
+      cwd: rootDir,
+      ignore: [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/.next/**",
+        "**/target/**",
+        "**/vendor/**",
+        "**/__pycache__/**",
+        "**/venv/**",
+        "**/.venv/**",
+        "**/.Trash/**",
+        "**/Library/**",
+        "**/.git/**",
+      ],
+      absolute: false,
+    });
+  } catch (err: unknown) {
+    // Gracefully degrade on permission errors (e.g. scanning ~/ on macOS)
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EPERM" || code === "EACCES") {
+      onProgress?.("Warning: permission error scanning files — returning empty graph");
+      return { edges: [], inDegree: new Map(), centrality: new Map(), externalImportCounts: new Map() };
+    }
+    throw err;
+  }
 
   onProgress?.(`Found ${files.length} source files to analyze`);
 

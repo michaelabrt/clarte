@@ -312,6 +312,9 @@ export async function generateSnapshot(
       "**/*.test.*",
       "**/*.spec.*",
       "**/__tests__/**",
+      "**/.Trash/**",
+      "**/Library/**",
+      "**/.git/**",
     ],
     absolute: false,
   });
