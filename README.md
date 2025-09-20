@@ -1,18 +1,25 @@
-# codebrief
+<h1 align="center">Clarté</h1>
+<p align="center"><em>/klaʁ.te/</em></p>
 
-Give your AI agent full project context, without the warm-up.
+<p align="center">
+  <a href="https://github.com/michaelabrt/clarte/actions/workflows/release.yml"><img src="https://github.com/michaelabrt/clarte/actions/workflows/release.yml/badge.svg" alt="CI"></a>
+    <a href="https://github.com/michaelabrt/clarte/actions/workflows/ci.yml"><img src="https://github.com/michaelabrt/clarte/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/clarte"><img src="https://img.shields.io/npm/v/clarte" alt="npm version"></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+</p>
 
-![codebrief demo](https://raw.githubusercontent.com/michaelabrt/codebrief/main/demo.gif)
+<p align="center"><strong>First light on your codebase.</strong></p>
 
-AI coding agents spend their first few minutes reading files, tracing imports, and piecing together your architecture. **codebrief** does that work once, ahead of time, and hands the agent a single context file so it can start writing useful code immediately.
+AI coding agents spend their first few minutes reading files, tracing imports, and piecing together your architecture. **clarte** does that work once, ahead of time, and hands the agent a single context file so it can start writing useful code immediately.
 
 ```bash
-npx codebrief
+npx clarte
 ```
 
 ## Before & After
 
-Without codebrief, a typical AI agent session starts like this:
+Without clarte, a typical AI agent session starts like this:
 
 ```
 Agent: Let me explore the project structure...
@@ -23,7 +30,7 @@ Agent: Reading src/store/auth.ts...
 Agent: Now I understand the architecture. Let me start working...
 ```
 
-With codebrief, the agent already knows:
+With clarte, the agent already knows:
 
 | What | Example |
 |------|---------|
@@ -122,10 +129,10 @@ export function useAuth(): AuthContext  // imported by 9 files
 Run in your project root:
 
 ```bash
-npx codebrief
+npx clarte
 ```
 
-codebrief will:
+clarte will:
 
 1. **Detect** your tech stack (language, framework, package manager, linter)
 2. **Ask** a few questions (which AI tool, project purpose, key patterns)
@@ -133,7 +140,7 @@ codebrief will:
 4. **Generate** an optimized context file for your chosen tool
 5. **Show** a summary with token savings estimate
 
-Your answers are saved to `.codebrief.json` so future runs skip the prompts.
+Your answers are saved to `.clarte.json` so future runs skip the prompts.
 
 ## Supported Tools
 
@@ -151,7 +158,7 @@ Your answers are saved to `.codebrief.json` so future runs skip the prompts.
 
 ## How It Works
 
-codebrief runs a pipeline of static analysis steps. Here's a quick overview:
+clarte runs a pipeline of static analysis steps. Here's a quick overview:
 
 | Step | What it does | Why it matters |
 |------|-------------|----------------|
@@ -191,7 +198,7 @@ This catches leftover refactors, over-exported utilities, and test-only helpers,
 
 ### Token Budgeting
 
-Large projects may have more types and signatures than fit in the token budget. codebrief uses a greedy [knapsack](https://en.wikipedia.org/wiki/Knapsack_problem) approach that prioritizes:
+Large projects may have more types and signatures than fit in the token budget. clarte uses a greedy [knapsack](https://en.wikipedia.org/wiki/Knapsack_problem) approach that prioritizes:
 
 1. Entries from high-centrality files (via PageRank)
 2. Recently active files (via git history)
@@ -259,7 +266,7 @@ Counts commits per file over the last 90 days to surface:
 Hashes all source file paths and modification times. Run `--check` to compare against the stored hash:
 
 ```bash
-npx codebrief --check
+npx clarte --check
 # exit 0 = snapshot is fresh
 # exit 1 = snapshot is stale, run --refresh-snapshot
 ```
@@ -267,7 +274,7 @@ npx codebrief --check
 ## Options
 
 ```bash
-npx codebrief [directory] [options]
+npx clarte [directory] [options]
 ```
 
 | Flag | Description |
@@ -278,7 +285,7 @@ npx codebrief [directory] [options]
 | `--force` | Overwrite existing files without asking |
 | `--dry-run` | Preview what would be generated |
 | `--refresh-snapshot` | Re-scan source files and update just the code snapshot |
-| `--reconfigure` | Re-prompt even if `.codebrief.json` exists |
+| `--reconfigure` | Re-prompt even if `.clarte.json` exists |
 | `--check` | Check if the snapshot is stale via hash comparison (exit 0 = fresh, 1 = stale) |
 | `--check=timestamp` | Timestamp-only staleness check — instant, no file hashing (for shell hooks) |
 | `--max-tokens=N` | Set the token budget for the code snapshot |
@@ -290,7 +297,7 @@ npx codebrief [directory] [options]
 After a refactor, update just the code snapshot without re-generating the entire file:
 
 ```bash
-npx codebrief --refresh-snapshot
+npx clarte --refresh-snapshot
 ```
 
 This finds the `<!-- CODE SNAPSHOT -->` markers in your context file, re-scans source files, and replaces just that section.
@@ -305,14 +312,14 @@ Automatically detect stale snapshots when you `cd` into a project. These hooks r
 ```zsh
 # Add to ~/.zshrc
 chpwd() {
-  if [[ -f .codebrief.json ]]; then
+  if [[ -f .clarte.json ]]; then
     local ts days stale_days
-    ts=$(command grep -o '"snapshotGeneratedAt":[0-9]*' .codebrief.json 2>/dev/null | command grep -o '[0-9]*$')
+    ts=$(command grep -o '"snapshotGeneratedAt":[0-9]*' .clarte.json 2>/dev/null | command grep -o '[0-9]*$')
     [[ -z "$ts" ]] && return
-    stale_days=$(command grep -o '"staleDays":[0-9]*' .codebrief.json 2>/dev/null | command grep -o '[0-9]*$')
+    stale_days=$(command grep -o '"staleDays":[0-9]*' .clarte.json 2>/dev/null | command grep -o '[0-9]*$')
     : "${stale_days:=7}"
     days=$(( ($(date +%s) - ts / 1000) / 86400 ))
-    (( days > stale_days )) && echo "codebrief: snapshot is ${days}d old. Run: npx codebrief --refresh-snapshot"
+    (( days > stale_days )) && echo "clarte: snapshot is ${days}d old. Run: npx clarte --refresh-snapshot"
   fi
 }
 ```
@@ -326,14 +333,14 @@ chpwd() {
 # Add to ~/.bashrc
 cd() {
   builtin cd "$@" || return
-  if [[ -f .codebrief.json ]]; then
+  if [[ -f .clarte.json ]]; then
     local ts days stale_days
-    ts=$(command grep -o '"snapshotGeneratedAt":[0-9]*' .codebrief.json 2>/dev/null | command grep -o '[0-9]*$')
+    ts=$(command grep -o '"snapshotGeneratedAt":[0-9]*' .clarte.json 2>/dev/null | command grep -o '[0-9]*$')
     [[ -z "$ts" ]] && return
-    stale_days=$(command grep -o '"staleDays":[0-9]*' .codebrief.json 2>/dev/null | command grep -o '[0-9]*$')
+    stale_days=$(command grep -o '"staleDays":[0-9]*' .clarte.json 2>/dev/null | command grep -o '[0-9]*$')
     : "${stale_days:=7}"
     days=$(( ($(date +%s) - ts / 1000) / 86400 ))
-    (( days > stale_days )) && echo "codebrief: snapshot is ${days}d old. Run: npx codebrief --refresh-snapshot"
+    (( days > stale_days )) && echo "clarte: snapshot is ${days}d old. Run: npx clarte --refresh-snapshot"
   fi
 }
 ```
@@ -344,26 +351,26 @@ cd() {
 <summary><strong>fish</strong></summary>
 
 ```fish
-# Add to ~/.config/fish/conf.d/codebrief.fish
-function __codebrief_check --on-variable PWD
-  if test -f .codebrief.json
-    set -l ts (command grep -o '"snapshotGeneratedAt":[0-9]*' .codebrief.json 2>/dev/null | command grep -o '[0-9]*\$')
+# Add to ~/.config/fish/conf.d/clarte.fish
+function __clarte_check --on-variable PWD
+  if test -f .clarte.json
+    set -l ts (command grep -o '"snapshotGeneratedAt":[0-9]*' .clarte.json 2>/dev/null | command grep -o '[0-9]*\$')
     test -z "$ts"; and return
-    set -l stale_days (command grep -o '"staleDays":[0-9]*' .codebrief.json 2>/dev/null | command grep -o '[0-9]*\$')
+    set -l stale_days (command grep -o '"staleDays":[0-9]*' .clarte.json 2>/dev/null | command grep -o '[0-9]*\$')
     test -z "$stale_days"; and set stale_days 7
     set -l days (math "( "(date +%s)" - $ts / 1000) / 86400")
-    test $days -gt $stale_days; and echo "codebrief: snapshot is "$days"d old. Run: npx codebrief --refresh-snapshot"
+    test $days -gt $stale_days; and echo "clarte: snapshot is "$days"d old. Run: npx clarte --refresh-snapshot"
   end
 end
 ```
 
 </details>
 
-> **Tip:** Set `"staleDays": 14` in `.codebrief.json` to customize the threshold. For CI/pre-commit use the hash-based `--check` instead.
+> **Tip:** Set `"staleDays": 14` in `.clarte.json` to customize the threshold. For CI/pre-commit use the hash-based `--check` instead.
 
 ## Config File
 
-On first run, codebrief saves your answers to `.codebrief.json`:
+On first run, clarte saves your answers to `.clarte.json`:
 
 ```json
 {
@@ -381,11 +388,11 @@ On first run, codebrief saves your answers to `.codebrief.json`:
 
 Subsequent runs load this config and skip all prompts. Use `--reconfigure` to re-prompt.
 
-Add `.codebrief.json` to your `.gitignore`. It's local tool config, not project docs.
+Add `.clarte.json` to your `.gitignore`. It's local tool config, not project docs.
 
 ## Framework Conventions
 
-codebrief detects your framework and includes relevant best practices:
+clarte detects your framework and includes relevant best practices:
 
 | Framework | What's included |
 |-----------|----------------|
@@ -402,7 +409,7 @@ Also supports: Fastify, Hono, Angular, Svelte, Prisma, Drizzle, Tailwind CSS, El
 
 ## Monorepo Support
 
-codebrief detects monorepo tooling and can generate per-package context files:
+clarte detects monorepo tooling and can generate per-package context files:
 
 - **pnpm workspaces** (`pnpm-workspace.yaml`)
 - **Turborepo** (`turbo.json`)

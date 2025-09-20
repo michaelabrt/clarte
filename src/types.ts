@@ -125,7 +125,7 @@ export interface UserAnswers {
   generatePerPackage: boolean;
 }
 
-/** Persisted project config (.codebrief.json) */
+/** Persisted project config (.clarte.json) */
 export interface ProjectConfig {
   /** Which IDE/tools to generate config for */
   ides: IDETarget[];

@@ -6,7 +6,7 @@ import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "..
 import type { ProjectConfig, UserAnswers } from "../types.js";
 
 async function makeTmpDir(): Promise<string> {
-  return fs.mkdtemp(path.join(os.tmpdir(), "codebrief-cfg-"));
+  return fs.mkdtemp(path.join(os.tmpdir(), "clarte-cfg-"));
 }
 
 async function cleanup(dir: string) {
@@ -15,7 +15,7 @@ async function cleanup(dir: string) {
 
 async function writeConfig(dir: string, obj: Record<string, unknown>) {
   await fs.writeFile(
-    path.join(dir, ".codebrief.json"),
+    path.join(dir, ".clarte.json"),
     JSON.stringify(obj, null, 2),
     "utf-8",
   );

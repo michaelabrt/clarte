@@ -66,7 +66,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   if (!found) {
     p.log.error(
       "No context file found. Run " +
-        t.accent("codebrief") +
+        t.accent("clarte") +
         " first to generate one.",
     );
     process.exit(1);
