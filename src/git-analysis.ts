@@ -61,7 +61,7 @@ export function analyzeGitActivity(
 }
 
 /**
- * Analyze change coupling — files that frequently change together in commits.
+ * Analyze change coupling: files that frequently change together in commits.
  * Uses co-occurrence analysis over the last 90 days of git history.
  */
 export function analyzeChangeCoupling(rootDir: string): ChangeCoupling[] {

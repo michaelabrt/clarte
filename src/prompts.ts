@@ -7,16 +7,23 @@ import type {
 } from "./types.js";
 import { summarizeDetection } from "./detect.js";
 
+/** Languages that support code snapshot extraction */
+const SNAPSHOT_LANGUAGES = new Set(["typescript", "javascript", "python"]);
+
 /**
  * Run the interactive prompt flow. Takes the auto-detected context
  * and asks the user to fill in what couldn't be auto-detected.
  *
  * When `defaults` is provided (from .codebrief.json + --reconfigure),
  * prompt values are pre-filled so the user can just press Enter to keep them.
+ *
+ * The `isReconfigure` flag indicates we're running via --reconfigure,
+ * which shows additional prompts (snapshot toggle, stack corrections).
  */
 export async function runPrompts(
   detected: DetectedContext,
   defaults?: ProjectConfig | null,
+  isReconfigure = false,
 ): Promise<UserAnswers> {
   // 1. IDE/tool selection
   const ideOptions = [
@@ -31,47 +38,50 @@ export async function runPrompts(
     { value: "generic" as const, label: "Other (generic CONTEXT.md)" },
   ];
 
-  const ide = (await p.select({
-    message: "Which AI coding tool are you using?",
+  const ides = (await p.multiselect({
+    message: "Which AI coding tools do you use? (select all that apply)",
     options: ideOptions,
-    initialValue: defaults?.ide,
-  })) as IDETarget | symbol;
+    initialValues: defaults?.ides ?? (defaults?.ide ? [defaults.ide] : undefined),
+    required: true,
+  })) as IDETarget[] | symbol;
 
-  if (p.isCancel(ide)) {
+  if (p.isCancel(ides)) {
     p.cancel("Cancelled.");
     process.exit(0);
   }
 
-  // 2. Confirm detected stack
-  const stackSummary = summarizeDetection(detected);
+  // 2. Stack corrections (only on --reconfigure)
   let stackConfirmed = true;
   let stackCorrections = defaults?.stackCorrections ?? "";
 
-  if (stackSummary) {
-    const confirm = await p.confirm({
-      message: `Detected: ${stackSummary}. Correct?`,
-    });
-
-    if (p.isCancel(confirm)) {
-      p.cancel("Cancelled.");
-      process.exit(0);
-    }
-
-    stackConfirmed = confirm;
-
-    if (!confirm) {
-      const corrections = await p.text({
-        message: "What should I correct? (describe your actual stack)",
-        placeholder: "e.g. It's actually Next.js 15 + Prisma, not plain React",
-        defaultValue: defaults?.stackCorrections || undefined,
+  if (isReconfigure) {
+    const stackSummary = summarizeDetection(detected);
+    if (stackSummary) {
+      const confirm = await p.confirm({
+        message: `Detected: ${stackSummary}. Correct?`,
       });
 
-      if (p.isCancel(corrections)) {
+      if (p.isCancel(confirm)) {
         p.cancel("Cancelled.");
         process.exit(0);
       }
 
-      stackCorrections = corrections;
+      stackConfirmed = confirm;
+
+      if (!confirm) {
+        const corrections = await p.text({
+          message: "What should I correct? (describe your actual stack)",
+          placeholder: "e.g. It's actually Next.js 15 + Prisma, not plain React",
+          defaultValue: defaults?.stackCorrections || undefined,
+        });
+
+        if (p.isCancel(corrections)) {
+          p.cancel("Cancelled.");
+          process.exit(0);
+        }
+
+        stackCorrections = corrections;
+      }
     }
   }
 
@@ -91,13 +101,21 @@ export async function runPrompts(
     process.exit(0);
   }
 
-  // 4. Key patterns / conventions
+  // 4. Key patterns, conventions, and gotchas (merged into one prompt)
+  // If old config had separate gotchas, merge them into the default value
+  let patternsDefault = defaults?.keyPatterns || "";
+  if (defaults?.gotchas) {
+    patternsDefault = patternsDefault
+      ? `${patternsDefault}\nGotchas: ${defaults.gotchas}`
+      : `Gotchas: ${defaults.gotchas}`;
+  }
+
   const keyPatterns = await p.text({
     message:
-      "Any key coding patterns or conventions? (optional, press Enter to skip)",
+      "Any key patterns, conventions, or gotchas? (optional, press Enter to skip)",
     placeholder:
-      "e.g. Zustand slices for state, NativeWind for styling, expo/fetch for SSE",
-    defaultValue: defaults?.keyPatterns || "",
+      "e.g. Zustand for state, never use FadeIn on ternary, angular commit style",
+    defaultValue: patternsDefault,
   });
 
   if (p.isCancel(keyPatterns)) {
@@ -105,74 +123,67 @@ export async function runPrompts(
     process.exit(0);
   }
 
-  // 5. Gotchas / anti-patterns
-  const gotchas = await p.text({
-    message: "Any critical gotchas or anti-patterns to avoid? (optional)",
-    placeholder:
-      "e.g. Never use FadeIn/FadeOut on ternary components, no @expo/vector-icons",
-    defaultValue: defaults?.gotchas || "",
-  });
-
-  if (p.isCancel(gotchas)) {
-    p.cancel("Cancelled.");
-    process.exit(0);
-  }
-
-  // 6. Code snapshot depth (only for TS/JS projects)
+  // 5. Code snapshot (auto-enabled for supported languages on first run;
+  //    only prompted on --reconfigure)
   let generateSnapshot = false;
   let snapshotPaths: string[] = defaults?.snapshotPaths ?? [];
+  const supportsSnapshot = SNAPSHOT_LANGUAGES.has(detected.language);
 
-  if (
-    detected.language === "typescript" ||
-    detected.language === "javascript"
-  ) {
-    const snapshotChoice = (await p.select({
-      message:
-        "Generate a code snapshot? (extracts types, store shapes, component props)",
-      options: [
-        { value: "auto" as const, label: "Yes, auto-detect key files" },
-        { value: "no" as const, label: "No, skip code snapshot" },
-        { value: "custom" as const, label: "Yes, but let me specify paths" },
-      ],
-      initialValue: defaults?.generateSnapshot
-        ? defaults.snapshotPaths.length > 0
-          ? ("custom" as const)
-          : ("auto" as const)
-        : undefined,
-    })) as "auto" | "no" | "custom" | symbol;
+  if (supportsSnapshot) {
+    if (isReconfigure) {
+      // On --reconfigure, let the user choose
+      const snapshotChoice = (await p.select({
+        message:
+          "Code snapshot (extracts types, function signatures, class definitions)",
+        options: [
+          { value: "auto" as const, label: "Auto-detect key files" },
+          { value: "custom" as const, label: "Custom paths" },
+          { value: "no" as const, label: "Disable" },
+        ],
+        initialValue: defaults?.generateSnapshot
+          ? defaults.snapshotPaths.length > 0
+            ? ("custom" as const)
+            : ("auto" as const)
+          : ("auto" as const),
+      })) as "auto" | "no" | "custom" | symbol;
 
-    if (p.isCancel(snapshotChoice)) {
-      p.cancel("Cancelled.");
-      process.exit(0);
-    }
-
-    if (snapshotChoice === "auto") {
-      generateSnapshot = true;
-      snapshotPaths = [];
-    } else if (snapshotChoice === "custom") {
-      generateSnapshot = true;
-      const paths = await p.text({
-        message: "Paths to scan (comma-separated, relative to project root)",
-        placeholder: "e.g. src/types, src/stores, src/components",
-        defaultValue:
-          defaults?.snapshotPaths.length
-            ? defaults.snapshotPaths.join(", ")
-            : undefined,
-      });
-
-      if (p.isCancel(paths)) {
+      if (p.isCancel(snapshotChoice)) {
         p.cancel("Cancelled.");
         process.exit(0);
       }
 
-      snapshotPaths = paths
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
+      if (snapshotChoice === "auto") {
+        generateSnapshot = true;
+        snapshotPaths = [];
+      } else if (snapshotChoice === "custom") {
+        generateSnapshot = true;
+        const paths = await p.text({
+          message: "Paths to scan (comma-separated, relative to project root)",
+          placeholder: "e.g. src/types, src/stores, src/components",
+          defaultValue:
+            defaults?.snapshotPaths.length
+              ? defaults.snapshotPaths.join(", ")
+              : undefined,
+        });
+
+        if (p.isCancel(paths)) {
+          p.cancel("Cancelled.");
+          process.exit(0);
+        }
+
+        snapshotPaths = paths
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+    } else {
+      // First run: auto-enable snapshot for supported languages
+      generateSnapshot = true;
+      snapshotPaths = defaults?.snapshotPaths ?? [];
     }
   }
 
-  // 7. Monorepo: per-package context files
+  // 6. Monorepo: per-package context files (conditional)
   let generatePerPackage = false;
 
   if (detected.monorepo && detected.monorepo.packages.length > 0) {
@@ -193,10 +204,10 @@ export async function runPrompts(
   }
 
   return {
-    ide,
+    ides,
     projectPurpose,
     keyPatterns: keyPatterns ?? "",
-    gotchas: gotchas ?? "",
+    gotchas: "", // Folded into keyPatterns; kept for backward compat
     generateSnapshot,
     snapshotPaths,
     stackConfirmed,

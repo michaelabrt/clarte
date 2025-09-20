@@ -89,7 +89,7 @@ function buildArchitectureSkill(analysis?: ContextAnalysis): ClaudeSkill | null 
     bodyLines.push("## Key Files (by centrality)");
     bodyLines.push("");
     for (const hub of analysis.hubFiles) {
-      bodyLines.push(`- \`${hub.path}\` — imported by ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"}`);
+      bodyLines.push(`- \`${hub.path}\` (imported by ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"})`);
     }
     bodyLines.push("");
   }

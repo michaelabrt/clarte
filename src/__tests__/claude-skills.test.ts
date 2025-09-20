@@ -22,7 +22,7 @@ function mockCtx(overrides?: Partial<DetectedContext>): DetectedContext {
 
 function mockAnswers(overrides?: Partial<UserAnswers>): UserAnswers {
   return {
-    ide: "claude",
+    ides: ["claude"],
     projectPurpose: "A test project",
     keyPatterns: "",
     gotchas: "",

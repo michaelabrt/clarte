@@ -5,6 +5,7 @@ import type {
   ContextAnalysis,
   DetectedContext,
   GeneratedFile,
+  IDETarget,
   ProgressCallback,
   UserAnswers,
 } from "./types.js";
@@ -40,69 +41,59 @@ export async function generateFiles(
   generateSkills: boolean = false,
   onVerbose?: ProgressCallback,
 ): Promise<GeneratedFile[]> {
-  const files: GeneratedFile[] = [];
+  // Deduplicate files by path (e.g. claude + cursor both produce CLAUDE.md)
+  const fileMap = new Map<string, GeneratedFile>();
 
-  // 1. Main context file
-  const mainFilename = getMainContextFilename(answers.ide);
-  const mainPath = path.join(ctx.rootDir, mainFilename);
-
-  // Aider uses YAML format, everything else uses markdown
-  const mainContent =
-    answers.ide === "aider"
-      ? buildAiderContext(ctx, answers, snapshot, analysis)
-      : buildMainContext(ctx, answers, snapshot, analysis);
-
-  files.push({
-    path: mainFilename,
-    content: mainContent,
-    existed: await fileExists(mainPath),
-  });
-  onVerbose?.(`Prepared ${mainFilename} (${mainContent.length} bytes)`);
-
-  // 2. Cursor-specific scoped rules
-  if (answers.ide === "cursor") {
-    const rules = buildCursorRules(ctx, answers, analysis);
-    for (const rule of rules) {
-      const rulePath = `.cursor/rules/${rule.filename}`;
-      const absPath = path.join(ctx.rootDir, rulePath);
-      const ruleContent = renderCursorRule(rule);
-      files.push({
-        path: rulePath,
-        content: ruleContent,
-        existed: await fileExists(absPath),
-      });
-      onVerbose?.(`Prepared ${rulePath} (${ruleContent.length} bytes)`);
-    }
+  async function addFile(filePath: string, content: string) {
+    if (fileMap.has(filePath)) return;
+    const absPath = path.join(ctx.rootDir, filePath);
+    fileMap.set(filePath, {
+      path: filePath,
+      content,
+      existed: await fileExists(absPath),
+    });
+    onVerbose?.(`Prepared ${filePath} (${content.length} bytes)`);
   }
 
-  // 3. Claude Code skills
-  if (generateSkills) {
-    const pkgJson = await readJsonFile(path.join(ctx.rootDir, "package.json"));
-    const scripts = (pkgJson?.scripts as Record<string, string>) ?? undefined;
-    const skills = buildClaudeSkills(ctx, answers, analysis, scripts);
-    for (const skill of skills) {
-      const skillPath = `.claude/skills/${skill.name}/SKILL.md`;
-      const absPath = path.join(ctx.rootDir, skillPath);
-      const skillContent = renderClaudeSkill(skill);
-      files.push({
-        path: skillPath,
-        content: skillContent,
-        existed: await fileExists(absPath),
-      });
-      onVerbose?.(`Prepared ${skillPath} (${skillContent.length} bytes)`);
-    }
-  }
+  // Generate files for each selected IDE
+  for (const ide of answers.ides) {
+    // 1. Main context file
+    const mainFilename = getMainContextFilename(ide);
+    const mainContent =
+      ide === "aider"
+        ? buildAiderContext(ctx, answers, snapshot, analysis)
+        : buildMainContext(ctx, answers, snapshot, analysis);
+    await addFile(mainFilename, mainContent);
 
-  // For OpenCode, also generate CLAUDE.md as fallback if main file is AGENTS.md
-  if (answers.ide === "opencode") {
-    const claudePath = path.join(ctx.rootDir, "CLAUDE.md");
-    const claudeExists = await fileExists(claudePath);
-    if (!claudeExists) {
-      files.push({
-        path: "CLAUDE.md",
-        content: `# ${path.basename(ctx.rootDir)}\n\n> See AGENTS.md for full project context.\n`,
-        existed: false,
-      });
+    // 2. Cursor-specific scoped rules
+    if (ide === "cursor") {
+      const rules = buildCursorRules(ctx, answers, analysis);
+      for (const rule of rules) {
+        const rulePath = `.cursor/rules/${rule.filename}`;
+        const ruleContent = renderCursorRule(rule);
+        await addFile(rulePath, ruleContent);
+      }
+    }
+
+    // 3. Claude Code skills
+    if (generateSkills && ide === "claude") {
+      const pkgJson = await readJsonFile(path.join(ctx.rootDir, "package.json"));
+      const scripts = (pkgJson?.scripts as Record<string, string>) ?? undefined;
+      const skills = buildClaudeSkills(ctx, answers, analysis, scripts);
+      for (const skill of skills) {
+        const skillPath = `.claude/skills/${skill.name}/SKILL.md`;
+        const skillContent = renderClaudeSkill(skill);
+        await addFile(skillPath, skillContent);
+      }
+    }
+
+    // 4. For OpenCode, also generate CLAUDE.md as fallback if main file is AGENTS.md
+    if (ide === "opencode") {
+      const claudePath = path.join(ctx.rootDir, "CLAUDE.md");
+      const claudeExists = await fileExists(claudePath);
+      if (!claudeExists && !fileMap.has("CLAUDE.md")) {
+        await addFile("CLAUDE.md", `# ${path.basename(ctx.rootDir)}\n\n> See AGENTS.md for full project context.\n`);
+      }
     }
   }
 
@@ -112,9 +103,6 @@ export async function generateFiles(
     ctx.monorepo &&
     ctx.monorepo.packages.length > 0
   ) {
-    const pkgMainFilename =
-      answers.ide === "aider" ? ".aider.conf.yml" : getMainContextFilename(answers.ide);
-
     for (const pkg of ctx.monorepo.packages) {
       const pkgRootDir = path.join(ctx.rootDir, pkg.path);
 
@@ -131,25 +119,26 @@ export async function generateFiles(
       // Build scoped answers for this package
       const pkgAnswers: UserAnswers = {
         ...answers,
-        projectPurpose: `${pkg.name} — part of the ${path.basename(ctx.rootDir)} monorepo. ${answers.projectPurpose}`,
+        projectPurpose: `${pkg.name}, part of the ${path.basename(ctx.rootDir)} monorepo. ${answers.projectPurpose}`,
         generatePerPackage: false, // don't recurse
       };
 
-      const pkgContent =
-        answers.ide === "aider"
-          ? buildAiderContext(pkgCtx, pkgAnswers, pkgSnapshot)
-          : buildMainContext(pkgCtx, pkgAnswers, pkgSnapshot);
+      for (const ide of answers.ides) {
+        const pkgMainFilename =
+          ide === "aider" ? ".aider.conf.yml" : getMainContextFilename(ide);
 
-      const pkgFilePath = path.join(pkg.path, pkgMainFilename);
-      const pkgAbsPath = path.join(ctx.rootDir, pkgFilePath);
+        const pkgContent =
+          ide === "aider"
+            ? buildAiderContext(pkgCtx, pkgAnswers, pkgSnapshot)
+            : buildMainContext(pkgCtx, pkgAnswers, pkgSnapshot);
 
-      files.push({
-        path: pkgFilePath,
-        content: pkgContent,
-        existed: await fileExists(pkgAbsPath),
-      });
+        const pkgFilePath = path.join(pkg.path, pkgMainFilename);
+        await addFile(pkgFilePath, pkgContent);
+      }
     }
   }
+
+  const files = Array.from(fileMap.values());
 
   // Dry run: return files without writing anything
   if (dryRun) {

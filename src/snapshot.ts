@@ -2,12 +2,19 @@ import path from "node:path";
 import fg from "fast-glob";
 import { estimateTokens, readFileOr } from "./utils.js";
 import { findUsedExports } from "./graph.js";
-import type { CodeSnapshot, DetectedContext, GitAnalysis, ImportGraph, ProgressCallback, SnapshotEntry } from "./types.js";
+import type { CodeSnapshot, DetectedContext, GitAnalysis, ImportGraph, Language, ProgressCallback, SnapshotEntry } from "./types.js";
 
 /**
  * Auto-detect which directories to scan for code snapshots.
  */
 function getDefaultScanPaths(ctx: DetectedContext): string[] {
+  if (ctx.language === "python") {
+    return getDefaultPythonScanPaths(ctx);
+  }
+  return getDefaultJsTsScanPaths(ctx);
+}
+
+function getDefaultJsTsScanPaths(ctx: DetectedContext): string[] {
   const paths: string[] = [];
   const dirs = ctx.directories;
 
@@ -44,6 +51,28 @@ function getDefaultScanPaths(ctx: DetectedContext): string[] {
   // Fallback: scan common type file patterns at root
   if (paths.length === 0) {
     paths.push("src", "app", "lib");
+  }
+
+  return paths;
+}
+
+function getDefaultPythonScanPaths(ctx: DetectedContext): string[] {
+  const paths: string[] = [];
+  const dirs = ctx.directories;
+
+  for (const d of dirs) {
+    const last = d.split("/").pop() ?? d;
+    if (
+      ["models", "schemas", "types", "services", "api", "core",
+       "utils", "db", "routes", "routers", "views"].includes(last)
+    ) {
+      paths.push(d);
+    }
+  }
+
+  // Fallback: common Python project roots
+  if (paths.length === 0) {
+    paths.push("src", "app", "lib", ".");
   }
 
   return paths;
@@ -126,7 +155,7 @@ async function extractFromFile(
       // Skip React component default exports like `export function MyComponent(`
       // unless it's clearly a hook or service
       if (isComponent && name[0] === name[0].toUpperCase() && !name.startsWith("use")) {
-        // This is likely a component — we only care about its Props, not its body
+        // This is likely a component; we only care about its Props, not its body
         continue;
       }
 
@@ -161,7 +190,7 @@ function extractBlock(lines: string[], startIdx: number): string {
     return result.trim();
   }
 
-  // Block with braces — capture until matching depth
+  // Block with braces: capture until matching depth
   let depth = 0;
   let result = "";
   const maxLines = 30; // Cap to avoid capturing massive blocks
@@ -208,15 +237,236 @@ function extractSignatureLine(lines: string[], startIdx: number): string {
   return sig;
 }
 
+// ── Python extraction ────────────────────────────────────────────────────────
+
+const PY_PATTERNS = {
+  /** class Foo: or class Foo(Base): or class Foo(Base, Mixin): */
+  classDef: /^class\s+(\w+)(?:\(([^)]*)\))?:/,
+  /** Decorators (@dataclass, @app.route, etc.) */
+  decorator: /^@(\S+)/,
+  /** def foo(...) -> RetType: or async def foo(...): */
+  funcDef: /^(async\s+)?def\s+(\w+)\s*\(/,
+  /** TypeAlias: Foo = NewType/Union/Optional/Callable/Literal/TypeVar */
+  typeAlias: /^(\w+)\s*(?::\s*TypeAlias\s*)?=\s*(?:NewType|Union|Optional|Callable|Literal|TypeVar|Annotated)\b/,
+};
+
+/** Bases that indicate a "type" category */
+const PY_TYPE_BASES = new Set([
+  "BaseModel", "TypedDict", "NamedTuple", "Protocol",
+]);
+
+/** Decorator names that indicate a dataclass-like */
+const PY_DATACLASS_DECORATORS = new Set([
+  "dataclass", "dataclasses.dataclass", "attrs", "attr.s", "define",
+]);
+
+/**
+ * Extract snapshot entries from a single Python file.
+ */
+async function extractFromPythonFile(
+  filePath: string,
+  relPath: string,
+): Promise<SnapshotEntry[]> {
+  const content = await readFileOr(filePath);
+  if (!content) return [];
+
+  const entries: SnapshotEntry[] = [];
+  const lines = content.split("\n");
+
+  // Track decorators for the next class/function
+  let pendingDecorators: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+    const indent = line.length - trimmed.length;
+
+    // Skip deeply indented lines (nested classes/functions)
+    if (indent > 0 && !pendingDecorators.length) {
+      // Only process top-level (indent 0) or class-level methods (indent 4)
+      // For snapshot purposes, we only want top-level definitions
+      if (indent > 4) continue;
+    }
+
+    // Collect decorators
+    const decoMatch = trimmed.match(PY_PATTERNS.decorator);
+    if (decoMatch) {
+      pendingDecorators.push(decoMatch[1]);
+      continue;
+    }
+
+    // -- Class definitions (top-level only) --
+    if (indent === 0) {
+      const classMatch = trimmed.match(PY_PATTERNS.classDef);
+      if (classMatch) {
+        const [, name, bases] = classMatch;
+        const baseList = bases
+          ? bases.split(",").map((b) => b.trim().split("[")[0].split("(")[0])
+          : [];
+
+        // Determine category
+        let category: SnapshotEntry["category"] = "type";
+        const isEnum = baseList.some((b) => b === "Enum" || b === "IntEnum" || b === "StrEnum");
+        const isProtocol = baseList.some((b) => b === "Protocol");
+        const isDatalike =
+          baseList.some((b) => PY_TYPE_BASES.has(b)) ||
+          pendingDecorators.some((d) => PY_DATACLASS_DECORATORS.has(d));
+
+        if (isProtocol) {
+          category = "interface";
+        } else if (isEnum || isDatalike) {
+          category = "type";
+        }
+
+        // Extract the class block (indentation-based)
+        const block = extractPythonBlock(lines, i, pendingDecorators);
+        entries.push({ file: relPath, category, signature: block });
+        pendingDecorators = [];
+        continue;
+      }
+    }
+
+    // -- Function definitions (top-level only) --
+    if (indent === 0) {
+      const funcMatch = trimmed.match(PY_PATTERNS.funcDef);
+      if (funcMatch) {
+        const [, , name] = funcMatch;
+
+        // Skip private and test functions
+        if (name.startsWith("_") || name.startsWith("test_")) {
+          pendingDecorators = [];
+          continue;
+        }
+
+        const sig = extractPythonFuncSignature(lines, i, pendingDecorators);
+        entries.push({ file: relPath, category: "function", signature: sig });
+        pendingDecorators = [];
+        continue;
+      }
+    }
+
+    // -- Type aliases (top-level only) --
+    if (indent === 0) {
+      const aliasMatch = trimmed.match(PY_PATTERNS.typeAlias);
+      if (aliasMatch) {
+        entries.push({ file: relPath, category: "type", signature: trimmed });
+        pendingDecorators = [];
+        continue;
+      }
+    }
+
+    // Reset decorators if we hit a non-decorator, non-blank, non-comment line
+    if (trimmed && !trimmed.startsWith("#")) {
+      pendingDecorators = [];
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Extract a Python class body using indentation. Includes decorators.
+ * Caps at 30 lines (same as TS blocks).
+ */
+function extractPythonBlock(
+  lines: string[],
+  startIdx: number,
+  decorators: string[],
+): string {
+  const maxLines = 30;
+  const parts: string[] = [];
+
+  // Add decorators
+  for (const dec of decorators) {
+    parts.push(`@${dec}`);
+  }
+
+  // First line (the class def)
+  parts.push(lines[startIdx].trimStart());
+
+  // Determine body indentation from next non-blank line
+  let bodyIndent = -1;
+  for (let i = startIdx + 1; i < lines.length && i < startIdx + maxLines; i++) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    bodyIndent = line.length - trimmed.length;
+    break;
+  }
+
+  if (bodyIndent <= 0) return parts.join("\n");
+
+  // Collect body lines
+  for (let i = startIdx + 1; i < lines.length && parts.length < maxLines; i++) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+
+    // Blank lines within the block are kept
+    if (!trimmed) {
+      parts.push("");
+      continue;
+    }
+
+    // If indentation returns to or below the class level, block is done
+    const currentIndent = line.length - trimmed.length;
+    if (currentIndent < bodyIndent) break;
+
+    parts.push(line.trimStart());
+  }
+
+  // Trim trailing blank lines
+  while (parts.length > 0 && parts[parts.length - 1] === "") {
+    parts.pop();
+  }
+
+  return parts.join("\n");
+}
+
+/**
+ * Extract a Python function signature (the `def` line, possibly multi-line).
+ * Includes decorators.
+ */
+function extractPythonFuncSignature(
+  lines: string[],
+  startIdx: number,
+  decorators: string[],
+): string {
+  const parts: string[] = [];
+
+  // Add decorators
+  for (const dec of decorators) {
+    parts.push(`@${dec}`);
+  }
+
+  // Collect the signature (may span multiple lines if args are wrapped)
+  let sig = "";
+  for (let i = startIdx; i < lines.length && i < startIdx + 10; i++) {
+    const trimmed = lines[i].trimStart();
+    sig += (sig ? " " : "") + trimmed;
+    // The signature ends at the colon after closing paren
+    if (sig.includes("):") || sig.includes(") ->")) {
+      // Find the colon that ends the signature
+      const colonIdx = sig.lastIndexOf(":");
+      if (colonIdx >= 0) {
+        sig = sig.slice(0, colonIdx + 1);
+      }
+      break;
+    }
+  }
+
+  parts.push(sig);
+  return parts.join("\n");
+}
+
 /**
  * Append an "imported by N files" comment to signatures of highly-imported entries.
  */
-function annotateSignature(entry: SnapshotEntry): string {
+function annotateSignature(entry: SnapshotEntry, commentPrefix = "//"): string {
   if (entry.importedByCount && entry.importedByCount > 2) {
     // Add comment to first line of the signature
     const firstLine = entry.signature.split("\n")[0];
     const rest = entry.signature.split("\n").slice(1);
-    const annotated = `${firstLine}  // imported by ${entry.importedByCount} files`;
+    const annotated = `${firstLine}  ${commentPrefix} imported by ${entry.importedByCount} files`;
     return rest.length > 0 ? [annotated, ...rest].join("\n") : annotated;
   }
   return entry.signature;
@@ -225,16 +475,11 @@ function annotateSignature(entry: SnapshotEntry): string {
 /**
  * Condense snapshot entries into a readable markdown block.
  */
-function renderSnapshot(entries: SnapshotEntry[]): string {
+function renderSnapshot(entries: SnapshotEntry[], language: Language = "typescript"): string {
   if (entries.length === 0) return "";
 
-  // Group by file
-  const byFile = new Map<string, SnapshotEntry[]>();
-  for (const e of entries) {
-    const list = byFile.get(e.file) ?? [];
-    list.push(e);
-    byFile.set(e.file, list);
-  }
+  const lang = language === "python" ? "python" : "ts";
+  const comment = language === "python" ? "#" : "//";
 
   let md = "";
 
@@ -246,32 +491,32 @@ function renderSnapshot(entries: SnapshotEntry[]): string {
   const functions = entries.filter((e) => e.category === "function");
 
   if (types.length > 0) {
-    md += "### Core Types\n\n```ts\n";
-    md += types.map((e) => annotateSignature(e)).join("\n\n");
+    md += `### Core Types\n\n\`\`\`${lang}\n`;
+    md += types.map((e) => annotateSignature(e, comment)).join("\n\n");
     md += "\n```\n\n";
   }
 
   if (stores.length > 0) {
-    md += "### Store Shape\n\n```ts\n";
-    md += stores.map((e) => annotateSignature(e)).join("\n\n");
+    md += `### Store Shape\n\n\`\`\`${lang}\n`;
+    md += stores.map((e) => annotateSignature(e, comment)).join("\n\n");
     md += "\n```\n\n";
   }
 
   if (components.length > 0) {
-    md += "### Component Props\n\n```ts\n";
-    md += components.map((e) => annotateSignature(e)).join("\n\n");
+    md += `### Component Props\n\n\`\`\`${lang}\n`;
+    md += components.map((e) => annotateSignature(e, comment)).join("\n\n");
     md += "\n```\n\n";
   }
 
   if (hooks.length > 0) {
-    md += "### Hooks\n\n```ts\n";
-    md += hooks.map((e) => annotateSignature(e)).join("\n\n");
+    md += `### Hooks\n\n\`\`\`${lang}\n`;
+    md += hooks.map((e) => annotateSignature(e, comment)).join("\n\n");
     md += "\n```\n\n";
   }
 
   if (functions.length > 0) {
-    md += "### Key Functions\n\n```ts\n";
-    md += functions.map((e) => annotateSignature(e)).join("\n\n");
+    md += `### Key Functions\n\n\`\`\`${lang}\n`;
+    md += functions.map((e) => annotateSignature(e, comment)).join("\n\n");
     md += "\n```\n\n";
   }
 
@@ -300,26 +545,44 @@ export async function generateSnapshot(
   const dirNames = scanPaths.map((p) => p.split("/").pop() ?? p);
   onProgress?.(`Scanning ${scanPaths.length} directories: ${dirNames.join(", ")}...`);
 
-  // Find all TS/JS files in the scan paths
-  const patterns = scanPaths.map((p) => `${p}/**/*.{ts,tsx,js,jsx}`);
+  // File patterns and extractor based on language
+  const isPython = ctx.language === "python";
+  const fileGlob = isPython ? "**/*.py" : "**/*.{ts,tsx,js,jsx}";
+  const patterns = scanPaths.map((p) => `${p}/${fileGlob}`);
+
+  const ignorePatterns = [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/__tests__/**",
+    "**/.Trash/**",
+    "**/Library/**",
+    "**/.git/**",
+  ];
+  if (isPython) {
+    ignorePatterns.push(
+      "**/__pycache__/**",
+      "**/venv/**",
+      "**/.venv/**",
+      "**/env/**",
+      "**/migrations/**",
+      "**/test_*.py",
+      "**/tests/**",
+      "**/conftest.py",
+      "**/setup.py",
+    );
+  }
 
   const files = await fg(patterns, {
     cwd: ctx.rootDir,
-    ignore: [
-      "**/node_modules/**",
-      "**/dist/**",
-      "**/build/**",
-      "**/*.test.*",
-      "**/*.spec.*",
-      "**/__tests__/**",
-      "**/.Trash/**",
-      "**/Library/**",
-      "**/.git/**",
-    ],
+    ignore: ignorePatterns,
     absolute: false,
   });
 
   const allEntries: SnapshotEntry[] = [];
+  const extractor = isPython ? extractFromPythonFile : extractFromFile;
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -330,7 +593,7 @@ export async function generateSnapshot(
     }
 
     const absPath = path.join(ctx.rootDir, file);
-    const entries = await extractFromFile(absPath, file);
+    const entries = await extractor(absPath, file);
     allEntries.push(...entries);
   }
 
@@ -355,7 +618,7 @@ export async function generateSnapshot(
   onProgress?.(`Applying token budget (${budget.toLocaleString()} tokens)...`);
   const { selected, excluded } = applyTokenBudget(liveEntries, budget, graph, gitActivity);
 
-  const markdown = renderSnapshot(selected);
+  const markdown = renderSnapshot(selected, ctx.language);
 
   return {
     entries: selected,
@@ -365,7 +628,7 @@ export async function generateSnapshot(
   };
 }
 
-/** Entry-point patterns — files that are never filtered as dead exports */
+/** Entry-point patterns: files that are never filtered as dead exports */
 const ENTRY_POINT_PATTERNS = [
   /(?:^|\/)index\.[jt]sx?$/,
   /(?:^|\/)App\.[jt]sx?$/,
@@ -374,19 +637,30 @@ const ENTRY_POINT_PATTERNS = [
   /(?:^|\/)app\//,
   /(?:^|\/)routes?\//,
   /(?:^|\/)middleware\//,
+  // Python entry points
+  /(?:^|\/)__init__\.py$/,
+  /(?:^|\/)main\.py$/,
+  /(?:^|\/)app\.py$/,
+  /(?:^|\/)wsgi\.py$/,
+  /(?:^|\/)asgi\.py$/,
 ];
 
 /**
  * Extract the identifier name from a signature string.
- * e.g. "export interface Foo {" -> "Foo"
- *      "export const bar =" -> "bar"
- *      "export type Baz =" -> "Baz"
+ * Handles both JS/TS and Python signatures.
  */
 function extractNameFromSignature(sig: string): string | null {
-  const m = sig.match(
+  // JS/TS: "export interface Foo {" -> "Foo"
+  const jsMatch = sig.match(
     /export\s+(?:default\s+)?(?:async\s+)?(?:interface|type|function|const|let|var|class|enum)\s+(\w+)/,
   );
-  return m?.[1] ?? null;
+  if (jsMatch) return jsMatch[1];
+
+  // Python: "class Foo:" or "class Foo(Base):" or "def foo(" or "async def foo("
+  const pyMatch = sig.match(
+    /(?:class|(?:async\s+)?def)\s+(\w+)/,
+  );
+  return pyMatch?.[1] ?? null;
 }
 
 /**

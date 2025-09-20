@@ -64,7 +64,7 @@ const HINT_GENERATORS: HintGenerator[] = [
         hints.push("### Next.js (App Router)");
         hints.push("");
         hints.push(
-          "- **App Router** — all routes in `app/` use React Server Components by default",
+          "- **App Router**: all routes in `app/` use React Server Components by default",
         );
         hints.push(
           '- Add `"use client"` directive at the top of files that need browser APIs, hooks, or event handlers',
@@ -87,7 +87,7 @@ const HINT_GENERATORS: HintGenerator[] = [
       } else if (hasPagesDir && !hasAppDir) {
         hints.push("### Next.js (Pages Router)");
         hints.push("");
-        hints.push("- **Pages Router** — routes in `pages/` directory");
+        hints.push("- **Pages Router**: routes in `pages/` directory");
         hints.push(
           "- `getServerSideProps` for server-side data fetching, `getStaticProps` for static generation",
         );
@@ -96,10 +96,10 @@ const HINT_GENERATORS: HintGenerator[] = [
         );
         hints.push("- API routes in `pages/api/`");
       } else if (hasAppDir && hasPagesDir) {
-        hints.push("### Next.js (Hybrid — App + Pages Router)");
+        hints.push("### Next.js (Hybrid: App + Pages Router)");
         hints.push("");
         hints.push(
-          "- Both `app/` (App Router) and `pages/` (Pages Router) coexist — new routes should use App Router",
+          "- Both `app/` (App Router) and `pages/` (Pages Router) coexist. New routes should use App Router",
         );
         hints.push(
           '- App Router components are server components by default; add `"use client"` for client components',
@@ -130,7 +130,7 @@ const HINT_GENERATORS: HintGenerator[] = [
       "- Organize routes with `express.Router()` in separate files, mount with `app.use('/prefix', router)`",
       "- Validate request bodies/params at the route level (e.g. with zod, joi, or express-validator)",
       "- Use `async` handlers with try/catch or an async wrapper to avoid unhandled promise rejections",
-      "- Set `res.status()` before `res.json()` — don't rely on defaults for error responses",
+      "- Set `res.status()` before `res.json()`. Don't rely on defaults for error responses",
     ],
   },
   {
@@ -150,10 +150,10 @@ const HINT_GENERATORS: HintGenerator[] = [
     getHints: () => [
       "### Hono",
       "",
-      "- Middleware with `app.use()` — compose with `c.next()` pattern",
+      "- Middleware with `app.use()`. Compose with `c.next()` pattern",
       "- Validators: use `hono/validator` or `@hono/zod-validator` for type-safe request parsing",
       "- Context (`c`): `c.json()`, `c.text()`, `c.html()` for responses; `c.req` for request",
-      "- Supports multiple runtimes (Node, Deno, Bun, Cloudflare Workers) — avoid Node-specific APIs",
+      "- Supports multiple runtimes (Node, Deno, Bun, Cloudflare Workers). Avoid Node-specific APIs",
     ],
   },
   {
@@ -163,7 +163,7 @@ const HINT_GENERATORS: HintGenerator[] = [
       "",
       "- **Modules** organize the app into cohesive blocks; every feature gets a module",
       "- **Controllers** handle HTTP requests (decorators: `@Get()`, `@Post()`, etc.)",
-      "- **Providers** (services) hold business logic — injected via constructor DI",
+      "- **Providers** (services) hold business logic, injected via constructor DI",
       "- **Guards** for auth (`@UseGuards()`), **Pipes** for validation (`@UsePipes()`)",
       "- **Interceptors** for response transformation, logging, caching",
       "- DTOs with `class-validator` decorators for request validation",
@@ -179,7 +179,7 @@ const HINT_GENERATORS: HintGenerator[] = [
         "- **expo-router** for file-based routing (if using); Stack, Tabs, Drawer navigators",
       );
       hints.push(
-        "- Expo Go has limited native module support — some packages require a dev build (`npx expo run:ios`)",
+        "- Expo Go has limited native module support. Some packages require a dev build (`npx expo run:ios`)",
       );
       hints.push(
         "- Use `expo-constants`, `expo-device` etc. instead of raw RN APIs when available",
@@ -192,7 +192,7 @@ const HINT_GENERATORS: HintGenerator[] = [
           "- **Reanimated**: worklet functions need the `\"worklet\"` directive on the first line",
         );
         hints.push(
-          "- Avoid `FadeIn`/`FadeOut` entering/exiting animations on conditionally rendered components — they cause flashes",
+          "- Avoid `FadeIn`/`FadeOut` entering/exiting animations on conditionally rendered components. They cause flashes",
         );
       }
       return hints;
@@ -206,11 +206,11 @@ const HINT_GENERATORS: HintGenerator[] = [
       return [
         "### React Native",
         "",
-        "- Use `StyleSheet.create()` for styles — avoid inline style objects in render",
+        "- Use `StyleSheet.create()` for styles. Avoid inline style objects in render",
         "- Platform-specific: `*.ios.tsx` / `*.android.tsx` or `Platform.select()`",
         "- **Reanimated**: worklet functions need the `\"worklet\"` directive",
         "- Navigation: React Navigation with Stack/Tab/Drawer navigators",
-        "- Test with both iOS and Android — layout behavior differs",
+        "- Test with both iOS and Android. Layout behavior differs",
       ];
     },
   },
@@ -223,7 +223,7 @@ const HINT_GENERATORS: HintGenerator[] = [
       return [
         "### React",
         "",
-        "- Functional components with hooks — no class components",
+        "- Functional components with hooks (no class components)",
         "- Use `React.memo()` for expensive renders, `useMemo`/`useCallback` for referential stability",
         "- Lift state up or use context for shared state; avoid prop drilling beyond 2-3 levels",
         "- Prefer controlled components for forms",
@@ -248,11 +248,11 @@ const HINT_GENERATORS: HintGenerator[] = [
     getHints: () => [
       "### Nuxt",
       "",
-      "- Auto-imports: components, composables, and utils are auto-imported — no manual import needed",
-      "- File-based routing in `pages/` — dynamic params with `[id].vue` syntax",
-      "- Data fetching: `useFetch()` / `useAsyncData()` — they handle SSR hydration automatically",
-      "- Server routes in `server/api/` — auto-registered, use `defineEventHandler()`",
-      "- Middleware in `middleware/` — `defineNuxtRouteMiddleware()` for route guards",
+      "- Auto-imports: components, composables, and utils are auto-imported (no manual import needed)",
+      "- File-based routing in `pages/`. Dynamic params with `[id].vue` syntax",
+      "- Data fetching: `useFetch()` / `useAsyncData()`. They handle SSR hydration automatically",
+      "- Server routes in `server/api/`, auto-registered, use `defineEventHandler()`",
+      "- Middleware in `middleware/`. `defineNuxtRouteMiddleware()` for route guards",
       "- State: `useState()` for SSR-safe shared state, Pinia for complex stores",
     ],
   },
@@ -265,7 +265,7 @@ const HINT_GENERATORS: HintGenerator[] = [
         "",
         "- Reactive declarations with `$:` for derived state",
         "- Props: `export let propName` in component script",
-        "- Stores: `writable()`, `readable()`, `derived()` — auto-subscribe with `$store` syntax",
+        "- Stores: `writable()`, `readable()`, `derived()`. Auto-subscribe with `$store` syntax",
         "- Use `{#if}`, `{#each}`, `{#await}` blocks for conditional/list/async rendering",
       ];
     },
@@ -275,7 +275,7 @@ const HINT_GENERATORS: HintGenerator[] = [
     getHints: () => [
       "### SvelteKit",
       "",
-      "- File-based routing in `src/routes/` — `+page.svelte`, `+layout.svelte`, `+server.ts`",
+      "- File-based routing in `src/routes/`: `+page.svelte`, `+layout.svelte`, `+server.ts`",
       "- `+page.ts` (universal) or `+page.server.ts` (server-only) for `load` functions",
       "- Form actions in `+page.server.ts` with `actions` export for progressive enhancement",
       "- Hooks in `src/hooks.server.ts` for auth, session, error handling",
@@ -289,7 +289,7 @@ const HINT_GENERATORS: HintGenerator[] = [
       "",
       "- Components, services, pipes, directives all use decorators (`@Component`, `@Injectable`, etc.)",
       "- Dependency injection: provide services in module or component `providers` array",
-      "- RxJS Observables for async data — use `async` pipe in templates, unsubscribe on destroy",
+      "- RxJS Observables for async data. Use `async` pipe in templates, unsubscribe on destroy",
       "- Lazy-load feature modules with `loadChildren` in routes",
       "- Use Angular CLI (`ng generate`) for scaffolding",
     ],
@@ -301,9 +301,9 @@ const HINT_GENERATORS: HintGenerator[] = [
       "",
       "- Apps structure: each feature is a Django app with `models.py`, `views.py`, `urls.py`, `admin.py`",
       "- Models: define in `models.py`, create migrations with `python manage.py makemigrations`",
-      "- Views: function-based (FBV) or class-based (CBV) — CBV for CRUD, FBV for custom logic",
+      "- Views: function-based (FBV) or class-based (CBV). CBV for CRUD, FBV for custom logic",
       "- URL routing in `urls.py` using `path()` and `include()` for app-level URLs",
-      "- Templates in `templates/` — use template inheritance with `{% extends %}` and `{% block %}`",
+      "- Templates in `templates/`. Use template inheritance with `{% extends %}` and `{% block %}`",
       "- Management commands in `management/commands/` for custom CLI tasks",
       "- Settings: use `django-environ` or `python-decouple` for environment-based config",
     ],
@@ -313,11 +313,11 @@ const HINT_GENERATORS: HintGenerator[] = [
     getHints: () => [
       "### Flask",
       "",
-      "- Blueprints for modular route organization — register with `app.register_blueprint()`",
+      "- Blueprints for modular route organization. Register with `app.register_blueprint()`",
       "- Use application factory pattern (`create_app()`) for testing and config flexibility",
       "- Error handlers with `@app.errorhandler(404)` etc.",
       "- Use Flask-SQLAlchemy for ORM, Flask-Migrate for database migrations",
-      "- Request context: `request`, `g`, `session` globals — available inside request handlers",
+      "- Request context: `request`, `g`, `session` globals, available inside request handlers",
     ],
   },
   {
@@ -326,7 +326,7 @@ const HINT_GENERATORS: HintGenerator[] = [
       "### FastAPI",
       "",
       "- **Dependency injection**: use `Depends()` for shared logic (auth, DB sessions, validation)",
-      "- **Pydantic models** for request/response schemas — automatic validation and OpenAPI docs",
+      "- **Pydantic models** for request/response schemas with automatic validation and OpenAPI docs",
       "- Async endpoints by default (`async def`); use sync `def` only for blocking I/O with threadpool",
       "- Routers: `APIRouter()` for modular route organization, mount with `app.include_router()`",
       "- Middleware with `@app.middleware(\"http\")` or Starlette middleware classes",
@@ -339,7 +339,7 @@ const HINT_GENERATORS: HintGenerator[] = [
     getHints: () => [
       "### Prisma",
       "",
-      "- Schema in `prisma/schema.prisma` — run `npx prisma generate` after changes",
+      "- Schema in `prisma/schema.prisma`. Run `npx prisma generate` after changes",
       "- Migrations: `npx prisma migrate dev` for development, `npx prisma migrate deploy` for production",
       "- Use `prisma.$transaction()` for atomic operations",
       "- Relation queries: use `include` for eager loading, `select` for field filtering",
@@ -350,7 +350,7 @@ const HINT_GENERATORS: HintGenerator[] = [
     getHints: () => [
       "### Drizzle",
       "",
-      "- Schema defined in TypeScript — type-safe queries with no code generation step",
+      "- Schema defined in TypeScript. Type-safe queries with no code generation step",
       "- Migrations: `drizzle-kit generate` then `drizzle-kit migrate`",
       "- Use `db.select()`, `db.insert()`, `db.update()`, `db.delete()` for queries",
       "- Relations: define with `relations()` helper for type-safe joins",
@@ -364,7 +364,7 @@ const HINT_GENERATORS: HintGenerator[] = [
       return [
         "### Tailwind CSS",
         "",
-        "- Utility-first: compose styles with `className` — avoid custom CSS unless truly needed",
+        "- Utility-first: compose styles with `className`. Avoid custom CSS unless truly needed",
         "- Use `@apply` sparingly in CSS modules for repeated patterns",
         "- Responsive: mobile-first with `sm:`, `md:`, `lg:` breakpoint prefixes",
         "- Dark mode: `dark:` variant (class or media strategy per `tailwind.config`)",
@@ -377,7 +377,7 @@ const HINT_GENERATORS: HintGenerator[] = [
     getHints: () => [
       "### Electron",
       "",
-      "- **Main process** (Node.js) and **renderer process** (Chromium) — communicate via IPC",
+      "- **Main process** (Node.js) and **renderer process** (Chromium). Communicate via IPC",
       "- Use `contextBridge` + `preload.js` to expose safe APIs to renderer (no `nodeIntegration`)",
       "- `ipcMain.handle()` / `ipcRenderer.invoke()` for async request-response patterns",
       "- Package with `electron-builder` or `electron-forge`",

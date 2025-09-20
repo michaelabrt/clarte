@@ -1,4 +1,4 @@
-import pc from "picocolors";
+import { theme as t, gradient } from "./theme.js";
 import type { CodeSnapshot, ContextAnalysis, DetectedContext, GeneratedFile } from "./types.js";
 import { estimateTokens, formatBytes } from "./utils.js";
 
@@ -14,7 +14,7 @@ export function printSummary(
   if (files.length === 0) return;
 
   console.log("");
-  console.log(pc.bold("  Files created:"));
+  console.log(t.brandBold("  Files created:"));
   console.log("");
 
   // Track totals
@@ -100,26 +100,26 @@ export function printSummary(
   // Print aligned rows
   for (const row of fileRows) {
     if (row.isHeader) {
-      console.log(`${row.indent}${pc.cyan(row.name)}`);
+      console.log(`${row.indent}${t.accent(row.name)}`);
     } else {
-      const status = row.isUpdated ? pc.yellow("(updated)") : pc.green("(new)");
+      const status = row.isUpdated ? t.muted("(updated)") : t.success("(new)");
       const paddedName = row.name.padEnd(maxNameCol - row.indent.length);
       console.log(
-        `${row.indent}${pc.cyan(paddedName)}  ${row.size.padStart(maxSizeWidth)}  ${pc.dim(row.tokens.padEnd(maxTokenWidth))}  ${status}`,
+        `${row.indent}${t.accent(paddedName)}  ${row.size.padStart(maxSizeWidth)}  ${t.muted(row.tokens.padEnd(maxTokenWidth))}  ${status}`,
       );
     }
   }
 
   console.log("");
   console.log(
-    pc.dim(
+    t.muted(
       `    Total: ${formatBytes(totalBytes)}, ~${formatNumber(totalTokens)} tokens`,
     ),
   );
 
   if (snapshot?.budgetExcluded && snapshot.budgetExcluded > 0) {
     console.log(
-      pc.dim(
+      t.muted(
         `    (${snapshot.budgetExcluded} snapshot entries excluded by token budget)`,
       ),
     );
@@ -135,14 +135,14 @@ export function printSummary(
     if (analysis.gitActivity) parts.push(`${analysis.gitActivity.hotFiles.length} recently active files`);
     if (parts.length > 0) {
       console.log(
-        pc.dim(`    Includes: ${parts.join(", ")}`),
+        t.muted(`    Includes: ${parts.join(", ")}`),
       );
     }
   }
 
   // -- Token estimate comparison (bar chart) --
   console.log("");
-  console.log(pc.bold("  Estimated context cost per conversation:"));
+  console.log(t.brandBold("  Estimated context cost per conversation:"));
   console.log("");
 
   // Before: estimate exploration cost from source file count + size
@@ -163,25 +163,37 @@ export function printSummary(
     ((explorationTokens - afterTotal) / explorationTokens) * 100,
   );
 
-  // Bar chart: proportional bars, max 40 chars wide
+  // Bar chart: gradient bars with depth, max 40 chars wide
   const BAR_MAX = 40;
   const maxVal = Math.max(explorationTokens, afterTotal);
   const beforeBarLen = Math.max(1, Math.round((explorationTokens / maxVal) * BAR_MAX));
   const afterBarLen = Math.max(1, Math.round((afterTotal / maxVal) * BAR_MAX));
-  const BLOCK = "\u2588";
+  const savedLen = Math.max(0, beforeBarLen - afterBarLen);
 
-  const beforeBar = BLOCK.repeat(beforeBarLen);
-  const afterBar = BLOCK.repeat(afterBarLen);
-  const afterPad = " ".repeat(Math.max(0, beforeBarLen - afterBarLen));
+  // Before: slightly deeper blue → brand blue (subtle gradient)
+  const beforeBar = gradient(
+    "\u2588".repeat(beforeBarLen),
+    [90, 135, 230],   // slightly deeper than brand
+    [122, 162, 247],  // #7aa2f7 brand
+    t.brand,
+  );
+  // After: brand blue → accent (subtle shift toward cyan)
+  const afterBar = gradient(
+    "\u2588".repeat(afterBarLen),
+    [122, 162, 247],  // #7aa2f7 brand
+    [137, 180, 250],  // #89b4fa accent
+    t.accent,
+  );
+  const savedBar = t.muted("\u2591".repeat(savedLen));
 
-  console.log(`    Before: ${pc.red(beforeBar)}  ~${formatNumber(explorationTokens)} tokens`);
-  console.log(`    After:  ${pc.green(afterBar)}${afterPad}  ~${formatNumber(afterTotal)} tokens`);
+  console.log(`    Before  ${beforeBar}  ${t.muted(`~${formatNumber(explorationTokens)} tokens`)}`);
+  console.log(`    After   ${afterBar}${savedBar}  ${t.muted(`~${formatNumber(afterTotal)} tokens`)}`);
 
   console.log("");
 
   if (savings > 0) {
     console.log(
-      pc.green(
+      t.success(
         `    Estimated savings: ~${savings}% fewer tokens`,
       ),
     );
@@ -190,7 +202,7 @@ export function printSummary(
   // "What we analyzed" recap
   if (analysis) {
     console.log("");
-    console.log(pc.bold("  What we analyzed:"));
+    console.log(t.brandBold("  What we analyzed:"));
 
     const recapRows: Array<{ label: string; result: string }> = [];
 
@@ -234,12 +246,12 @@ export function printSummary(
     const maxRecapLabel = Math.max(...recapRows.map((r) => r.label.length));
     for (const row of recapRows) {
       console.log(
-        pc.dim(`    ${row.label.padEnd(maxRecapLabel)} → ${row.result}`),
+        t.muted(`    ${row.label.padEnd(maxRecapLabel)} → ${row.result}`),
       );
     }
   }
 
-  // Findings summary — actionable issues worth fixing
+  // Findings summary: actionable issues worth fixing
   if (analysis) {
     const findings: string[] = [];
 
@@ -274,12 +286,13 @@ export function printSummary(
 
     console.log("");
     if (findings.length > 0) {
-      console.log(pc.yellow(`  \u26A0  ${findings.length} finding${findings.length === 1 ? "" : "s"}`));
+      const findingsHeader = `  \u26A0  ${findings.length} finding${findings.length === 1 ? "" : "s"}`;
+      console.log(t.warn(findingsHeader));
       for (const f of findings) {
-        console.log(pc.dim(`     \u25CF ${f}`));
+        console.log(t.muted(`     \u25CF ${f}`));
       }
     } else {
-      console.log(pc.green(`  \u2713  No structural issues detected`));
+      console.log(t.success(`  \u2713  No structural issues detected`));
     }
   }
 
@@ -301,7 +314,7 @@ function estimateExplorationCost(ctx: DetectedContext): number {
 
   // Agents typically read ~40% of source files to understand a project
   const bytesRead = ctx.totalSourceBytes * 0.4;
-  // Convert to tokens — source code is typically symbol-heavy (~3.2 chars/token)
+  // Convert to tokens. Source code is typically symbol-heavy (~3.2 chars/token)
   const readTokens = Math.ceil(bytesRead / 3.2);
 
   // Add overhead for search commands, tool calls, etc (~30% overhead)

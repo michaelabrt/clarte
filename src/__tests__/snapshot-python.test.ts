@@ -1,0 +1,300 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+// We need to test the Python extraction functions, which are not exported.
+// We'll test them via generateSnapshot with mocked file system.
+// Instead, we test by importing the module and using the public API.
+
+// For unit testing the extraction logic, we mock readFileOr and fast-glob
+// to feed controlled Python file content.
+
+vi.mock("../utils.js", async () => {
+  const actual = await vi.importActual<typeof import("../utils.js")>("../utils.js");
+  return {
+    ...actual,
+    readFileOr: vi.fn(),
+  };
+});
+
+vi.mock("fast-glob", () => ({
+  default: vi.fn(),
+}));
+
+vi.mock("../graph.js", async () => {
+  const actual = await vi.importActual<typeof import("../graph.js")>("../graph.js");
+  return {
+    ...actual,
+    findUsedExports: () => new Set<string>(),
+  };
+});
+
+import { generateSnapshot } from "../snapshot.js";
+import { readFileOr } from "../utils.js";
+import fg from "fast-glob";
+import type { DetectedContext } from "../types.js";
+
+const mockReadFileOr = vi.mocked(readFileOr);
+const mockFg = vi.mocked(fg);
+
+function makePythonCtx(overrides?: Partial<DetectedContext>): DetectedContext {
+  return {
+    rootDir: "/test-project",
+    language: "python",
+    hasTypeScript: false,
+    packageManager: "pip",
+    linter: "ruff",
+    frameworks: [],
+    directories: ["app", "models"],
+    dependencies: [],
+    isGitRepo: true,
+    totalSourceBytes: 5000,
+    sourceFileCount: 10,
+    monorepo: null,
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("Python snapshot extraction", () => {
+  it("extracts a simple dataclass", async () => {
+    const pyContent = `
+from dataclasses import dataclass
+
+@dataclass
+class UserProfile:
+    name: str
+    email: str
+    age: int = 0
+`;
+
+    mockFg.mockResolvedValue(["models/user.py"] as any);
+    mockReadFileOr.mockResolvedValue(pyContent);
+
+    const result = await generateSnapshot(makePythonCtx(), []);
+
+    expect(result.entries.length).toBe(1);
+    expect(result.entries[0].category).toBe("type");
+    expect(result.entries[0].signature).toContain("@dataclass");
+    expect(result.entries[0].signature).toContain("class UserProfile:");
+    expect(result.entries[0].signature).toContain("name: str");
+  });
+
+  it("extracts a Pydantic BaseModel", async () => {
+    const pyContent = `
+from pydantic import BaseModel, EmailStr
+
+class UserCreate(BaseModel):
+    name: str
+    email: EmailStr
+    age: int | None = None
+`;
+
+    mockFg.mockResolvedValue(["schemas/user.py"] as any);
+    mockReadFileOr.mockResolvedValue(pyContent);
+
+    const result = await generateSnapshot(makePythonCtx(), []);
+
+    expect(result.entries.length).toBe(1);
+    expect(result.entries[0].category).toBe("type");
+    expect(result.entries[0].signature).toContain("class UserCreate(BaseModel):");
+  });
+
+  it("extracts a TypedDict", async () => {
+    const pyContent = `
+from typing import TypedDict
+
+class Config(TypedDict):
+    debug: bool
+    host: str
+    port: int
+`;
+
+    mockFg.mockResolvedValue(["types/config.py"] as any);
+    mockReadFileOr.mockResolvedValue(pyContent);
+
+    const result = await generateSnapshot(makePythonCtx(), []);
+
+    expect(result.entries.length).toBe(1);
+    expect(result.entries[0].category).toBe("type");
+    expect(result.entries[0].signature).toContain("class Config(TypedDict):");
+  });
+
+  it("extracts a Protocol as interface", async () => {
+    const pyContent = `
+from typing import Protocol
+
+class Serializable(Protocol):
+    def serialize(self) -> bytes: ...
+    def deserialize(self, data: bytes) -> None: ...
+`;
+
+    mockFg.mockResolvedValue(["core/protocols.py"] as any);
+    mockReadFileOr.mockResolvedValue(pyContent);
+
+    const result = await generateSnapshot(makePythonCtx(), []);
+
+    expect(result.entries.length).toBe(1);
+    expect(result.entries[0].category).toBe("interface");
+    expect(result.entries[0].signature).toContain("class Serializable(Protocol):");
+  });
+
+  it("extracts an Enum", async () => {
+    const pyContent = `
+from enum import Enum
+
+class Status(Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    PENDING = "pending"
+`;
+
+    mockFg.mockResolvedValue(["models/enums.py"] as any);
+    mockReadFileOr.mockResolvedValue(pyContent);
+
+    const result = await generateSnapshot(makePythonCtx(), []);
+
+    expect(result.entries.length).toBe(1);
+    expect(result.entries[0].category).toBe("type");
+    expect(result.entries[0].signature).toContain("class Status(Enum):");
+  });
+
+  it("extracts sync and async function signatures", async () => {
+    const pyContent = `
+def process_order(order_id: int, user: User) -> OrderResult:
+    \"\"\"Process an order.\"\"\"
+    pass
+
+async def fetch_data(url: str, timeout: float = 30.0) -> dict[str, Any]:
+    \"\"\"Fetch data from a URL.\"\"\"
+    pass
+`;
+
+    mockFg.mockResolvedValue(["services/orders.py"] as any);
+    mockReadFileOr.mockResolvedValue(pyContent);
+
+    const result = await generateSnapshot(makePythonCtx(), []);
+
+    expect(result.entries.length).toBe(2);
+    expect(result.entries[0].category).toBe("function");
+    expect(result.entries[0].signature).toContain("def process_order(order_id: int, user: User) -> OrderResult:");
+    expect(result.entries[1].category).toBe("function");
+    expect(result.entries[1].signature).toContain("async def fetch_data(url: str, timeout: float = 30.0) -> dict[str, Any]:");
+  });
+
+  it("skips private functions (starting with _)", async () => {
+    const pyContent = `
+def public_function() -> None:
+    pass
+
+def _private_helper() -> None:
+    pass
+
+def __very_private() -> None:
+    pass
+`;
+
+    mockFg.mockResolvedValue(["utils/helpers.py"] as any);
+    mockReadFileOr.mockResolvedValue(pyContent);
+
+    const result = await generateSnapshot(makePythonCtx(), []);
+
+    expect(result.entries.length).toBe(1);
+    expect(result.entries[0].signature).toContain("public_function");
+  });
+
+  it("skips test_ functions", async () => {
+    const pyContent = `
+def create_user(name: str) -> User:
+    pass
+
+def test_create_user():
+    pass
+`;
+
+    mockFg.mockResolvedValue(["services/user.py"] as any);
+    mockReadFileOr.mockResolvedValue(pyContent);
+
+    const result = await generateSnapshot(makePythonCtx(), []);
+
+    expect(result.entries.length).toBe(1);
+    expect(result.entries[0].signature).toContain("create_user");
+  });
+
+  it("extracts type aliases", async () => {
+    const pyContent = `
+from typing import NewType, Callable
+
+UserID = NewType("UserID", int)
+Callback = Callable[[str, int], bool]
+`;
+
+    mockFg.mockResolvedValue(["types/aliases.py"] as any);
+    mockReadFileOr.mockResolvedValue(pyContent);
+
+    const result = await generateSnapshot(makePythonCtx(), []);
+
+    expect(result.entries.length).toBe(2);
+    expect(result.entries[0].category).toBe("type");
+    expect(result.entries[0].signature).toContain("UserID = NewType");
+    expect(result.entries[1].signature).toContain("Callback = Callable");
+  });
+
+  it("renders python code blocks in markdown", async () => {
+    const pyContent = `
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    email: str
+
+def get_user(user_id: int) -> User:
+    pass
+`;
+
+    mockFg.mockResolvedValue(["models/user.py"] as any);
+    mockReadFileOr.mockResolvedValue(pyContent);
+
+    const result = await generateSnapshot(makePythonCtx(), []);
+
+    expect(result.markdown).toContain("```python");
+    expect(result.markdown).not.toContain("```ts");
+  });
+
+  it("handles class with multiple bases", async () => {
+    const pyContent = `
+class AdminUser(BaseModel, PermissionMixin):
+    name: str
+    is_admin: bool = True
+`;
+
+    mockFg.mockResolvedValue(["models/admin.py"] as any);
+    mockReadFileOr.mockResolvedValue(pyContent);
+
+    const result = await generateSnapshot(makePythonCtx(), []);
+
+    expect(result.entries.length).toBe(1);
+    expect(result.entries[0].signature).toContain("class AdminUser(BaseModel, PermissionMixin):");
+  });
+
+  it("handles multi-line function signature", async () => {
+    const pyContent = `
+def create_order(
+    user_id: int,
+    items: list[OrderItem],
+    discount: float = 0.0,
+) -> Order:
+    pass
+`;
+
+    mockFg.mockResolvedValue(["services/orders.py"] as any);
+    mockReadFileOr.mockResolvedValue(pyContent);
+
+    const result = await generateSnapshot(makePythonCtx(), []);
+
+    expect(result.entries.length).toBe(1);
+    expect(result.entries[0].signature).toContain("def create_order(");
+    expect(result.entries[0].signature).toContain(") -> Order:");
+  });
+});
