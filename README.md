@@ -279,7 +279,8 @@ npx codebrief [directory] [options]
 | `--dry-run` | Preview what would be generated |
 | `--refresh-snapshot` | Re-scan source files and update just the code snapshot |
 | `--reconfigure` | Re-prompt even if `.codebrief.json` exists |
-| `--check` | Check if the snapshot is stale (exit 0 = fresh, 1 = stale) |
+| `--check` | Check if the snapshot is stale via hash comparison (exit 0 = fresh, 1 = stale) |
+| `--check=timestamp` | Timestamp-only staleness check — instant, no file hashing (for shell hooks) |
 | `--max-tokens=N` | Set the token budget for the code snapshot |
 | `--generate-skills` | Generate Claude Code skill files |
 | `-v, --verbose` | Show detailed progress output |
@@ -296,7 +297,7 @@ This finds the `<!-- CODE SNAPSHOT -->` markers in your context file, re-scans s
 
 ## Shell Integration
 
-Automatically detect stale snapshots when you `cd` into a project:
+Automatically detect stale snapshots when you `cd` into a project. These hooks run in pure shell (no Node.js boot), so they add zero latency to your prompt:
 
 <details>
 <summary><strong>zsh</strong></summary>
@@ -305,7 +306,13 @@ Automatically detect stale snapshots when you `cd` into a project:
 # Add to ~/.zshrc
 chpwd() {
   if [[ -f .codebrief.json ]]; then
-    npx --yes codebrief --check 2>/dev/null
+    local ts days stale_days
+    ts=$(command grep -o '"snapshotGeneratedAt":[0-9]*' .codebrief.json 2>/dev/null | command grep -o '[0-9]*$')
+    [[ -z "$ts" ]] && return
+    stale_days=$(command grep -o '"staleDays":[0-9]*' .codebrief.json 2>/dev/null | command grep -o '[0-9]*$')
+    : "${stale_days:=7}"
+    days=$(( ($(date +%s) - ts / 1000) / 86400 ))
+    (( days > stale_days )) && echo "codebrief: snapshot is ${days}d old. Run: npx codebrief --refresh-snapshot"
   fi
 }
 ```
@@ -320,7 +327,13 @@ chpwd() {
 cd() {
   builtin cd "$@" || return
   if [[ -f .codebrief.json ]]; then
-    npx --yes codebrief --check 2>/dev/null
+    local ts days stale_days
+    ts=$(command grep -o '"snapshotGeneratedAt":[0-9]*' .codebrief.json 2>/dev/null | command grep -o '[0-9]*$')
+    [[ -z "$ts" ]] && return
+    stale_days=$(command grep -o '"staleDays":[0-9]*' .codebrief.json 2>/dev/null | command grep -o '[0-9]*$')
+    : "${stale_days:=7}"
+    days=$(( ($(date +%s) - ts / 1000) / 86400 ))
+    (( days > stale_days )) && echo "codebrief: snapshot is ${days}d old. Run: npx codebrief --refresh-snapshot"
   fi
 }
 ```
@@ -334,12 +347,19 @@ cd() {
 # Add to ~/.config/fish/conf.d/codebrief.fish
 function __codebrief_check --on-variable PWD
   if test -f .codebrief.json
-    npx --yes codebrief --check 2>/dev/null
+    set -l ts (command grep -o '"snapshotGeneratedAt":[0-9]*' .codebrief.json 2>/dev/null | command grep -o '[0-9]*\$')
+    test -z "$ts"; and return
+    set -l stale_days (command grep -o '"staleDays":[0-9]*' .codebrief.json 2>/dev/null | command grep -o '[0-9]*\$')
+    test -z "$stale_days"; and set stale_days 7
+    set -l days (math "( "(date +%s)" - $ts / 1000) / 86400")
+    test $days -gt $stale_days; and echo "codebrief: snapshot is "$days"d old. Run: npx codebrief --refresh-snapshot"
   end
 end
 ```
 
 </details>
+
+> **Tip:** Set `"staleDays": 14` in `.codebrief.json` to customize the threshold. For CI/pre-commit use the hash-based `--check` instead.
 
 ## Config File
 

@@ -27,19 +27,19 @@ src/
 ### Core Types
 
 ```ts
-export type ProgressCallback = (message: string) => void;  // imported by 17 files
+export type ProgressCallback = (message: string) => void;  // imported by 18 files
 
-export interface LayerEdge {  // imported by 17 files
+export interface LayerEdge {  // imported by 18 files
   from: string;
   to: string;
 }
 
-export interface CircularDependency {  // imported by 17 files
+export interface CircularDependency {  // imported by 18 files
   /** File paths forming the cycle */
   chain: string[];
 }
 
-export type Language =  // imported by 17 files
+export type Language =  // imported by 18 files
   | "typescript"
   | "javascript"
   | "python"
@@ -48,7 +48,7 @@ export type Language =  // imported by 17 files
   | "java"
   | "other";
 
-export type Linter =  // imported by 17 files
+export type Linter =  // imported by 18 files
   | "biome"
   | "eslint"
   | "prettier"
@@ -58,7 +58,7 @@ export type Linter =  // imported by 17 files
   | "gofmt"
   | "none";
 
-export type PackageManager =  // imported by 17 files
+export type PackageManager =  // imported by 18 files
   | "npm"
   | "pnpm"
   | "yarn"
@@ -69,7 +69,7 @@ export type PackageManager =  // imported by 17 files
   | "go"
   | "none";
 
-export type IDETarget =  // imported by 17 files
+export type IDETarget =  // imported by 18 files
   | "claude"
   | "cursor"
   | "opencode"
@@ -80,21 +80,21 @@ export type IDETarget =  // imported by 17 files
   | "aider"
   | "generic";
 
-export interface DetectedFramework {  // imported by 17 files
+export interface DetectedFramework {  // imported by 18 files
   name: string;
   version?: string;
   /** Number of files that import this framework (from import graph) */
   importCount?: number;
 }
 
-export interface MonorepoInfo {  // imported by 17 files
+export interface MonorepoInfo {  // imported by 18 files
   /** Which monorepo tool was detected */
   type: "pnpm-workspaces" | "turborepo" | "nx";
   /** Discovered packages */
   packages: MonorepoPackage[];
 }
 
-export interface GeneratedFile {  // imported by 17 files
+export interface GeneratedFile {  // imported by 18 files
   /** Relative path from project root */
   path: string;
   /** File contents */
@@ -103,7 +103,7 @@ export interface GeneratedFile {  // imported by 17 files
   existed: boolean;
 }
 
-export interface Community {  // imported by 17 files
+export interface Community {  // imported by 18 files
   /** Auto-assigned numeric ID */
   id: number;
   /** Files in this community */
@@ -112,7 +112,7 @@ export interface Community {  // imported by 17 files
   label: string;
 }
 
-export interface CodeSnapshot {  // imported by 17 files
+export interface CodeSnapshot {  // imported by 18 files
   entries: SnapshotEntry[];
   /** Rendered markdown block */
   markdown: string;
@@ -122,7 +122,7 @@ export interface CodeSnapshot {  // imported by 17 files
   estimatedTokens?: number;
 }
 
-export interface HubFile {  // imported by 17 files
+export interface HubFile {  // imported by 18 files
   /** Relative file path */
   path: string;
   /** PageRank centrality score (0-1) */
@@ -133,7 +133,7 @@ export interface HubFile {  // imported by 17 files
   imports: number;
 }
 
-export interface MonorepoPackage {  // imported by 17 files
+export interface MonorepoPackage {  // imported by 18 files
   /** Package name from package.json */
   name: string;
   /** Relative path from project root */
@@ -144,7 +144,7 @@ export interface MonorepoPackage {  // imported by 17 files
   frameworks: DetectedFramework[];
 }
 
-export interface ExportCoverage {  // imported by 17 files
+export interface ExportCoverage {  // imported by 18 files
   /** Relative file path */
   file: string;
   /** Total number of named exports */
@@ -155,7 +155,7 @@ export interface ExportCoverage {  // imported by 17 files
   coverage: number;
 }
 
-export interface FileInstability {  // imported by 17 files
+export interface FileInstability {  // imported by 18 files
   /** Relative file path */
   path: string;
   /** Number of incoming dependencies */
@@ -166,7 +166,7 @@ export interface FileInstability {  // imported by 17 files
   instability: number;
 }
 
-export interface ChangeCoupling {  // imported by 17 files
+export interface ChangeCoupling {  // imported by 18 files
   fileA: string;
   fileB: string;
   /** Number of commits both files appeared in together */
@@ -177,7 +177,7 @@ export interface ChangeCoupling {  // imported by 17 files
   confidence: number;
 }
 
-export interface ImportGraph {  // imported by 17 files
+export interface ImportGraph {  // imported by 18 files
   /** All import edges */
   edges: ImportEdge[];
   /** Number of files that import each file */
@@ -188,7 +188,7 @@ export interface ImportGraph {  // imported by 17 files
   externalImportCounts: Map<string, number>;
 }
 
-export interface ArchitecturalLayer {  // imported by 17 files
+export interface ArchitecturalLayer {  // imported by 18 files
   /** Layer name (e.g. "types", "stores", "hooks", "components", "pages") */
   name: string;
   /** Files belonging to this layer */
@@ -199,7 +199,7 @@ export interface ArchitecturalLayer {  // imported by 17 files
   dependsOn: string[];
 }
 
-export interface GitAnalysis {  // imported by 17 files
+export interface GitAnalysis {  // imported by 18 files
   /** Map of relative file path -> commit count in analysis window */
   commitCounts: Map<string, number>;
   /** Files sorted by commit count descending */
@@ -212,7 +212,7 @@ export interface GitAnalysis {  // imported by 17 files
   changeCoupling: ChangeCoupling[];
 }
 
-export interface ImportEdge {  // imported by 17 files
+export interface ImportEdge {  // imported by 18 files
   /** Source file (relative path) */
   from: string;
   /** Target file or package (relative path or bare specifier) */
@@ -225,7 +225,7 @@ export interface ImportEdge {  // imported by 17 files
   importedNames: string[];
 }
 
-export interface SnapshotEntry {  // imported by 17 files
+export interface SnapshotEntry {  // imported by 18 files
   /** Source file path (relative) */
   file: string;
   /** Category: type, interface, function, component, store, hook */
@@ -236,7 +236,7 @@ export interface SnapshotEntry {  // imported by 17 files
   importedByCount?: number;
 }
 
-export interface ClaudeSkill {  // imported by 17 files
+export interface ClaudeSkill {  // imported by 18 files
   /** Skill name (used as directory name) */
   name: string;
   /** Human-readable description */
@@ -249,7 +249,7 @@ export interface ClaudeSkill {  // imported by 17 files
   body: string;
 }
 
-export interface ContextAnalysis {  // imported by 17 files
+export interface ContextAnalysis {  // imported by 18 files
   hubFiles: HubFile[];
   circularDeps: CircularDependency[];
   layers: ArchitecturalLayer[];
@@ -264,7 +264,7 @@ export interface ContextAnalysis {  // imported by 17 files
   exportCoverage?: ExportCoverage[];
 }
 
-export interface UserAnswers {  // imported by 17 files
+export interface UserAnswers {  // imported by 18 files
   /** Which IDE/tools to generate config for */
   ides: IDETarget[];
   /** User's description of the project (1-2 sentences) */
@@ -285,7 +285,7 @@ export interface UserAnswers {  // imported by 17 files
   generatePerPackage: boolean;
 }
 
-export interface ProjectConfig {  // imported by 17 files
+export interface ProjectConfig {  // imported by 18 files
   /** Which IDE/tools to generate config for */
   ides: IDETarget[];
   /** @deprecated Old single-IDE field for backward compatibility when loading old configs */
@@ -312,7 +312,7 @@ export interface ProjectConfig {  // imported by 17 files
   language?: Language;
 }
 
-export interface DetectedContext {  // imported by 17 files
+export interface DetectedContext {  // imported by 18 files
   /** Root directory being analyzed */
   rootDir: string;
   /** Primary language */
@@ -347,103 +347,103 @@ export interface DetectedContext {  // imported by 17 files
 ### Key Functions
 
 ```ts
-export function estimateTokens(text: string): number  // imported by 11 files
+export function estimateTokens(text: string): number  // imported by 13 files
 
-export function formatBytes(bytes: number): string  // imported by 11 files
+export function formatBytes(bytes: number): string  // imported by 13 files
 
 export const theme =  // imported by 4 files
 
-export async function fileExists(filePath: string): Promise<boolean>  // imported by 11 files
+export async function fileExists(filePath: string): Promise<boolean>  // imported by 13 files
 
-export async function readDirSafe(dirPath: string): Promise<string[]>  // imported by 11 files
+export async function readDirSafe(dirPath: string): Promise<string[]>  // imported by 13 files
 
-export async function readFileOr(filePath: string): Promise<string | null>  // imported by 11 files
+export async function readFileOr(filePath: string): Promise<string | null>  // imported by 13 files
 
-export async function writeFileSafe(filePath: string, content: string): Promise<void>  // imported by 11 files
+export async function writeFileSafe(filePath: string, content: string): Promise<void>  // imported by 13 files
 
-export async function readJsonFile(filePath: string): Promise<Record<string, unknown> | null>  // imported by 11 files
+export async function readJsonFile(filePath: string): Promise<Record<string, unknown> | null>  // imported by 13 files
 
-export function findSCCs(graph: ImportGraph): string[][]  // imported by 5 files
+export function findSCCs(graph: ImportGraph): string[][]  // imported by 6 files
 
-export function detectArchitecturalLayers(graph: ImportGraph):  // imported by 5 files
+export function detectArchitecturalLayers(graph: ImportGraph):  // imported by 6 files
 
-export function parseJsImports(content: string): RawImport[]  // imported by 5 files
+export function parseJsImports(content: string): RawImport[]  // imported by 6 files
 
-export function parseGoImports(content: string): RawImport[]  // imported by 5 files
+export function parseGoImports(content: string): RawImport[]  // imported by 6 files
 
-export function parsePythonImports(content: string): RawImport[]  // imported by 5 files
+export function parsePythonImports(content: string): RawImport[]  // imported by 6 files
 
-export function parseRustImports(content: string): RawImport[]  // imported by 5 files
+export function parseRustImports(content: string): RawImport[]  // imported by 6 files
 
-export function findUsedExports(edges: ImportEdge[]): Set<string>  // imported by 5 files
+export function findUsedExports(edges: ImportEdge[]): Set<string>  // imported by 6 files
 
-export function detectCommunities(graph: ImportGraph): Community[]  // imported by 5 files
+export function detectCommunities(graph: ImportGraph): Community[]  // imported by 6 files
 
-export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[]  // imported by 5 files
+export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[]  // imported by 6 files
 
-export function computeExportCoverage(graph: ImportGraph): ExportCoverage[]  // imported by 5 files
+export function computeExportCoverage(graph: ImportGraph): ExportCoverage[]  // imported by 6 files
+
+export function computeInstability(graph: ImportGraph): FileInstability[]  // imported by 6 files
 
 export function summarizeDetection(ctx: DetectedContext): string  // imported by 6 files
 
-export function computeInstability(graph: ImportGraph): FileInstability[]  // imported by 5 files
-
-export function findCircularDeps( graph: ImportGraph, maxCycles = 10, ): CircularDependency[]  // imported by 5 files
-
 export function getFrameworkHintsSection(ctx: DetectedContext): string  // imported by 3 files
+
+export function findCircularDeps( graph: ImportGraph, maxCycles = 10, ): CircularDependency[]  // imported by 6 files
 
 export function getFrameworkHints(ctx: DetectedContext): string[]  // imported by 3 files
 
-export async function buildImportGraph( rootDir: string, language: Language, onProgress?: ProgressCallback, ): Promise<ImportGraph>  // imported by 5 files
-
 export function renderClaudeSkill(skill: ClaudeSkill): string
-
-export async function detectContext(rootDir: string, onProgress?: ProgressCallback): Promise<DetectedContext>  // imported by 6 files
-
-export function getMainContextFilename(ide: IDETarget): string
 
 export function gradient( text: string, from: RGB, to: RGB, fallbackFn?: (text: string) =>  // imported by 4 files
 
+export async function buildImportGraph( rootDir: string, language: Language, onProgress?: ProgressCallback, ): Promise<ImportGraph>  // imported by 6 files
+
+export async function detectContext(rootDir: string, onProgress?: ProgressCallback): Promise<DetectedContext>  // imported by 6 files
+
 export function renderCursorRule(rule: CursorRule): string
+
+export async function animatePageRank(): Promise<void>
+
+export function getMainContextFilename(ide: IDETarget): string
 
 export function configToAnswers(config: ProjectConfig): UserAnswers
 
 export function enrichFrameworksWithUsage( frameworks: DetectedFramework[], externalImportCounts: Map<string, number>, ): DetectedFramework[]  // imported by 6 files
 
-export async function animatePageRank(): Promise<void>
-
 export async function refreshSnapshot(rootDir: string): Promise<void>
 
 export async function loadConfig( rootDir: string, ): Promise<ProjectConfig | null>
 
-export async function computeSnapshotHash( rootDir: string, language: Language, ): Promise<string>
-
 export async function animateLayerStack( layerNames: string[], ): Promise<void>
-
-export async function generateSnapshot( ctx: DetectedContext, customPaths: string[], graph?: ImportGraph, maxTokens?: number,  // imported by 3 files
 
 export async function animateCycleDetection( cycleCount: number, ): Promise<void>
 
 export async function animateCommunities( communityCount: number, ): Promise<void>
 
-export async function saveConfig( rootDir: string, answers: UserAnswers, snapshotHash?: string, language?: Language,
+export async function computeSnapshotHash( rootDir: string, language: Language, ): Promise<string>
+
+export async function generateSnapshot( ctx: DetectedContext, customPaths: string[], graph?: ImportGraph, maxTokens?: number,  // imported by 4 files
 
 export function buildClaudeSkills( ctx: DetectedContext, answers: UserAnswers, analysis?: ContextAnalysis, scripts?: Record<string, string>,
 
-export function buildCursorRules( ctx: DetectedContext, answers: UserAnswers, analysis?: ContextAnalysis, ): CursorRule[]
-
-export function buildMainContext( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,
-
-export async function runPrompts( detected: DetectedContext, defaults?: ProjectConfig | null, ): Promise<UserAnswers>
-
 export async function animateGraphBuild( _fileCount: number, _edgeCount: number, ): Promise<void>
+
+export async function saveConfig( rootDir: string, answers: UserAnswers, snapshotHash?: string, language?: Language,
 
 export function analyzeGitActivity( rootDir: string, onProgress?: ProgressCallback, ): GitAnalysis | null
 
-export function printSummary( files: GeneratedFile[], ctx: DetectedContext, snapshot?: CodeSnapshot | null, analysis?: ContextAnalysis,
+export function buildCursorRules( ctx: DetectedContext, answers: UserAnswers, analysis?: ContextAnalysis, ): CursorRule[]
+
+export function buildAiderContext( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,
+
+export function buildMainContext( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,
 
 export async function generateFiles( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, force: boolean = false,
 
-export function buildAiderContext( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,
+export function printSummary( files: GeneratedFile[], ctx: DetectedContext, snapshot?: CodeSnapshot | null, analysis?: ContextAnalysis,
+
+export async function runPrompts( detected: DetectedContext, defaults?: ProjectConfig | null, isReconfigure = false, ): Promise<UserAnswers>
 ```
 
 <!-- /CODE SNAPSHOT -->
