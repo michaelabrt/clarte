@@ -105,8 +105,8 @@ export interface DetectedContext {
 
 /** User-provided answers from the interactive prompts */
 export interface UserAnswers {
-  /** Which IDE/tool to generate config for */
-  ide: IDETarget;
+  /** Which IDE/tools to generate config for */
+  ides: IDETarget[];
   /** User's description of the project (1-2 sentences) */
   projectPurpose: string;
   /** Key patterns and conventions described by user */
@@ -127,8 +127,10 @@ export interface UserAnswers {
 
 /** Persisted project config (.codebrief.json) */
 export interface ProjectConfig {
-  /** Which IDE/tool to generate config for */
-  ide: IDETarget;
+  /** Which IDE/tools to generate config for */
+  ides: IDETarget[];
+  /** @deprecated Old single-IDE field for backward compatibility when loading old configs */
+  ide?: IDETarget;
   /** User's description of the project */
   projectPurpose: string;
   /** Key patterns and conventions */
@@ -207,7 +209,7 @@ export interface ImportGraph {
   edges: ImportEdge[];
   /** Number of files that import each file */
   inDegree: Map<string, number>;
-  /** PageRank-style centrality scores (0–1) */
+  /** PageRank-style centrality scores (0-1) */
   centrality: Map<string, number>;
   /** How many files import each external package */
   externalImportCounts: Map<string, number>;
@@ -217,7 +219,7 @@ export interface ImportGraph {
 export interface HubFile {
   /** Relative file path */
   path: string;
-  /** PageRank centrality score (0–1) */
+  /** PageRank centrality score (0-1) */
   centrality: number;
   /** Number of files that import this file */
   importedBy: number;
@@ -239,7 +241,7 @@ export interface FileInstability {
   fanIn: number;
   /** Number of outgoing dependencies */
   fanOut: number;
-  /** Instability score: fanOut / (fanIn + fanOut), range 0–1 */
+  /** Instability score: fanOut / (fanIn + fanOut), range 0-1 */
   instability: number;
 }
 
@@ -315,7 +317,7 @@ export interface ClaudeSkill {
   name: string;
   /** Human-readable description */
   description: string;
-  /** If true, skill cannot invoke the model — it just injects content */
+  /** If true, skill cannot invoke the model; it just injects content */
   disableModelInvocation: boolean;
   /** Comma-separated allowed tools (e.g. "Read, Grep, Glob") */
   allowedTools?: string;

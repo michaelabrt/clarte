@@ -1,6 +1,6 @@
 # codebrief
 
-Give your AI agent full project context — without the warm-up.
+Give your AI agent full project context, without the warm-up.
 
 ![codebrief demo](demo.gif)
 
@@ -34,6 +34,89 @@ With codebrief, the agent already knows:
 | Coupled files | `routes.ts` and `middleware.ts` always change together |
 | Code snapshot | All public types, interfaces, props, and function signatures |
 
+<details>
+<summary><strong>Example: generated CLAUDE.md</strong> (click to expand)</summary>
+
+```markdown
+# MyProject
+
+> **Keep this file up to date.** When you change the architecture, add a dependency,
+> create a new pattern, or learn a gotcha, update this file in the same step.
+
+## What Is This
+
+A mobile AI chat app connecting to OpenAI, Anthropic, and Google APIs
+
+## Tech Stack
+
+- **Next.js** 14.1.0 (used in 34 files)
+- **TypeScript**
+- **Prisma** (used in 8 files)
+- **Tailwind CSS** (used in 22 files)
+- **npm** (package manager)
+
+## Code Snapshot
+
+<!-- CODE SNAPSHOT (auto-generated) -->
+
+### Core Types
+
+‍```ts
+export interface User {  // imported by 12 files
+  id: string;
+  email: string;
+  role: "admin" | "user";
+}
+
+export type APIResponse<T> = {  // imported by 8 files
+  data: T;
+  error?: string;
+}
+‍```
+
+### Key Functions
+
+‍```ts
+export async function fetchChat(chatId: string): Promise<Chat>  // imported by 6 files
+
+export function useAuth(): AuthContext  // imported by 9 files
+‍```
+
+<!-- /CODE SNAPSHOT -->
+
+## Key Files
+
+| File | Imported By | Stability |
+|------|-------------|-----------|
+| `src/types.ts` | 18 files | stable |
+| `src/lib/api-client.ts` | 12 files | stable |
+| `src/store/auth.ts` | 9 files | stable |
+
+## Architecture
+
+‍```
+┌──────────────┐    ┌──────────────┐
+│    types      │    │   services    │
+└──────────────┘    └──────────────┘
+        │                    │
+        ▼                    ▼
+┌──────────────┐    ┌──────────────┐
+│    hooks      │    │  components   │
+└──────────────┘    └──────────────┘
+‍```
+
+## Recently Active Files
+
+| File | Commits (90d) | Last Changed |
+|------|--------------|--------------|
+| `src/app/chat/page.tsx` | 14 | 2 days ago |
+| `src/lib/api-client.ts` | 11 | 3 days ago |
+
+<!-- ... more sections: change coupling, module clusters, gotchas -->
+```
+
+</details>
+
 ## Quick Start
 
 Run in your project root:
@@ -64,7 +147,7 @@ Your answers are saved to `.codebrief.json` so future runs skip the prompts.
 | Cline | `.clinerules` | [cline.bot](https://docs.cline.bot/improving-your-workflow/cline-rules) |
 | Continue.dev | `.continuerules` | [continue.dev/docs](https://docs.continue.dev/customize/deep-dives/rules) |
 | Aider | `.aider.conf.yml` | [aider.chat](https://aider.chat/docs/config/adir_conf.html) |
-| Generic | `CONTEXT.md` | — |
+| Generic | `CONTEXT.md` | - |
 
 ## How It Works
 
@@ -96,7 +179,7 @@ src/pages/Login.tsx   ──imports──▶  src/hooks/useAuth.ts
 
 ### PageRank
 
-Runs the [PageRank algorithm](https://en.wikipedia.org/wiki/PageRank) on the import graph — the same algorithm Google uses to rank web pages. Files imported by many important files score highest.
+Runs the [PageRank algorithm](https://en.wikipedia.org/wiki/PageRank) on the import graph. The same algorithm Google uses to rank web pages. Files imported by many important files score highest.
 
 **Example:** In a typical project, `types.ts` or `api-client.ts` often ranks #1 because most of the codebase depends on them. These high-centrality files appear first in the generated context so agents understand foundational code before details.
 
@@ -104,7 +187,7 @@ Runs the [PageRank algorithm](https://en.wikipedia.org/wiki/PageRank) on the imp
 
 Cross-references every named export against the import graph. If nothing in the project imports it, it's excluded from the snapshot.
 
-This catches leftover refactors, over-exported utilities, and test-only helpers — keeping the context lean.
+This catches leftover refactors, over-exported utilities, and test-only helpers, keeping the context lean.
 
 ### Token Budgeting
 
@@ -126,13 +209,13 @@ types  →  stores  →  services  →  hooks  →  components  →  pages
                                             utils, config
 ```
 
-The generated context includes a dependency-flow summary so agents understand how layers relate — e.g., "services call the API, components use hooks, hooks read from stores."
+The generated context includes a dependency-flow summary so agents understand how layers relate (e.g., "services call the API, components use hooks, hooks read from stores").
 
 ### Cycle Detection
 
 Uses [Tarjan's algorithm](https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm) to find groups of files that form import cycles.
 
-**Example:** `auth.ts → user.ts → permissions.ts → auth.ts` — all three files are reported as a circular dependency cluster. Agents are warned to avoid deepening the cycle.
+**Example:** `auth.ts → user.ts → permissions.ts → auth.ts`. All three files are reported as a circular dependency cluster. Agents are warned to avoid deepening the cycle.
 
 ### Instability Scoring
 
@@ -155,7 +238,7 @@ Analyzes 90 days of git history to find file pairs that frequently appear in the
 | `src/api/client.ts` | `src/api/types.ts` | 12 | 92% |
 | `src/routes.ts` | `src/middleware.ts` | 8 | 80% |
 
-This catches implicit dependencies that don't show up in imports — agents know that touching one file likely means touching the other.
+This catches implicit dependencies that don't show up in imports. Agents know that touching one file likely means touching the other.
 
 ### Module Clustering
 
@@ -167,9 +250,9 @@ This reveals logical boundaries (auth module, payments module, settings module) 
 
 Counts commits per file over the last 90 days to surface:
 
-- **Hot spots** — files with the most churn
-- **Recently active files** — where current development is focused
-- **Quiet zones** — stable code that rarely changes
+- **Hot spots**: files with the most churn
+- **Recently active files**: where current development is focused
+- **Quiet zones**: stable code that rarely changes
 
 ### Stale Detection
 
@@ -190,12 +273,16 @@ npx codebrief [directory] [options]
 | Flag | Description |
 |------|-------------|
 | `directory` | Path to analyze (defaults to `.`) |
+| `-h, --help` | Show help message |
+| `-V, --version` | Show version number |
 | `--force` | Overwrite existing files without asking |
 | `--dry-run` | Preview what would be generated |
 | `--refresh-snapshot` | Re-scan source files and update just the code snapshot |
 | `--reconfigure` | Re-prompt even if `.codebrief.json` exists |
 | `--check` | Check if the snapshot is stale (exit 0 = fresh, 1 = stale) |
 | `--max-tokens=N` | Set the token budget for the code snapshot |
+| `--generate-skills` | Generate Claude Code skill files |
+| `-v, --verbose` | Show detailed progress output |
 
 ### Refreshing Snapshots
 
@@ -274,7 +361,7 @@ On first run, codebrief saves your answers to `.codebrief.json`:
 
 Subsequent runs load this config and skip all prompts. Use `--reconfigure` to re-prompt.
 
-Add `.codebrief.json` to your `.gitignore` — it's local tool config, not project docs.
+Add `.codebrief.json` to your `.gitignore`. It's local tool config, not project docs.
 
 ## Framework Conventions
 

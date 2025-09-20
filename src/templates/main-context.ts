@@ -1,4 +1,4 @@
-import type { ArchitecturalLayer, CodeSnapshot, ContextAnalysis, DetectedContext, LayerEdge, UserAnswers } from "../types.js";
+import type { ArchitecturalLayer, CodeSnapshot, ContextAnalysis, DetectedContext, IDETarget, LayerEdge, UserAnswers } from "../types.js";
 import { summarizeDetection } from "../detect.js";
 import { getFrameworkHintsSection } from "./framework-hints.js";
 
@@ -27,7 +27,7 @@ export function buildMainContext(
     "> **Keep this file up to date.** When you change the architecture, add a dependency, create a new pattern, or learn a gotcha, update this file in the same step. This is the source of truth for how the project works.",
   );
 
-  if (answers.ide === "cursor") {
+  if (answers.ides.includes("cursor")) {
     sections.push(
       "> Scoped rules are in `.cursor/rules/` -- update them when conventions change.",
     );
@@ -74,7 +74,7 @@ export function buildMainContext(
     for (const pkg of ctx.monorepo.packages) {
       const fws =
         pkg.frameworks.length > 0
-          ? ` — ${pkg.frameworks.map((f) => f.name).join(", ")}`
+          ? ` (${pkg.frameworks.map((f) => f.name).join(", ")})`
           : "";
       sections.push(`- **${pkg.name}** (\`${pkg.path}\`)${fws}`);
     }
@@ -517,7 +517,7 @@ function buildDevSection(ctx: DetectedContext): string {
 /**
  * Get the filename for the main context file based on IDE target.
  */
-export function getMainContextFilename(ide: UserAnswers["ide"]): string {
+export function getMainContextFilename(ide: IDETarget): string {
   switch (ide) {
     case "claude":
       return "CLAUDE.md";

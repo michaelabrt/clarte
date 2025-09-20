@@ -79,7 +79,7 @@ export function parseJsImports(content: string): RawImport[] {
     if (m[1]) names.push(...m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
     if (m[2]) {
       const group2 = m[2].trim();
-      // Namespace import (* as foo) — edge is valid but no named import to extract
+      // Namespace import (* as foo): edge is valid but no named import to extract
       if (!group2.startsWith("*")) {
         names.push(group2);
       }
@@ -323,7 +323,7 @@ function computePageRank(
     scores = next;
   }
 
-  // Normalize to 0–1
+  // Normalize to 0-1
   let max = 0;
   for (const v of scores.values()) {
     if (v > max) max = v;
@@ -372,7 +372,7 @@ export async function buildImportGraph(
     // Gracefully degrade on permission errors (e.g. scanning ~/ on macOS)
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EPERM" || code === "EACCES") {
-      onProgress?.("Warning: permission error scanning files — returning empty graph");
+      onProgress?.("Warning: permission error scanning files, returning empty graph");
       return { edges: [], inDegree: new Map(), centrality: new Map(), externalImportCounts: new Map() };
     }
     throw err;
@@ -574,7 +574,7 @@ export function findCircularDeps(
   const sccs = findSCCs(graph);
 
   // Convert SCCs to circular dependency chains
-  // Sort by size (smallest first — more actionable)
+  // Sort by size (smallest first, more actionable)
   sccs.sort((a, b) => a.length - b.length);
 
   const cycles: CircularDependency[] = [];
@@ -822,7 +822,7 @@ function deriveLabel(files: string[]): string {
 }
 
 /**
- * Compute export coverage for each file — how many of its exports
+ * Compute export coverage for each file: how many of its exports
  * are actually imported by other files in the project.
  */
 export function computeExportCoverage(graph: ImportGraph): ExportCoverage[] {

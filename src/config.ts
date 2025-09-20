@@ -25,10 +25,12 @@ export async function loadConfig(
 
   const cfg = raw as Partial<ConfigFile>;
 
-  // Validate required fields
-  if (!cfg.ide || !cfg.projectPurpose) return null;
+  // Validate required fields: support old `ide` (string) or new `ides` (array)
+  const ides = cfg.ides ?? (cfg.ide ? [cfg.ide] : undefined);
+  if (!ides || ides.length === 0 || !cfg.projectPurpose) return null;
 
   return {
+    ides,
     ide: cfg.ide,
     projectPurpose: cfg.projectPurpose,
     keyPatterns: cfg.keyPatterns ?? "",
@@ -56,7 +58,7 @@ export async function saveConfig(
   const configPath = path.join(rootDir, CONFIG_FILENAME);
   const cfg: ConfigFile = {
     _version: CONFIG_VERSION,
-    ide: answers.ide,
+    ides: answers.ides,
     projectPurpose: answers.projectPurpose,
     keyPatterns: answers.keyPatterns,
     gotchas: answers.gotchas,
@@ -78,7 +80,7 @@ export async function saveConfig(
  */
 export function configToAnswers(config: ProjectConfig): UserAnswers {
   return {
-    ide: config.ide,
+    ides: config.ides,
     projectPurpose: config.projectPurpose,
     keyPatterns: config.keyPatterns,
     gotchas: config.gotchas,

@@ -91,7 +91,7 @@ function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analysis?: 
     );
     bodyLines.push("");
     for (const inst of analysis.instabilities) {
-      bodyLines.push(`- \`${inst.path}\` — ${(inst.instability * 100).toFixed(0)}% unstable (${inst.fanIn} dependents, ${inst.fanOut} dependencies)`);
+      bodyLines.push(`- \`${inst.path}\`: ${(inst.instability * 100).toFixed(0)}% unstable (${inst.fanIn} dependents, ${inst.fanOut} dependencies)`);
     }
     bodyLines.push("");
   }

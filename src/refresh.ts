@@ -1,6 +1,6 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
-import pc from "picocolors";
+import { theme as t } from "./theme.js";
 import { detectContext } from "./detect.js";
 import { generateSnapshot } from "./snapshot.js";
 import { buildImportGraph } from "./graph.js";
@@ -66,7 +66,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   if (!found) {
     p.log.error(
       "No context file found. Run " +
-        pc.cyan("codebrief") +
+        t.accent("codebrief") +
         " first to generate one.",
     );
     process.exit(1);
@@ -96,7 +96,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
     }
   }
 
-  p.log.info(`Refreshing snapshot in ${pc.cyan(found.path)}`);
+  p.log.info(`Refreshing snapshot in ${t.accent(found.path)}`);
 
   // 3. Detect context and generate new snapshot
   spinner.start("Scanning source files...");
@@ -118,7 +118,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   );
 
   if (snapshot.entries.length === 0) {
-    p.log.warn("No types found — snapshot section will be empty.");
+    p.log.warn("No types found. Snapshot section will be empty.");
   }
 
   // 4. Replace the snapshot section
@@ -169,5 +169,5 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
 
   // 5. Write back
   await writeFileSafe(absPath, updated);
-  p.log.success(`Updated snapshot in ${pc.cyan(found.path)}`);
+  p.log.success(`Updated snapshot in ${t.accent(found.path)}`);
 }
