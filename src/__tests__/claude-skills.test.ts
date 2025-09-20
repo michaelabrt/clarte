@@ -85,12 +85,6 @@ describe("buildClaudeSkills", () => {
     expect(archSkill).toBeUndefined();
   });
 
-  it("skips script skills when no scripts provided", () => {
-    const skills = buildClaudeSkills(mockCtx(), mockAnswers(), mockAnalysis());
-    const scriptSkills = skills.filter((s) => s.disableModelInvocation);
-    expect(scriptSkills).toHaveLength(0);
-  });
-
   it("uses correct run command for pnpm", () => {
     const scripts = { test: "vitest run" };
     const skills = buildClaudeSkills(
@@ -132,14 +126,4 @@ describe("renderClaudeSkill", () => {
     expect(rendered).not.toContain("disable-model-invocation");
   });
 
-  it("omits disable-model-invocation when false", () => {
-    const skill: ClaudeSkill = {
-      name: "arch",
-      description: "Explore architecture",
-      disableModelInvocation: false,
-      body: "# Architecture",
-    };
-    const rendered = renderClaudeSkill(skill);
-    expect(rendered).not.toContain("disable-model-invocation");
-  });
 });

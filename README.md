@@ -2,7 +2,7 @@
 
 Give your AI agent full project context, without the warm-up.
 
-![codebrief demo](demo.gif)
+![codebrief demo](https://raw.githubusercontent.com/michaelabrt/codebrief/main/demo.gif)
 
 AI coding agents spend their first few minutes reading files, tracing imports, and piecing together your architecture. **codebrief** does that work once, ahead of time, and hands the agent a single context file so it can start writing useful code immediately.
 

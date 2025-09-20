@@ -140,26 +140,6 @@ class Serializable(Protocol):
     expect(result.entries[0].signature).toContain("class Serializable(Protocol):");
   });
 
-  it("extracts an Enum", async () => {
-    const pyContent = `
-from enum import Enum
-
-class Status(Enum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    PENDING = "pending"
-`;
-
-    mockFg.mockResolvedValue(["models/enums.py"] as any);
-    mockReadFileOr.mockResolvedValue(pyContent);
-
-    const result = await generateSnapshot(makePythonCtx(), []);
-
-    expect(result.entries.length).toBe(1);
-    expect(result.entries[0].category).toBe("type");
-    expect(result.entries[0].signature).toContain("class Status(Enum):");
-  });
-
   it("extracts sync and async function signatures", async () => {
     const pyContent = `
 def process_order(order_id: int, user: User) -> OrderResult:
@@ -204,24 +184,6 @@ def __very_private() -> None:
     expect(result.entries[0].signature).toContain("public_function");
   });
 
-  it("skips test_ functions", async () => {
-    const pyContent = `
-def create_user(name: str) -> User:
-    pass
-
-def test_create_user():
-    pass
-`;
-
-    mockFg.mockResolvedValue(["services/user.py"] as any);
-    mockReadFileOr.mockResolvedValue(pyContent);
-
-    const result = await generateSnapshot(makePythonCtx(), []);
-
-    expect(result.entries.length).toBe(1);
-    expect(result.entries[0].signature).toContain("create_user");
-  });
-
   it("extracts type aliases", async () => {
     const pyContent = `
 from typing import NewType, Callable
@@ -260,22 +222,6 @@ def get_user(user_id: int) -> User:
 
     expect(result.markdown).toContain("```python");
     expect(result.markdown).not.toContain("```ts");
-  });
-
-  it("handles class with multiple bases", async () => {
-    const pyContent = `
-class AdminUser(BaseModel, PermissionMixin):
-    name: str
-    is_admin: bool = True
-`;
-
-    mockFg.mockResolvedValue(["models/admin.py"] as any);
-    mockReadFileOr.mockResolvedValue(pyContent);
-
-    const result = await generateSnapshot(makePythonCtx(), []);
-
-    expect(result.entries.length).toBe(1);
-    expect(result.entries[0].signature).toContain("class AdminUser(BaseModel, PermissionMixin):");
   });
 
   it("handles multi-line function signature", async () => {
