@@ -26,6 +26,7 @@ export function buildAiderContext(
   lines.push("conventions:");
   lines.push(`  - "Project: ${escapeYaml(answers.projectPurpose)}"`);
   lines.push(`  - "Stack: ${escapeYaml(stackSummary)}"`);
+  lines.push(`  - "INSTRUCTION: This file is your starting point. Only read additional files when the task requires details not captured here."`);
 
   // Frameworks
   if (ctx.frameworks.length > 0) {

@@ -65,6 +65,7 @@ function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analysis?: 
     "# Global Rules",
     "",
     `> Update this rule and the main context file after any architectural or convention change.`,
+    `> Prefer using context from the main project file over re-reading source files you already have summaries for.`,
     "",
   ];
 
