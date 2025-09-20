@@ -4,7 +4,7 @@ import fg from "fast-glob";
 import type { Language, ProjectConfig, UserAnswers } from "./types.js";
 import { readJsonFile, writeFileSafe } from "./utils.js";
 
-const CONFIG_FILENAME = ".codebrief.json";
+const CONFIG_FILENAME = ".clarte.json";
 const CONFIG_VERSION = 1;
 
 interface ConfigFile extends ProjectConfig {
@@ -13,7 +13,7 @@ interface ConfigFile extends ProjectConfig {
 }
 
 /**
- * Load project config from .codebrief.json.
+ * Load project config from .clarte.json.
  * Returns null if the file doesn't exist or is invalid.
  */
 export async function loadConfig(
@@ -47,7 +47,7 @@ export async function loadConfig(
 }
 
 /**
- * Save project config to .codebrief.json.
+ * Save project config to .clarte.json.
  * Optionally includes snapshot hash and timestamp.
  */
 export async function saveConfig(

@@ -14,7 +14,7 @@ const SNAPSHOT_LANGUAGES = new Set(["typescript", "javascript", "python"]);
  * Run the interactive prompt flow. Takes the auto-detected context
  * and asks the user to fill in what couldn't be auto-detected.
  *
- * When `defaults` is provided (from .codebrief.json + --reconfigure),
+ * When `defaults` is provided (from .clarte.json + --reconfigure),
  * prompt values are pre-filled so the user can just press Enter to keep them.
  *
  * The `isReconfigure` flag indicates we're running via --reconfigure,

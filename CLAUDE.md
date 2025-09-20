@@ -1,4 +1,4 @@
-# Codebrief
+# Clarte
 
 > **Keep this file up to date.** When you change the architecture, add a dependency, create a new pattern, or learn a gotcha, update this file in the same step. This is the source of truth for how the project works.
 > Scoped rules are in `.cursor/rules/` -- update them when conventions change.

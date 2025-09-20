@@ -9,7 +9,7 @@ import type { DetectedContext, DetectedFramework } from "../types.js";
 async function makeProject(
   files: Record<string, string>,
 ): Promise<string> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "codebrief-test-"));
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-test-"));
   for (const [relPath, content] of Object.entries(files)) {
     const fullPath = path.join(tmpDir, relPath);
     await fs.mkdir(path.dirname(fullPath), { recursive: true });

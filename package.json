@@ -1,10 +1,10 @@
 {
-  "name": "codebrief",
-  "version": "1.2.0",
+  "name": "clarte",
+  "version": "1.0.0",
   "description": "Bootstrap optimized AI context files for any project. Auto-detect stack, generate code snapshots, produce config for Claude Code, Cursor, Copilot, Windsurf, Cline, Continue, Aider, and more.",
   "type": "module",
   "bin": {
-    "codebrief": "dist/index.js"
+    "clarte": "dist/index.js"
   },
   "scripts": {
     "build": "tsup",
@@ -33,11 +33,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/michaelabrt/codebrief.git"
+    "url": "git+https://github.com/michaelabrt/clarte.git"
   },
-  "homepage": "https://github.com/michaelabrt/codebrief#readme",
+  "homepage": "https://github.com/michaelabrt/clarte#readme",
   "bugs": {
-    "url": "https://github.com/michaelabrt/codebrief/issues"
+    "url": "https://github.com/michaelabrt/clarte/issues"
   },
   "engines": {
     "node": ">=18"

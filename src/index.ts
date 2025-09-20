@@ -39,12 +39,12 @@ declare const PKG_NAME: string;
 declare const PKG_DESCRIPTION: string;
 
 const VERSION = typeof PKG_VERSION !== "undefined" ? PKG_VERSION : "0.0.0-dev";
-const NAME = typeof PKG_NAME !== "undefined" ? PKG_NAME : "codebrief";
+const NAME = typeof PKG_NAME !== "undefined" ? PKG_NAME : "clarte";
 const DESCRIPTION = typeof PKG_DESCRIPTION !== "undefined" ? PKG_DESCRIPTION : "";
 
 function printHelp(): void {
   console.log("");
-  console.log(gradient(" codebrief ", [90, 130, 220], [137, 180, 250], t.brandBold));
+  console.log(gradient(" clarte ", [90, 130, 220], [137, 180, 250], t.brandBold));
   console.log(t.muted("  " + DESCRIPTION));
   console.log("");
   console.log(`  ${t.bold("Usage:")}  npx ${NAME} [directory] [options]`);
@@ -54,7 +54,7 @@ function printHelp(): void {
   console.log(`    ${t.accent("-V, --version")}           Show version number`);
   console.log(`    ${t.accent("--force")}                 Overwrite existing files without asking`);
   console.log(`    ${t.accent("--dry-run")}               Preview what would be generated`);
-  console.log(`    ${t.accent("--reconfigure")}           Re-prompt even if .codebrief.json exists`);
+  console.log(`    ${t.accent("--reconfigure")}           Re-prompt even if .clarte.json exists`);
   console.log(`    ${t.accent("--refresh-snapshot")}      Re-scan source files, update code snapshot only`);
   console.log(`    ${t.accent("--check")}                 Exit 0 if snapshot is fresh, 1 if stale (hash-based)`);
   console.log(`    ${t.accent("--check=timestamp")}       Exit 0/1 based on age only (no Node.js needed in shell hooks)`);
@@ -107,9 +107,9 @@ async function main() {
 
   if (!hasProjectMarker) {
     console.log("");
-    p.intro(t.bold(" codebrief "));
+    p.intro(t.bold(" clarte "));
     p.log.error(`No project found at ${t.accent(rootDir)}`);
-    p.log.info(`Run ${t.bold("npx codebrief")} from a project directory, or pass a path:\n  ${t.muted("npx codebrief ./my-project")}`);
+    p.log.info(`Run ${t.bold("npx clarte")} from a project directory, or pass a path:\n  ${t.muted("npx clarte ./my-project")}`);
     p.outro("");
     process.exit(1);
   }
@@ -133,7 +133,7 @@ async function main() {
         (Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24),
       );
       if (daysSince > staleDays) {
-        console.log(`codebrief: snapshot is ${daysSince}d old. Run: npx codebrief --refresh-snapshot`);
+        console.log(`clarte: snapshot is ${daysSince}d old. Run: npx clarte --refresh-snapshot`);
         process.exit(1);
       }
       process.exit(0);
@@ -150,14 +150,14 @@ async function main() {
         ? Math.floor((Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24))
         : 0;
       const staleMsg = daysSince > 0 ? ` (last generated ${daysSince}d ago)` : "";
-      console.log(`codebrief: snapshot is stale${staleMsg}. Run npx codebrief --refresh-snapshot`);
+      console.log(`clarte: snapshot is stale${staleMsg}. Run npx clarte --refresh-snapshot`);
       process.exit(1);
     }
     process.exit(0);
   }
 
   console.log("");
-  p.intro(gradient(" codebrief ", [90, 130, 220], [137, 180, 250], t.brandBold));
+  p.intro(gradient(" clarte ", [90, 130, 220], [137, 180, 250], t.brandBold));
   p.log.info(t.muted("code analysis for AI context"));
 
   // --refresh-snapshot: fast path, update snapshot in existing context file
@@ -393,7 +393,7 @@ async function main() {
   if (savedConfig && !reconfigure) {
     // Use saved config, skip prompts
     p.log.info(
-      `Using saved config from ${t.accent(".codebrief.json")} ` +
+      `Using saved config from ${t.accent(".clarte.json")} ` +
         t.muted("(run with --reconfigure to change)"),
     );
     answers = configToAnswers(savedConfig);
@@ -415,7 +415,7 @@ async function main() {
       const hash = await computeSnapshotHash(rootDir, detected.language);
       await saveConfig(rootDir, answers, hash, detected.language);
       p.log.info(
-        t.muted("Saved config to .codebrief.json for future runs."),
+        t.muted("Saved config to .clarte.json for future runs."),
       );
     }
   }
