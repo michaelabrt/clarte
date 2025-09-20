@@ -151,6 +151,8 @@ export interface ProjectConfig {
   snapshotGeneratedAt?: number;
   /** Detected language (for --check fast path) */
   language?: Language;
+  /** Number of days before snapshot is considered stale (default: 7) */
+  staleDays?: number;
 }
 
 /** A generated file ready to be written */

@@ -56,7 +56,8 @@ function printHelp(): void {
   console.log(`    ${t.accent("--dry-run")}               Preview what would be generated`);
   console.log(`    ${t.accent("--reconfigure")}           Re-prompt even if .codebrief.json exists`);
   console.log(`    ${t.accent("--refresh-snapshot")}      Re-scan source files, update code snapshot only`);
-  console.log(`    ${t.accent("--check")}                 Exit 0 if snapshot is fresh, 1 if stale`);
+  console.log(`    ${t.accent("--check")}                 Exit 0 if snapshot is fresh, 1 if stale (hash-based)`);
+  console.log(`    ${t.accent("--check=timestamp")}       Exit 0/1 based on age only (no Node.js needed in shell hooks)`);
   console.log(`    ${t.accent("--max-tokens=N")}          Set the token budget for the code snapshot`);
   console.log(`    ${t.accent("--generate-skills")}       Generate Claude Code skill files`);
   console.log(`    ${t.accent("-v, --verbose")}           Show detailed progress output`);
@@ -88,7 +89,9 @@ async function main() {
   const dryRun = args.includes("--dry-run");
   const refresh = args.includes("--refresh-snapshot");
   const reconfigure = args.includes("--reconfigure");
-  const check = args.includes("--check");
+  const checkArg = args.find((a) => a === "--check" || a.startsWith("--check="));
+  const check = !!checkArg;
+  const checkTimestamp = checkArg === "--check=timestamp";
   const verbose = args.includes("--verbose") || args.includes("-v");
   const generateSkills = args.includes("--generate-skills");
   const maxTokensArg = args.find((a) => a.startsWith("--max-tokens="));
@@ -119,6 +122,24 @@ async function main() {
   // --check: fast path for shell integration (silent, exit code only)
   if (check) {
     const config = await loadConfig(rootDir);
+
+    if (checkTimestamp) {
+      // Timestamp-only check: no file globbing or hashing
+      if (!config?.snapshotGeneratedAt) {
+        process.exit(0); // No config or no timestamp: nothing to check
+      }
+      const staleDays = config.staleDays ?? 7;
+      const daysSince = Math.floor(
+        (Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24),
+      );
+      if (daysSince > staleDays) {
+        console.log(`codebrief: snapshot is ${daysSince}d old. Run: npx codebrief --refresh-snapshot`);
+        process.exit(1);
+      }
+      process.exit(0);
+    }
+
+    // Hash-based check (original behavior)
     if (!config?.snapshotHash) {
       process.exit(0); // No config or no hash: nothing to check
     }

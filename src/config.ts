@@ -42,6 +42,7 @@ export async function loadConfig(
     snapshotHash: cfg.snapshotHash,
     snapshotGeneratedAt: cfg.snapshotGeneratedAt,
     language: cfg.language,
+    staleDays: cfg.staleDays,
   };
 }
 
@@ -56,6 +57,8 @@ export async function saveConfig(
   language?: Language,
 ): Promise<void> {
   const configPath = path.join(rootDir, CONFIG_FILENAME);
+  // Preserve user-editable fields from existing config
+  const existing = await readJsonFile(configPath) as Partial<ConfigFile> | null;
   const cfg: ConfigFile = {
     _version: CONFIG_VERSION,
     ides: answers.ides,
@@ -70,6 +73,7 @@ export async function saveConfig(
       ? { snapshotHash, snapshotGeneratedAt: Date.now() }
       : {}),
     ...(language ? { language } : {}),
+    ...(existing?.staleDays != null ? { staleDays: existing.staleDays } : {}),
   };
   await writeFileSafe(configPath, JSON.stringify(cfg, null, 2) + "\n");
 }

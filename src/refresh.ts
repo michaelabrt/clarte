@@ -4,7 +4,7 @@ import { theme as t } from "./theme.js";
 import { detectContext } from "./detect.js";
 import { generateSnapshot } from "./snapshot.js";
 import { buildImportGraph } from "./graph.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "./config.js";
 import { fileExists, readFileOr, writeFileSafe } from "./utils.js";
 import type { ProgressCallback } from "./types.js";
 
@@ -169,5 +169,13 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
 
   // 5. Write back
   await writeFileSafe(absPath, updated);
+
+  // 6. Update config with new snapshot hash + timestamp
+  if (config) {
+    const answers = configToAnswers(config);
+    const newHash = await computeSnapshotHash(rootDir, config.language ?? detected.language);
+    await saveConfig(rootDir, answers, newHash, config.language ?? detected.language);
+  }
+
   p.log.success(`Updated snapshot in ${t.accent(found.path)}`);
 }
