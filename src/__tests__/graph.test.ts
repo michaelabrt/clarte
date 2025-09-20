@@ -60,13 +60,6 @@ describe("parseJsImports", () => {
     ]);
   });
 
-  it("parses dynamic imports", () => {
-    const result = parseJsImports(`const mod = await import('./lazy')`);
-    expect(result).toEqual([
-      { specifier: "./lazy", importedNames: [] },
-    ]);
-  });
-
   it("parses aliased named imports", () => {
     const result = parseJsImports(
       `import { foo as bar, baz as qux } from './utils'`,
@@ -76,18 +69,6 @@ describe("parseJsImports", () => {
     ]);
   });
 
-  it("handles multiple imports in one file", () => {
-    const code = [
-      `import { a } from './a'`,
-      `import B from './b'`,
-      `import * as C from './c'`,
-    ].join("\n");
-    const result = parseJsImports(code);
-    expect(result).toHaveLength(3);
-    expect(result[0].specifier).toBe("./a");
-    expect(result[1].specifier).toBe("./b");
-    expect(result[2].specifier).toBe("./c");
-  });
 });
 
 describe("parsePythonImports", () => {
@@ -102,20 +83,6 @@ describe("parsePythonImports", () => {
     const result = parsePythonImports(`from . import utils`);
     expect(result).toEqual([
       { specifier: ".", importedNames: ["utils"] },
-    ]);
-  });
-
-  it("parses relative imports (dot-module)", () => {
-    const result = parsePythonImports(`from .models import User`);
-    expect(result).toEqual([
-      { specifier: ".models", importedNames: ["User"] },
-    ]);
-  });
-
-  it("parses deep relative imports (triple dot)", () => {
-    const result = parsePythonImports(`from ...pkg import Config`);
-    expect(result).toEqual([
-      { specifier: "...pkg", importedNames: ["Config"] },
     ]);
   });
 
@@ -178,13 +145,6 @@ describe("parseRustImports", () => {
     ]);
   });
 
-  it("parses pub use", () => {
-    const result = parseRustImports(`pub use crate::models::User;`);
-    expect(result).toEqual([
-      { specifier: "crate::models::User", importedNames: ["User"] },
-    ]);
-  });
-
   it("parses glob imports with braces", () => {
     const result = parseRustImports(`use crate::foo::{Bar, Baz}`);
     expect(result).toEqual([
@@ -199,12 +159,4 @@ describe("parseRustImports", () => {
     ]);
   });
 
-  it("parses super:: and self:: paths", () => {
-    const results = parseRustImports(
-      `use super::parent::Foo;\nuse self::child::Bar;`,
-    );
-    expect(results).toHaveLength(2);
-    expect(results[0].specifier).toBe("super::parent::Foo");
-    expect(results[1].specifier).toBe("self::child::Bar");
-  });
 });

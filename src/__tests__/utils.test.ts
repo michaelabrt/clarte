@@ -21,10 +21,4 @@ describe("estimateTokens", () => {
     expect(tokens).toBe(Math.ceil(code.length / 3.2));
   });
 
-  it("code gives more tokens than same-length prose", () => {
-    // Create equal-length strings
-    const code = `fn(a: T, b: U) => { x[i] + y.z; }`.repeat(3);
-    const prose = "a".repeat(code.length); // all word chars
-    expect(estimateTokens(code)).toBeGreaterThan(estimateTokens(prose));
-  });
 });

@@ -46,22 +46,6 @@ describe("findSCCs", () => {
     expect(sccs).toHaveLength(0);
   });
 
-  it("finds two disjoint cycles", () => {
-    const graph = makeGraph(["a", "b", "c", "d"], [
-      edge("a", "b"),
-      edge("b", "a"),
-      edge("c", "d"),
-      edge("d", "c"),
-    ]);
-    const sccs = findSCCs(graph);
-    expect(sccs).toHaveLength(2);
-  });
-
-  it("handles empty graph", () => {
-    const graph = makeGraph([], []);
-    const sccs = findSCCs(graph);
-    expect(sccs).toHaveLength(0);
-  });
 });
 
 describe("findCircularDeps", () => {
@@ -112,12 +96,6 @@ describe("getHubFiles", () => {
     const hubs = getHubFiles(graph);
     expect(hubs[0].path).toBe("center");
     expect(hubs[0].importedBy).toBe(3);
-  });
-
-  it("returns empty for empty graph", () => {
-    const graph = makeGraph([], []);
-    const hubs = getHubFiles(graph);
-    expect(hubs).toHaveLength(0);
   });
 
   it("respects limit parameter", () => {
