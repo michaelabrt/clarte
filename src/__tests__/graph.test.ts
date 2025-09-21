@@ -160,3 +160,66 @@ describe("parseRustImports", () => {
   });
 
 });
+
+describe("parseJsImports ignores comments", () => {
+  it("ignores imports in single-line comments", () => {
+    const result = parseJsImports(
+      `import { foo } from './real';\n// import { fake } from './fake';`,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].specifier).toBe("./real");
+  });
+
+  it("ignores imports in block comments", () => {
+    const result = parseJsImports(
+      `import { foo } from './real';\n/* import { fake } from './fake'; */`,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].specifier).toBe("./real");
+  });
+
+  it("ignores imports in multi-line block comments", () => {
+    const result = parseJsImports(`
+import { foo } from './real';
+/*
+import { fake } from './fake';
+import { another } from './also-fake';
+*/`);
+    expect(result).toHaveLength(1);
+    expect(result[0].specifier).toBe("./real");
+  });
+
+  it("handles inline comment after real import", () => {
+    const result = parseJsImports(
+      `import { foo } from './real'; // import { x } from './y'`,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].specifier).toBe("./real");
+  });
+
+  it("ignores require() in comments", () => {
+    const result = parseJsImports(
+      `const a = require('./real');\n// const b = require('./fake');`,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].specifier).toBe("./real");
+  });
+});
+
+describe("parsePythonImports ignores comments", () => {
+  it("ignores imports in comments", () => {
+    const result = parsePythonImports(
+      `from real import foo\n# from fake import bar`,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].specifier).toBe("real");
+  });
+
+  it("preserves imports after comments on separate lines", () => {
+    const result = parsePythonImports(
+      `# comment\nfrom real import foo`,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].specifier).toBe("real");
+  });
+});

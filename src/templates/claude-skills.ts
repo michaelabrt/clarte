@@ -112,15 +112,6 @@ function buildArchitectureSkill(analysis?: ContextAnalysis): ClaudeSkill | null 
     bodyLines.push("");
   }
 
-  if (analysis.communities.length > 0) {
-    bodyLines.push("## Module Clusters");
-    bodyLines.push("");
-    for (const community of analysis.communities) {
-      bodyLines.push(`- **${community.label}** (${community.files.length} files)`);
-    }
-    bodyLines.push("");
-  }
-
   // Only create the skill if there's meaningful content
   if (analysis.hubFiles.length === 0 && analysis.layers.length === 0) {
     return null;
