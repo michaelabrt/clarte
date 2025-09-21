@@ -10,14 +10,14 @@ describe("parseJsImports", () => {
   it("parses named imports", () => {
     const result = parseJsImports(`import { foo, bar } from './utils'`);
     expect(result).toEqual([
-      { specifier: "./utils", importedNames: ["foo", "bar"] },
+      { specifier: "./utils", importedNames: ["foo", "bar"], isTypeOnly: false },
     ]);
   });
 
   it("parses default imports", () => {
     const result = parseJsImports(`import React from 'react'`);
     expect(result).toEqual([
-      { specifier: "react", importedNames: ["React"] },
+      { specifier: "react", importedNames: ["React"], isTypeOnly: false },
     ]);
   });
 
@@ -26,14 +26,14 @@ describe("parseJsImports", () => {
       `import React, { useState, useEffect } from 'react'`,
     );
     expect(result).toEqual([
-      { specifier: "react", importedNames: ["React", "useState", "useEffect"] },
+      { specifier: "react", importedNames: ["React", "useState", "useEffect"], isTypeOnly: false },
     ]);
   });
 
   it("parses namespace imports (* as)", () => {
     const result = parseJsImports(`import * as path from 'node:path'`);
     expect(result).toEqual([
-      { specifier: "node:path", importedNames: [] },
+      { specifier: "node:path", importedNames: [], isTypeOnly: false },
     ]);
   });
 
@@ -42,7 +42,7 @@ describe("parseJsImports", () => {
       `import type { Foo, Bar } from './types'`,
     );
     expect(result).toEqual([
-      { specifier: "./types", importedNames: ["Foo", "Bar"] },
+      { specifier: "./types", importedNames: ["Foo", "Bar"], isTypeOnly: true },
     ]);
   });
 
@@ -65,7 +65,7 @@ describe("parseJsImports", () => {
       `import { foo as bar, baz as qux } from './utils'`,
     );
     expect(result).toEqual([
-      { specifier: "./utils", importedNames: ["foo", "baz"] },
+      { specifier: "./utils", importedNames: ["foo", "baz"], isTypeOnly: false },
     ]);
   });
 

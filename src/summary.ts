@@ -207,7 +207,7 @@ export function printSummary(
     const recapRows: Array<{ label: string; result: string }> = [];
 
     if (analysis.hubFiles.length > 0) {
-      recapRows.push({ label: "PageRank hub detection", result: `found ${analysis.hubFiles.length} key architectural files` });
+      recapRows.push({ label: "HITS analysis", result: `found ${analysis.hubFiles.length} key architectural files` });
     }
 
     recapRows.push({

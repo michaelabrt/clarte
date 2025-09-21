@@ -1,15 +1,15 @@
-# Clarte
+# clarte
 
 > **Keep this file up to date.** When you change the architecture, add a dependency, create a new pattern, or learn a gotcha, update this file in the same step. This is the source of truth for how the project works.
-> Scoped rules are in `.cursor/rules/` -- update them when conventions change.
+> **This file is your starting point.** Only read additional files when the task requires implementation details not captured here.
 
 ## What Is This
 
-CLI tool that generates optimized AI context files
+CLI tool to generate AI context files that map codebase's architecture, dependencies, and hotspots
 
 ## Tech Stack
 
-- **Vitest** 4.0.18 (used in 5 files)
+- **Vitest** 4.0.18 (used in 9 files)
 - **TypeScript**
 - **npm** (package manager)
 
@@ -27,19 +27,19 @@ src/
 ### Core Types
 
 ```ts
-export type ProgressCallback = (message: string) => void;  // imported by 18 files
+export type ProgressCallback = (message: string) => void;  // imported by 20 files
 
-export interface LayerEdge {  // imported by 18 files
+export interface LayerEdge {  // imported by 20 files
   from: string;
   to: string;
 }
 
-export interface CircularDependency {  // imported by 18 files
+export interface CircularDependency {  // imported by 20 files
   /** File paths forming the cycle */
   chain: string[];
 }
 
-export type Language =  // imported by 18 files
+export type Language =  // imported by 20 files
   | "typescript"
   | "javascript"
   | "python"
@@ -48,7 +48,7 @@ export type Language =  // imported by 18 files
   | "java"
   | "other";
 
-export type Linter =  // imported by 18 files
+export type Linter =  // imported by 20 files
   | "biome"
   | "eslint"
   | "prettier"
@@ -58,7 +58,7 @@ export type Linter =  // imported by 18 files
   | "gofmt"
   | "none";
 
-export type PackageManager =  // imported by 18 files
+export type PackageManager =  // imported by 20 files
   | "npm"
   | "pnpm"
   | "yarn"
@@ -69,7 +69,7 @@ export type PackageManager =  // imported by 18 files
   | "go"
   | "none";
 
-export type IDETarget =  // imported by 18 files
+export type IDETarget =  // imported by 20 files
   | "claude"
   | "cursor"
   | "opencode"
@@ -80,21 +80,21 @@ export type IDETarget =  // imported by 18 files
   | "aider"
   | "generic";
 
-export interface DetectedFramework {  // imported by 18 files
+export interface DetectedFramework {  // imported by 20 files
   name: string;
   version?: string;
   /** Number of files that import this framework (from import graph) */
   importCount?: number;
 }
 
-export interface MonorepoInfo {  // imported by 18 files
+export interface MonorepoInfo {  // imported by 20 files
   /** Which monorepo tool was detected */
   type: "pnpm-workspaces" | "turborepo" | "nx";
   /** Discovered packages */
   packages: MonorepoPackage[];
 }
 
-export interface GeneratedFile {  // imported by 18 files
+export interface GeneratedFile {  // imported by 20 files
   /** Relative path from project root */
   path: string;
   /** File contents */
@@ -103,7 +103,7 @@ export interface GeneratedFile {  // imported by 18 files
   existed: boolean;
 }
 
-export interface Community {  // imported by 18 files
+export interface Community {  // imported by 20 files
   /** Auto-assigned numeric ID */
   id: number;
   /** Files in this community */
@@ -112,7 +112,7 @@ export interface Community {  // imported by 18 files
   label: string;
 }
 
-export interface CodeSnapshot {  // imported by 18 files
+export interface CodeSnapshot {  // imported by 20 files
   entries: SnapshotEntry[];
   /** Rendered markdown block */
   markdown: string;
@@ -122,7 +122,7 @@ export interface CodeSnapshot {  // imported by 18 files
   estimatedTokens?: number;
 }
 
-export interface HubFile {  // imported by 18 files
+export interface HubFile {  // imported by 20 files
   /** Relative file path */
   path: string;
   /** PageRank centrality score (0-1) */
@@ -133,7 +133,7 @@ export interface HubFile {  // imported by 18 files
   imports: number;
 }
 
-export interface MonorepoPackage {  // imported by 18 files
+export interface MonorepoPackage {  // imported by 20 files
   /** Package name from package.json */
   name: string;
   /** Relative path from project root */
@@ -144,7 +144,7 @@ export interface MonorepoPackage {  // imported by 18 files
   frameworks: DetectedFramework[];
 }
 
-export interface ExportCoverage {  // imported by 18 files
+export interface ExportCoverage {  // imported by 20 files
   /** Relative file path */
   file: string;
   /** Total number of named exports */
@@ -155,7 +155,7 @@ export interface ExportCoverage {  // imported by 18 files
   coverage: number;
 }
 
-export interface FileInstability {  // imported by 18 files
+export interface FileInstability {  // imported by 20 files
   /** Relative file path */
   path: string;
   /** Number of incoming dependencies */
@@ -166,7 +166,7 @@ export interface FileInstability {  // imported by 18 files
   instability: number;
 }
 
-export interface ChangeCoupling {  // imported by 18 files
+export interface ChangeCoupling {  // imported by 20 files
   fileA: string;
   fileB: string;
   /** Number of commits both files appeared in together */
@@ -177,7 +177,7 @@ export interface ChangeCoupling {  // imported by 18 files
   confidence: number;
 }
 
-export interface ImportGraph {  // imported by 18 files
+export interface ImportGraph {  // imported by 20 files
   /** All import edges */
   edges: ImportEdge[];
   /** Number of files that import each file */
@@ -188,7 +188,7 @@ export interface ImportGraph {  // imported by 18 files
   externalImportCounts: Map<string, number>;
 }
 
-export interface ArchitecturalLayer {  // imported by 18 files
+export interface ArchitecturalLayer {  // imported by 20 files
   /** Layer name (e.g. "types", "stores", "hooks", "components", "pages") */
   name: string;
   /** Files belonging to this layer */
@@ -199,7 +199,7 @@ export interface ArchitecturalLayer {  // imported by 18 files
   dependsOn: string[];
 }
 
-export interface GitAnalysis {  // imported by 18 files
+export interface GitAnalysis {  // imported by 20 files
   /** Map of relative file path -> commit count in analysis window */
   commitCounts: Map<string, number>;
   /** Files sorted by commit count descending */
@@ -212,20 +212,7 @@ export interface GitAnalysis {  // imported by 18 files
   changeCoupling: ChangeCoupling[];
 }
 
-export interface ImportEdge {  // imported by 18 files
-  /** Source file (relative path) */
-  from: string;
-  /** Target file or package (relative path or bare specifier) */
-  to: string;
-  /** Whether this is an external package import */
-  isExternal: boolean;
-  /** Raw import specifier as written in source */
-  specifier: string;
-  /** Named imports (e.g. ['useState', 'useEffect']) */
-  importedNames: string[];
-}
-
-export interface SnapshotEntry {  // imported by 18 files
+export interface SnapshotEntry {  // imported by 20 files
   /** Source file path (relative) */
   file: string;
   /** Category: type, interface, function, component, store, hook */
@@ -236,7 +223,7 @@ export interface SnapshotEntry {  // imported by 18 files
   importedByCount?: number;
 }
 
-export interface ClaudeSkill {  // imported by 18 files
+export interface ClaudeSkill {  // imported by 20 files
   /** Skill name (used as directory name) */
   name: string;
   /** Human-readable description */
@@ -249,7 +236,22 @@ export interface ClaudeSkill {  // imported by 18 files
   body: string;
 }
 
-export interface ContextAnalysis {  // imported by 18 files
+export interface ImportEdge {  // imported by 20 files
+  /** Source file (relative path) */
+  from: string;
+  /** Target file or package (relative path or bare specifier) */
+  to: string;
+  /** Whether this is an external package import */
+  isExternal: boolean;
+  /** Raw import specifier as written in source */
+  specifier: string;
+  /** Named imports (e.g. ['useState', 'useEffect']) */
+  importedNames: string[];
+  /** Whether this is a type-only import (import type { ... }) */
+  isTypeOnly?: boolean;
+}
+
+export interface ContextAnalysis {  // imported by 20 files
   hubFiles: HubFile[];
   circularDeps: CircularDependency[];
   layers: ArchitecturalLayer[];
@@ -262,9 +264,11 @@ export interface ContextAnalysis {  // imported by 18 files
   communities: Community[];
   /** Export coverage metrics per file */
   exportCoverage?: ExportCoverage[];
+  /** Files with zero in-degree (not imported by anything) */
+  deadFiles?: string[];
 }
 
-export interface UserAnswers {  // imported by 18 files
+export interface UserAnswers {  // imported by 20 files
   /** Which IDE/tools to generate config for */
   ides: IDETarget[];
   /** User's description of the project (1-2 sentences) */
@@ -285,7 +289,7 @@ export interface UserAnswers {  // imported by 18 files
   generatePerPackage: boolean;
 }
 
-export interface ProjectConfig {  // imported by 18 files
+export interface ProjectConfig {  // imported by 20 files
   /** Which IDE/tools to generate config for */
   ides: IDETarget[];
   /** @deprecated Old single-IDE field for backward compatibility when loading old configs */
@@ -310,9 +314,11 @@ export interface ProjectConfig {  // imported by 18 files
   snapshotGeneratedAt?: number;
   /** Detected language (for --check fast path) */
   language?: Language;
+  /** Number of days before snapshot is considered stale (default: 7) */
+  staleDays?: number;
 }
 
-export interface DetectedContext {  // imported by 18 files
+export interface DetectedContext {  // imported by 20 files
   /** Root directory being analyzed */
   rootDir: string;
   /** Primary language */
@@ -347,21 +353,19 @@ export interface DetectedContext {  // imported by 18 files
 ### Key Functions
 
 ```ts
-export function estimateTokens(text: string): number  // imported by 13 files
+export function estimateTokens(text: string): number  // imported by 14 files
 
-export function formatBytes(bytes: number): string  // imported by 13 files
+export function formatBytes(bytes: number): string  // imported by 14 files
 
-export const theme =  // imported by 4 files
+export async function fileExists(filePath: string): Promise<boolean>  // imported by 14 files
 
-export async function fileExists(filePath: string): Promise<boolean>  // imported by 13 files
+export async function readDirSafe(dirPath: string): Promise<string[]>  // imported by 14 files
 
-export async function readDirSafe(dirPath: string): Promise<string[]>  // imported by 13 files
+export async function readFileOr(filePath: string): Promise<string | null>  // imported by 14 files
 
-export async function readFileOr(filePath: string): Promise<string | null>  // imported by 13 files
+export async function writeFileSafe(filePath: string, content: string): Promise<void>  // imported by 14 files
 
-export async function writeFileSafe(filePath: string, content: string): Promise<void>  // imported by 13 files
-
-export async function readJsonFile(filePath: string): Promise<Record<string, unknown> | null>  // imported by 13 files
+export async function readJsonFile(filePath: string): Promise<Record<string, unknown> | null>  // imported by 14 files
 
 export function findSCCs(graph: ImportGraph): string[][]  // imported by 6 files
 
@@ -379,41 +383,55 @@ export function findUsedExports(edges: ImportEdge[]): Set<string>  // imported b
 
 export function detectCommunities(graph: ImportGraph): Community[]  // imported by 6 files
 
+export function summarizeDetection(ctx: DetectedContext): string  // imported by 7 files
+
 export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[]  // imported by 6 files
 
 export function computeExportCoverage(graph: ImportGraph): ExportCoverage[]  // imported by 6 files
 
 export function computeInstability(graph: ImportGraph): FileInstability[]  // imported by 6 files
 
-export function summarizeDetection(ctx: DetectedContext): string  // imported by 6 files
-
-export function getFrameworkHintsSection(ctx: DetectedContext): string  // imported by 3 files
+export function findDeadFiles( graph: ImportGraph, entryPoints: string[] = [], ): string[]  // imported by 6 files
 
 export function findCircularDeps( graph: ImportGraph, maxCycles = 10, ): CircularDependency[]  // imported by 6 files
 
+export function extractUserSections(content: string): UserSection[]
+
+export function getFrameworkHintsSection(ctx: DetectedContext): string  // imported by 3 files
+
 export function getFrameworkHints(ctx: DetectedContext): string[]  // imported by 3 files
 
-export function renderClaudeSkill(skill: ClaudeSkill): string
+export function configToAnswers(config: ProjectConfig): UserAnswers  // imported by 3 files
 
-export function gradient( text: string, from: RGB, to: RGB, fallbackFn?: (text: string) =>  // imported by 4 files
+export async function detectContext(rootDir: string, onProgress?: ProgressCallback): Promise<DetectedContext>  // imported by 7 files
 
 export async function buildImportGraph( rootDir: string, language: Language, onProgress?: ProgressCallback, ): Promise<ImportGraph>  // imported by 6 files
 
-export async function detectContext(rootDir: string, onProgress?: ProgressCallback): Promise<DetectedContext>  // imported by 6 files
-
-export function renderCursorRule(rule: CursorRule): string
-
-export async function animatePageRank(): Promise<void>
+export function renderClaudeSkill(skill: ClaudeSkill): string
 
 export function getMainContextFilename(ide: IDETarget): string
 
-export function configToAnswers(config: ProjectConfig): UserAnswers
+export function renderCursorRule(rule: CursorRule): string
 
-export function enrichFrameworksWithUsage( frameworks: DetectedFramework[], externalImportCounts: Map<string, number>, ): DetectedFramework[]  // imported by 6 files
+export function mergeUserSections(newContent: string, userSections: UserSection[]): string
+
+export async function loadConfig( rootDir: string, ): Promise<ProjectConfig | null>  // imported by 3 files
+
+export function enrichFrameworksWithUsage( frameworks: DetectedFramework[], externalImportCounts: Map<string, number>, ): DetectedFramework[]  // imported by 7 files
+
+export function gradient( text: string, from: RGB, to: RGB, fallbackFn?: (text: string) => string,  // imported by 4 files
+
+export async function computeSnapshotHash( rootDir: string, language: Language, ): Promise<string>  // imported by 3 files
+
+export async function animatePageRank(): Promise<void>
 
 export async function refreshSnapshot(rootDir: string): Promise<void>
 
-export async function loadConfig( rootDir: string, ): Promise<ProjectConfig | null>
+export async function generateFiles( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, force: boolean = false,
+
+export async function saveConfig( rootDir: string, answers: UserAnswers, snapshotHash?: string, language?: Language,  // imported by 3 files
+
+export async function generateSnapshot( ctx: DetectedContext, customPaths: string[], graph?: ImportGraph, maxTokens?: number,  // imported by 4 files
 
 export async function animateLayerStack( layerNames: string[], ): Promise<void>
 
@@ -421,25 +439,17 @@ export async function animateCycleDetection( cycleCount: number, ): Promise<void
 
 export async function animateCommunities( communityCount: number, ): Promise<void>
 
-export async function computeSnapshotHash( rootDir: string, language: Language, ): Promise<string>
-
-export async function generateSnapshot( ctx: DetectedContext, customPaths: string[], graph?: ImportGraph, maxTokens?: number,  // imported by 4 files
-
-export function buildClaudeSkills( ctx: DetectedContext, answers: UserAnswers, analysis?: ContextAnalysis, scripts?: Record<string, string>,
-
-export async function animateGraphBuild( _fileCount: number, _edgeCount: number, ): Promise<void>
-
-export async function saveConfig( rootDir: string, answers: UserAnswers, snapshotHash?: string, language?: Language,
-
-export function analyzeGitActivity( rootDir: string, onProgress?: ProgressCallback, ): GitAnalysis | null
+export async function buildMainContext( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,
 
 export function buildCursorRules( ctx: DetectedContext, answers: UserAnswers, analysis?: ContextAnalysis, ): CursorRule[]
 
+export function buildClaudeSkills( ctx: DetectedContext, answers: UserAnswers, analysis?: ContextAnalysis, scripts?: Record<string, string>,
+
 export function buildAiderContext( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,
 
-export function buildMainContext( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,
+export async function animateGraphBuild( _fileCount: number, _edgeCount: number, ): Promise<void>
 
-export async function generateFiles( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, force: boolean = false,
+export function analyzeGitActivity( rootDir: string, onProgress?: ProgressCallback, ): GitAnalysis | null
 
 export function printSummary( files: GeneratedFile[], ctx: DetectedContext, snapshot?: CodeSnapshot | null, analysis?: ContextAnalysis,
 
@@ -454,56 +464,50 @@ These are the most interconnected files. Read these first for architectural unde
 
 | File | Imported By | Stability |
 |------|-------------|-----------|
-| `src/types.ts` | 17 files | stable |
-| `src/utils.ts` | 11 files | stable |
-| `src/graph.ts` | 5 files | stable |
+| `src/types.ts` | 20 files | stable |
+| `src/utils.ts` | 14 files | stable |
+| `src/graph.ts` | 6 files | stable |
+| `src/detect.ts` | 7 files | stable |
 | `src/theme.ts` | 4 files | stable |
-| `src/detect.ts` | 6 files | stable |
 | `src/templates/framework-hints.ts` | 3 files | stable |
+| `src/generate.ts` | 2 files | 80% unstable ⚠️ |
 | `src/templates/claude-skills.ts` | 2 files | stable |
-| `src/snapshot.ts` | 3 files | stable |
 
 ## Recently Active Files
 
 | File | Commits (90d) | Last Changed |
 |------|--------------|--------------|
-| `src/index.ts` | 13 | 3 hours ago |
-| `package.json` | 11 | 3 hours ago |
-| `package-lock.json` | 9 | 3 hours ago |
-| `src/types.ts` | 9 | 4 hours ago |
-| `README.md` | 7 | 33 minutes ago |
-| `src/summary.ts` | 7 | 3 hours ago |
-| `src/templates/main-context.ts` | 7 | 4 hours ago |
-| `src/detect.ts` | 6 | 3 hours ago |
-| `src/graph.ts` | 6 | 3 hours ago |
-| `src/snapshot.ts` | 6 | 3 hours ago |
+| `package.json` | 17 | 6 hours ago |
+| `src/index.ts` | 16 | 6 hours ago |
+| `package-lock.json` | 14 | 6 hours ago |
+| `src/types.ts` | 12 | 6 hours ago |
+| `CHANGELOG.md` | 11 | 2 hours ago |
+| `README.md` | 11 | 6 hours ago |
+| `src/templates/main-context.ts` | 9 | 16 hours ago |
+| `src/summary.ts` | 8 | 17 hours ago |
+| `src/config.ts` | 7 | 6 hours ago |
+| `src/templates/aider-context.ts` | 7 | 6 hours ago |
 
 ## Change Coupling
 
-Files that frequently change together. Consider whether they should be colocated or decoupled.
+Files that frequently change together — when modifying one, check if the other needs updates too.
 
 | File A | File B | Co-changes | Confidence |
 |--------|--------|------------|------------|
-| `package-lock.json` | `package.json` | 9 | 82% |
-| `src/templates/main-context.ts` | `src/types.ts` | 7 | 78% |
-| `src/config.ts` | `src/refresh.ts` | 3 | 75% |
-| `src/config.ts` | `src/templates/aider-context.ts` | 3 | 75% |
-| `src/prompts.ts` | `src/templates/aider-context.ts` | 3 | 75% |
-| `src/refresh.ts` | `src/templates/aider-context.ts` | 3 | 75% |
-| `src/detect.ts` | `src/templates/main-context.ts` | 5 | 71% |
-| `src/index.ts` | `src/types.ts` | 8 | 62% |
-| `src/graph.ts` | `src/snapshot.ts` | 3 | 60% |
-| `README.md` | `src/prompts.ts` | 4 | 57% |
-
-## Module Clusters
-
-Automatically detected groups of tightly-connected files.
-
-- **src** (23 files): `src/__tests__/claude-skills.test.ts`, `src/__tests__/graph-algorithms.test.ts`, `src/__tests__/graph.test.ts`, `src/__tests__/utils.test.ts`, `src/animations.ts`, `src/config.ts`, `src/detect.ts`, `src/generate.ts`, `src/git-analysis.ts`, `src/graph.ts`, `src/index.ts`, `src/prompts.ts`, `src/refresh.ts`, `src/snapshot.ts`, `src/summary.ts`, `src/templates/aider-context.ts`, `src/templates/claude-skills.ts`, `src/templates/cursor-rules.ts`, `src/templates/framework-hints.ts`, `src/templates/main-context.ts`, `src/theme.ts`, `src/types.ts`, `src/utils.ts`
+| `package-lock.json` | `package.json` | 14 | 88% |
+| `src/config.ts` | `src/refresh.ts` | 5 | 83% |
+| `CHANGELOG.md` | `package-lock.json` | 10 | 71% |
+| `src/config.ts` | `src/templates/aider-context.ts` | 4 | 67% |
+| `src/index.ts` | `src/types.ts` | 10 | 67% |
+| `src/prompts.ts` | `src/templates/aider-context.ts` | 4 | 67% |
+| `src/refresh.ts` | `src/templates/aider-context.ts` | 4 | 67% |
+| `src/templates/main-context.ts` | `src/types.ts` | 7 | 64% |
+| `CHANGELOG.md` | `package.json` | 10 | 63% |
+| `src/templates/cursor-rules.ts` | `src/templates/main-context.ts` | 5 | 63% |
 
 ## Key Patterns
 
-- Angular conventional commits
+- Angular commit style
 
 ## Development
 
@@ -511,3 +515,14 @@ Automatically detected groups of tightly-connected files.
 npm install
 npm run dev
 ```
+
+```bash
+npm run test
+```
+
+<!-- clarte:user-start -->
+## Style Rules
+
+- Never use em dashes (—). Use commas, periods, semicolons, colons, or parentheses instead.
+- Angular commit style
+<!-- clarte:user-end -->

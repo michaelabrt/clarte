@@ -1,6 +1,7 @@
 import type { CodeSnapshot, ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
 import { summarizeDetection } from "../detect.js";
 import { getFrameworkHints } from "./framework-hints.js";
+import { renderConstraintsSection } from "../config-scan.js";
 
 /**
  * Build an Aider config file (.aider.conf.yml) with project conventions.
@@ -42,6 +43,20 @@ export function buildAiderContext(
   }
   if (ctx.linter !== "none") {
     lines.push(`  - "Linter: ${ctx.linter}"`);
+  }
+
+  // Config constraints
+  if (analysis?.configConstraints) {
+    const constraintsSection = renderConstraintsSection(analysis.configConstraints);
+    if (constraintsSection) {
+      // Extract bullet lines from the markdown section
+      for (const line of constraintsSection.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("- ")) {
+          lines.push(`  - "${escapeYaml(trimmed.slice(2).replace(/\*\*/g, ""))}"`);
+        }
+      }
+    }
   }
 
   // Project structure
@@ -100,7 +115,8 @@ export function buildAiderContext(
 
   // Key files
   if (analysis?.hubFiles && analysis.hubFiles.length > 0) {
-    lines.push(`  - "Key files (read these first for architecture): ${escapeYaml(analysis.hubFiles.map((h) => h.path).join(", "))}"`);
+    const fileDescs = analysis.hubFiles.map((h) => `${h.path} (${h.role})`).join(", ");
+    lines.push(`  - "Key files (read these first for architecture): ${escapeYaml(fileDescs)}"`);
   }
 
   // Architecture

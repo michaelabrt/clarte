@@ -1,12 +1,13 @@
 import path from "node:path";
 import fg from "fast-glob";
-import { readFileOr } from "./utils.js";
+import { readFileOr, readJsonFile } from "./utils.js";
 import type {
   ArchitecturalLayer,
   CircularDependency,
   Community,
   ExportCoverage,
   FileInstability,
+  FileRole,
   HubFile,
   ImportEdge,
   ImportGraph,
@@ -18,7 +19,7 @@ import type {
 // ── Import regex patterns per language ────────────────────────────────
 
 /** JS/TS: import ... from '...' (including type-only and namespace imports) */
-const JS_IMPORT_FROM = /import\s+(?:type\s+)?(?:\{([^}]*)\}|(\*\s+as\s+\w+|\w+)(?:\s*,\s*\{([^}]*)\})?)\s+from\s+['"]([^'"]+)['"]/g;
+const JS_IMPORT_FROM = /import\s+(type\s+)?(?:\{([^}]*)\}|(\*\s+as\s+\w+|\w+)(?:\s*,\s*\{([^}]*)\})?)\s+from\s+['"]([^'"]+)['"]/g;
 /** JS/TS: import '...' (side-effect) */
 const JS_IMPORT_SIDE = /import\s+['"]([^'"]+)['"]/g;
 /** JS/TS: require('...') */
@@ -45,6 +46,97 @@ const RUST_MOD = /mod\s+(\w+)\s*;/g;
 const JS_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs"];
 const INDEX_FILES = JS_EXTENSIONS.map((e) => `/index${e}`);
 
+// ── tsconfig path alias resolution ─────────────────────────────────────
+
+interface PathAlias {
+  /** The alias prefix (e.g. "@/", "@components/") */
+  prefix: string;
+  /** The replacement path (relative to rootDir) */
+  replacement: string;
+}
+
+/**
+ * Load path aliases from tsconfig.json, following `extends` chains up to 5 levels.
+ * Returns an array of PathAlias objects for resolving aliased imports.
+ */
+async function loadTsconfigPaths(rootDir: string): Promise<PathAlias[]> {
+  let configPath = path.join(rootDir, "tsconfig.json");
+  let baseUrl = ".";
+  let paths: Record<string, string[]> = {};
+
+  for (let depth = 0; depth < 5; depth++) {
+    const config = await readJsonFile(configPath);
+    if (!config) break;
+
+    const co = config.compilerOptions as Record<string, unknown> | undefined;
+    if (co?.baseUrl && typeof co.baseUrl === "string") baseUrl = co.baseUrl;
+    if (co?.paths && typeof co.paths === "object") {
+      // Child config wins over parent — only set if not already set by child
+      const configPaths = co.paths as Record<string, string[]>;
+      for (const [key, value] of Object.entries(configPaths)) {
+        if (!(key in paths)) {
+          paths[key] = value;
+        }
+      }
+    }
+
+    const ext = config.extends as string | undefined;
+    if (!ext) break;
+
+    // Resolve relative extends paths
+    configPath = path.resolve(path.dirname(configPath), ext);
+    if (!configPath.endsWith(".json")) configPath += ".json";
+  }
+
+  // Convert to PathAlias array
+  const aliases: PathAlias[] = [];
+  for (const [pattern, mappings] of Object.entries(paths)) {
+    if (!mappings || mappings.length === 0) continue;
+    // Only support wildcard patterns: "@/*" -> ["src/*"]
+    if (pattern.endsWith("/*") && mappings[0].endsWith("/*")) {
+      const prefix = pattern.slice(0, -1); // "@/" from "@/*"
+      const target = mappings[0].slice(0, -1); // "src/" from "src/*"
+      const replacement = path.join(baseUrl, target).replace(/\\/g, "/");
+      aliases.push({ prefix, replacement });
+    } else if (!pattern.includes("*")) {
+      // Exact alias: "utils" -> ["src/utils"]
+      aliases.push({ prefix: pattern, replacement: path.join(baseUrl, mappings[0]).replace(/\\/g, "/") });
+    }
+  }
+
+  return aliases;
+}
+
+/**
+ * Try to resolve a path alias import to an actual file path.
+ */
+function resolveAliasImport(
+  specifier: string,
+  aliases: PathAlias[],
+  allFiles: Set<string>,
+): string | null {
+  for (const alias of aliases) {
+    if (specifier.startsWith(alias.prefix)) {
+      const remainder = specifier.slice(alias.prefix.length);
+      const raw = (alias.replacement + remainder).replace(/\\/g, "/");
+      // Try the same resolution as relative imports
+      const stripped = raw.replace(/\.(jsx?|mjs)$/, "");
+      const bases = stripped !== raw ? [raw, stripped] : [raw];
+
+      for (const base of bases) {
+        if (allFiles.has(base)) return base;
+        for (const ext of JS_EXTENSIONS) {
+          if (allFiles.has(base + ext)) return base + ext;
+        }
+        for (const idx of INDEX_FILES) {
+          if (allFiles.has(base + idx)) return base + idx;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 // ── Language-specific source file globs ───────────────────────────────
 
 function getSourceGlob(lang: Language): string[] {
@@ -68,6 +160,8 @@ function getSourceGlob(lang: Language): string[] {
 export interface RawImport {
   specifier: string;
   importedNames: string[];
+  /** Whether this is a type-only import (import type { ... }) */
+  isTypeOnly?: boolean;
 }
 
 export function parseJsImports(content: string): RawImport[] {
@@ -75,17 +169,18 @@ export function parseJsImports(content: string): RawImport[] {
 
   // import { a, b } from '...' / import Foo from '...' / import Foo, { a } from '...' / import * as Foo from '...'
   for (const m of content.matchAll(JS_IMPORT_FROM)) {
+    const isTypeOnly = !!m[1]; // group 1: "type " keyword
     const names: string[] = [];
-    if (m[1]) names.push(...m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
-    if (m[2]) {
-      const group2 = m[2].trim();
+    if (m[2]) names.push(...m[2].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
+    if (m[3]) {
+      const group3 = m[3].trim();
       // Namespace import (* as foo): edge is valid but no named import to extract
-      if (!group2.startsWith("*")) {
-        names.push(group2);
+      if (!group3.startsWith("*")) {
+        names.push(group3);
       }
     }
-    if (m[3]) names.push(...m[3].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
-    imports.push({ specifier: m[4], importedNames: names });
+    if (m[4]) names.push(...m[4].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
+    imports.push({ specifier: m[5], importedNames: names, isTypeOnly });
   }
 
   // import '...' (side-effect)
@@ -282,59 +377,139 @@ function resolveImport(
   }
 }
 
-// ── PageRank centrality ───────────────────────────────────────────────
+// ── HITS (Kleinberg) centrality ───────────────────────────────────────
 
-function computePageRank(
+/**
+ * Compute HITS authority and hub scores for all files.
+ *
+ * Edge weight: (1 - typeOnlyDiscount) * specificity
+ * - typeOnlyDiscount = 0.7 if isTypeOnly, else 0
+ * - specificity = log2(importedNames.length + 1) / log2(6), clamped min 0.2
+ */
+export function computeHITS(
   files: string[],
   edges: ImportEdge[],
-  iterations = 5,
-  damping = 0.85,
-): Map<string, number> {
+  maxIterations = 30,
+  epsilon = 1e-6,
+): { authority: Map<string, number>; hub: Map<string, number> } {
   const n = files.length;
-  if (n === 0) return new Map();
+  if (n === 0) return { authority: new Map(), hub: new Map() };
 
-  // Build adjacency: from -> [to, ...]
-  const outLinks = new Map<string, string[]>();
-  for (const file of files) outLinks.set(file, []);
-  for (const edge of edges) {
-    if (!edge.isExternal && outLinks.has(edge.from)) {
-      outLinks.get(edge.from)!.push(edge.to);
-    }
+  const fileSet = new Set(files);
+
+  // Build weighted adjacency lists (internal edges only)
+  // forward: from -> [{to, weight}]   (for hub update)
+  // reverse: to -> [{from, weight}]   (for authority update)
+  const forward = new Map<string, Array<{ to: string; weight: number }>>();
+  const reverse = new Map<string, Array<{ from: string; weight: number }>>();
+  for (const file of files) {
+    forward.set(file, []);
+    reverse.set(file, []);
   }
 
-  // Init scores
-  let scores = new Map<string, number>();
-  const init = 1 / n;
-  for (const file of files) scores.set(file, init);
+  for (const edge of edges) {
+    if (edge.isExternal) continue;
+    if (!fileSet.has(edge.from) || !fileSet.has(edge.to)) continue;
+
+    const typeOnlyDiscount = edge.isTypeOnly ? 0.7 : 0;
+    const nameCount = edge.importedNames.length;
+    const specificity = nameCount > 0
+      ? Math.max(0.2, Math.log2(nameCount + 1) / Math.log2(6))
+      : 0.2;
+    const weight = (1 - typeOnlyDiscount) * specificity;
+
+    forward.get(edge.from)!.push({ to: edge.to, weight });
+    reverse.get(edge.to)!.push({ from: edge.from, weight });
+  }
+
+  // Initialize
+  let auth = new Float64Array(n).fill(1);
+  let hub = new Float64Array(n).fill(1);
+  const fileIndex = new Map<string, number>();
+  for (let i = 0; i < n; i++) fileIndex.set(files[i], i);
 
   // Iterate
-  for (let iter = 0; iter < iterations; iter++) {
-    const next = new Map<string, number>();
-    for (const file of files) next.set(file, (1 - damping) / n);
+  for (let iter = 0; iter < maxIterations; iter++) {
+    const newAuth = new Float64Array(n);
+    const newHub = new Float64Array(n);
 
-    for (const file of files) {
-      const links = outLinks.get(file) ?? [];
-      if (links.length === 0) continue;
-      const share = (damping * (scores.get(file) ?? 0)) / links.length;
-      for (const target of links) {
-        next.set(target, (next.get(target) ?? 0) + share);
+    // Update authorities: newAuth[v] = Σ hub[u] * w(u→v)
+    for (let vi = 0; vi < n; vi++) {
+      const file = files[vi];
+      let sum = 0;
+      for (const { from, weight } of reverse.get(file)!) {
+        sum += hub[fileIndex.get(from)!] * weight;
       }
+      newAuth[vi] = sum;
     }
-    scores = next;
+
+    // Update hubs (using new auth): newHub[v] = Σ newAuth[w] * w(v→w)
+    for (let vi = 0; vi < n; vi++) {
+      const file = files[vi];
+      let sum = 0;
+      for (const { to, weight } of forward.get(file)!) {
+        sum += newAuth[fileIndex.get(to)!] * weight;
+      }
+      newHub[vi] = sum;
+    }
+
+    // L2 normalize
+    let authNorm = 0;
+    let hubNorm = 0;
+    for (let i = 0; i < n; i++) {
+      authNorm += newAuth[i] * newAuth[i];
+      hubNorm += newHub[i] * newHub[i];
+    }
+    authNorm = Math.sqrt(authNorm) || 1;
+    hubNorm = Math.sqrt(hubNorm) || 1;
+    for (let i = 0; i < n; i++) {
+      newAuth[i] /= authNorm;
+      newHub[i] /= hubNorm;
+    }
+
+    // Convergence check
+    let maxDelta = 0;
+    for (let i = 0; i < n; i++) {
+      maxDelta = Math.max(maxDelta, Math.abs(newAuth[i] - auth[i]) + Math.abs(newHub[i] - hub[i]));
+    }
+
+    auth = newAuth;
+    hub = newHub;
+
+    if (maxDelta < epsilon) break;
   }
 
-  // Normalize to 0-1
-  let max = 0;
-  for (const v of scores.values()) {
-    if (v > max) max = v;
+  // Min-max normalize to 0-1
+  let authMin = Infinity, authMax = -Infinity;
+  let hubMin = Infinity, hubMax = -Infinity;
+  for (let i = 0; i < n; i++) {
+    if (auth[i] < authMin) authMin = auth[i];
+    if (auth[i] > authMax) authMax = auth[i];
+    if (hub[i] < hubMin) hubMin = hub[i];
+    if (hub[i] > hubMax) hubMax = hub[i];
   }
-  if (max > 0) {
-    for (const [k, v] of scores) {
-      scores.set(k, v / max);
-    }
+  const authRange = authMax - authMin || 1;
+  const hubRange = hubMax - hubMin || 1;
+
+  const authorityMap = new Map<string, number>();
+  const hubMap = new Map<string, number>();
+  for (let i = 0; i < n; i++) {
+    authorityMap.set(files[i], (auth[i] - authMin) / authRange);
+    hubMap.set(files[i], (hub[i] - hubMin) / hubRange);
   }
 
-  return scores;
+  return { authority: authorityMap, hub: hubMap };
+}
+
+/**
+ * Derive a functional role from HITS authority and hub scores.
+ */
+export function deriveRole(authority: number, hubScore: number): FileRole {
+  if (authority > 0.6 && hubScore < 0.3) return "Foundation";
+  if (hubScore > 0.6 && authority < 0.3) return "Orchestrator";
+  if (authority > 0.4 && hubScore > 0.4) return "Bridge";
+  if (authority >= 0.3 && authority <= 0.6 && hubScore < 0.3) return "Utility";
+  return "Leaf";
 }
 
 // ── Public API ────────────────────────────────────────────────────────
@@ -373,7 +548,7 @@ export async function buildImportGraph(
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EPERM" || code === "EACCES") {
       onProgress?.("Warning: permission error scanning files, returning empty graph");
-      return { edges: [], inDegree: new Map(), centrality: new Map(), externalImportCounts: new Map() };
+      return { edges: [], inDegree: new Map(), centrality: new Map(), externalImportCounts: new Map(), authority: new Map(), hubScores: new Map() };
     }
     throw err;
   }
@@ -384,6 +559,14 @@ export async function buildImportGraph(
   const edges: ImportEdge[] = [];
   const inDegree = new Map<string, number>();
   const externalImportCounts = new Map<string, number>();
+
+  // Load path aliases for TS/JS projects
+  const pathAliases = (language === "typescript" || language === "javascript")
+    ? await loadTsconfigPaths(rootDir)
+    : [];
+  if (pathAliases.length > 0) {
+    onProgress?.(`Loaded ${pathAliases.length} path alias(es) from tsconfig`);
+  }
 
   // Init in-degree
   for (const file of files) inDegree.set(file, 0);
@@ -413,32 +596,52 @@ export async function buildImportGraph(
             isExternal: false,
             specifier: raw.specifier,
             importedNames: raw.importedNames,
+            isTypeOnly: raw.isTypeOnly,
           });
           inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
         }
       } else {
-        // External package
-        // Normalize specifier to package name (e.g. @scope/pkg/path -> @scope/pkg)
-        const pkgName = getPackageName(raw.specifier);
-        edges.push({
-          from: file,
-          to: pkgName,
-          isExternal: true,
-          specifier: raw.specifier,
-          importedNames: raw.importedNames,
-        });
-        externalImportCounts.set(
-          pkgName,
-          (externalImportCounts.get(pkgName) ?? 0) + 1,
-        );
+        // Try path alias resolution before treating as external
+        const aliasResolved = pathAliases.length > 0
+          ? resolveAliasImport(raw.specifier, pathAliases, fileSet)
+          : null;
+
+        if (aliasResolved) {
+          edges.push({
+            from: file,
+            to: aliasResolved,
+            isExternal: false,
+            specifier: raw.specifier,
+            importedNames: raw.importedNames,
+            isTypeOnly: raw.isTypeOnly,
+          });
+          inDegree.set(aliasResolved, (inDegree.get(aliasResolved) ?? 0) + 1);
+        } else {
+          // External package
+          // Normalize specifier to package name (e.g. @scope/pkg/path -> @scope/pkg)
+          const pkgName = getPackageName(raw.specifier);
+          edges.push({
+            from: file,
+            to: pkgName,
+            isExternal: true,
+            specifier: raw.specifier,
+            importedNames: raw.importedNames,
+            isTypeOnly: raw.isTypeOnly,
+          });
+          externalImportCounts.set(
+            pkgName,
+            (externalImportCounts.get(pkgName) ?? 0) + 1,
+          );
+        }
       }
     }
   }
 
-  onProgress?.("Computing centrality (PageRank)...");
-  const centrality = computePageRank(files, edges);
+  onProgress?.("Computing centrality (HITS)...");
+  const { authority, hub: hubScores } = computeHITS(files, edges);
 
-  return { edges, inDegree, centrality, externalImportCounts };
+  // Use authority as centrality for backward compat (snapshot.ts etc.)
+  return { edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores };
 }
 
 /**
@@ -471,7 +674,8 @@ export function findUsedExports(edges: ImportEdge[]): Set<string> {
 }
 
 /**
- * Get the most interconnected files (hub files) sorted by centrality.
+ * Get the most interconnected files sorted by max(authority, hubScore).
+ * Captures both foundations (high authority) and orchestrators (high hub).
  */
 export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[] {
   // Count outgoing internal imports per file
@@ -484,17 +688,28 @@ export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[] {
 
   // Build list of all files with their scores
   const files: HubFile[] = [];
-  for (const [filePath, centrality] of graph.centrality) {
+  for (const [filePath] of graph.centrality) {
     const importedBy = graph.inDegree.get(filePath) ?? 0;
     const imports = outCount.get(filePath) ?? 0;
     // Only include files that have some connectivity
     if (importedBy > 0 || imports > 0) {
-      files.push({ path: filePath, centrality, importedBy, imports });
+      const authority = graph.authority?.get(filePath) ?? graph.centrality.get(filePath) ?? 0;
+      const hubScore = graph.hubScores?.get(filePath) ?? 0;
+      const role = deriveRole(authority, hubScore);
+      files.push({
+        path: filePath,
+        centrality: authority,
+        authority,
+        hubScore,
+        role,
+        importedBy,
+        imports,
+      });
     }
   }
 
-  // Sort by centrality descending
-  files.sort((a, b) => b.centrality - a.centrality);
+  // Sort by max(authority, hubScore) descending — captures both foundations and orchestrators
+  files.sort((a, b) => Math.max(b.authority, b.hubScore) - Math.max(a.authority, a.hubScore));
 
   return files.slice(0, limit);
 }
@@ -671,7 +886,7 @@ export function detectArchitecturalLayers(graph: ImportGraph): { layers: Archite
 /**
  * Compute instability metric (Robert C. Martin) for each file.
  * instability = fanOut / (fanIn + fanOut)
- * Returns files with instability > 0.7 and fanIn >= 3 (high-risk zones).
+ * Returns files with instability > 0.7 and fanIn >= 1 (high-risk zones).
  */
 export function computeInstability(graph: ImportGraph): FileInstability[] {
   // Count outgoing internal edges per file
@@ -688,7 +903,7 @@ export function computeInstability(graph: ImportGraph): FileInstability[] {
     const total = fanIn + fanOut;
     if (total === 0) continue;
     const instability = fanOut / total;
-    if (instability > 0.7 && fanIn >= 3) {
+    if (instability > 0.7 && fanIn >= 1) {
       results.push({ path: filePath, fanIn, fanOut, instability });
     }
   }
@@ -819,6 +1034,36 @@ function deriveLabel(files: string[]): string {
   common = common.replace(/\/$/, "");
 
   return common || files[0].split("/")[0] || "root";
+}
+
+/**
+ * Find dead files: files with zero in-degree (not imported by anything).
+ * Excludes entry points, test files, and config files.
+ */
+export function findDeadFiles(
+  graph: ImportGraph,
+  entryPoints: string[] = [],
+): string[] {
+  const entrySet = new Set(entryPoints);
+  const dead: string[] = [];
+
+  for (const [file, degree] of graph.inDegree) {
+    if (degree > 0) continue;
+    if (entrySet.has(file)) continue;
+    // Skip test files
+    if (/\.(test|spec)\.[jt]sx?$/.test(file) || file.includes("__tests__/")) continue;
+    // Skip config files
+    if (/\.(config|rc)\.[jt]sx?$/.test(file)) continue;
+    // Skip entry points by convention
+    const basename = file.split("/").pop() ?? "";
+    if (/^(index|main|app|server|cli)\.[jt]sx?$/.test(basename)) continue;
+    if (basename === "mod.ts" || basename === "lib.rs" || basename === "main.rs") continue;
+    if (basename === "main.go" || basename === "main.py") continue;
+
+    dead.push(file);
+  }
+
+  return dead.sort();
 }
 
 /**

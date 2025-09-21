@@ -9,7 +9,7 @@ import type {
   ProgressCallback,
   UserAnswers,
 } from "./types.js";
-import { fileExists, readJsonFile, writeFileSafe } from "./utils.js";
+import { fileExists, readFileOr, readJsonFile, writeFileSafe } from "./utils.js";
 import {
   buildMainContext,
   getMainContextFilename,
@@ -62,7 +62,7 @@ export async function generateFiles(
     const mainContent =
       ide === "aider"
         ? buildAiderContext(ctx, answers, snapshot, analysis)
-        : buildMainContext(ctx, answers, snapshot, analysis);
+        : await buildMainContext(ctx, answers, snapshot, analysis);
     await addFile(mainFilename, mainContent);
 
     // 2. Cursor-specific scoped rules
@@ -130,7 +130,7 @@ export async function generateFiles(
         const pkgContent =
           ide === "aider"
             ? buildAiderContext(pkgCtx, pkgAnswers, pkgSnapshot)
-            : buildMainContext(pkgCtx, pkgAnswers, pkgSnapshot);
+            : await buildMainContext(pkgCtx, pkgAnswers, pkgSnapshot);
 
         const pkgFilePath = path.join(pkg.path, pkgMainFilename);
         await addFile(pkgFilePath, pkgContent);
@@ -139,6 +139,31 @@ export async function generateFiles(
   }
 
   const files = Array.from(fileMap.values());
+
+  // Preserve user sections from existing files before overwriting
+  let preservedCount = 0;
+  for (const file of files) {
+    if (!file.existed) continue;
+    // Only preserve in markdown-based context files (not YAML, not skills)
+    if (!file.path.endsWith(".md") && !file.path.startsWith(".windsurfrules") && !file.path.startsWith(".clinerules") && !file.path.startsWith(".continuerules")) continue;
+
+    const absPath = path.join(ctx.rootDir, file.path);
+    const existingContent = await readFileOr(absPath);
+    if (!existingContent) continue;
+
+    const userSections = extractUserSections(existingContent);
+    if (userSections.length > 0) {
+      file.content = mergeUserSections(file.content, userSections);
+      preservedCount += userSections.length;
+      onVerbose?.(`Preserved ${userSections.length} user section(s) in ${file.path}`);
+    }
+  }
+
+  if (preservedCount > 0) {
+    p.log.info(
+      `Preserved ${preservedCount} custom section${preservedCount === 1 ? "" : "s"} (clarte:user markers)`,
+    );
+  }
 
   // Dry run: return files without writing anything
   if (dryRun) {
@@ -178,4 +203,87 @@ export async function generateFiles(
   }
 
   return files;
+}
+
+// ── User section preservation ────────────────────────────────────────────────
+
+const USER_START = "<!-- clarte:user-start -->";
+const USER_END = "<!-- clarte:user-end -->";
+
+interface UserSection {
+  /** Full content including markers */
+  content: string;
+  /** The nearest preceding ## header (anchor for repositioning) */
+  anchor: string | null;
+}
+
+/**
+ * Extract user-preserved sections from existing file content.
+ * Each section is delimited by <!-- clarte:user-start --> and <!-- clarte:user-end -->.
+ */
+export function extractUserSections(content: string): UserSection[] {
+  const sections: UserSection[] = [];
+  let searchFrom = 0;
+
+  while (searchFrom < content.length) {
+    const startIdx = content.indexOf(USER_START, searchFrom);
+    if (startIdx < 0) break;
+
+    const endIdx = content.indexOf(USER_END, startIdx + USER_START.length);
+    if (endIdx < 0) break; // Unclosed marker — skip
+
+    const fullBlock = content.slice(startIdx, endIdx + USER_END.length);
+
+    // Find nearest preceding ## header as position anchor
+    const before = content.slice(0, startIdx);
+    const headers = before.match(/^## .+$/gm);
+    const anchor = headers ? headers[headers.length - 1] : null;
+
+    sections.push({ content: fullBlock, anchor });
+    searchFrom = endIdx + USER_END.length;
+  }
+
+  return sections;
+}
+
+/**
+ * Merge preserved user sections into newly generated content.
+ * Each section is re-inserted after its anchor header (nearest preceding ## header
+ * from the original file). If the anchor is not found, the section is appended at the end.
+ */
+export function mergeUserSections(newContent: string, userSections: UserSection[]): string {
+  if (userSections.length === 0) return newContent;
+
+  let result = newContent;
+
+  for (const section of userSections) {
+    // Skip if this exact user block is somehow already in the new content
+    if (result.includes(section.content)) continue;
+
+    if (section.anchor) {
+      // Find the anchor header in the new content
+      const anchorIdx = result.indexOf(section.anchor);
+      if (anchorIdx >= 0) {
+        // Find the start of the next ## header after the anchor
+        const afterAnchor = anchorIdx + section.anchor.length;
+        const nextHeaderIdx = result.indexOf("\n## ", afterAnchor);
+
+        if (nextHeaderIdx >= 0) {
+          // Insert before the next header
+          const before = result.slice(0, nextHeaderIdx);
+          const after = result.slice(nextHeaderIdx);
+          result = before.trimEnd() + "\n\n" + section.content + "\n" + after;
+        } else {
+          // No next header — insert before the final newline
+          result = result.trimEnd() + "\n\n" + section.content + "\n";
+        }
+        continue;
+      }
+    }
+
+    // No anchor found: append at end
+    result = result.trimEnd() + "\n\n" + section.content + "\n";
+  }
+
+  return result;
 }
