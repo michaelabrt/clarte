@@ -100,6 +100,53 @@ describe("detectContext", () => {
     expect(ctx.frameworks.map((f) => f.name)).toContain("SQLAlchemy");
   });
 
+  it("detects a Python project with frameworks from pyproject.toml", async () => {
+    tmpDir = await makeProject({
+      "pyproject.toml": [
+        "[project]",
+        'name = "myapp"',
+        'version = "1.0.0"',
+        "dependencies = [",
+        '  "django>=4.2",',
+        '  "celery>=5.0",',
+        '  "pydantic>=2.0",',
+        "]",
+        "",
+      ].join("\n"),
+      "app.py": "import django\n",
+    });
+
+    const ctx = await detectContext(tmpDir);
+
+    expect(ctx.language).toBe("python");
+    expect(ctx.frameworks.map((f) => f.name)).toContain("Django");
+    expect(ctx.frameworks.map((f) => f.name)).toContain("Celery");
+    expect(ctx.frameworks.map((f) => f.name)).toContain("Pydantic");
+  });
+
+  it("detects Python frameworks from poetry pyproject.toml", async () => {
+    tmpDir = await makeProject({
+      "pyproject.toml": [
+        "[tool.poetry.dependencies]",
+        'python = "^3.11"',
+        'fastapi = "^0.100"',
+        'sqlalchemy = "^2.0"',
+        "",
+      ].join("\n"),
+      "poetry.lock": "# lock",
+      "main.py": "import fastapi\n",
+    });
+
+    const ctx = await detectContext(tmpDir);
+
+    expect(ctx.language).toBe("python");
+    expect(ctx.packageManager).toBe("poetry");
+    expect(ctx.frameworks.map((f) => f.name)).toContain("FastAPI");
+    expect(ctx.frameworks.map((f) => f.name)).toContain("SQLAlchemy");
+    // python itself should not appear as a dependency
+    expect(ctx.dependencies).not.toContain("python");
+  });
+
   it("returns 'other' language for empty project", async () => {
     tmpDir = await makeProject({
       "README.md": "# Hello\n",
@@ -165,7 +212,7 @@ describe("detectContext", () => {
 // ── enrichFrameworksWithUsage ───────────────────────────────────────────────
 
 describe("enrichFrameworksWithUsage", () => {
-  it("filters out frameworks with zero imports", () => {
+  it("keeps all frameworks and annotates import counts", () => {
     const frameworks: DetectedFramework[] = [
       { name: "React", version: "18.0.0" },
       { name: "Express", version: "4.0.0" },
@@ -175,7 +222,8 @@ describe("enrichFrameworksWithUsage", () => {
     const result = enrichFrameworksWithUsage(frameworks, counts);
 
     expect(result.find((f) => f.name === "React")?.importCount).toBe(10);
-    expect(result.map((f) => f.name)).not.toContain("Express");
+    expect(result.find((f) => f.name === "Express")?.importCount).toBe(0);
+    expect(result.map((f) => f.name)).toContain("Express");
   });
 
   it("sums counts across multiple dep names for same framework", () => {

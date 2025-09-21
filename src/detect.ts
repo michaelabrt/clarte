@@ -128,22 +128,26 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     hasBiome,
     hasPnpmLock,
     hasYarnLock,
-    hasBunLock,
+    hasBunLockBin,
+    hasBunLockText,
     topEntries,
   ] = await Promise.all([
     fileExists(path.join(rootDir, ".git")),
     readJsonFile(path.join(rootDir, "package.json")),
     fileExists(path.join(rootDir, "go.mod")),
     fileExists(path.join(rootDir, "Cargo.toml")),
-    readJsonFile(path.join(rootDir, "pyproject.toml")), // won't parse TOML but that's ok
+    fileExists(path.join(rootDir, "pyproject.toml")),
     fileExists(path.join(rootDir, "requirements.txt")),
     fileExists(path.join(rootDir, "tsconfig.json")),
     fileExists(path.join(rootDir, "biome.json")),
     fileExists(path.join(rootDir, "pnpm-lock.yaml")),
     fileExists(path.join(rootDir, "yarn.lock")),
     fileExists(path.join(rootDir, "bun.lockb")),
+    fileExists(path.join(rootDir, "bun.lock")),
     readDirSafe(rootDir),
   ]);
+
+  const hasBunLock = hasBunLockBin || hasBunLockText;
 
   ctx.isGitRepo = hasGit;
 
@@ -173,7 +177,7 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
       const framework = FRAMEWORK_MAP[dep];
       if (framework && !seen.has(framework)) {
         seen.add(framework);
-        const version = deps[dep]?.replace(/^[\^~>=<]/, "");
+        const version = deps[dep]?.replace(/^[\^~>=<\s]+/, "");
         ctx.frameworks.push({ name: framework, version });
       }
     }
@@ -203,30 +207,48 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     if (topEntries.includes("poetry.lock")) ctx.packageManager = "poetry";
     else ctx.packageManager = "pip";
 
-    // Detect Python frameworks from requirements.txt
+    // Detect Python frameworks from requirements.txt and/or pyproject.toml
+    const allPyDeps: string[] = [];
+    const seenFw = new Set<string>();
+
     if (hasRequirements) {
-      const { readFileOr } = await import("./utils.js");
       const reqContent = await readFileOr(path.join(rootDir, "requirements.txt"));
       if (reqContent) {
         const pkgs = reqContent
           .split("\n")
           .map((l) => l.trim().split(/[=<>!~[]/)[0].toLowerCase())
           .filter(Boolean);
-        for (const pkg of pkgs) {
-          const framework = PYTHON_FRAMEWORK_MAP[pkg];
-          if (framework) {
-            ctx.frameworks.push({ name: framework });
-          }
-        }
-        ctx.dependencies = pkgs;
+        allPyDeps.push(...pkgs);
       }
     }
 
+    if (hasPyproject) {
+      const pyDeps = await parsePyprojectDeps(path.join(rootDir, "pyproject.toml"));
+      for (const dep of pyDeps) {
+        if (!allPyDeps.includes(dep)) allPyDeps.push(dep);
+      }
+    }
+
+    for (const pkg of allPyDeps) {
+      const framework = PYTHON_FRAMEWORK_MAP[pkg];
+      if (framework && !seenFw.has(framework)) {
+        seenFw.add(framework);
+        ctx.frameworks.push({ name: framework });
+      }
+    }
+    ctx.dependencies = allPyDeps;
+
     // Detect Python linter
-    const hasRuff = topEntries.includes("ruff.toml") ||
-      topEntries.some((e) => e === "pyproject.toml");
-    if (hasRuff) ctx.linter = "ruff";
-    else ctx.linter = "none";
+    const hasRuffConfig = topEntries.includes("ruff.toml") || topEntries.includes(".ruff.toml");
+    if (!hasRuffConfig && topEntries.includes("pyproject.toml")) {
+      // Check for [tool.ruff] section in pyproject.toml
+      const pyContent = await readFileOr(path.join(rootDir, "pyproject.toml"));
+      if (pyContent?.includes("[tool.ruff]")) {
+        ctx.linter = "ruff";
+      }
+    } else if (hasRuffConfig) {
+      ctx.linter = "ruff";
+    }
   }
 
   // Report detected stack
@@ -468,7 +490,7 @@ async function detectMonorepo(
       const framework = FRAMEWORK_MAP[dep];
       if (framework && !seen.has(framework)) {
         seen.add(framework);
-        const version = deps[dep]?.replace(/^[\^~>=<]/, "");
+        const version = deps[dep]?.replace(/^[\^~>=<\s]+/, "");
         frameworks.push({ name: framework, version });
       }
     }
@@ -484,6 +506,122 @@ async function detectMonorepo(
   if (packages.length === 0) return null;
 
   return { type, packages };
+}
+
+/**
+ * Minimal TOML parser for pyproject.toml dependency extraction.
+ * Extracts package names from [project.dependencies], [tool.poetry.dependencies],
+ * and [project.optional-dependencies.*] sections.
+ */
+async function parsePyprojectDeps(filePath: string): Promise<string[]> {
+  const content = await readFileOr(filePath);
+  if (!content) return [];
+
+  const deps: string[] = [];
+  const lines = content.split("\n");
+
+  let inDepsSection = false;
+  let inPoetryDeps = false;
+  let inArrayValue = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Detect section headers
+    if (trimmed.startsWith("[")) {
+      inArrayValue = false;
+      if (
+        trimmed === "[project.dependencies]" ||
+        trimmed === "[project]" ||
+        /^\[project\.optional-dependencies\.\w+\]$/.test(trimmed)
+      ) {
+        inDepsSection = trimmed === "[project.dependencies]" || /optional-dependencies/.test(trimmed);
+        inPoetryDeps = false;
+        continue;
+      }
+      if (trimmed === "[tool.poetry.dependencies]") {
+        inPoetryDeps = true;
+        inDepsSection = false;
+        continue;
+      }
+      // Any other section header ends current section
+      inDepsSection = false;
+      inPoetryDeps = false;
+      continue;
+    }
+
+    // Inside [project] section, look for dependencies = [...]
+    if (!inDepsSection && !inPoetryDeps) {
+      if (trimmed.startsWith("dependencies")) {
+        const eqIdx = trimmed.indexOf("=");
+        if (eqIdx > 0) {
+          const rest = trimmed.slice(eqIdx + 1).trim();
+          if (rest.startsWith("[")) {
+            // Inline or multiline array
+            const items = extractTomlArrayItems(rest);
+            deps.push(...items);
+            if (!rest.includes("]")) {
+              inArrayValue = true;
+              inDepsSection = true;
+            }
+          }
+        }
+      }
+      continue;
+    }
+
+    // Inside [project.dependencies] array continuation
+    if (inDepsSection && inArrayValue) {
+      if (trimmed === "]" || trimmed.endsWith("]")) {
+        const items = extractTomlArrayItems(trimmed);
+        deps.push(...items);
+        inArrayValue = false;
+        inDepsSection = false;
+      } else {
+        const items = extractTomlArrayItems(trimmed);
+        deps.push(...items);
+      }
+      continue;
+    }
+
+    // Inside [project.dependencies] or similar list section
+    if (inDepsSection) {
+      // PEP 631 format: each line is a quoted dependency string
+      const match = trimmed.match(/^["']([^"']+)["']/);
+      if (match) {
+        const depName = match[1].split(/[=<>!~;\[]/)[0].trim().toLowerCase();
+        if (depName) deps.push(depName);
+      }
+      continue;
+    }
+
+    // Inside [tool.poetry.dependencies] section
+    if (inPoetryDeps) {
+      // Poetry format: package = "version" or package = {version = "..."}
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const match = trimmed.match(/^([\w-]+)\s*=/);
+      if (match) {
+        const depName = match[1].toLowerCase();
+        if (depName !== "python") deps.push(depName);
+      }
+    }
+  }
+
+  return deps;
+}
+
+/**
+ * Extract package names from TOML array items like '"flask>=2.0"' or '"django"'.
+ */
+function extractTomlArrayItems(text: string): string[] {
+  const items: string[] = [];
+  const regex = /["']([^"']+)["']/g;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    const depName = m[1].split(/[=<>!~;\[]/)[0].trim().toLowerCase();
+    if (depName) items.push(depName);
+  }
+  return items;
 }
 
 /**
@@ -509,16 +647,14 @@ export function enrichFrameworksWithUsage(
 ): DetectedFramework[] {
   const reverseMap = buildReverseFrameworkMap();
 
-  return frameworks
-    .map((fw) => {
-      const depNames = reverseMap.get(fw.name) ?? [];
-      let totalCount = 0;
-      for (const dep of depNames) {
-        totalCount += externalImportCounts.get(dep) ?? 0;
-      }
-      return { ...fw, importCount: totalCount };
-    })
-    .filter((fw) => fw.importCount === undefined || fw.importCount > 0);
+  return frameworks.map((fw) => {
+    const depNames = reverseMap.get(fw.name) ?? [];
+    let totalCount = 0;
+    for (const dep of depNames) {
+      totalCount += externalImportCounts.get(dep) ?? 0;
+    }
+    return { ...fw, importCount: totalCount };
+  });
 }
 
 /**

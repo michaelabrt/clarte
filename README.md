@@ -35,7 +35,7 @@ With Clarté, the agent already knows:
 | What | Example |
 |------|---------|
 | Tech stack | Next.js 14 (App Router), TypeScript, Zustand, Tailwind |
-| Key files | `src/types.ts` (highest centrality), `src/api/client.ts` |
+| Key files | `src/types.ts` (Foundation), `src/api/client.ts` (Orchestrator) |
 | Architecture | services → hooks → components → pages |
 | Active areas | `src/auth/` changed 12 times in the last 90 days |
 | Coupled files | `routes.ts` and `middleware.ts` always change together |
@@ -96,9 +96,9 @@ export function useAuth(): AuthContext  // imported by 9 files
 
 | File | Imported By | Stability |
 |------|-------------|-----------|
-| `src/types.ts` | 18 files | stable |
-| `src/lib/api-client.ts` | 12 files | stable |
-| `src/store/auth.ts` | 9 files | stable |
+| `src/types.ts` (Foundation) | 18 files | stable |
+| `src/lib/api-client.ts` (Bridge) | 12 files | stable |
+| `src/store/auth.ts` (Utility) | 9 files | stable |
 
 ## Architecture
 
@@ -140,9 +140,9 @@ Your answers are saved to `.clarte.json` so future runs skip the prompts.
 |----------|---------------|---------------------|
 | TypeScript / JavaScript | `import`, `require` | types, interfaces, functions, components, hooks, stores |
 | Python | `import`, `from ... import` | classes (BaseModel, TypedDict, dataclass, Enum), functions, type aliases |
-| Go | `import` | — |
-| Rust | `use` | — |
-| Java | `import` | — |
+| Go | `import` | - |
+| Rust | `use` | - |
+| Java | `import` | - |
 
 ## Supported Tools
 
@@ -164,10 +164,11 @@ Clarté can generate context files for multiple tools at once.
 
 Clarté runs a pipeline of static analysis steps:
 
-| Step | What it does | Why it matters |
-|------|-------------|----------------|
+| Step | How | Result |
+|------|-----|--------|
 | [Dependency graph](#dependency-graph) | Parses all `import`/`require`/`use` statements | Maps how files connect to each other |
-| [PageRank](#pagerank) | Ranks files by structural importance | Surfaces the files an agent should read first |
+| [HITS analysis](#hits-analysis) | Computes authority/hub scores, assigns roles | Surfaces foundations, orchestrators, and bridges |
+| [Config constraints](#config-constraints) | Extracts rules from tsconfig, ESLint, Biome, Prettier | Prevents wrong code from strict mode, linter rules |
 | [Dead file detection](#dead-file-detection) | Finds files nothing imports | Highlights potential cleanup targets |
 | [Dead export removal](#dead-export-removal) | Drops exports nothing imports | Saves tokens on unused code |
 | [Token budgeting](#token-budgeting) | Fits the snapshot into a token limit | Keeps context files within model limits |
@@ -189,15 +190,28 @@ src/hooks/useAuth.ts  ──imports──▶  src/types.ts
 src/pages/Login.tsx   ──imports──▶  src/hooks/useAuth.ts
 ```
 
-**Barrel file resolution** — imports from `index.ts` barrel files are followed through re-exports to credit the actual source files, preventing barrel files from inflating centrality scores.
+**Barrel file resolution**: imports from `index.ts` barrel files are followed through re-exports to credit the actual source files, preventing barrel files from inflating centrality scores.
 
-**tsconfig path aliases** — specifiers like `@/utils` are resolved via `tsconfig.json` `paths`/`baseUrl` instead of being counted as external packages.
+**tsconfig path aliases**: specifiers like `@/utils` are resolved via `tsconfig.json` `paths`/`baseUrl` instead of being counted as external packages.
 
-### PageRank
+### HITS Analysis
 
-Runs a weighted [PageRank algorithm](https://en.wikipedia.org/wiki/PageRank) on the import graph. Edges are weighted by the number of imported symbols — a file pulling 15 named imports contributes more to centrality than one importing a single function. The algorithm uses a convergence threshold (ε=1e-6) with a cap of 20 iterations.
+Runs [Kleinberg's HITS algorithm](https://en.wikipedia.org/wiki/HITS_algorithm) on the import graph to separate two kinds of important files:
 
-**Example:** In a typical project, `types.ts` or `api-client.ts` often ranks #1 because most of the codebase depends on them. These high-centrality files appear first in the generated context so agents understand foundational code before details.
+- **Authorities** (high authority score): files imported by many others, i.e. stable foundations like `types.ts`, `utils.ts`. Read these to understand the vocabulary.
+- **Hubs** (high hub score): files that import many others, i.e. orchestration points like `index.ts`, controllers. Read these to understand the flow.
+
+Each file is assigned a role based on its scores: **Foundation**, **Orchestrator**, **Bridge**, **Utility**, or **Leaf**. Edges are weighted by import specificity (number of named imports) and type-only imports contribute less weight (0.3x).
+
+### Config Constraints
+
+Scans `tsconfig.json`, ESLint, Biome, and Prettier configs to extract rules that directly affect code generation:
+
+- TypeScript strict flags (`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`)
+- Linter rules (`prefer-const`, `consistent-type-imports`, `no-explicit-any`)
+- Formatter settings (indent style, quotes, semicolons)
+
+These are rendered as actionable directives: "**Must**: TypeScript strict mode, no implicit any", "**Prefer**: type-only imports". An LLM that doesn't know about `exactOptionalPropertyTypes` will write wrong code. These constraints prevent that.
 
 ### Dead File Detection
 
@@ -213,7 +227,7 @@ This catches leftover refactors, over-exported utilities, and test-only helpers,
 
 Large projects may have more types and signatures than fit in the token budget. Clarté uses a greedy [knapsack](https://en.wikipedia.org/wiki/Knapsack_problem) approach that prioritizes:
 
-1. Entries from high-centrality files (via PageRank)
+1. Entries from high-centrality files (via HITS authority scores)
 2. Recently active files (via git history, using a logarithmic scale)
 3. Core categories (types, store shapes, component props)
 
@@ -315,7 +329,7 @@ npx clarte [directory] [options]
 | `--refresh-snapshot` | Re-scan source files and update just the code snapshot |
 | `--reconfigure` | Re-prompt even if `.clarte.json` exists |
 | `--check` | Check if the snapshot is stale via hash comparison (exit 0 = fresh, 1 = stale) |
-| `--check=timestamp` | Timestamp-only staleness check — instant, no file hashing (for shell hooks) |
+| `--check=timestamp` | Timestamp-only staleness check, no file hashing (for shell hooks) |
 | `--max-tokens=N` | Set the token budget for the code snapshot |
 | `--generate-skills` | Generate Claude Code skill files |
 | `-v, --verbose` | Show detailed progress output |

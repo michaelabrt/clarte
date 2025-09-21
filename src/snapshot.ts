@@ -86,8 +86,10 @@ const PATTERNS = {
   exportedType: /^export\s+(interface|type)\s+(\w+)/,
   /** interface FooProps { ... } (component props, even if not exported) */
   propsInterface: /^(?:export\s+)?interface\s+(\w+Props)\s*\{/,
-  /** export function foo(...) or export const foo = */
-  exportedFunction: /^export\s+(?:async\s+)?(?:function|const)\s+(\w+)/,
+  /** export function foo(...) */
+  exportedFunction: /^export\s+(?:async\s+)?function\s+(\w+)/,
+  /** export const foo = (arrow function or function expression) */
+  exportedConstFn: /^export\s+(?:async\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?(?:\(|<|\w+\s*=>)/,
   /** StateCreator<...> pattern (Zustand slices) */
   zustandSlice: /StateCreator<\s*(\w+)/,
   /** export interface FooSlice { ... } */
@@ -148,7 +150,7 @@ async function extractFromFile(
     }
 
     // -- Exported functions --
-    const funcMatch = trimmed.match(PATTERNS.exportedFunction);
+    const funcMatch = trimmed.match(PATTERNS.exportedFunction) ?? trimmed.match(PATTERNS.exportedConstFn);
     if (funcMatch) {
       const [, name] = funcMatch;
 
@@ -219,17 +221,21 @@ function extractSignatureLine(lines: string[], startIdx: number): string {
     sig += (sig ? " " : "") + lines[i].trim();
     // Stop at opening brace, arrow, or if it looks complete
     if (sig.includes("{") || sig.includes("=>")) {
-      // Trim everything after the opening brace / arrow
       const braceIdx = sig.indexOf("{");
       const arrowIdx = sig.indexOf("=>");
-      const cutIdx =
-        braceIdx >= 0 && arrowIdx >= 0
-          ? Math.min(braceIdx, arrowIdx)
-          : braceIdx >= 0
-            ? braceIdx
-            : arrowIdx >= 0
-              ? arrowIdx + 2
-              : sig.length;
+
+      let cutIdx: number;
+      if (arrowIdx >= 0 && (braceIdx < 0 || arrowIdx < braceIdx)) {
+        // Arrow function: preserve "=>" and cut at the opening brace after it
+        const braceAfterArrow = sig.indexOf("{", arrowIdx + 2);
+        cutIdx = braceAfterArrow >= 0 ? braceAfterArrow : sig.length;
+      } else if (braceIdx >= 0) {
+        // Regular function: cut at opening brace
+        cutIdx = braceIdx;
+      } else {
+        cutIdx = sig.length;
+      }
+
       sig = sig.slice(0, cutIdx).trim();
       break;
     }

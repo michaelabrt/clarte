@@ -22,8 +22,10 @@ import {
   computeInstability,
   detectCommunities,
   computeExportCoverage,
+  findDeadFiles,
 } from "./graph.js";
 import { analyzeGitActivity } from "./git-analysis.js";
+import { scanConfigConstraints } from "./config-scan.js";
 import { formatBytes } from "./utils.js";
 import {
   animateGraphBuild,
@@ -233,19 +235,19 @@ async function main() {
   // Step 1.7: Structural analysis (progressive reveal, one animation per algorithm)
   const fileCount = graph.centrality.size;
 
-  // PageRank
+  // HITS analysis
   await animatePageRank();
   const hubFiles = getHubFiles(graph);
   const topHubName = hubFiles[0]?.path ?? "";
   p.log.step(
     hubFiles.length > 0
-      ? `${t.brand("PageRank")}       found ${t.bold(String(hubFiles.length))} hub files` +
+      ? `${t.brand("HITS")}           found ${t.bold(String(hubFiles.length))} key files` +
         (topHubName ? t.muted(` (top: ${topHubName})`) : "")
-      : `${t.brand("PageRank")}       ${t.muted("no hub files detected")}`,
+      : `${t.brand("HITS")}           ${t.muted("no key files detected")}`,
   );
   if (verbose && hubFiles.length > 0) {
     for (const h of hubFiles.slice(0, 5)) {
-      p.log.info(t.muted(`  ${h.path} (centrality: ${h.centrality.toFixed(3)}, imported by ${h.importedBy})`));
+      p.log.info(t.muted(`  ${h.path} (auth: ${h.authority.toFixed(3)}, hub: ${h.hubScore.toFixed(3)}, role: ${h.role})`));
     }
   }
 
@@ -341,7 +343,31 @@ async function main() {
     p.log.step(`${t.brand("Git")}            ${t.muted("not a git repo, skipped")}`);
   }
 
-  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, exportCoverage };
+  // Dead files (zero in-degree, excluding entry points and tests)
+  const deadFiles = findDeadFiles(graph);
+  if (deadFiles.length > 0) {
+    p.log.step(
+      `${t.warn("Dead files")}     ${t.bold(String(deadFiles.length))} file${deadFiles.length === 1 ? "" : "s"} not imported by anything`,
+    );
+    if (verbose) {
+      for (const f of deadFiles.slice(0, 5)) {
+        p.log.info(t.muted(`  ${f}`));
+      }
+    }
+  }
+
+  // Config constraint extraction
+  const configConstraints = await scanConfigConstraints(rootDir, detected);
+  const hasConstraints = configConstraints.typescript || configConstraints.linter || configConstraints.formatter;
+  if (hasConstraints) {
+    const parts: string[] = [];
+    if (configConstraints.typescript) parts.push("tsconfig");
+    if (configConstraints.linter) parts.push(configConstraints.linter.tool.toLowerCase());
+    if (configConstraints.formatter && !configConstraints.linter) parts.push(configConstraints.formatter.tool.toLowerCase());
+    p.log.step(`${t.brand("Config")}         extracted constraints from ${parts.join(", ")}`);
+  }
+
+  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, exportCoverage, deadFiles, configConstraints };
 
   // Analysis report box
   {

@@ -86,10 +86,10 @@ function buildArchitectureSkill(analysis?: ContextAnalysis): ClaudeSkill | null 
   ];
 
   if (analysis.hubFiles.length > 0) {
-    bodyLines.push("## Key Files (by centrality)");
+    bodyLines.push("## Key Files (by HITS analysis)");
     bodyLines.push("");
     for (const hub of analysis.hubFiles) {
-      bodyLines.push(`- \`${hub.path}\` (imported by ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"})`);
+      bodyLines.push(`- \`${hub.path}\` — ${hub.role} (imported by ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"})`);
     }
     bodyLines.push("");
   }

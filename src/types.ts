@@ -1,3 +1,26 @@
+/** Functional role derived from HITS authority/hub scores */
+export type FileRole = "Foundation" | "Orchestrator" | "Bridge" | "Utility" | "Leaf";
+
+/** Extracted constraints from tsconfig, linter, and formatter configs */
+export interface ConfigConstraints {
+  typescript?: {
+    strict: boolean;
+    target: string;
+    pathAliases: Record<string, string[]>;
+    otherStrict: string[];
+  };
+  linter?: {
+    tool: string;
+    keyRules: Array<{ rule: string; setting: string; impact: string }>;
+  };
+  formatter?: {
+    tool: string;
+    indent: string;
+    quotes: string;
+    semicolons: boolean;
+  };
+}
+
 /** Supported AI IDE/tool targets */
 export type IDETarget =
   | "claude"
@@ -203,6 +226,8 @@ export interface ImportEdge {
   specifier: string;
   /** Named imports (e.g. ['useState', 'useEffect']) */
   importedNames: string[];
+  /** Whether this is a type-only import (import type { ... }) */
+  isTypeOnly?: boolean;
 }
 
 /** Full import graph for a project */
@@ -211,18 +236,28 @@ export interface ImportGraph {
   edges: ImportEdge[];
   /** Number of files that import each file */
   inDegree: Map<string, number>;
-  /** PageRank-style centrality scores (0-1) */
+  /** Centrality scores (0-1) — set to HITS authority for backward compat */
   centrality: Map<string, number>;
   /** How many files import each external package */
   externalImportCounts: Map<string, number>;
+  /** HITS authority scores (0-1): how much a file is depended upon */
+  authority: Map<string, number>;
+  /** HITS hub scores (0-1): how much a file depends on others */
+  hubScores: Map<string, number>;
 }
 
-/** A highly-connected file identified by centrality analysis */
+/** A highly-connected file identified by HITS analysis */
 export interface HubFile {
   /** Relative file path */
   path: string;
-  /** PageRank centrality score (0-1) */
+  /** Centrality score (0-1) — set to authority for backward compat */
   centrality: number;
+  /** HITS authority score (0-1): how much this file is depended upon */
+  authority: number;
+  /** HITS hub score (0-1): how much this file orchestrates others */
+  hubScore: number;
+  /** Functional role derived from authority/hub balance */
+  role: FileRole;
   /** Number of files that import this file */
   importedBy: number;
   /** Number of internal files this file imports */
@@ -341,4 +376,8 @@ export interface ContextAnalysis {
   communities: Community[];
   /** Export coverage metrics per file */
   exportCoverage?: ExportCoverage[];
+  /** Files with zero in-degree (not imported by anything) */
+  deadFiles?: string[];
+  /** Extracted config constraints (tsconfig, linter, formatter) */
+  configConstraints?: ConfigConstraints;
 }
