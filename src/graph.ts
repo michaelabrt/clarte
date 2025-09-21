@@ -1,5 +1,5 @@
 import path from "node:path";
-import fg from "fast-glob";
+import { glob } from "tinyglobby";
 import { readFileOr, readJsonFile } from "./utils.js";
 import type {
   ArchitecturalLayer,
@@ -363,11 +363,18 @@ function resolveImport(
   fromFile: string,
   lang: Language,
   allFiles: Set<string>,
+  pathAliases?: PathAlias[],
 ): string | null {
   switch (lang) {
     case "typescript":
-    case "javascript":
+    case "javascript": {
+      // Try tsconfig path aliases first for non-relative specifiers
+      if (pathAliases && !specifier.startsWith("./") && !specifier.startsWith("../")) {
+        const resolved = resolvePathAlias(specifier, allFiles, pathAliases);
+        if (resolved) return resolved;
+      }
       return resolveJsImport(specifier, fromFile, allFiles);
+    }
     case "python":
       return resolvePythonImport(specifier, fromFile, allFiles);
     default:
@@ -377,7 +384,124 @@ function resolveImport(
   }
 }
 
-// ── HITS (Kleinberg) centrality ───────────────────────────────────────
+// ── tsconfig path alias resolution ────────────────────────────────────
+
+interface PathAlias {
+  prefix: string;
+  replacement: string;
+}
+
+/**
+ * Load tsconfig.json paths and baseUrl to resolve path aliases.
+ * Returns alias mappings like { prefix: "@/", replacement: "src/" }.
+ */
+async function loadTsconfigPaths(rootDir: string): Promise<PathAlias[]> {
+  const tsconfig = await readJsonFile(path.join(rootDir, "tsconfig.json"));
+  if (!tsconfig) return [];
+
+  const compilerOptions = tsconfig.compilerOptions as Record<string, unknown> | undefined;
+  if (!compilerOptions) return [];
+
+  const baseUrl = (compilerOptions.baseUrl as string) ?? ".";
+  const paths = compilerOptions.paths as Record<string, string[]> | undefined;
+  if (!paths) return [];
+
+  const aliases: PathAlias[] = [];
+  for (const [pattern, mappings] of Object.entries(paths)) {
+    if (!mappings || mappings.length === 0) continue;
+    // Convert "@ /*" -> prefix "@/", replacement "src/"
+    const prefix = pattern.replace(/\*$/, "");
+    const target = mappings[0].replace(/\*$/, "");
+    const replacement = path.join(baseUrl, target).replace(/\\/g, "/");
+    aliases.push({ prefix, replacement });
+  }
+
+  return aliases;
+}
+
+/**
+ * Try to resolve a specifier using tsconfig path aliases.
+ */
+function resolvePathAlias(
+  specifier: string,
+  allFiles: Set<string>,
+  aliases: PathAlias[],
+): string | null {
+  for (const { prefix, replacement } of aliases) {
+    if (!specifier.startsWith(prefix)) continue;
+    const rest = specifier.slice(prefix.length);
+    const raw = (replacement + rest).replace(/\\/g, "/");
+
+    // Try exact match, then with extensions, then with /index
+    const stripped = raw.replace(/\.(jsx?|mjs)$/, "");
+    const bases = stripped !== raw ? [raw, stripped] : [raw];
+    for (const base of bases) {
+      if (allFiles.has(base)) return base;
+      for (const ext of JS_EXTENSIONS) {
+        if (allFiles.has(base + ext)) return base + ext;
+      }
+      for (const idx of INDEX_FILES) {
+        if (allFiles.has(base + idx)) return base + idx;
+      }
+    }
+  }
+  return null;
+}
+
+// ── Barrel file (re-export) resolution ────────────────────────────────
+
+/** Regex to match re-export statements: export { ... } from '...' / export * from '...' */
+const RE_EXPORT_NAMED = /export\s+\{([^}]*)\}\s+from\s+['"]([^'"]+)['"]/g;
+const RE_EXPORT_STAR = /export\s+\*\s+from\s+['"]([^'"]+)['"]/g;
+
+/**
+ * Scan barrel files (index.ts, etc.) and build a map from barrel path to
+ * the re-exported source files they re-export from.
+ */
+async function resolveBarrelFiles(
+  rootDir: string,
+  fileSet: Set<string>,
+): Promise<Map<string, string[]>> {
+  const barrelMap = new Map<string, string[]>();
+
+  for (const file of fileSet) {
+    // Only scan index files as potential barrels
+    const basename = path.basename(file).replace(/\.[^.]+$/, "");
+    if (basename !== "index") continue;
+
+    const absPath = path.join(rootDir, file);
+    const content = await readFileOr(absPath);
+    if (!content) continue;
+
+    const sources: string[] = [];
+
+    // export { ... } from './foo'
+    for (const m of content.matchAll(RE_EXPORT_NAMED)) {
+      const specifier = m[2];
+      if (specifier.startsWith("./") || specifier.startsWith("../")) {
+        const resolved = resolveJsImport(specifier, file, fileSet);
+        if (resolved) sources.push(resolved);
+      }
+    }
+
+    // export * from './foo'
+    for (const m of content.matchAll(RE_EXPORT_STAR)) {
+      const specifier = m[1];
+      if (specifier.startsWith("./") || specifier.startsWith("../")) {
+        const resolved = resolveJsImport(specifier, file, fileSet);
+        if (resolved) sources.push(resolved);
+      }
+    }
+
+    if (sources.length > 0) {
+      barrelMap.set(file, [...new Set(sources)]);
+    }
+  }
+
+  return barrelMap;
+}
+
+// ── PageRank centrality (weighted, with convergence check) ────────────
 
 /**
  * Compute HITS authority and hub scores for all files.
@@ -389,22 +513,27 @@ function resolveImport(
 export function computeHITS(
   files: string[],
   edges: ImportEdge[],
-  maxIterations = 30,
+  maxIterations = 20,
+  damping = 0.85,
   epsilon = 1e-6,
-): { authority: Map<string, number>; hub: Map<string, number> } {
+): Map<string, number> {
   const n = files.length;
   if (n === 0) return { authority: new Map(), hub: new Map() };
 
-  const fileSet = new Set(files);
-
-  // Build weighted adjacency lists (internal edges only)
-  // forward: from -> [{to, weight}]   (for hub update)
-  // reverse: to -> [{from, weight}]   (for authority update)
-  const forward = new Map<string, Array<{ to: string; weight: number }>>();
-  const reverse = new Map<string, Array<{ from: string; weight: number }>>();
+  // Build weighted adjacency: from -> [{to, weight}, ...]
+  // Weight = number of imported symbols (minimum 1)
+  const outLinks = new Map<string, Array<{ to: string; weight: number }>>();
+  const outWeightSum = new Map<string, number>();
   for (const file of files) {
-    forward.set(file, []);
-    reverse.set(file, []);
+    outLinks.set(file, []);
+    outWeightSum.set(file, 0);
+  }
+  for (const edge of edges) {
+    if (!edge.isExternal && outLinks.has(edge.from)) {
+      const weight = Math.max(1, edge.importedNames.length);
+      outLinks.get(edge.from)!.push({ to: edge.to, weight });
+      outWeightSum.set(edge.from, (outWeightSum.get(edge.from) ?? 0) + weight);
+    }
   }
 
   for (const edge of edges) {
@@ -428,55 +557,31 @@ export function computeHITS(
   const fileIndex = new Map<string, number>();
   for (let i = 0; i < n; i++) fileIndex.set(files[i], i);
 
-  // Iterate
+  // Iterate with convergence check
   for (let iter = 0; iter < maxIterations; iter++) {
-    const newAuth = new Float64Array(n);
-    const newHub = new Float64Array(n);
+    const next = new Map<string, number>();
+    for (const file of files) next.set(file, (1 - damping) / n);
 
-    // Update authorities: newAuth[v] = Σ hub[u] * w(u→v)
-    for (let vi = 0; vi < n; vi++) {
-      const file = files[vi];
-      let sum = 0;
-      for (const { from, weight } of reverse.get(file)!) {
-        sum += hub[fileIndex.get(from)!] * weight;
+    for (const file of files) {
+      const links = outLinks.get(file) ?? [];
+      if (links.length === 0) continue;
+      const totalWeight = outWeightSum.get(file) ?? 1;
+      const score = scores.get(file) ?? 0;
+      for (const { to, weight } of links) {
+        const share = (damping * score * weight) / totalWeight;
+        next.set(to, (next.get(to) ?? 0) + share);
       }
       newAuth[vi] = sum;
     }
 
-    // Update hubs (using new auth): newHub[v] = Σ newAuth[w] * w(v→w)
-    for (let vi = 0; vi < n; vi++) {
-      const file = files[vi];
-      let sum = 0;
-      for (const { to, weight } of forward.get(file)!) {
-        sum += newAuth[fileIndex.get(to)!] * weight;
-      }
-      newHub[vi] = sum;
+    // Check convergence: max absolute difference
+    let maxDiff = 0;
+    for (const file of files) {
+      const diff = Math.abs((next.get(file) ?? 0) - (scores.get(file) ?? 0));
+      if (diff > maxDiff) maxDiff = diff;
     }
-
-    // L2 normalize
-    let authNorm = 0;
-    let hubNorm = 0;
-    for (let i = 0; i < n; i++) {
-      authNorm += newAuth[i] * newAuth[i];
-      hubNorm += newHub[i] * newHub[i];
-    }
-    authNorm = Math.sqrt(authNorm) || 1;
-    hubNorm = Math.sqrt(hubNorm) || 1;
-    for (let i = 0; i < n; i++) {
-      newAuth[i] /= authNorm;
-      newHub[i] /= hubNorm;
-    }
-
-    // Convergence check
-    let maxDelta = 0;
-    for (let i = 0; i < n; i++) {
-      maxDelta = Math.max(maxDelta, Math.abs(newAuth[i] - auth[i]) + Math.abs(newHub[i] - hub[i]));
-    }
-
-    auth = newAuth;
-    hub = newHub;
-
-    if (maxDelta < epsilon) break;
+    scores = next;
+    if (maxDiff < epsilon) break;
   }
 
   // Min-max normalize to 0-1
@@ -525,7 +630,7 @@ export async function buildImportGraph(
   const globs = getSourceGlob(language);
   let files: string[];
   try {
-    files = await fg(globs, {
+    files = await glob(globs, {
       cwd: rootDir,
       ignore: [
         "**/node_modules/**",
@@ -560,12 +665,20 @@ export async function buildImportGraph(
   const inDegree = new Map<string, number>();
   const externalImportCounts = new Map<string, number>();
 
-  // Load path aliases for TS/JS projects
-  const pathAliases = (language === "typescript" || language === "javascript")
-    ? await loadTsconfigPaths(rootDir)
-    : [];
+  // Load tsconfig path aliases for JS/TS projects
+  const isJsTs = language === "typescript" || language === "javascript";
+  const pathAliases = isJsTs ? await loadTsconfigPaths(rootDir) : [];
   if (pathAliases.length > 0) {
-    onProgress?.(`Loaded ${pathAliases.length} path alias(es) from tsconfig`);
+    onProgress?.(`Loaded ${pathAliases.length} tsconfig path alias${pathAliases.length === 1 ? "" : "es"}`);
+  }
+
+  // Resolve barrel file re-exports for JS/TS projects
+  let barrelMap = new Map<string, string[]>();
+  if (isJsTs) {
+    barrelMap = await resolveBarrelFiles(rootDir, fileSet);
+    if (barrelMap.size > 0) {
+      onProgress?.(`Resolved ${barrelMap.size} barrel file${barrelMap.size === 1 ? "" : "s"}`);
+    }
   }
 
   // Init in-degree
@@ -587,18 +700,59 @@ export async function buildImportGraph(
     for (const raw of rawImports) {
       const isRelative = isRelativeSpecifier(raw.specifier, language);
 
-      if (isRelative) {
-        const resolved = resolveImport(raw.specifier, file, language, fileSet);
+      if (isRelative || (pathAliases.length > 0 && !isRelative)) {
+        const resolved = resolveImport(raw.specifier, file, language, fileSet, pathAliases);
         if (resolved) {
+          // Barrel file resolution: if resolved target is a barrel (re-export),
+          // create edges to the actual source files instead
+          const barrelSources = barrelMap.get(resolved);
+          if (barrelSources && barrelSources.length > 0) {
+            // Credit the barrel file with an edge too (it is a real file)
+            edges.push({
+              from: file,
+              to: resolved,
+              isExternal: false,
+              specifier: raw.specifier,
+              importedNames: [],
+            });
+            inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
+
+            // Add edges to the actual source files behind the barrel
+            for (const source of barrelSources) {
+              edges.push({
+                from: file,
+                to: source,
+                isExternal: false,
+                specifier: raw.specifier,
+                importedNames: raw.importedNames,
+              });
+              inDegree.set(source, (inDegree.get(source) ?? 0) + 1);
+            }
+          } else {
+            edges.push({
+              from: file,
+              to: resolved,
+              isExternal: false,
+              specifier: raw.specifier,
+              importedNames: raw.importedNames,
+            });
+            inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
+          }
+        } else if (!isRelative) {
+          // Path alias didn't resolve — treat as external package
+          const pkgName = getPackageName(raw.specifier);
           edges.push({
             from: file,
-            to: resolved,
-            isExternal: false,
+            to: pkgName,
+            isExternal: true,
             specifier: raw.specifier,
             importedNames: raw.importedNames,
             isTypeOnly: raw.isTypeOnly,
           });
-          inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
+          externalImportCounts.set(
+            pkgName,
+            (externalImportCounts.get(pkgName) ?? 0) + 1,
+          );
         }
       } else {
         // Try path alias resolution before treating as external
@@ -637,8 +791,8 @@ export async function buildImportGraph(
     }
   }
 
-  onProgress?.("Computing centrality (HITS)...");
-  const { authority, hub: hubScores } = computeHITS(files, edges);
+  onProgress?.("Computing centrality (weighted PageRank)...");
+  const centrality = computePageRank(files, edges);
 
   // Use authority as centrality for backward compat (snapshot.ts etc.)
   return { edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores };
@@ -779,7 +933,7 @@ export function findSCCs(graph: ImportGraph): string[][] {
 
 /**
  * Detect circular dependencies using Tarjan's SCC algorithm.
- * Each SCC with size > 1 is reported as a circular dependency chain.
+ * For each SCC, finds the shortest actual cycle via BFS for actionable output.
  * Returns up to maxCycles results.
  */
 export function findCircularDeps(
@@ -788,18 +942,65 @@ export function findCircularDeps(
 ): CircularDependency[] {
   const sccs = findSCCs(graph);
 
-  // Convert SCCs to circular dependency chains
+  // Build adjacency restricted to internal edges
+  const adj = new Map<string, Set<string>>();
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
+    adj.get(edge.from)!.add(edge.to);
+  }
+
   // Sort by size (smallest first, more actionable)
   sccs.sort((a, b) => a.length - b.length);
 
   const cycles: CircularDependency[] = [];
   for (const scc of sccs) {
     if (cycles.length >= maxCycles) break;
-    // Create a chain by closing the loop
-    cycles.push({ chain: [...scc, scc[0]] });
+
+    // Find shortest cycle in this SCC via BFS from the first node
+    const sccSet = new Set(scc);
+    const shortestCycle = findShortestCycleInSCC(scc[0], sccSet, adj);
+    if (shortestCycle) {
+      cycles.push({ chain: shortestCycle });
+    } else {
+      // Fallback: just close the loop with SCC order
+      cycles.push({ chain: [...scc, scc[0]] });
+    }
   }
 
   return cycles;
+}
+
+/**
+ * BFS to find the shortest cycle starting and ending at `start` within `sccSet`.
+ */
+function findShortestCycleInSCC(
+  start: string,
+  sccSet: Set<string>,
+  adj: Map<string, Set<string>>,
+): string[] | null {
+  // BFS from start, only traversing nodes in the SCC
+  const queue: Array<{ node: string; path: string[] }> = [{ node: start, path: [start] }];
+  const visited = new Set<string>();
+
+  while (queue.length > 0) {
+    const { node, path } = queue.shift()!;
+    const neighbors = adj.get(node);
+    if (!neighbors) continue;
+
+    for (const next of neighbors) {
+      if (!sccSet.has(next)) continue;
+      if (next === start && path.length >= 2) {
+        // Found a cycle back to start
+        return [...path, start];
+      }
+      if (!visited.has(next)) {
+        visited.add(next);
+        queue.push({ node: next, path: [...path, next] });
+      }
+    }
+  }
+  return null;
 }
 
 /** Directory patterns for classifying files into architectural layers */
@@ -917,6 +1118,7 @@ export function computeInstability(graph: ImportGraph): FileInstability[] {
  * Detect communities of tightly-connected files using label propagation.
  * Each file starts with a unique label; iteratively adopts the most common
  * label among its neighbors (both directions). Returns communities with size >= 3.
+ * Uses deterministic ordering (sorted by file path) for reproducible results.
  */
 export function detectCommunities(graph: ImportGraph): Community[] {
   // Build undirected adjacency from internal edges
@@ -934,7 +1136,8 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     adj.get(edge.to)!.add(edge.from);
   }
 
-  const files = [...allFiles];
+  // Sort files deterministically for reproducible community detection
+  const files = [...allFiles].sort();
   if (files.length === 0) return [];
 
   // Initialize: each file gets its own numeric label
@@ -943,17 +1146,11 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     labels.set(files[i], i);
   }
 
-  // Iterate label propagation (~10 rounds)
+  // Iterate label propagation (~10 rounds) with deterministic ordering
   for (let iter = 0; iter < 10; iter++) {
     let changed = false;
-    // Shuffle order for better convergence
-    const shuffled = [...files];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
 
-    for (const file of shuffled) {
+    for (const file of files) {
       const neighbors = adj.get(file);
       if (!neighbors || neighbors.size === 0) continue;
 
@@ -964,11 +1161,11 @@ export function detectCommunities(graph: ImportGraph): Community[] {
         labelCounts.set(lbl, (labelCounts.get(lbl) ?? 0) + 1);
       }
 
-      // Find most common label
+      // Find most common label (break ties by smallest label for determinism)
       let maxCount = 0;
       let bestLabel = labels.get(file)!;
       for (const [lbl, count] of labelCounts) {
-        if (count > maxCount) {
+        if (count > maxCount || (count === maxCount && lbl < bestLabel)) {
           maxCount = count;
           bestLabel = lbl;
         }

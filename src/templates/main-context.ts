@@ -113,10 +113,10 @@ export async function buildMainContext(
   // -- Key Files (hub files) --
   if (analysis?.hubFiles && analysis.hubFiles.length > 0) {
     // Build instability lookup for flagging risky files
-    const instabilityMap = new Map<string, number>();
+    const instabilityMap = new Map<string, { instability: number; fanIn: number; fanOut: number }>();
     if (analysis.instabilities) {
       for (const inst of analysis.instabilities) {
-        instabilityMap.set(inst.path, inst.instability);
+        instabilityMap.set(inst.path, { instability: inst.instability, fanIn: inst.fanIn, fanOut: inst.fanOut });
       }
     }
 
@@ -131,7 +131,7 @@ export async function buildMainContext(
     for (const hub of analysis.hubFiles) {
       const inst = instabilityMap.get(hub.path);
       const stabilityCell = inst != null
-        ? `${(inst * 100).toFixed(0)}% unstable ⚠️`
+        ? `${(inst.instability * 100).toFixed(0)}% unstable`
         : "stable";
       const roleTag = hub.role !== "Leaf" ? ` (${hub.role})` : "";
       sections.push(
@@ -139,6 +139,15 @@ export async function buildMainContext(
       );
     }
     sections.push("");
+
+    // Add explanations for unstable hub files
+    const unstableHubs = analysis.hubFiles.filter(h => instabilityMap.has(h.path));
+    if (unstableHubs.length > 0) {
+      sections.push(
+        "> **Reading guide:** Files with high instability have many outgoing dependencies relative to incoming ones — changes to these files tend to ripple outward. Stable files (low instability) are foundational and widely depended upon — modify them with extra care.",
+      );
+      sections.push("");
+    }
   }
 
   // -- Architecture (layer ordering) --
@@ -169,7 +178,7 @@ export async function buildMainContext(
     sections.push("## Change Coupling");
     sections.push("");
     sections.push(
-      "Files that frequently change together — when modifying one, check if the other needs updates too.",
+      "Files that frequently change together — when modifying one, you likely need to update the other. High confidence means these files are strongly coupled in practice.",
     );
     sections.push("");
     sections.push("| File A | File B | Co-changes | Confidence |");
@@ -187,7 +196,7 @@ export async function buildMainContext(
     sections.push("## Circular Dependencies");
     sections.push("");
     sections.push(
-      "> These circular import chains may cause unexpected behavior when modified.",
+      "> Circular imports create tight coupling: changing any file in the cycle may require changes to all others. Break cycles by extracting shared types into a separate file or using dependency inversion.",
     );
     sections.push("");
     for (const dep of analysis.circularDeps) {

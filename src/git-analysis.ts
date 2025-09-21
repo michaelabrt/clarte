@@ -109,13 +109,28 @@ export function analyzeGitActivity(
         lastChanged: lastChanged.get(filePath) ?? "",
       }));
 
-    // Analyze change coupling using the same parsed commits
+    for (const [filePath, commits] of sorted.slice(0, 15)) {
+      let lastChanged = "";
+      try {
+        lastChanged = execSync(
+          `git log -1 --format="%ar" -- "${filePath}"`,
+          { cwd: rootDir, encoding: "utf-8", timeout: 5000 },
+        ).trim();
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        onProgress?.(`Warning: could not get last change date for ${filePath}: ${msg}`);
+      }
+      hotFiles.push({ path: filePath, commits, lastChanged });
+    }
+
+    // Analyze change coupling
     onProgress?.("Analyzing change coupling...");
-    const changeCoupling = computeChangeCoupling(commits);
+    const changeCoupling = analyzeChangeCoupling(rootDir, onProgress);
 
     return { commitCounts, hotFiles, changeCoupling };
-  } catch {
-    // Not a git repo, git not available, or command failed
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    onProgress?.(`Warning: git analysis failed: ${msg}`);
     return null;
   }
 }
@@ -131,9 +146,88 @@ const NOISE_PATTERNS: Array<{ pattern: RegExp; discount: number }> = [
  * Compute the noise discount for a commit based on its message.
  * Returns 1.0 for normal commits, lower values for noisy commits.
  */
-function noiseDiscount(message: string): number {
-  for (const { pattern, discount } of NOISE_PATTERNS) {
-    if (pattern.test(message)) return discount;
+export function analyzeChangeCoupling(rootDir: string, onProgress?: ProgressCallback): ChangeCoupling[] {
+  try {
+    // Get commit hashes from last 90 days
+    const hashOutput = execSync(
+      'git log --format="%H" --since="90 days ago"',
+      { cwd: rootDir, encoding: "utf-8", timeout: 10000 },
+    ).trim();
+
+    if (!hashOutput) return [];
+
+    const hashes = hashOutput.split("\n").filter(Boolean);
+    if (hashes.length === 0) return [];
+
+    // Get files per commit (batch for efficiency)
+    const filesPerCommit: string[][] = [];
+    const commitCountPerFile = new Map<string, number>();
+    let skippedCommits = 0;
+
+    for (const hash of hashes) {
+      try {
+        const filesOutput = execSync(
+          `git show --name-only --format="" ${hash}`,
+          { cwd: rootDir, encoding: "utf-8", timeout: 5000 },
+        ).trim();
+
+        const files = filesOutput
+          .split("\n")
+          .map((f) => f.trim())
+          .filter(Boolean);
+
+        if (files.length >= 2 && files.length <= 20) {
+          // Skip huge commits (merges) and single-file commits
+          filesPerCommit.push(files);
+          for (const file of files) {
+            commitCountPerFile.set(file, (commitCountPerFile.get(file) ?? 0) + 1);
+          }
+        }
+      } catch {
+        skippedCommits++;
+      }
+    }
+
+    if (skippedCommits > 0) {
+      onProgress?.(`Warning: skipped ${skippedCommits} commit${skippedCommits === 1 ? "" : "s"} due to errors`);
+    }
+
+    // Build co-occurrence matrix
+    const coChanges = new Map<string, number>();
+    for (const files of filesPerCommit) {
+      for (let i = 0; i < files.length; i++) {
+        for (let j = i + 1; j < files.length; j++) {
+          const key = [files[i], files[j]].sort().join("||");
+          coChanges.set(key, (coChanges.get(key) ?? 0) + 1);
+        }
+      }
+    }
+
+    // Compute coupling metrics
+    const results: ChangeCoupling[] = [];
+    const totalCommits = filesPerCommit.length;
+
+    for (const [key, coChangeCount] of coChanges) {
+      if (coChangeCount < 3) continue; // Minimum threshold
+
+      const [fileA, fileB] = key.split("||");
+      const commitsA = commitCountPerFile.get(fileA) ?? 0;
+      const commitsB = commitCountPerFile.get(fileB) ?? 0;
+      const confidence = coChangeCount / Math.max(commitsA, commitsB);
+      const support = coChangeCount / totalCommits;
+
+      if (confidence >= 0.5) {
+        results.push({ fileA, fileB, coChangeCount, support, confidence });
+      }
+    }
+
+    // Sort by confidence descending, return top 10
+    results.sort((a, b) => b.confidence - a.confidence);
+    return results.slice(0, 10);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    onProgress?.(`Warning: change coupling analysis failed: ${msg}`);
+    return [];
   }
   return 1.0;
 }

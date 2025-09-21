@@ -1,5 +1,5 @@
 import path from "node:path";
-import fg from "fast-glob";
+import { glob } from "tinyglobby";
 import { estimateTokens, readFileOr } from "./utils.js";
 import { findUsedExports } from "./graph.js";
 import type { CodeSnapshot, DetectedContext, GitAnalysis, ImportGraph, Language, ProgressCallback, SnapshotEntry } from "./types.js";
@@ -581,7 +581,7 @@ export async function generateSnapshot(
     );
   }
 
-  const files = await fg(patterns, {
+  const files = await glob(patterns, {
     cwd: ctx.rootDir,
     ignore: ignorePatterns,
     absolute: false,
@@ -721,11 +721,13 @@ function applyTokenBudget(
     let categoryBoost = 1.0;
     if (entry.category === "type" || entry.category === "interface") categoryBoost = 1.3;
 
-    // Git boost: files changed recently get priority
+    // Git boost: logarithmic scale so 100 commits scores higher than 20
     let gitBoost = 1.0;
     if (gitActivity) {
       const commits = gitActivity.commitCounts.get(entry.file) ?? 0;
-      gitBoost = 1.0 + Math.min(0.5, commits / 20);
+      if (commits > 0) {
+        gitBoost = 1.0 + Math.log2(commits + 1) * 0.15;
+      }
     }
 
     const value = (centrality * categoryBoost * gitBoost) / tokens;
