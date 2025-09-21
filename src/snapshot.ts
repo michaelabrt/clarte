@@ -1,7 +1,7 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
 import { estimateTokens, readFileOr } from "./utils.js";
-import { findUsedExports } from "./graph.js";
+import { findUsedExports, stripCommentsAndStrings } from "./graph.js";
 import type { CodeSnapshot, DetectedContext, GitAnalysis, ImportGraph, Language, ProgressCallback, SnapshotEntry } from "./types.js";
 
 /**
@@ -201,7 +201,9 @@ function extractBlock(lines: string[], startIdx: number): string {
     const line = lines[i];
     result += (result ? "\n" : "") + line;
 
-    for (const ch of line) {
+    // Strip comments/strings for accurate brace counting
+    const cleaned = stripCommentsAndStrings(line);
+    for (const ch of cleaned) {
       if (ch === "{") depth++;
       if (ch === "}") depth--;
     }

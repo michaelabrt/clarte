@@ -45,6 +45,214 @@ const RUST_USE = /(?:pub\s+)?use\s+((?:crate|super|self)(?:::\w+)*(?:::\{[^}]*\}
 /** Rust: mod foo; */
 const RUST_MOD = /mod\s+(\w+)\s*;/g;
 
+// ── Comment/string stripping for accurate import parsing ──────────────
+
+/**
+ * Strip comments and string literals from JS/TS source code.
+ * Replaces stripped content with whitespace to preserve line structure.
+ *
+ * When `commentsOnly` is true, only strips comments (preserves strings).
+ * This is used for import parsing where specifiers live inside strings.
+ *
+ * When `commentsOnly` is false, strips both comments and strings.
+ * This is used for brace counting where string content is noise.
+ */
+export function stripCommentsAndStrings(content: string, commentsOnly = false): string {
+  let result = "";
+  let i = 0;
+  const len = content.length;
+
+  while (i < len) {
+    const ch = content[i];
+    const next = i + 1 < len ? content[i + 1] : "";
+
+    // Single-line comment: // ...
+    if (ch === "/" && next === "/") {
+      result += "  ";
+      i += 2;
+      while (i < len && content[i] !== "\n") {
+        result += " ";
+        i++;
+      }
+      continue;
+    }
+
+    // Block comment: /* ... */
+    if (ch === "/" && next === "*") {
+      result += "  ";
+      i += 2;
+      while (i < len) {
+        if (content[i] === "*" && i + 1 < len && content[i + 1] === "/") {
+          result += "  ";
+          i += 2;
+          break;
+        }
+        result += content[i] === "\n" ? "\n" : " ";
+        i++;
+      }
+      continue;
+    }
+
+    if (!commentsOnly) {
+      // Template literal: `...` (handles nested ${} by tracking depth)
+      if (ch === "`") {
+        result += " ";
+        i++;
+        let braceDepth = 0;
+        while (i < len) {
+          if (content[i] === "\\" && i + 1 < len) {
+            result += "  ";
+            i += 2;
+            continue;
+          }
+          if (content[i] === "$" && i + 1 < len && content[i + 1] === "{") {
+            result += "  ";
+            i += 2;
+            braceDepth++;
+            continue;
+          }
+          if (braceDepth > 0 && content[i] === "}") {
+            result += " ";
+            i++;
+            braceDepth--;
+            continue;
+          }
+          if (braceDepth === 0 && content[i] === "`") {
+            result += " ";
+            i++;
+            break;
+          }
+          result += content[i] === "\n" ? "\n" : " ";
+          i++;
+        }
+        continue;
+      }
+
+      // String literal: "..." or '...'
+      if (ch === '"' || ch === "'") {
+        const quote = ch;
+        result += " ";
+        i++;
+        while (i < len) {
+          if (content[i] === "\\" && i + 1 < len) {
+            result += "  ";
+            i += 2;
+            continue;
+          }
+          if (content[i] === quote) {
+            result += " ";
+            i++;
+            break;
+          }
+          if (content[i] === "\n") break; // unterminated string
+          result += " ";
+          i++;
+        }
+        continue;
+      }
+    } else {
+      // In commentsOnly mode, skip past strings without stripping them
+      // so the parser doesn't confuse string contents with comment starts
+      if (ch === "`") {
+        result += ch;
+        i++;
+        let braceDepth = 0;
+        while (i < len) {
+          result += content[i];
+          if (content[i] === "\\" && i + 1 < len) { i++; result += content[i]; i++; continue; }
+          if (content[i] === "$" && i + 1 < len && content[i + 1] === "{") { i++; result += content[i]; i++; braceDepth++; continue; }
+          if (braceDepth > 0 && content[i] === "}") { i++; braceDepth--; continue; }
+          if (braceDepth === 0 && content[i] === "`") { i++; break; }
+          i++;
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        const quote = ch;
+        result += ch;
+        i++;
+        while (i < len) {
+          result += content[i];
+          if (content[i] === "\\" && i + 1 < len) { i++; result += content[i]; i++; continue; }
+          if (content[i] === quote) { i++; break; }
+          if (content[i] === "\n") break;
+          i++;
+        }
+        continue;
+      }
+    }
+
+    result += ch;
+    i++;
+  }
+
+  return result;
+}
+
+/**
+ * Strip comments from Python source code.
+ * Only strips `#` comments (preserves strings for import parsing).
+ */
+function stripPythonComments(content: string): string {
+  let result = "";
+  let i = 0;
+  const len = content.length;
+
+  while (i < len) {
+    const ch = content[i];
+
+    // Triple-quoted strings: skip past them (don't strip, but don't match # inside)
+    if (i + 2 < len) {
+      const triple = content.slice(i, i + 3);
+      if (triple === '"""' || triple === "'''") {
+        result += triple;
+        i += 3;
+        while (i < len) {
+          if (i + 2 < len && content.slice(i, i + 3) === triple) {
+            result += triple;
+            i += 3;
+            break;
+          }
+          result += content[i];
+          i++;
+        }
+        continue;
+      }
+    }
+
+    // Single-line strings: skip past them
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      result += ch;
+      i++;
+      while (i < len) {
+        result += content[i];
+        if (content[i] === "\\" && i + 1 < len) { i++; result += content[i]; i++; continue; }
+        if (content[i] === quote) { i++; break; }
+        if (content[i] === "\n") break;
+        i++;
+      }
+      continue;
+    }
+
+    // Comment: # ...
+    if (ch === "#") {
+      result += " ";
+      i++;
+      while (i < len && content[i] !== "\n") {
+        result += " ";
+        i++;
+      }
+      continue;
+    }
+
+    result += ch;
+    i++;
+  }
+
+  return result;
+}
+
 // ── File extensions to try when resolving relative imports ────────────
 
 const JS_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs"];
@@ -169,10 +377,11 @@ export interface RawImport {
 }
 
 export function parseJsImports(content: string): RawImport[] {
+  const cleaned = stripCommentsAndStrings(content, true);
   const imports: RawImport[] = [];
 
   // import { a, b } from '...' / import Foo from '...' / import Foo, { a } from '...' / import * as Foo from '...'
-  for (const m of content.matchAll(JS_IMPORT_FROM)) {
+  for (const m of cleaned.matchAll(JS_IMPORT_FROM)) {
     const isTypeOnly = !!m[1]; // group 1: "type " keyword
     const names: string[] = [];
     if (m[2]) names.push(...m[2].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
@@ -188,20 +397,20 @@ export function parseJsImports(content: string): RawImport[] {
   }
 
   // import '...' (side-effect)
-  for (const m of content.matchAll(JS_IMPORT_SIDE)) {
+  for (const m of cleaned.matchAll(JS_IMPORT_SIDE)) {
     // Skip if already captured by JS_IMPORT_FROM (side-effect imports have no bindings)
-    if (!content.includes(`from '${m[1]}'`) && !content.includes(`from "${m[1]}"`)) {
+    if (!cleaned.includes(`from '${m[1]}'`) && !cleaned.includes(`from "${m[1]}"`)) {
       imports.push({ specifier: m[1], importedNames: [] });
     }
   }
 
   // require('...')
-  for (const m of content.matchAll(JS_REQUIRE)) {
+  for (const m of cleaned.matchAll(JS_REQUIRE)) {
     imports.push({ specifier: m[1], importedNames: [] });
   }
 
   // dynamic import('...')
-  for (const m of content.matchAll(JS_DYNAMIC)) {
+  for (const m of cleaned.matchAll(JS_DYNAMIC)) {
     imports.push({ specifier: m[1], importedNames: [] });
   }
 
@@ -209,15 +418,16 @@ export function parseJsImports(content: string): RawImport[] {
 }
 
 export function parsePythonImports(content: string): RawImport[] {
+  const cleaned = stripPythonComments(content);
   const imports: RawImport[] = [];
 
-  for (const m of content.matchAll(PY_FROM_IMPORT)) {
+  for (const m of cleaned.matchAll(PY_FROM_IMPORT)) {
     const module = m[1];
     const names = m[2].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
     imports.push({ specifier: module, importedNames: names });
   }
 
-  for (const m of content.matchAll(PY_IMPORT)) {
+  for (const m of cleaned.matchAll(PY_IMPORT)) {
     const modules = m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
     for (const mod of modules) {
       imports.push({ specifier: mod, importedNames: [] });
@@ -386,6 +596,79 @@ function resolveImport(
       // without a full build system. Skip resolution for now.
       return null;
   }
+}
+
+// ── Barrel file (re-export) resolution ────────────────────────────────
+
+/** Regex to match re-export statements: export { ... } from '...' / export * from '...' */
+const RE_EXPORT_NAMED = /export\s+\{([^}]*)\}\s+from\s+['"]([^'"]+)['"]/g;
+const RE_EXPORT_STAR = /export\s+\*\s+from\s+['"]([^'"]+)['"]/g;
+
+/** Barrel file export mapping: tracks which names come from which source files */
+interface BarrelExportMap {
+  /** barrel file -> { exportedName -> source file } */
+  namedExports: Map<string, Map<string, string>>;
+  /** barrel file -> set of files re-exported with `export *` (names unknown) */
+  starExports: Map<string, Set<string>>;
+}
+
+/**
+ * Scan barrel files (index.ts, etc.) and build a map from barrel path to
+ * the source files and exported names they re-export.
+ */
+async function resolveBarrelFiles(
+  rootDir: string,
+  fileSet: Set<string>,
+): Promise<BarrelExportMap> {
+  const namedExports = new Map<string, Map<string, string>>();
+  const starExports = new Map<string, Set<string>>();
+
+  for (const file of fileSet) {
+    // Only scan index files as potential barrels
+    const basename = path.basename(file).replace(/\.[^.]+$/, "");
+    if (basename !== "index") continue;
+
+    const absPath = path.join(rootDir, file);
+    const content = await readFileOr(absPath);
+    if (!content) continue;
+
+    const cleaned = stripCommentsAndStrings(content, true);
+    const nameMap = new Map<string, string>();
+    const starSet = new Set<string>();
+
+    // export { Foo, Bar as Baz } from './source'
+    for (const m of cleaned.matchAll(RE_EXPORT_NAMED)) {
+      const namesBlock = m[1];
+      const specifier = m[2];
+      if (!specifier.startsWith("./") && !specifier.startsWith("../")) continue;
+
+      const resolved = resolveJsImport(specifier, file, fileSet);
+      if (!resolved) continue;
+
+      for (const nameStr of namesBlock.split(",")) {
+        const trimmed = nameStr.trim();
+        if (!trimmed) continue;
+        // Handle "Foo as Bar" -> exported as Bar, from resolved file
+        const parts = trimmed.split(/\s+as\s+/);
+        const exportedName = parts.length > 1 ? parts[1].trim() : parts[0].trim();
+        nameMap.set(exportedName, resolved);
+      }
+    }
+
+    // export * from './source'
+    for (const m of cleaned.matchAll(RE_EXPORT_STAR)) {
+      const specifier = m[1];
+      if (!specifier.startsWith("./") && !specifier.startsWith("../")) continue;
+
+      const resolved = resolveJsImport(specifier, file, fileSet);
+      if (resolved) starSet.add(resolved);
+    }
+
+    if (nameMap.size > 0) namedExports.set(file, nameMap);
+    if (starSet.size > 0) starExports.set(file, starSet);
+  }
+
+  return { namedExports, starExports };
 }
 
 // ── HITS (Kleinberg) centrality ───────────────────────────────────────
@@ -579,6 +862,16 @@ export async function buildImportGraph(
     onProgress?.(`Loaded ${pathAliases.length} path alias(es) from tsconfig`);
   }
 
+  // Resolve barrel file re-exports for JS/TS projects
+  let barrelMap: BarrelExportMap = { namedExports: new Map(), starExports: new Map() };
+  if (isJsTs) {
+    barrelMap = await resolveBarrelFiles(rootDir, fileSet);
+    const barrelCount = barrelMap.namedExports.size + barrelMap.starExports.size;
+    if (barrelCount > 0) {
+      onProgress?.(`Resolved ${barrelCount} barrel file${barrelCount === 1 ? "" : "s"}`);
+    }
+  }
+
   // Init in-degree
   for (const file of files) inDegree.set(file, 0);
 
@@ -601,89 +894,77 @@ export async function buildImportGraph(
       if (isRelative || (pathAliases.length > 0 && !isRelative)) {
         const resolved = resolveImport(raw.specifier, file, language, fileSet, pathAliases);
         if (resolved) {
-          // Barrel file resolution: if resolved target is a barrel (re-export),
-          // create edges to the actual source files instead
-          const barrelSources = barrelMap.get(resolved);
-          if (barrelSources && barrelSources.length > 0) {
-            // Credit the barrel file with an edge too (it is a real file)
-            edges.push({
-              from: file,
-              to: resolved,
-              isExternal: false,
-              specifier: raw.specifier,
-              importedNames: [],
-            });
-            inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
+          const barrelNamed = barrelMap.namedExports.get(resolved);
+          const barrelStars = barrelMap.starExports.get(resolved);
 
-            // Add edges to the actual source files behind the barrel
-            for (const source of barrelSources) {
+          if (barrelNamed || barrelStars) {
+            // Barrel import: route each name to its actual source file
+            const routedNames = new Map<string, string[]>();
+            const unresolved: string[] = [];
+
+            for (const name of raw.importedNames) {
+              const source = barrelNamed?.get(name);
+              if (source) {
+                const existing = routedNames.get(source) ?? [];
+                existing.push(name);
+                routedNames.set(source, existing);
+              } else {
+                unresolved.push(name);
+              }
+            }
+
+            // Create edges to resolved source files
+            for (const [source, names] of routedNames) {
               edges.push({
                 from: file,
                 to: source,
                 isExternal: false,
                 specifier: raw.specifier,
-                importedNames: raw.importedNames,
+                importedNames: names,
+                isTypeOnly: raw.isTypeOnly,
               });
               inDegree.set(source, (inDegree.get(source) ?? 0) + 1);
             }
+
+            // Unresolved names (could be from star exports): create edges to star sources
+            if (unresolved.length > 0 && barrelStars) {
+              for (const starSource of barrelStars) {
+                edges.push({
+                  from: file,
+                  to: starSource,
+                  isExternal: false,
+                  specifier: raw.specifier,
+                  importedNames: unresolved,
+                  isTypeOnly: raw.isTypeOnly,
+                });
+                inDegree.set(starSource, (inDegree.get(starSource) ?? 0) + 1);
+              }
+            }
+
+            // Side-effect import to barrel (no names): keep edge to barrel itself
+            if (raw.importedNames.length === 0) {
+              edges.push({
+                from: file,
+                to: resolved,
+                isExternal: false,
+                specifier: raw.specifier,
+                importedNames: [],
+                isTypeOnly: raw.isTypeOnly,
+              });
+              inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
+            }
           } else {
+            // Non-barrel import: direct edge
             edges.push({
               from: file,
               to: resolved,
               isExternal: false,
               specifier: raw.specifier,
               importedNames: raw.importedNames,
+              isTypeOnly: raw.isTypeOnly,
             });
             inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
           }
-        } else if (!isRelative) {
-          // Path alias didn't resolve — treat as external package
-          const pkgName = getPackageName(raw.specifier);
-          edges.push({
-            from: file,
-            to: pkgName,
-            isExternal: true,
-            specifier: raw.specifier,
-            importedNames: raw.importedNames,
-            isTypeOnly: raw.isTypeOnly,
-          });
-          externalImportCounts.set(
-            pkgName,
-            (externalImportCounts.get(pkgName) ?? 0) + 1,
-          );
-        }
-      } else {
-        // Try path alias resolution before treating as external
-        const aliasResolved = pathAliases.length > 0
-          ? resolveAliasImport(raw.specifier, pathAliases, fileSet)
-          : null;
-
-        if (aliasResolved) {
-          edges.push({
-            from: file,
-            to: aliasResolved,
-            isExternal: false,
-            specifier: raw.specifier,
-            importedNames: raw.importedNames,
-            isTypeOnly: raw.isTypeOnly,
-          });
-          inDegree.set(aliasResolved, (inDegree.get(aliasResolved) ?? 0) + 1);
-        } else {
-          // External package
-          // Normalize specifier to package name (e.g. @scope/pkg/path -> @scope/pkg)
-          const pkgName = getPackageName(raw.specifier);
-          edges.push({
-            from: file,
-            to: pkgName,
-            isExternal: true,
-            specifier: raw.specifier,
-            importedNames: raw.importedNames,
-            isTypeOnly: raw.isTypeOnly,
-          });
-          externalImportCounts.set(
-            pkgName,
-            (externalImportCounts.get(pkgName) ?? 0) + 1,
-          );
         }
       } else {
         // Try path alias resolution before treating as external

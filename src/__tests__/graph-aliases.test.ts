@@ -113,3 +113,98 @@ describe("buildImportGraph with tsconfig path aliases", () => {
     expect(externalEdges).toHaveLength(1);
   });
 });
+
+describe("buildImportGraph barrel file resolution", () => {
+  let tmpDir: string;
+  afterEach(async () => {
+    if (tmpDir) await cleanup(tmpDir);
+  });
+
+  it("routes named imports through barrel to correct source files", async () => {
+    tmpDir = await makeProject({
+      "src/utils/helpers.ts": "export function helperA() {} export function helperB() {}",
+      "src/utils/format.ts": "export function formatDate() {}",
+      "src/utils/index.ts": [
+        "export { helperA, helperB } from './helpers';",
+        "export { formatDate } from './format';",
+      ].join("\n"),
+      "src/app.ts": "import { helperA, formatDate } from './utils';",
+    });
+
+    const graph = await buildImportGraph(tmpDir, "typescript");
+    const internal = graph.edges.filter((e) => !e.isExternal);
+
+    // helperA should route to helpers.ts, formatDate to format.ts
+    const toHelpers = internal.find((e) => e.to === "src/utils/helpers.ts");
+    const toFormat = internal.find((e) => e.to === "src/utils/format.ts");
+
+    expect(toHelpers).toBeDefined();
+    expect(toHelpers!.importedNames).toEqual(["helperA"]);
+
+    expect(toFormat).toBeDefined();
+    expect(toFormat!.importedNames).toEqual(["formatDate"]);
+
+    // No direct edge to the barrel index.ts itself (since all names were resolved)
+    const toBarrel = internal.find(
+      (e) => e.to === "src/utils/index.ts" && e.from === "src/app.ts",
+    );
+    expect(toBarrel).toBeUndefined();
+  });
+
+  it("falls back to star export sources for unresolved names", async () => {
+    tmpDir = await makeProject({
+      "src/lib/types.ts": "export interface Foo {} export interface Bar {}",
+      "src/lib/index.ts": "export * from './types';",
+      "src/app.ts": "import { Foo } from './lib';",
+    });
+
+    const graph = await buildImportGraph(tmpDir, "typescript");
+    const internal = graph.edges.filter((e) => !e.isExternal);
+
+    // Foo can't be resolved by named exports, should fall back to star source
+    const toTypes = internal.find((e) => e.to === "src/lib/types.ts");
+    expect(toTypes).toBeDefined();
+    expect(toTypes!.importedNames).toEqual(["Foo"]);
+  });
+
+  it("handles mixed named and star exports in a barrel", async () => {
+    tmpDir = await makeProject({
+      "src/mod/alpha.ts": "export const a = 1;",
+      "src/mod/beta.ts": "export const b = 2; export const c = 3;",
+      "src/mod/index.ts": [
+        "export { a } from './alpha';",
+        "export * from './beta';",
+      ].join("\n"),
+      "src/consumer.ts": "import { a, b } from './mod';",
+    });
+
+    const graph = await buildImportGraph(tmpDir, "typescript");
+    const internal = graph.edges.filter((e) => !e.isExternal);
+
+    // 'a' should route to alpha.ts via named export
+    const toAlpha = internal.find((e) => e.to === "src/mod/alpha.ts");
+    expect(toAlpha).toBeDefined();
+    expect(toAlpha!.importedNames).toEqual(["a"]);
+
+    // 'b' should route to beta.ts via star export fallback
+    const toBeta = internal.find((e) => e.to === "src/mod/beta.ts");
+    expect(toBeta).toBeDefined();
+    expect(toBeta!.importedNames).toEqual(["b"]);
+  });
+
+  it("keeps edge to barrel for side-effect imports (no names)", async () => {
+    tmpDir = await makeProject({
+      "src/setup/init.ts": "export const x = 1;",
+      "src/setup/index.ts": "export { x } from './init';",
+      "src/app.ts": "import './setup';",
+    });
+
+    const graph = await buildImportGraph(tmpDir, "typescript");
+    const internal = graph.edges.filter((e) => !e.isExternal);
+
+    // Side-effect import should keep edge to barrel itself
+    const toBarrel = internal.find((e) => e.to === "src/setup/index.ts");
+    expect(toBarrel).toBeDefined();
+    expect(toBarrel!.importedNames).toEqual([]);
+  });
+});
