@@ -11,7 +11,7 @@
 
 <p align="center"><strong>First light on your codebase.</strong></p>
 
-AI coding agents spend their first few minutes reading files, tracing imports, and piecing together your architecture. **clarte** does that work once, ahead of time, and hands the agent a single context file so it can start writing useful code immediately.
+AI coding agents spend their first few minutes reading files, tracing imports, and piecing together your architecture. **Clarté** does that work once, ahead of time, and hands the agent a single context file so it can start writing useful code immediately.
 
 ```bash
 npx clarte
@@ -19,7 +19,7 @@ npx clarte
 
 ## Before & After
 
-Without clarte, a typical AI agent session starts like this:
+Without Clarté, a typical AI agent session starts like this:
 
 ```
 Agent: Let me explore the project structure...
@@ -30,7 +30,7 @@ Agent: Reading src/store/auth.ts...
 Agent: Now I understand the architecture. Let me start working...
 ```
 
-With clarte, the agent already knows:
+With Clarté, the agent already knows:
 
 | What | Example |
 |------|---------|
@@ -39,6 +39,7 @@ With clarte, the agent already knows:
 | Architecture | services → hooks → components → pages |
 | Active areas | `src/auth/` changed 12 times in the last 90 days |
 | Coupled files | `routes.ts` and `middleware.ts` always change together |
+| Dead files | Files with zero imports that may be safe to remove |
 | Code snapshot | All public types, interfaces, props, and function signatures |
 
 <details>
@@ -101,16 +102,7 @@ export function useAuth(): AuthContext  // imported by 9 files
 
 ## Architecture
 
-‍```
-┌──────────────┐    ┌──────────────┐
-│    types      │    │   services    │
-└──────────────┘    └──────────────┘
-        │                    │
-        ▼                    ▼
-┌──────────────┐    ┌──────────────┐
-│    hooks      │    │  components   │
-└──────────────┘    └──────────────┘
-‍```
+types → stores → hooks → components → pages
 
 ## Recently Active Files
 
@@ -119,7 +111,7 @@ export function useAuth(): AuthContext  // imported by 9 files
 | `src/app/chat/page.tsx` | 14 | 2 days ago |
 | `src/lib/api-client.ts` | 11 | 3 days ago |
 
-<!-- ... more sections: change coupling, module clusters, gotchas -->
+<!-- ... more sections: change coupling, module clusters, dead files, gotchas -->
 ```
 
 </details>
@@ -132,17 +124,29 @@ Run in your project root:
 npx clarte
 ```
 
-clarte will:
+Clarté will:
 
 1. **Detect** your tech stack (language, framework, package manager, linter)
-2. **Ask** a few questions (which AI tool, project purpose, key patterns)
+2. **Ask** a few questions (which AI tool(s), project purpose, key patterns)
 3. **Scan** source files for a code snapshot (types, store shapes, component props)
-4. **Generate** an optimized context file for your chosen tool
+4. **Generate** optimized context files for your chosen tools
 5. **Show** a summary with token savings estimate
 
 Your answers are saved to `.clarte.json` so future runs skip the prompts.
 
+## Supported Languages
+
+| Language | Import parsing | Snapshot extraction |
+|----------|---------------|---------------------|
+| TypeScript / JavaScript | `import`, `require` | types, interfaces, functions, components, hooks, stores |
+| Python | `import`, `from ... import` | classes (BaseModel, TypedDict, dataclass, Enum), functions, type aliases |
+| Go | `import` | — |
+| Rust | `use` | — |
+| Java | `import` | — |
+
 ## Supported Tools
+
+Clarté can generate context files for multiple tools at once.
 
 | Tool | Generated file | Docs |
 |------|---------------|------|
@@ -158,12 +162,13 @@ Your answers are saved to `.clarte.json` so future runs skip the prompts.
 
 ## How It Works
 
-clarte runs a pipeline of static analysis steps. Here's a quick overview:
+Clarté runs a pipeline of static analysis steps:
 
 | Step | What it does | Why it matters |
 |------|-------------|----------------|
 | [Dependency graph](#dependency-graph) | Parses all `import`/`require`/`use` statements | Maps how files connect to each other |
 | [PageRank](#pagerank) | Ranks files by structural importance | Surfaces the files an agent should read first |
+| [Dead file detection](#dead-file-detection) | Finds files nothing imports | Highlights potential cleanup targets |
 | [Dead export removal](#dead-export-removal) | Drops exports nothing imports | Saves tokens on unused code |
 | [Token budgeting](#token-budgeting) | Fits the snapshot into a token limit | Keeps context files within model limits |
 | [Layer detection](#layer-detection) | Classifies files into architecture layers | Gives agents a mental model of your project |
@@ -184,11 +189,19 @@ src/hooks/useAuth.ts  ──imports──▶  src/types.ts
 src/pages/Login.tsx   ──imports──▶  src/hooks/useAuth.ts
 ```
 
+**Barrel file resolution** — imports from `index.ts` barrel files are followed through re-exports to credit the actual source files, preventing barrel files from inflating centrality scores.
+
+**tsconfig path aliases** — specifiers like `@/utils` are resolved via `tsconfig.json` `paths`/`baseUrl` instead of being counted as external packages.
+
 ### PageRank
 
-Runs the [PageRank algorithm](https://en.wikipedia.org/wiki/PageRank) on the import graph. The same algorithm Google uses to rank web pages. Files imported by many important files score highest.
+Runs a weighted [PageRank algorithm](https://en.wikipedia.org/wiki/PageRank) on the import graph. Edges are weighted by the number of imported symbols — a file pulling 15 named imports contributes more to centrality than one importing a single function. The algorithm uses a convergence threshold (ε=1e-6) with a cap of 20 iterations.
 
 **Example:** In a typical project, `types.ts` or `api-client.ts` often ranks #1 because most of the codebase depends on them. These high-centrality files appear first in the generated context so agents understand foundational code before details.
+
+### Dead File Detection
+
+Identifies files with zero in-degree (nothing imports them), excluding known entry points like `index.ts`, `main.ts`, `app.ts`, `__init__.py`, and test files. These are potential cleanup targets or files that may only be used via side effects.
 
 ### Dead Export Removal
 
@@ -198,10 +211,10 @@ This catches leftover refactors, over-exported utilities, and test-only helpers,
 
 ### Token Budgeting
 
-Large projects may have more types and signatures than fit in the token budget. clarte uses a greedy [knapsack](https://en.wikipedia.org/wiki/Knapsack_problem) approach that prioritizes:
+Large projects may have more types and signatures than fit in the token budget. Clarté uses a greedy [knapsack](https://en.wikipedia.org/wiki/Knapsack_problem) approach that prioritizes:
 
 1. Entries from high-centrality files (via PageRank)
-2. Recently active files (via git history)
+2. Recently active files (via git history, using a logarithmic scale)
 3. Core categories (types, store shapes, component props)
 
 Lower-priority items fill whatever budget remains.
@@ -216,11 +229,11 @@ types  →  stores  →  services  →  hooks  →  components  →  pages
                                             utils, config
 ```
 
-The generated context includes a dependency-flow summary so agents understand how layers relate (e.g., "services call the API, components use hooks, hooks read from stores").
+The generated context includes a dependency-flow summary so agents understand how layers relate. Cross-layer violations (e.g., types importing from components) are flagged.
 
 ### Cycle Detection
 
-Uses [Tarjan's algorithm](https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm) to find groups of files that form import cycles.
+Uses [Tarjan's algorithm](https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm) to find groups of files that form import cycles, then reports the shortest actual cycle within each strongly connected component via BFS.
 
 **Example:** `auth.ts → user.ts → permissions.ts → auth.ts`. All three files are reported as a circular dependency cluster. Agents are warned to avoid deepening the cycle.
 
@@ -232,7 +245,7 @@ Computes an [instability metric](https://en.wikipedia.org/wiki/Software_package_
 instability = outgoing imports / (outgoing + incoming imports)
 ```
 
-Files that are both highly unstable (many outgoing deps) **and** widely depended on (many incoming deps) are flagged as risk zones.
+Files that are both highly unstable (many outgoing deps) **and** widely depended on (many incoming deps) are flagged as risk zones. Generated context includes interpretive explanations so agents understand what the scores mean.
 
 ### Change Coupling
 
@@ -249,7 +262,7 @@ This catches implicit dependencies that don't show up in imports. Agents know th
 
 ### Module Clustering
 
-Uses [label propagation](https://en.wikipedia.org/wiki/Label_propagation_algorithm) on the import graph to discover natural groupings. Each file starts with its own label and iteratively adopts the most common label among its neighbors. Files sharing a label form a module cluster.
+Uses deterministic [label propagation](https://en.wikipedia.org/wiki/Label_propagation_algorithm) on the import graph to discover natural groupings. Each file starts with its own label and iteratively adopts the most common label among its neighbors. Running Clarté twice on the same codebase produces identical community groupings.
 
 This reveals logical boundaries (auth module, payments module, settings module) even when the folder layout doesn't reflect them.
 
@@ -271,6 +284,20 @@ npx clarte --check
 # exit 1 = snapshot is stale, run --refresh-snapshot
 ```
 
+## User Section Preservation
+
+Clarté preserves your manual additions across regenerations. Wrap custom content with markers:
+
+```markdown
+<!-- clarte:user-start -->
+## My Custom Notes
+
+These notes will survive the next `npx clarte` run.
+<!-- clarte:user-end -->
+```
+
+Marked sections are anchored to the nearest preceding `## Header` and reinserted at the same position when the file is regenerated.
+
 ## Options
 
 ```bash
@@ -284,6 +311,7 @@ npx clarte [directory] [options]
 | `-V, --version` | Show version number |
 | `--force` | Overwrite existing files without asking |
 | `--dry-run` | Preview what would be generated |
+| `--diff[=base]` | Generate focused context for changed files only (default base: `main`) |
 | `--refresh-snapshot` | Re-scan source files and update just the code snapshot |
 | `--reconfigure` | Re-prompt even if `.clarte.json` exists |
 | `--check` | Check if the snapshot is stale via hash comparison (exit 0 = fresh, 1 = stale) |
@@ -291,6 +319,17 @@ npx clarte [directory] [options]
 | `--max-tokens=N` | Set the token budget for the code snapshot |
 | `--generate-skills` | Generate Claude Code skill files |
 | `-v, --verbose` | Show detailed progress output |
+
+### Diff Mode
+
+Generate focused context for just the files you changed:
+
+```bash
+npx clarte --diff         # diff against main
+npx clarte --diff=develop # diff against a specific branch
+```
+
+This gets changed files from `git diff`, expands to 1-hop neighbors in the import graph, includes test files that cover changed files, and outputs a compact markdown summary to stdout. Useful before every LLM session to give the agent targeted context.
 
 ### Refreshing Snapshots
 
@@ -370,12 +409,12 @@ end
 
 ## Config File
 
-On first run, clarte saves your answers to `.clarte.json`:
+On first run, Clarté saves your answers to `.clarte.json`:
 
 ```json
 {
   "_version": 1,
-  "ide": "cursor",
+  "ides": ["cursor", "copilot"],
   "projectPurpose": "A mobile AI chat app...",
   "keyPatterns": "Zustand slices for state...",
   "gotchas": "Never use FadeIn/FadeOut...",
@@ -392,7 +431,7 @@ Add `.clarte.json` to your `.gitignore`. It's local tool config, not project doc
 
 ## Framework Conventions
 
-clarte detects your framework and includes relevant best practices:
+Clarté detects your framework and includes relevant best practices:
 
 | Framework | What's included |
 |-----------|----------------|
@@ -400,16 +439,17 @@ clarte detects your framework and includes relevant best practices:
 | Express | Middleware chain, error handling, router organization |
 | FastAPI | Dependency injection, Pydantic models, async endpoints |
 | Django | Apps structure, models-views-templates, migrations |
+| Flask | Application factory, blueprints, extensions |
 | NestJS | Modules, controllers, providers, guards |
 | SvelteKit | Load functions, form actions, server routes |
 | Expo / React Native | Routing, native modules, platform-specific files |
 | Vue / Nuxt | Composition API, auto-imports, data fetching |
 
-Also supports: Fastify, Hono, Angular, Svelte, Prisma, Drizzle, Tailwind CSS, Electron, and more.
+Also supports: Fastify, Hono, Angular, Svelte, Prisma, Drizzle, Tailwind CSS, Electron, SQLAlchemy, Celery, and more.
 
 ## Monorepo Support
 
-clarte detects monorepo tooling and can generate per-package context files:
+Clarté detects monorepo tooling and can generate per-package context files:
 
 - **pnpm workspaces** (`pnpm-workspace.yaml`)
 - **Turborepo** (`turbo.json`)
@@ -419,7 +459,7 @@ When detected, you'll be asked if you want per-package files. Each package gets 
 
 ## Living Documents
 
-Generated files include maintenance directives telling your AI agent to keep them up to date. The code snapshot section uses HTML comment markers (`<!-- CODE SNAPSHOT -->`) so it's clear what to refresh after refactors.
+Generated files include maintenance directives telling your AI agent to keep them up to date. The code snapshot section uses HTML comment markers (`<!-- CODE SNAPSHOT -->`) so it's clear what to refresh after refactors. Custom sections wrapped in `<!-- clarte:user-start -->` / `<!-- clarte:user-end -->` markers are preserved across regenerations.
 
 ## Development
 
