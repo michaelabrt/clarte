@@ -24,9 +24,14 @@ import {
   detectCommunities,
   computeExportCoverage,
   findDeadFiles,
+  findCrossCuttingFiles,
+  computeLayerConsistency,
+  findChokepoints,
 } from "./graph.js";
 import { analyzeGitActivity } from "./git-analysis.js";
 import { scanConfigConstraints } from "./config-scan.js";
+import { inferConventions } from "./conventions.js";
+import { buildTestMapping } from "./test-map.js";
 import { formatBytes } from "./utils.js";
 import { startShimmer } from "./animations.js";
 import type { ContextAnalysis, ImportGraph, ProgressCallback } from "./types.js";
@@ -249,22 +254,19 @@ async function main() {
   // Step 1.7: Structural analysis (progressive reveal via shimmer)
   const fileCount = graph.centrality.size;
 
-  // PageRank
-  {
-    const s = startShimmer("Computing PageRank centrality...");
-    const hubFiles = getHubFiles(graph);
-    s.stop();
-    const topHubName = hubFiles[0]?.path ?? "";
-    p.log.step(
-      hubFiles.length > 0
-        ? `${t.text("PageRank")}       ${t.text("found")} ${t.text(String(hubFiles.length))} ${t.text("hub files")}` +
-          (topHubName ? t.text(` (top: ${topHubName})`) : "")
-        : `${t.text("PageRank")}       ${t.muted("no hub files detected")}`,
-    );
-    if (verbose && hubFiles.length > 0) {
-      for (const h of hubFiles.slice(0, 5)) {
-        p.log.info(t.muted(`  ${h.path} (centrality: ${h.centrality.toFixed(3)}, imported by ${h.importedBy})`));
-      }
+  // HITS analysis
+  await animatePageRank();
+  const hubFiles = getHubFiles(graph);
+  const topHubName = hubFiles[0]?.path ?? "";
+  p.log.step(
+    hubFiles.length > 0
+      ? `${t.brand("HITS")}           found ${t.bold(String(hubFiles.length))} key files` +
+        (topHubName ? t.muted(` (top: ${topHubName})`) : "")
+      : `${t.brand("HITS")}           ${t.muted("no key files detected")}`,
+  );
+  if (verbose && hubFiles.length > 0) {
+    for (const h of hubFiles.slice(0, 5)) {
+      p.log.info(t.muted(`  ${h.path} (auth: ${h.authority.toFixed(3)}, hub: ${h.hubScore.toFixed(3)}, role: ${h.role})`));
     }
     var analysisHubFiles = hubFiles;
   }
@@ -387,16 +389,104 @@ async function main() {
     p.log.step(`${t.text("Git")}            ${t.muted("not a git repo, skipped")}`);
   }
 
-  const analysis: ContextAnalysis = {
-    hubFiles: analysisHubFiles,
-    circularDeps: analysisCircularDeps,
-    layers: analysisLayers,
-    layerEdges: analysisLayerEdges,
-    gitActivity,
-    instabilities: analysisInstabilities,
-    communities: analysisCommunities,
-    exportCoverage: analysisExportCoverage,
-  };
+  // Dead files (zero in-degree, excluding entry points and tests)
+  const deadFiles = findDeadFiles(graph);
+  if (deadFiles.length > 0) {
+    p.log.step(
+      `${t.warn("Dead files")}     ${t.bold(String(deadFiles.length))} file${deadFiles.length === 1 ? "" : "s"} not imported by anything`,
+    );
+    if (verbose) {
+      for (const f of deadFiles.slice(0, 5)) {
+        p.log.info(t.muted(`  ${f}`));
+      }
+    }
+  }
+
+  // Cross-cutting files (imported across multiple layers)
+  const crossCuttingFiles = findCrossCuttingFiles(graph, layers);
+  if (crossCuttingFiles.length > 0) {
+    p.log.step(
+      `${t.brand("Cross-cutting")}  ${t.bold(String(crossCuttingFiles.length))} file${crossCuttingFiles.length === 1 ? "" : "s"} span ${t.bold("3+")} layers`,
+    );
+    if (verbose) {
+      for (const f of crossCuttingFiles.slice(0, 5)) {
+        p.log.info(t.muted(`  ${f.file} (${f.layerSpread} layers: ${f.layers.join(", ")})`));
+      }
+    }
+  }
+
+  // Layer consistency score
+  const layerConsistency = layers.length >= 2
+    ? computeLayerConsistency(graph, layers, layerEdges)
+    : undefined;
+  if (layerConsistency) {
+    const pct = (layerConsistency.consistency * 100).toFixed(0);
+    const violationCount = layerConsistency.violations.length;
+    p.log.step(
+      violationCount === 0
+        ? `${t.brand("Layer order")}    ${pct}% consistent ${t.check()}`
+        : `${t.warn("Layer order")}    ${pct}% consistent, ${t.bold(String(violationCount))} violation${violationCount === 1 ? "" : "s"}`,
+    );
+    if (verbose && violationCount > 0) {
+      for (const v of layerConsistency.violations.slice(0, 3)) {
+        p.log.info(t.muted(`  ${v.from} (${v.fromLayer}) imports ${v.to} (${v.toLayer})`));
+      }
+    }
+  }
+
+  // Chokepoints (articulation points)
+  const chokepoints = findChokepoints(graph);
+  if (chokepoints.length > 0) {
+    p.log.step(
+      `${t.brand("Chokepoints")}   ${t.bold(String(chokepoints.length))} structural chokepoint${chokepoints.length === 1 ? "" : "s"}`,
+    );
+    if (verbose) {
+      for (const cp of chokepoints.slice(0, 5)) {
+        p.log.info(t.muted(`  ${cp.file} (separates ${cp.separates} components, ${cp.importedBy} importers)`));
+      }
+    }
+  }
+
+  // Config constraint extraction
+  const configConstraints = await scanConfigConstraints(rootDir, detected);
+  const hasConstraints = configConstraints.typescript || configConstraints.linter || configConstraints.formatter;
+  if (hasConstraints) {
+    const parts: string[] = [];
+    if (configConstraints.typescript) parts.push("tsconfig");
+    if (configConstraints.linter) parts.push(configConstraints.linter.tool.toLowerCase());
+    if (configConstraints.formatter && !configConstraints.linter) parts.push(configConstraints.formatter.tool.toLowerCase());
+    p.log.step(`${t.brand("Config")}         extracted constraints from ${parts.join(", ")}`);
+  }
+
+  // Convention inference (fills gaps not covered by config constraints)
+  const conventions = await inferConventions(rootDir, graph, configConstraints);
+  if (conventions) {
+    const parts: string[] = [];
+    if (Object.values(conventions.naming).some((v) => v !== "mixed")) parts.push("naming");
+    if (conventions.exportStyle.preferNamed) parts.push("exports");
+    if (conventions.importOrdering) parts.push("imports");
+    if (parts.length > 0) {
+      p.log.step(`${t.brand("Conventions")}   inferred ${parts.join(", ")} patterns`);
+    }
+  }
+
+  // Test-source mapping
+  const testMapping = buildTestMapping(graph, detected);
+  if (testMapping) {
+    const coveredCount = testMapping.sourceToTests.size;
+    const untestedCount = testMapping.untestedFiles.length;
+    p.log.step(
+      `${t.brand("Test map")}       ${t.bold(String(coveredCount))} source file${coveredCount === 1 ? "" : "s"} with tests` +
+        (untestedCount > 0 ? `, ${t.warn(String(untestedCount))} untested` : ` ${t.check()}`),
+    );
+    if (verbose && untestedCount > 0) {
+      for (const f of testMapping.untestedFiles.slice(0, 5)) {
+        p.log.info(t.muted(`  untested: ${f}`));
+      }
+    }
+  }
+
+  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, exportCoverage, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined };
 
   // Analysis report box
   {

@@ -2,6 +2,8 @@ import type { CodeSnapshot, ContextAnalysis, DetectedContext, UserAnswers } from
 import { summarizeDetection } from "../detect.js";
 import { getFrameworkHints } from "./framework-hints.js";
 import { renderConstraintsSection } from "../config-scan.js";
+import { renderConventionsSection } from "../conventions.js";
+import { renderTestMappingSection } from "../test-map.js";
 
 /**
  * Build an Aider config file (.aider.conf.yml) with project conventions.
@@ -51,6 +53,32 @@ export function buildAiderContext(
     if (constraintsSection) {
       // Extract bullet lines from the markdown section
       for (const line of constraintsSection.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("- ")) {
+          lines.push(`  - "${escapeYaml(trimmed.slice(2).replace(/\*\*/g, ""))}"`);
+        }
+      }
+    }
+  }
+
+  // Inferred conventions
+  if (analysis?.conventions) {
+    const conventionsSection = renderConventionsSection(analysis.conventions);
+    if (conventionsSection) {
+      for (const line of conventionsSection.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("- ")) {
+          lines.push(`  - "${escapeYaml(trimmed.slice(2).replace(/\*\*/g, ""))}"`);
+        }
+      }
+    }
+  }
+
+  // Test mapping
+  if (analysis?.testMapping) {
+    const testSection = renderTestMappingSection(analysis.testMapping, analysis?.hubFiles);
+    if (testSection) {
+      for (const line of testSection.split("\n")) {
         const trimmed = line.trim();
         if (trimmed.startsWith("- ")) {
           lines.push(`  - "${escapeYaml(trimmed.slice(2).replace(/\*\*/g, ""))}"`);
@@ -136,6 +164,29 @@ export function buildAiderContext(
   if (analysis?.gitActivity?.changeCoupling && analysis.gitActivity.changeCoupling.length > 0) {
     for (const pair of analysis.gitActivity.changeCoupling.slice(0, 5)) {
       lines.push(`  - "CO-CHANGE: ${escapeYaml(pair.fileA)} <-> ${escapeYaml(pair.fileB)} (${pair.coChangeCount} co-changes, ${(pair.confidence * 100).toFixed(0)}% confidence)"`);
+    }
+  }
+
+  // Cross-cutting files
+  if (analysis?.crossCuttingFiles && analysis.crossCuttingFiles.length > 0) {
+    for (const f of analysis.crossCuttingFiles) {
+      lines.push(`  - "CROSS-CUTTING: ${escapeYaml(f.file)} spans ${f.layerSpread} layers (${escapeYaml(f.layers.join(", "))}), changes have wide blast radius"`);
+    }
+  }
+
+  // Layer consistency violations
+  if (analysis?.layerConsistency && analysis.layerConsistency.violations.length > 0) {
+    const pct = (analysis.layerConsistency.consistency * 100).toFixed(0);
+    lines.push(`  - "LAYER ORDER: ${pct}% consistent. Do not introduce upward dependency violations."`);
+    for (const v of analysis.layerConsistency.violations.slice(0, 3)) {
+      lines.push(`  - "VIOLATION: ${escapeYaml(v.from)} (${escapeYaml(v.fromLayer)}) imports ${escapeYaml(v.to)} (${escapeYaml(v.toLayer)})"`);
+    }
+  }
+
+  // Chokepoints
+  if (analysis?.chokepoints && analysis.chokepoints.length > 0) {
+    for (const cp of analysis.chokepoints.slice(0, 5)) {
+      lines.push(`  - "CHOKEPOINT: ${escapeYaml(cp.file)} separates ${cp.separates} components, refactor with extreme care"`);
     }
   }
 

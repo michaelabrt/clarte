@@ -38,6 +38,8 @@ With Clarté, the agent already knows:
 | Key files | `src/types.ts` (Foundation), `src/api/client.ts` (Orchestrator) |
 | Architecture | services → hooks → components → pages |
 | Active areas | `src/auth/` changed 12 times in the last 90 days |
+| Cross-cutting | `src/types.ts` spans 5 layers; changes have wide blast radius |
+| Chokepoints | `src/utils.ts` separates 3 components; no alternative paths |
 | Coupled files | `routes.ts` and `middleware.ts` always change together |
 | Dead files | Files with zero imports that may be safe to remove |
 | Code snapshot | All public types, interfaces, props, and function signatures |
@@ -175,6 +177,9 @@ Clarté runs a pipeline of static analysis steps:
 | [Layer detection](#layer-detection) | Classifies files into architecture layers | Gives agents a mental model of your project |
 | [Cycle detection](#cycle-detection) | Finds circular import chains | Warns agents about risky dependency loops |
 | [Instability scoring](#instability-scoring) | Flags volatile, widely-depended-on files | Tells agents where to be extra careful |
+| [Cross-cutting analysis](#cross-cutting-analysis) | Finds files imported across 3+ layers | Warns agents about wide blast radius |
+| [Layer consistency](#layer-consistency) | Checks import direction against layer order | Prevents new dependency violations |
+| [Chokepoint detection](#chokepoint-detection) | Finds articulation points in the graph | Highlights irreplaceable connectors |
 | [Change coupling](#change-coupling) | Finds files that always change together | Prevents incomplete changes |
 | [Module clustering](#module-clustering) | Groups related files into logical modules | Reveals structure beyond folder layout |
 | [Git activity](#git-activity) | Surfaces recently active files | Shows where current work is focused |
@@ -260,6 +265,41 @@ instability = outgoing imports / (outgoing + incoming imports)
 ```
 
 Files that are both highly unstable (many outgoing deps) **and** widely depended on (many incoming deps) are flagged as risk zones. Generated context includes interpretive explanations so agents understand what the scores mean.
+
+### Cross-Cutting Analysis
+
+Identifies files imported across 3 or more architectural layers. A file imported by 10 files all in `components/` is a local utility. A file imported across `components/`, `services/`, `hooks/`, and `pages/` is a cross-cutting concern where changes ripple across architectural boundaries.
+
+**Example output:**
+
+| File | Imported By | Layers |
+|------|------------|--------|
+| `src/types.ts` | 20 files | types, services, hooks, components, pages |
+| `src/utils.ts` | 13 files | services, hooks, components |
+
+### Layer Consistency
+
+Measures how well the codebase follows its own layering conventions. Performs a topological sort of detected layers, then checks whether each cross-layer import flows in the expected direction (foundational to consumer). Upward imports (e.g., types importing from services) are flagged as violations.
+
+**Example output:**
+
+```
+Dependency direction consistency: 94% (imports flow downward)
+
+Violations (imports flowing upward):
+- `src/types/user.ts` imports from `src/services/auth.ts` (types -> services)
+```
+
+### Chokepoint Detection
+
+Uses [Tarjan's algorithm](https://en.wikipedia.org/wiki/Biconnected_component) to find articulation points: files whose removal would disconnect parts of the import graph. These are fundamentally different from hub files: a hub may have redundant paths around it, but a chokepoint has no alternative paths.
+
+**Example output:**
+
+| File | Separates | Imported By |
+|------|-----------|-------------|
+| `src/utils.ts` | 3 components | 13 files |
+| `src/graph.ts` | 2 components | 6 files |
 
 ### Change Coupling
 

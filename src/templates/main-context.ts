@@ -4,6 +4,8 @@ import { summarizeDetection } from "../detect.js";
 import { readJsonFile, readFileOr } from "../utils.js";
 import { getFrameworkHintsSection } from "./framework-hints.js";
 import { renderConstraintsSection } from "../config-scan.js";
+import { renderConventionsSection } from "../conventions.js";
+import { renderTestMappingSection } from "../test-map.js";
 
 /**
  * Build the main context file content (CLAUDE.md, AGENTS.md, or CONTEXT.md).
@@ -66,6 +68,15 @@ export async function buildMainContext(
   const fwHints = getFrameworkHintsSection(ctx);
   if (fwHints) {
     sections.push(fwHints);
+  }
+
+  // -- Inferred Conventions --
+  if (analysis?.conventions) {
+    const conventionsSection = renderConventionsSection(analysis.conventions);
+    if (conventionsSection) {
+      sections.push(conventionsSection);
+      sections.push("");
+    }
   }
 
   // -- Project Structure --
@@ -178,7 +189,7 @@ export async function buildMainContext(
     sections.push("## Change Coupling");
     sections.push("");
     sections.push(
-      "Files that frequently change together — when modifying one, you likely need to update the other. High confidence means these files are strongly coupled in practice.",
+      "Files that frequently change together — when modifying one, check if the other needs updates too.",
     );
     sections.push("");
     sections.push("| File A | File B | Co-changes | Confidence |");
@@ -186,6 +197,66 @@ export async function buildMainContext(
     for (const pair of analysis.gitActivity.changeCoupling) {
       sections.push(
         `| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${(pair.confidence * 100).toFixed(0)}% |`,
+      );
+    }
+    sections.push("");
+  }
+
+  // -- Cross-Cutting Files --
+  if (analysis?.crossCuttingFiles && analysis.crossCuttingFiles.length > 0) {
+    sections.push("## Cross-Cutting Files");
+    sections.push("");
+    sections.push(
+      "These files are imported across multiple architectural layers. Changes here have wide blast radius.",
+    );
+    sections.push("");
+    sections.push("| File | Imported By | Layers |");
+    sections.push("|------|------------|--------|");
+    for (const f of analysis.crossCuttingFiles) {
+      sections.push(
+        `| \`${f.file}\` | ${f.totalImporters} file${f.totalImporters === 1 ? "" : "s"} | ${f.layers.join(", ")} |`,
+      );
+    }
+    sections.push("");
+  }
+
+  // -- Layer Consistency --
+  if (analysis?.layerConsistency && analysis.layers && analysis.layers.length > 1) {
+    const lc = analysis.layerConsistency;
+    if (lc.violations.length > 0) {
+      sections.push("## Layer Consistency");
+      sections.push("");
+      sections.push(
+        `Dependency direction consistency: ${(lc.consistency * 100).toFixed(0)}% (imports flow downward)`,
+      );
+      sections.push("");
+      sections.push("Violations (imports flowing upward):");
+      sections.push("");
+      for (const v of lc.violations.slice(0, 5)) {
+        sections.push(
+          `- \`${v.from}\` imports from \`${v.to}\` (${v.fromLayer} \u2192 ${v.toLayer})`,
+        );
+      }
+      if (lc.violations.length > 5) {
+        sections.push(`- ... and ${lc.violations.length - 5} more`);
+      }
+      sections.push("");
+    }
+  }
+
+  // -- Architectural Chokepoints --
+  if (analysis?.chokepoints && analysis.chokepoints.length > 0) {
+    sections.push("## Architectural Chokepoints");
+    sections.push("");
+    sections.push(
+      "Files whose removal would disconnect parts of the codebase. Refactor with extreme care.",
+    );
+    sections.push("");
+    sections.push("| File | Separates | Imported By |");
+    sections.push("|------|-----------|-------------|");
+    for (const cp of analysis.chokepoints.slice(0, 10)) {
+      sections.push(
+        `| \`${cp.file}\` | ${cp.separates} component${cp.separates === 1 ? "" : "s"} | ${cp.importedBy} file${cp.importedBy === 1 ? "" : "s"} |`,
       );
     }
     sections.push("");
@@ -220,6 +291,15 @@ export async function buildMainContext(
       sections.push(`- ... and ${analysis.deadFiles.length - 15} more`);
     }
     sections.push("");
+  }
+
+  // -- Test Coverage Map --
+  if (analysis?.testMapping) {
+    const testSection = renderTestMappingSection(analysis.testMapping, analysis.hubFiles);
+    if (testSection) {
+      sections.push(testSection);
+      sections.push("");
+    }
   }
 
   // -- Key Patterns --
