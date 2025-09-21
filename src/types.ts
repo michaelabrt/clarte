@@ -362,6 +362,75 @@ export interface ClaudeSkill {
   body: string;
 }
 
+/** A file imported across multiple architectural layers */
+export interface CrossCuttingFile {
+  /** Relative file path */
+  file: string;
+  /** Total number of files that import this file */
+  totalImporters: number;
+  /** Number of distinct architectural layers importing this file */
+  layerSpread: number;
+  /** Which layers import this file */
+  layers: string[];
+}
+
+/** A layer dependency violation (import flowing upward) */
+export interface LayerViolation {
+  /** File that contains the import */
+  from: string;
+  /** File being imported */
+  to: string;
+  /** Layer of the importing file */
+  fromLayer: string;
+  /** Layer of the imported file */
+  toLayer: string;
+}
+
+/** Layer dependency consistency result */
+export interface LayerConsistency {
+  /** Fraction of cross-layer imports that follow the expected direction (0-1) */
+  consistency: number;
+  /** Import edges that violate the expected layer ordering */
+  violations: LayerViolation[];
+}
+
+/** An articulation point (chokepoint) in the import graph */
+export interface Chokepoint {
+  /** Relative file path */
+  file: string;
+  /** Number of disconnected components if this file were removed */
+  separates: number;
+  /** Number of files that import this file */
+  importedBy: number;
+}
+
+/** Inferred coding conventions from source analysis */
+export interface InferredConventions {
+  naming: {
+    functions: string;
+    types: string;
+    constants: string;
+    files: string;
+  };
+  exportStyle: {
+    preferNamed: boolean;
+    defaultExportPercent: number;
+    barrelFileCount: number;
+  };
+  importOrdering?: string;
+}
+
+/** Test-to-source file mapping */
+export interface TestMapping {
+  sourceToTests: Map<string, string[]>;
+  untestedFiles: string[];
+  testPattern?: {
+    framework: string;
+    convention: string;
+    filePattern: string;
+  };
+}
+
 /** Bundle of all structural analysis results */
 export interface ContextAnalysis {
   hubFiles: HubFile[];
@@ -380,4 +449,14 @@ export interface ContextAnalysis {
   deadFiles?: string[];
   /** Extracted config constraints (tsconfig, linter, formatter) */
   configConstraints?: ConfigConstraints;
+  /** Files imported across multiple architectural layers */
+  crossCuttingFiles?: CrossCuttingFile[];
+  /** Layer dependency consistency score and violations */
+  layerConsistency?: LayerConsistency;
+  /** Architectural chokepoints (articulation points) */
+  chokepoints?: Chokepoint[];
+  /** Inferred coding conventions (naming, export style, import ordering) */
+  conventions?: InferredConventions;
+  /** Test-to-source file mapping */
+  testMapping?: TestMapping;
 }

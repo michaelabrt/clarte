@@ -1,10 +1,12 @@
 import path from "node:path";
-import { glob } from "tinyglobby";
+import fg from "fast-glob";
 import { readFileOr, readJsonFile } from "./utils.js";
 import type {
   ArchitecturalLayer,
+  Chokepoint,
   CircularDependency,
   Community,
+  CrossCuttingFile,
   ExportCoverage,
   FileInstability,
   FileRole,
@@ -12,7 +14,9 @@ import type {
   ImportEdge,
   ImportGraph,
   Language,
+  LayerConsistency,
   LayerEdge,
+  LayerViolation,
   ProgressCallback,
 } from "./types.js";
 
@@ -384,124 +388,7 @@ function resolveImport(
   }
 }
 
-// ── tsconfig path alias resolution ────────────────────────────────────
-
-interface PathAlias {
-  prefix: string;
-  replacement: string;
-}
-
-/**
- * Load tsconfig.json paths and baseUrl to resolve path aliases.
- * Returns alias mappings like { prefix: "@/", replacement: "src/" }.
- */
-async function loadTsconfigPaths(rootDir: string): Promise<PathAlias[]> {
-  const tsconfig = await readJsonFile(path.join(rootDir, "tsconfig.json"));
-  if (!tsconfig) return [];
-
-  const compilerOptions = tsconfig.compilerOptions as Record<string, unknown> | undefined;
-  if (!compilerOptions) return [];
-
-  const baseUrl = (compilerOptions.baseUrl as string) ?? ".";
-  const paths = compilerOptions.paths as Record<string, string[]> | undefined;
-  if (!paths) return [];
-
-  const aliases: PathAlias[] = [];
-  for (const [pattern, mappings] of Object.entries(paths)) {
-    if (!mappings || mappings.length === 0) continue;
-    // Convert "@ /*" -> prefix "@/", replacement "src/"
-    const prefix = pattern.replace(/\*$/, "");
-    const target = mappings[0].replace(/\*$/, "");
-    const replacement = path.join(baseUrl, target).replace(/\\/g, "/");
-    aliases.push({ prefix, replacement });
-  }
-
-  return aliases;
-}
-
-/**
- * Try to resolve a specifier using tsconfig path aliases.
- */
-function resolvePathAlias(
-  specifier: string,
-  allFiles: Set<string>,
-  aliases: PathAlias[],
-): string | null {
-  for (const { prefix, replacement } of aliases) {
-    if (!specifier.startsWith(prefix)) continue;
-    const rest = specifier.slice(prefix.length);
-    const raw = (replacement + rest).replace(/\\/g, "/");
-
-    // Try exact match, then with extensions, then with /index
-    const stripped = raw.replace(/\.(jsx?|mjs)$/, "");
-    const bases = stripped !== raw ? [raw, stripped] : [raw];
-    for (const base of bases) {
-      if (allFiles.has(base)) return base;
-      for (const ext of JS_EXTENSIONS) {
-        if (allFiles.has(base + ext)) return base + ext;
-      }
-      for (const idx of INDEX_FILES) {
-        if (allFiles.has(base + idx)) return base + idx;
-      }
-    }
-  }
-  return null;
-}
-
-// ── Barrel file (re-export) resolution ────────────────────────────────
-
-/** Regex to match re-export statements: export { ... } from '...' / export * from '...' */
-const RE_EXPORT_NAMED = /export\s+\{([^}]*)\}\s+from\s+['"]([^'"]+)['"]/g;
-const RE_EXPORT_STAR = /export\s+\*\s+from\s+['"]([^'"]+)['"]/g;
-
-/**
- * Scan barrel files (index.ts, etc.) and build a map from barrel path to
- * the re-exported source files they re-export from.
- */
-async function resolveBarrelFiles(
-  rootDir: string,
-  fileSet: Set<string>,
-): Promise<Map<string, string[]>> {
-  const barrelMap = new Map<string, string[]>();
-
-  for (const file of fileSet) {
-    // Only scan index files as potential barrels
-    const basename = path.basename(file).replace(/\.[^.]+$/, "");
-    if (basename !== "index") continue;
-
-    const absPath = path.join(rootDir, file);
-    const content = await readFileOr(absPath);
-    if (!content) continue;
-
-    const sources: string[] = [];
-
-    // export { ... } from './foo'
-    for (const m of content.matchAll(RE_EXPORT_NAMED)) {
-      const specifier = m[2];
-      if (specifier.startsWith("./") || specifier.startsWith("../")) {
-        const resolved = resolveJsImport(specifier, file, fileSet);
-        if (resolved) sources.push(resolved);
-      }
-    }
-
-    // export * from './foo'
-    for (const m of content.matchAll(RE_EXPORT_STAR)) {
-      const specifier = m[1];
-      if (specifier.startsWith("./") || specifier.startsWith("../")) {
-        const resolved = resolveJsImport(specifier, file, fileSet);
-        if (resolved) sources.push(resolved);
-      }
-    }
-
-    if (sources.length > 0) {
-      barrelMap.set(file, [...new Set(sources)]);
-    }
-  }
-
-  return barrelMap;
-}
-
-// ── PageRank centrality (weighted, with convergence check) ────────────
+// ── HITS (Kleinberg) centrality ───────────────────────────────────────
 
 /**
  * Compute HITS authority and hub scores for all files.
@@ -513,27 +400,22 @@ async function resolveBarrelFiles(
 export function computeHITS(
   files: string[],
   edges: ImportEdge[],
-  maxIterations = 20,
-  damping = 0.85,
+  maxIterations = 30,
   epsilon = 1e-6,
-): Map<string, number> {
+): { authority: Map<string, number>; hub: Map<string, number> } {
   const n = files.length;
   if (n === 0) return { authority: new Map(), hub: new Map() };
 
-  // Build weighted adjacency: from -> [{to, weight}, ...]
-  // Weight = number of imported symbols (minimum 1)
-  const outLinks = new Map<string, Array<{ to: string; weight: number }>>();
-  const outWeightSum = new Map<string, number>();
+  const fileSet = new Set(files);
+
+  // Build weighted adjacency lists (internal edges only)
+  // forward: from -> [{to, weight}]   (for hub update)
+  // reverse: to -> [{from, weight}]   (for authority update)
+  const forward = new Map<string, Array<{ to: string; weight: number }>>();
+  const reverse = new Map<string, Array<{ from: string; weight: number }>>();
   for (const file of files) {
-    outLinks.set(file, []);
-    outWeightSum.set(file, 0);
-  }
-  for (const edge of edges) {
-    if (!edge.isExternal && outLinks.has(edge.from)) {
-      const weight = Math.max(1, edge.importedNames.length);
-      outLinks.get(edge.from)!.push({ to: edge.to, weight });
-      outWeightSum.set(edge.from, (outWeightSum.get(edge.from) ?? 0) + weight);
-    }
+    forward.set(file, []);
+    reverse.set(file, []);
   }
 
   for (const edge of edges) {
@@ -557,31 +439,55 @@ export function computeHITS(
   const fileIndex = new Map<string, number>();
   for (let i = 0; i < n; i++) fileIndex.set(files[i], i);
 
-  // Iterate with convergence check
+  // Iterate
   for (let iter = 0; iter < maxIterations; iter++) {
-    const next = new Map<string, number>();
-    for (const file of files) next.set(file, (1 - damping) / n);
+    const newAuth = new Float64Array(n);
+    const newHub = new Float64Array(n);
 
-    for (const file of files) {
-      const links = outLinks.get(file) ?? [];
-      if (links.length === 0) continue;
-      const totalWeight = outWeightSum.get(file) ?? 1;
-      const score = scores.get(file) ?? 0;
-      for (const { to, weight } of links) {
-        const share = (damping * score * weight) / totalWeight;
-        next.set(to, (next.get(to) ?? 0) + share);
+    // Update authorities: newAuth[v] = Σ hub[u] * w(u→v)
+    for (let vi = 0; vi < n; vi++) {
+      const file = files[vi];
+      let sum = 0;
+      for (const { from, weight } of reverse.get(file)!) {
+        sum += hub[fileIndex.get(from)!] * weight;
       }
       newAuth[vi] = sum;
     }
 
-    // Check convergence: max absolute difference
-    let maxDiff = 0;
-    for (const file of files) {
-      const diff = Math.abs((next.get(file) ?? 0) - (scores.get(file) ?? 0));
-      if (diff > maxDiff) maxDiff = diff;
+    // Update hubs (using new auth): newHub[v] = Σ newAuth[w] * w(v→w)
+    for (let vi = 0; vi < n; vi++) {
+      const file = files[vi];
+      let sum = 0;
+      for (const { to, weight } of forward.get(file)!) {
+        sum += newAuth[fileIndex.get(to)!] * weight;
+      }
+      newHub[vi] = sum;
     }
-    scores = next;
-    if (maxDiff < epsilon) break;
+
+    // L2 normalize
+    let authNorm = 0;
+    let hubNorm = 0;
+    for (let i = 0; i < n; i++) {
+      authNorm += newAuth[i] * newAuth[i];
+      hubNorm += newHub[i] * newHub[i];
+    }
+    authNorm = Math.sqrt(authNorm) || 1;
+    hubNorm = Math.sqrt(hubNorm) || 1;
+    for (let i = 0; i < n; i++) {
+      newAuth[i] /= authNorm;
+      newHub[i] /= hubNorm;
+    }
+
+    // Convergence check
+    let maxDelta = 0;
+    for (let i = 0; i < n; i++) {
+      maxDelta = Math.max(maxDelta, Math.abs(newAuth[i] - auth[i]) + Math.abs(newHub[i] - hub[i]));
+    }
+
+    auth = newAuth;
+    hub = newHub;
+
+    if (maxDelta < epsilon) break;
   }
 
   // Min-max normalize to 0-1
@@ -665,20 +571,12 @@ export async function buildImportGraph(
   const inDegree = new Map<string, number>();
   const externalImportCounts = new Map<string, number>();
 
-  // Load tsconfig path aliases for JS/TS projects
-  const isJsTs = language === "typescript" || language === "javascript";
-  const pathAliases = isJsTs ? await loadTsconfigPaths(rootDir) : [];
+  // Load path aliases for TS/JS projects
+  const pathAliases = (language === "typescript" || language === "javascript")
+    ? await loadTsconfigPaths(rootDir)
+    : [];
   if (pathAliases.length > 0) {
-    onProgress?.(`Loaded ${pathAliases.length} tsconfig path alias${pathAliases.length === 1 ? "" : "es"}`);
-  }
-
-  // Resolve barrel file re-exports for JS/TS projects
-  let barrelMap = new Map<string, string[]>();
-  if (isJsTs) {
-    barrelMap = await resolveBarrelFiles(rootDir, fileSet);
-    if (barrelMap.size > 0) {
-      onProgress?.(`Resolved ${barrelMap.size} barrel file${barrelMap.size === 1 ? "" : "s"}`);
-    }
+    onProgress?.(`Loaded ${pathAliases.length} path alias(es) from tsconfig`);
   }
 
   // Init in-degree
@@ -787,12 +685,45 @@ export async function buildImportGraph(
             (externalImportCounts.get(pkgName) ?? 0) + 1,
           );
         }
+      } else {
+        // Try path alias resolution before treating as external
+        const aliasResolved = pathAliases.length > 0
+          ? resolveAliasImport(raw.specifier, pathAliases, fileSet)
+          : null;
+
+        if (aliasResolved) {
+          edges.push({
+            from: file,
+            to: aliasResolved,
+            isExternal: false,
+            specifier: raw.specifier,
+            importedNames: raw.importedNames,
+            isTypeOnly: raw.isTypeOnly,
+          });
+          inDegree.set(aliasResolved, (inDegree.get(aliasResolved) ?? 0) + 1);
+        } else {
+          // External package
+          // Normalize specifier to package name (e.g. @scope/pkg/path -> @scope/pkg)
+          const pkgName = getPackageName(raw.specifier);
+          edges.push({
+            from: file,
+            to: pkgName,
+            isExternal: true,
+            specifier: raw.specifier,
+            importedNames: raw.importedNames,
+            isTypeOnly: raw.isTypeOnly,
+          });
+          externalImportCounts.set(
+            pkgName,
+            (externalImportCounts.get(pkgName) ?? 0) + 1,
+          );
+        }
       }
     }
   }
 
-  onProgress?.("Computing centrality (weighted PageRank)...");
-  const centrality = computePageRank(files, edges);
+  onProgress?.("Computing centrality (HITS)...");
+  const { authority, hub: hubScores } = computeHITS(files, edges);
 
   // Use authority as centrality for backward compat (snapshot.ts etc.)
   return { edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores };
@@ -1301,4 +1232,302 @@ export function computeExportCoverage(graph: ImportGraph): ExportCoverage[] {
   // Sort by coverage ascending (worst coverage first)
   results.sort((a, b) => a.coverage - b.coverage);
   return results;
+}
+
+// ── §1.7 Cross-Layer Fan-In Analysis ──────────────────────────────────
+
+/**
+ * Find files imported across multiple architectural layers.
+ * A file imported by 10 files all in `components/` is local.
+ * A file imported across `components/`, `services/`, `hooks/`, and `pages/`
+ * is a cross-cutting concern where changes ripple across boundaries.
+ */
+export function findCrossCuttingFiles(
+  graph: ImportGraph,
+  layers: ArchitecturalLayer[],
+  minLayerSpread = 3,
+): CrossCuttingFile[] {
+  if (layers.length < minLayerSpread) return [];
+
+  // Build file -> layer lookup
+  const fileToLayer = new Map<string, string>();
+  for (const layer of layers) {
+    for (const file of layer.files) {
+      fileToLayer.set(file, layer.name);
+    }
+  }
+
+  // For each target file, collect which layers import it
+  const importerLayers = new Map<string, Set<string>>();
+  const importerCounts = new Map<string, number>();
+
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    const fromLayer = fileToLayer.get(edge.from);
+    if (!fromLayer) continue;
+
+    if (!importerLayers.has(edge.to)) importerLayers.set(edge.to, new Set());
+    importerLayers.get(edge.to)!.add(fromLayer);
+    importerCounts.set(edge.to, (importerCounts.get(edge.to) ?? 0) + 1);
+  }
+
+  const results: CrossCuttingFile[] = [];
+  for (const [file, layerSet] of importerLayers) {
+    if (layerSet.size >= minLayerSpread) {
+      results.push({
+        file,
+        totalImporters: importerCounts.get(file) ?? 0,
+        layerSpread: layerSet.size,
+        layers: [...layerSet].sort(),
+      });
+    }
+  }
+
+  // Sort by layer spread descending, then by total importers descending
+  results.sort((a, b) => b.layerSpread - a.layerSpread || b.totalImporters - a.totalImporters);
+  return results;
+}
+
+// ── §1.8 Layer Dependency Consistency Score ────────────────────────────
+
+/**
+ * Topological sort of layers using Kahn's algorithm.
+ * Returns layers ordered from most foundational to most consumer.
+ * Falls back to input order for cycles.
+ */
+function topologicalSortLayers(
+  layers: ArchitecturalLayer[],
+  layerEdges: LayerEdge[],
+): string[] {
+  const layerNames = new Set(layers.map((l) => l.name));
+  const inDeg = new Map<string, number>();
+  const adj = new Map<string, string[]>();
+
+  for (const name of layerNames) {
+    inDeg.set(name, 0);
+    adj.set(name, []);
+  }
+
+  // layerEdges: from depends on to (from imports to)
+  // For topological order: to is more foundational, from is more consumer
+  // Edge direction for topo sort: to -> from (foundational -> consumer)
+  for (const edge of layerEdges) {
+    if (!layerNames.has(edge.from) || !layerNames.has(edge.to)) continue;
+    adj.get(edge.to)!.push(edge.from);
+    inDeg.set(edge.from, (inDeg.get(edge.from) ?? 0) + 1);
+  }
+
+  const queue: string[] = [];
+  for (const [name, deg] of inDeg) {
+    if (deg === 0) queue.push(name);
+  }
+  queue.sort(); // deterministic tie-breaking
+
+  const sorted: string[] = [];
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+    sorted.push(node);
+    for (const neighbor of adj.get(node) ?? []) {
+      const newDeg = (inDeg.get(neighbor) ?? 1) - 1;
+      inDeg.set(neighbor, newDeg);
+      if (newDeg === 0) {
+        // Insert in sorted position for determinism
+        const insertIdx = queue.findIndex((q) => q > neighbor);
+        if (insertIdx === -1) queue.push(neighbor);
+        else queue.splice(insertIdx, 0, neighbor);
+      }
+    }
+  }
+
+  // If cycle exists, append remaining layers
+  if (sorted.length < layerNames.size) {
+    for (const name of layerNames) {
+      if (!sorted.includes(name)) sorted.push(name);
+    }
+  }
+
+  return sorted;
+}
+
+/**
+ * Measure how well the codebase follows its own layering conventions.
+ * For each detected layer pair, count edges in the "correct" direction
+ * (foundational -> consumer) vs. the "wrong" direction (upward imports).
+ */
+export function computeLayerConsistency(
+  graph: ImportGraph,
+  layers: ArchitecturalLayer[],
+  layerEdges: LayerEdge[],
+): LayerConsistency {
+  if (layers.length < 2) return { consistency: 1, violations: [] };
+
+  // Build topological order and rank map
+  const order = topologicalSortLayers(layers, layerEdges);
+  const rank = new Map<string, number>();
+  for (let i = 0; i < order.length; i++) {
+    rank.set(order[i], i);
+  }
+
+  // Build file -> layer lookup
+  const fileToLayer = new Map<string, string>();
+  for (const layer of layers) {
+    for (const file of layer.files) {
+      fileToLayer.set(file, layer.name);
+    }
+  }
+
+  const violations: LayerViolation[] = [];
+  let correctCount = 0;
+
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    const fromLayer = fileToLayer.get(edge.from);
+    const toLayer = fileToLayer.get(edge.to);
+    if (!fromLayer || !toLayer || fromLayer === toLayer) continue;
+
+    const fromRank = rank.get(fromLayer);
+    const toRank = rank.get(toLayer);
+    if (fromRank == null || toRank == null) continue;
+
+    if (fromRank < toRank) {
+      // Foundational layer importing from a consumer layer = violation
+      violations.push({
+        from: edge.from,
+        to: edge.to,
+        fromLayer,
+        toLayer,
+      });
+    } else {
+      correctCount++;
+    }
+  }
+
+  const total = correctCount + violations.length;
+  const consistency = total === 0 ? 1 : correctCount / total;
+
+  // Sort violations by layer rank distance (most egregious first)
+  violations.sort((a, b) => {
+    const distA = (rank.get(a.toLayer) ?? 0) - (rank.get(a.fromLayer) ?? 0);
+    const distB = (rank.get(b.toLayer) ?? 0) - (rank.get(b.fromLayer) ?? 0);
+    return distB - distA;
+  });
+
+  return { consistency, violations: violations.slice(0, 10) };
+}
+
+// ── §1.9 Articulation Point Detection ─────────────────────────────────
+
+/**
+ * Find articulation points (chokepoints) in the import graph using
+ * Tarjan's algorithm. These are files whose removal would disconnect
+ * parts of the codebase.
+ *
+ * Runs in O(V + E), same complexity as SCC detection.
+ */
+export function findChokepoints(graph: ImportGraph): Chokepoint[] {
+  // Build undirected adjacency from internal edges
+  const adj = new Map<string, Set<string>>();
+  const allFiles = new Set<string>();
+
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    allFiles.add(edge.from);
+    allFiles.add(edge.to);
+
+    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
+    if (!adj.has(edge.to)) adj.set(edge.to, new Set());
+    adj.get(edge.from)!.add(edge.to);
+    adj.get(edge.to)!.add(edge.from);
+  }
+
+  if (allFiles.size === 0) return [];
+
+  const disc = new Map<string, number>();
+  const low = new Map<string, number>();
+  const parent = new Map<string, string | null>();
+  const articulationPoints = new Set<string>();
+  let timer = 0;
+
+  function dfs(u: string): void {
+    disc.set(u, timer);
+    low.set(u, timer);
+    timer++;
+    let childCount = 0;
+
+    for (const v of adj.get(u) ?? []) {
+      if (!disc.has(v)) {
+        childCount++;
+        parent.set(v, u);
+        dfs(v);
+        low.set(u, Math.min(low.get(u)!, low.get(v)!));
+
+        // Root with 2+ children
+        if (parent.get(u) == null && childCount > 1) {
+          articulationPoints.add(u);
+        }
+        // Non-root where no back edge from subtree reaches above u
+        if (parent.get(u) != null && low.get(v)! >= disc.get(u)!) {
+          articulationPoints.add(u);
+        }
+      } else if (v !== parent.get(u)) {
+        low.set(u, Math.min(low.get(u)!, disc.get(v)!));
+      }
+    }
+  }
+
+  // Run DFS from each unvisited node (handles disconnected components)
+  const sortedFiles = [...allFiles].sort();
+  for (const file of sortedFiles) {
+    if (!disc.has(file)) {
+      parent.set(file, null);
+      dfs(file);
+    }
+  }
+
+  // For each articulation point, count how many components exist without it
+  const results: Chokepoint[] = [];
+  for (const cp of articulationPoints) {
+    const components = countComponentsWithout(adj, allFiles, cp);
+    results.push({
+      file: cp,
+      separates: components,
+      importedBy: graph.inDegree.get(cp) ?? 0,
+    });
+  }
+
+  // Sort by separates descending, then importedBy descending
+  results.sort((a, b) => b.separates - a.separates || b.importedBy - a.importedBy);
+  return results;
+}
+
+/**
+ * Count the number of connected components in the graph after removing a node.
+ */
+function countComponentsWithout(
+  adj: Map<string, Set<string>>,
+  allFiles: Set<string>,
+  removed: string,
+): number {
+  const visited = new Set<string>();
+  visited.add(removed);
+  let components = 0;
+
+  for (const file of allFiles) {
+    if (visited.has(file)) continue;
+    components++;
+    // BFS from this file
+    const queue = [file];
+    visited.add(file);
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const neighbor of adj.get(current) ?? []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+  }
+
+  return components;
 }

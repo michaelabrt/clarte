@@ -243,6 +243,25 @@ export function printSummary(
       recapRows.push({ label: "Community detection", result: `${analysis.communities.length} module cluster${analysis.communities.length === 1 ? "" : "s"}` });
     }
 
+    if (analysis.crossCuttingFiles && analysis.crossCuttingFiles.length > 0) {
+      recapRows.push({ label: "Cross-cutting", result: `${analysis.crossCuttingFiles.length} file${analysis.crossCuttingFiles.length === 1 ? "" : "s"} span 3+ layers` });
+    }
+
+    if (analysis.layerConsistency) {
+      const pct = (analysis.layerConsistency.consistency * 100).toFixed(0);
+      const vCount = analysis.layerConsistency.violations.length;
+      recapRows.push({
+        label: "Layer consistency",
+        result: vCount === 0
+          ? `${pct}% consistent (no violations)`
+          : `${pct}% consistent, ${vCount} violation${vCount === 1 ? "" : "s"}`,
+      });
+    }
+
+    if (analysis.chokepoints && analysis.chokepoints.length > 0) {
+      recapRows.push({ label: "Chokepoints", result: `${analysis.chokepoints.length} articulation point${analysis.chokepoints.length === 1 ? "" : "s"}` });
+    }
+
     const maxRecapLabel = Math.max(...recapRows.map((r) => r.label.length));
     for (const row of recapRows) {
       console.log(
@@ -270,6 +289,11 @@ export function printSummary(
     const highInstabilityFiles = analysis.instabilities.filter((f) => f.instability > 0.8);
     if (highInstabilityFiles.length > 0) {
       findings.push(`${highInstabilityFiles.length} high-instability file${highInstabilityFiles.length === 1 ? "" : "s"}`);
+    }
+
+    // Layer violations
+    if (analysis.layerConsistency && analysis.layerConsistency.violations.length > 0) {
+      findings.push(`${analysis.layerConsistency.violations.length} layer dependency violation${analysis.layerConsistency.violations.length === 1 ? "" : "s"}`);
     }
 
     // Unused exports
