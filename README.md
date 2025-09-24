@@ -113,7 +113,7 @@ types → stores → hooks → components → pages
 | `src/app/chat/page.tsx` | 14 | 2 days ago |
 | `src/lib/api-client.ts` | 11 | 3 days ago |
 
-<!-- ... more sections: change coupling, module clusters, dead files, gotchas -->
+<!-- ... more sections: change coupling, dead files, gotchas -->
 ```
 
 </details>
@@ -181,7 +181,6 @@ Clarté runs a pipeline of static analysis steps:
 | [Layer consistency](#layer-consistency) | Checks import direction against layer order | Prevents new dependency violations |
 | [Chokepoint detection](#chokepoint-detection) | Finds articulation points in the graph | Highlights irreplaceable connectors |
 | [Change coupling](#change-coupling) | Finds files that always change together | Prevents incomplete changes |
-| [Module clustering](#module-clustering) | Groups related files into logical modules | Reveals structure beyond folder layout |
 | [Git activity](#git-activity) | Surfaces recently active files | Shows where current work is focused |
 | [Stale detection](#stale-detection) | Hashes file paths + mtimes | Tells you when to re-run |
 
@@ -313,12 +312,6 @@ Analyzes 90 days of git history to find file pairs that frequently appear in the
 | `src/routes.ts` | `src/middleware.ts` | 8 | 80% |
 
 This catches implicit dependencies that don't show up in imports. Agents know that touching one file likely means touching the other.
-
-### Module Clustering
-
-Uses deterministic [label propagation](https://en.wikipedia.org/wiki/Label_propagation_algorithm) on the import graph to discover natural groupings. Each file starts with its own label and iteratively adopts the most common label among its neighbors. Running Clarté twice on the same codebase produces identical community groupings.
-
-This reveals logical boundaries (auth module, payments module, settings module) even when the folder layout doesn't reflect them.
 
 ### Git Activity
 

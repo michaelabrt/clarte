@@ -122,11 +122,38 @@ export interface CodeSnapshot {  // imported by 20 files
   estimatedTokens?: number;
 }
 
-export interface HubFile {  // imported by 20 files
+export type FileRole = "Foundation" | "Orchestrator" | "Bridge" | "Utility" | "Leaf";
+
+export interface ConfigConstraints {
+  typescript?: {
+    strict: boolean;
+    target: string;
+    pathAliases: Record<string, string[]>;
+    otherStrict: string[];
+  };
+  linter?: {
+    tool: string;
+    keyRules: Array<{ rule: string; setting: string; impact: string }>;
+  };
+  formatter?: {
+    tool: string;
+    indent: string;
+    quotes: string;
+    semicolons: boolean;
+  };
+}
+
+export interface HubFile {
   /** Relative file path */
   path: string;
-  /** PageRank centrality score (0-1) */
+  /** Centrality score (0-1), set to HITS authority */
   centrality: number;
+  /** HITS authority score (0-1): how much this file is depended upon */
+  authority: number;
+  /** HITS hub score (0-1): how much this file orchestrates others */
+  hubScore: number;
+  /** Functional role derived from authority/hub balance */
+  role: FileRole;
   /** Number of files that import this file */
   importedBy: number;
   /** Number of internal files this file imports */
@@ -182,7 +209,7 @@ export interface ImportGraph {  // imported by 20 files
   edges: ImportEdge[];
   /** Number of files that import each file */
   inDegree: Map<string, number>;
-  /** PageRank-style centrality scores (0-1) */
+  /** Centrality scores (0-1), set to HITS authority */
   centrality: Map<string, number>;
   /** How many files import each external package */
   externalImportCounts: Map<string, number>;
@@ -251,21 +278,59 @@ export interface ImportEdge {  // imported by 20 files
   isTypeOnly?: boolean;
 }
 
-export interface ContextAnalysis {  // imported by 20 files
+export interface CrossCuttingFile {
+  file: string;
+  totalImporters: number;
+  layerSpread: number;
+  layers: string[];
+}
+
+export interface LayerViolation {
+  from: string;
+  to: string;
+  fromLayer: string;
+  toLayer: string;
+}
+
+export interface LayerConsistency {
+  consistency: number;
+  violations: LayerViolation[];
+}
+
+export interface Chokepoint {
+  file: string;
+  separates: number;
+  importedBy: number;
+}
+
+export interface InferredConventions {
+  naming: { functions: string; types: string; constants: string; files: string };
+  exportStyle: { preferNamed: boolean; defaultExportPercent: number; barrelFileCount: number };
+  importOrdering?: string;
+}
+
+export interface TestMapping {
+  sourceToTests: Map<string, string[]>;
+  untestedFiles: string[];
+  testPattern?: { framework: string; convention: string; filePattern: string };
+}
+
+export interface ContextAnalysis {
   hubFiles: HubFile[];
   circularDeps: CircularDependency[];
   layers: ArchitecturalLayer[];
-  /** Directed edges between architectural layers */
   layerEdges: LayerEdge[];
   gitActivity: GitAnalysis | null;
-  /** Instability scores for files */
   instabilities: FileInstability[];
-  /** Detected module clusters/communities */
   communities: Community[];
-  /** Export coverage metrics per file */
   exportCoverage?: ExportCoverage[];
-  /** Files with zero in-degree (not imported by anything) */
   deadFiles?: string[];
+  configConstraints?: ConfigConstraints;
+  crossCuttingFiles?: CrossCuttingFile[];
+  layerConsistency?: LayerConsistency;
+  chokepoints?: Chokepoint[];
+  conventions?: InferredConventions;
+  testMapping?: TestMapping;
 }
 
 export interface UserAnswers {  // imported by 20 files
@@ -367,9 +432,15 @@ export async function writeFileSafe(filePath: string, content: string): Promise<
 
 export async function readJsonFile(filePath: string): Promise<Record<string, unknown> | null>  // imported by 14 files
 
+export function stripCommentsAndStrings(content: string, commentsOnly?: boolean): string
+
 export function findSCCs(graph: ImportGraph): string[][]  // imported by 6 files
 
 export function detectArchitecturalLayers(graph: ImportGraph):  // imported by 6 files
+
+export function computeHITS(graph: ImportGraph): { authority: Map<string, number>; hub: Map<string, number> }
+
+export function deriveRole(authority: number, hubScore: number): FileRole
 
 export function parseJsImports(content: string): RawImport[]  // imported by 6 files
 
@@ -394,6 +465,12 @@ export function computeInstability(graph: ImportGraph): FileInstability[]  // im
 export function findDeadFiles( graph: ImportGraph, entryPoints: string[] = [], ): string[]  // imported by 6 files
 
 export function findCircularDeps( graph: ImportGraph, maxCycles = 10, ): CircularDependency[]  // imported by 6 files
+
+export function findCrossCuttingFiles(graph: ImportGraph, layers: ArchitecturalLayer[], minLayerSpread?: number): CrossCuttingFile[]
+
+export function computeLayerConsistency(graph: ImportGraph, layers: ArchitecturalLayer[], layerEdges: LayerEdge[]): LayerConsistency
+
+export function findChokepoints(graph: ImportGraph): Chokepoint[]
 
 export function extractUserSections(content: string): UserSection[]
 
