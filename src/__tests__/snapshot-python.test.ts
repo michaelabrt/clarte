@@ -4,7 +4,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 // We'll test them via generateSnapshot with mocked file system.
 // Instead, we test by importing the module and using the public API.
 
-// For unit testing the extraction logic, we mock readFileOr and fast-glob
+// For unit testing the extraction logic, we mock readFileOr and tinyglobby
 // to feed controlled Python file content.
 
 vi.mock("../utils.js", async () => {
@@ -15,8 +15,8 @@ vi.mock("../utils.js", async () => {
   };
 });
 
-vi.mock("fast-glob", () => ({
-  default: vi.fn(),
+vi.mock("tinyglobby", () => ({
+  glob: vi.fn(),
 }));
 
 vi.mock("../graph.js", async () => {
@@ -29,11 +29,11 @@ vi.mock("../graph.js", async () => {
 
 import { generateSnapshot } from "../snapshot.js";
 import { readFileOr } from "../utils.js";
-import fg from "fast-glob";
+import { glob } from "tinyglobby";
 import type { DetectedContext } from "../types.js";
 
 const mockReadFileOr = vi.mocked(readFileOr);
-const mockFg = vi.mocked(fg);
+const mockGlob = vi.mocked(glob);
 
 function makePythonCtx(overrides?: Partial<DetectedContext>): DetectedContext {
   return {
@@ -69,7 +69,7 @@ class UserProfile:
     age: int = 0
 `;
 
-    mockFg.mockResolvedValue(["models/user.py"] as any);
+    mockGlob.mockResolvedValue(["models/user.py"] as any);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -91,7 +91,7 @@ class UserCreate(BaseModel):
     age: int | None = None
 `;
 
-    mockFg.mockResolvedValue(["schemas/user.py"] as any);
+    mockGlob.mockResolvedValue(["schemas/user.py"] as any);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -111,7 +111,7 @@ class Config(TypedDict):
     port: int
 `;
 
-    mockFg.mockResolvedValue(["types/config.py"] as any);
+    mockGlob.mockResolvedValue(["types/config.py"] as any);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -130,7 +130,7 @@ class Serializable(Protocol):
     def deserialize(self, data: bytes) -> None: ...
 `;
 
-    mockFg.mockResolvedValue(["core/protocols.py"] as any);
+    mockGlob.mockResolvedValue(["core/protocols.py"] as any);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -151,7 +151,7 @@ async def fetch_data(url: str, timeout: float = 30.0) -> dict[str, Any]:
     pass
 `;
 
-    mockFg.mockResolvedValue(["services/orders.py"] as any);
+    mockGlob.mockResolvedValue(["services/orders.py"] as any);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -175,7 +175,7 @@ def __very_private() -> None:
     pass
 `;
 
-    mockFg.mockResolvedValue(["utils/helpers.py"] as any);
+    mockGlob.mockResolvedValue(["utils/helpers.py"] as any);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -192,7 +192,7 @@ UserID = NewType("UserID", int)
 Callback = Callable[[str, int], bool]
 `;
 
-    mockFg.mockResolvedValue(["types/aliases.py"] as any);
+    mockGlob.mockResolvedValue(["types/aliases.py"] as any);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -215,7 +215,7 @@ def get_user(user_id: int) -> User:
     pass
 `;
 
-    mockFg.mockResolvedValue(["models/user.py"] as any);
+    mockGlob.mockResolvedValue(["models/user.py"] as any);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -234,7 +234,7 @@ def create_order(
     pass
 `;
 
-    mockFg.mockResolvedValue(["services/orders.py"] as any);
+    mockGlob.mockResolvedValue(["services/orders.py"] as any);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);

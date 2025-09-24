@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
+import fs from "node:fs/promises";
 import path from "node:path";
-import fg from "fast-glob";
+import { glob } from "tinyglobby";
 import type { Language, ProjectConfig, UserAnswers } from "./types.js";
 import { readJsonFile, writeFileSafe } from "./utils.js";
 
@@ -114,7 +115,7 @@ export async function computeSnapshotHash(
     other: ["**/*.{ts,tsx,js,jsx,py,go,rs}"],
   };
 
-  const files = await fg(extMap[language] ?? extMap.other, {
+  const files = await glob(extMap[language] ?? extMap.other, {
     cwd: rootDir,
     ignore: [
       "**/node_modules/**",
@@ -124,14 +125,17 @@ export async function computeSnapshotHash(
       "**/target/**",
       "**/vendor/**",
     ],
-    stats: true,
     absolute: false,
   });
 
   // Sort by path for deterministic hashing
-  const entries = files
-    .map((f) => `${f.path}:${f.stats?.mtimeMs ?? 0}`)
-    .sort();
+  const entries = await Promise.all(
+    files.map(async (f) => {
+      const stat = await fs.stat(path.join(rootDir, f)).catch(() => null);
+      return `${f}:${stat?.mtimeMs ?? 0}`;
+    }),
+  );
+  entries.sort();
 
   const hash = createHash("sha256")
     .update(entries.join("\n"))

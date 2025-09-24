@@ -1,5 +1,5 @@
 import path from "node:path";
-import fg from "fast-glob";
+import { glob } from "tinyglobby";
 import { readFileOr, readJsonFile } from "./utils.js";
 import type {
   ArchitecturalLayer,

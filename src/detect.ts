@@ -1,5 +1,6 @@
+import fs from "node:fs/promises";
 import path from "node:path";
-import fg from "fast-glob";
+import { glob } from "tinyglobby";
 import type {
   DetectedContext,
   DetectedFramework,
@@ -282,7 +283,7 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
 
   try {
     const extensions = getExtensionsForLanguage(ctx.language);
-    const sourceFiles = await fg(
+    const sourceFiles = await glob(
       extensions.map((ext) => `**/*${ext}`),
       {
         cwd: rootDir,
@@ -300,16 +301,17 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
           "**/Library/**",
           "**/.git/**",
         ],
-        stats: true,
       },
     );
 
     ctx.sourceFileCount = sourceFiles.length;
     onProgress?.(`Counting ${sourceFiles.length} source files...`);
-    ctx.totalSourceBytes = sourceFiles.reduce(
-      (sum, f) => sum + (f.stats?.size ?? 0),
-      0,
+    const sizes = await Promise.all(
+      sourceFiles.map((f) =>
+        fs.stat(path.join(rootDir, f)).then((s) => s.size).catch(() => 0),
+      ),
     );
+    ctx.totalSourceBytes = sizes.reduce((sum, s) => sum + s, 0);
   } catch {
     // Non-critical, leave at 0
   }
@@ -462,7 +464,7 @@ async function detectMonorepo(
   if (packageGlobs.length === 0) return null;
 
   // Resolve globs to actual directories
-  const resolvedDirs = await fg(packageGlobs, {
+  const resolvedDirs = await glob(packageGlobs, {
     cwd: rootDir,
     onlyDirectories: true,
     ignore: ["**/node_modules/**"],

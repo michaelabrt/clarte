@@ -47,7 +47,7 @@
   ],
   "dependencies": {
     "@clack/prompts": "^1.0.1",
-    "fast-glob": "^3.3.3",
+    "tinyglobby": "^0.2.12",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
@@ -56,9 +56,9 @@
     "@semantic-release/changelog": "^6.0.0",
     "@semantic-release/git": "^10.0.0",
     "@types/node": "^22.0.0",
-    "semantic-release": "^24.0.0",
+    "semantic-release": "^25.0.0",
     "tsup": "^8.4.0",
-    "typescript": "^5.7.0",
+    "typescript": "^5.9.3",
     "vitest": "^4.0.0"
   }
 }

@@ -185,7 +185,8 @@ async function scanBiomeRules(rootDir: string) {
   const config = await readBiomeConfig(rootDir);
   if (!config) return undefined;
 
-  const linterRules = config.linter?.rules as Record<string, unknown> | undefined;
+  const linter = config.linter as Record<string, unknown> | undefined;
+  const linterRules = linter?.rules as Record<string, unknown> | undefined;
   if (!linterRules) return undefined;
 
   const keyRules: Array<{ rule: string; setting: string; impact: string }> = [];
