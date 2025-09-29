@@ -5,6 +5,7 @@ import type {
   ProjectConfig,
   UserAnswers,
 } from "./types.js";
+import { theme as t } from "./theme.js";
 import { summarizeDetection } from "./detect.js";
 
 /** Languages that support code snapshot extraction */
@@ -39,7 +40,7 @@ export async function runPrompts(
   ];
 
   const ides = (await p.multiselect({
-    message: "Which AI coding tools do you use? (select all that apply)",
+    message: t.text("Which AI coding tools do you use? (select all that apply)"),
     options: ideOptions,
     initialValues: defaults?.ides ?? (defaults?.ide ? [defaults.ide] : undefined),
     required: true,
@@ -58,7 +59,9 @@ export async function runPrompts(
     const stackSummary = summarizeDetection(detected);
     if (stackSummary) {
       const confirm = await p.confirm({
-        message: `Detected: ${stackSummary}. Correct?`,
+        message: t.text(`Detected: ${stackSummary}. Correct?`),
+        active: t.soft("Yes"),
+        inactive: t.soft("No"),
       });
 
       if (p.isCancel(confirm)) {
@@ -70,7 +73,7 @@ export async function runPrompts(
 
       if (!confirm) {
         const corrections = await p.text({
-          message: "What should I correct? (describe your actual stack)",
+          message: t.text("What should I correct? (describe your actual stack)"),
           placeholder: "e.g. It's actually Next.js 15 + Prisma, not plain React",
           defaultValue: defaults?.stackCorrections || undefined,
         });
@@ -87,7 +90,7 @@ export async function runPrompts(
 
   // 3. Project purpose
   const projectPurpose = await p.text({
-    message: "What does this project do? (1-2 sentences)",
+    message: t.text("What does this project do? (1-2 sentences)"),
     placeholder:
       "e.g. A mobile AI chat app connecting to OpenAI, Anthropic, and Google APIs",
     defaultValue: defaults?.projectPurpose || undefined,
@@ -112,7 +115,7 @@ export async function runPrompts(
 
   const keyPatterns = await p.text({
     message:
-      "Any key patterns, conventions, or gotchas? (optional, press Enter to skip)",
+      t.text("Any key patterns, conventions, or gotchas? (optional, press Enter to skip)"),
     placeholder:
       "e.g. Zustand for state, never use FadeIn on ternary, angular commit style",
     defaultValue: patternsDefault,
@@ -134,7 +137,7 @@ export async function runPrompts(
       // On --reconfigure, let the user choose
       const snapshotChoice = (await p.select({
         message:
-          "Code snapshot (extracts types, function signatures, class definitions)",
+          t.text("Code snapshot (extracts types, function signatures, class definitions)"),
         options: [
           { value: "auto" as const, label: "Auto-detect key files" },
           { value: "custom" as const, label: "Custom paths" },
@@ -158,7 +161,7 @@ export async function runPrompts(
       } else if (snapshotChoice === "custom") {
         generateSnapshot = true;
         const paths = await p.text({
-          message: "Paths to scan (comma-separated, relative to project root)",
+          message: t.text("Paths to scan (comma-separated, relative to project root)"),
           placeholder: "e.g. src/types, src/stores, src/components",
           defaultValue:
             defaults?.snapshotPaths.length
@@ -191,7 +194,9 @@ export async function runPrompts(
     const pkgNames = mono.packages.map((pkg) => pkg.name).join(", ");
 
     const perPkg = await p.confirm({
-      message: `Monorepo detected (${mono.type}, ${mono.packages.length} packages: ${pkgNames}). Generate per-package context files?`,
+      message: t.text(`Monorepo detected (${mono.type}, ${mono.packages.length} packages: ${pkgNames}). Generate per-package context files?`),
+      active: t.soft("Yes"),
+      inactive: t.soft("No"),
       initialValue: defaults?.generatePerPackage ?? false,
     });
 

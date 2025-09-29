@@ -1,5 +1,6 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
+import { theme as t } from "./theme.js";
 import type {
   CodeSnapshot,
   ContextAnalysis,
@@ -174,21 +175,24 @@ export async function generateFiles(
   const existingFiles = files.filter((f) => f.existed);
   if (existingFiles.length > 0 && !force) {
     p.log.warn(
-      `The following files already exist:\n${existingFiles.map((f) => `  - ${f.path}`).join("\n")}`,
+      t.text("The following files already exist:") + "\n" +
+        existingFiles.map((f) => t.soft(`  - ${f.path}`)).join("\n"),
     );
 
     const overwrite = await p.confirm({
-      message: "Overwrite existing files?",
+      message: t.text("Overwrite existing files?"),
+      active: t.soft("Yes"),
+      inactive: t.soft("No"),
     });
 
     if (p.isCancel(overwrite) || !overwrite) {
       // Only write new files
       const newFiles = files.filter((f) => !f.existed);
       if (newFiles.length === 0) {
-        p.log.info("No new files to write. Exiting.");
+        p.log.info(t.text("No new files to write. Exiting."));
         return [];
       }
-      p.log.info(`Writing ${newFiles.length} new file(s), skipping existing.`);
+      p.log.info(t.text(`Writing ${newFiles.length} new file(s), skipping existing.`));
       for (const file of newFiles) {
         await writeFileSafe(path.join(ctx.rootDir, file.path), file.content);
       }

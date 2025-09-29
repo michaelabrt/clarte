@@ -65,9 +65,9 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   const found = await findContextFile(rootDir);
   if (!found) {
     p.log.error(
-      "No context file found. Run " +
+      t.text("No context file found. Run ") +
         t.accent("clarte") +
-        " first to generate one.",
+        t.text(" first to generate one."),
     );
     process.exit(1);
   }
@@ -75,7 +75,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   const absPath = path.join(rootDir, found.path);
   const content = await readFileOr(absPath);
   if (!content) {
-    p.log.error(`Could not read ${found.path}`);
+    p.log.error(t.text(`Could not read ${found.path}`));
     process.exit(1);
   }
 
@@ -83,20 +83,20 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   if (found.isAider) {
     if (!AIDER_START.test(content) || !AIDER_END.test(content)) {
       p.log.error(
-        `No code snapshot markers found in ${found.path}. Re-generate the file with code snapshot enabled.`,
+        t.text(`No code snapshot markers found in ${found.path}. Re-generate the file with code snapshot enabled.`),
       );
       process.exit(1);
     }
   } else {
     if (!MD_START.test(content) || !MD_END.test(content)) {
       p.log.error(
-        `No code snapshot markers found in ${found.path}. Re-generate the file with code snapshot enabled.`,
+        t.text(`No code snapshot markers found in ${found.path}. Re-generate the file with code snapshot enabled.`),
       );
       process.exit(1);
     }
   }
 
-  p.log.info(`Refreshing snapshot in ${t.accent(found.path)}`);
+  p.log.info(t.text("Refreshing snapshot in ") + t.accent(found.path));
 
   // 3. Detect context and generate new snapshot
   spinner.start("Scanning source files...");
@@ -118,7 +118,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   );
 
   if (snapshot.entries.length === 0) {
-    p.log.warn("No types found. Snapshot section will be empty.");
+    p.log.warn(t.text("No types found. Snapshot section will be empty."));
   }
 
   // 4. Replace the snapshot section
@@ -129,7 +129,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
     const startMatch = content.match(AIDER_START);
     const endMatch = content.match(AIDER_END);
     if (!startMatch || !endMatch) {
-      p.log.error("Failed to parse snapshot markers.");
+      p.log.error(t.text("Failed to parse snapshot markers."));
       process.exit(1);
     }
 
@@ -150,7 +150,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
     const startMatch = content.match(MD_START);
     const endMatch = content.match(MD_END);
     if (!startMatch || !endMatch) {
-      p.log.error("Failed to parse snapshot markers.");
+      p.log.error(t.text("Failed to parse snapshot markers."));
       process.exit(1);
     }
 
@@ -177,5 +177,5 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
     await saveConfig(rootDir, answers, newHash, config.language ?? detected.language);
   }
 
-  p.log.success(`Updated snapshot in ${t.accent(found.path)}`);
+  p.log.success(t.text("Updated snapshot in ") + t.accent(found.path));
 }
