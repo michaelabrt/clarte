@@ -170,24 +170,24 @@ export function printSummary(
   const afterBarLen = Math.max(1, Math.round((afterTotal / maxVal) * BAR_MAX));
   const savedLen = Math.max(0, beforeBarLen - afterBarLen);
 
-  // Before: slightly deeper blue → brand blue (subtle gradient)
+  // Before: warm gold gradient
   const beforeBar = gradient(
     "\u2588".repeat(beforeBarLen),
-    [90, 135, 230],   // slightly deeper than brand
-    [122, 162, 247],  // #7aa2f7 brand
+    [233, 206, 161],  // warm gold
+    [243, 228, 185],  // light gold
     t.brand,
   );
-  // After: brand blue → accent (subtle shift toward cyan)
+  // After: same gold palette
   const afterBar = gradient(
     "\u2588".repeat(afterBarLen),
-    [122, 162, 247],  // #7aa2f7 brand
-    [137, 180, 250],  // #89b4fa accent
+    [233, 206, 161],  // warm gold
+    [243, 228, 185],  // light gold
     t.accent,
   );
   const savedBar = t.muted("\u2591".repeat(savedLen));
 
-  console.log(`    Before  ${beforeBar}  ${t.muted(`~${formatNumber(explorationTokens)} tokens`)}`);
-  console.log(`    After   ${afterBar}${savedBar}  ${t.muted(`~${formatNumber(afterTotal)} tokens`)}`);
+  console.log(`    ${t.text("Before")}  ${beforeBar}  ${t.muted(`~${formatNumber(explorationTokens)} tokens`)}`);
+  console.log(`    ${t.text("After")}   ${afterBar}${savedBar}  ${t.muted(`~${formatNumber(afterTotal)} tokens`)}`);
 
   console.log("");
 

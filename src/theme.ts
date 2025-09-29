@@ -30,25 +30,31 @@ function rgb(r: number, g: number, b: number): (text: string) => string {
   return (text: string) => `${open}${text}${close}`;
 }
 
+function rgbAnsi(r: number, g: number, b: number): (text: string) => string {
+  const open = `\x1b[38;2;${r};${g};${b}m`;
+  const close = "\x1b[39m";
+  return (text: string) => `${open}${text}${close}`;
+}
+
 // ── Palette ──────────────────────────────────────────────────────────────────
 
 const palette = {
-  brand: rgb(122, 162, 247),   // #7aa2f7
-  accent: rgb(137, 180, 250),  // #89b4fa
-  muted: rgb(84, 92, 126),     // #545c7e
-  success: rgb(125, 207, 255), // #7dcfff
-  warn: rgb(178, 174, 166),    // #b2aea6 (cool stone, no orange)
-  error: rgb(219, 75, 75),     // #db4b4b
+  text: rgb(235, 233, 228),    // bone white -- clean off-white
+  warm: rgb(224, 220, 210),    // light gold -- warm highlight with body
+  brand: rgb(233, 206, 161),   // warm gold (#E9CEA1)
+  accent: rgb(233, 206, 161),  // warm gold (same as brand)
+  muted: rgb(202, 196, 178),   // light champagne (#CAC4B2)
+  error: rgb(134, 38, 51),     // wine red
 };
 
 // ── Fallback mapping (basic ANSI via picocolors) ─────────────────────────────
 
 const fallback = {
-  brand: pc.blue,
-  accent: pc.cyan,
+  text: pc.white,
+  warm: pc.white,
+  brand: pc.yellow,
+  accent: pc.yellow,
   muted: pc.dim,
-  success: pc.green,
-  warn: pc.yellow,
   error: pc.red,
 };
 
@@ -59,7 +65,7 @@ function pick(key: keyof typeof palette): (text: string) => string {
 
 // ── Gradient ─────────────────────────────────────────────────────────────────
 
-type RGB = [number, number, number];
+export type RGB = [number, number, number];
 
 /**
  * Apply a per-character color gradient across `text`.
@@ -89,20 +95,64 @@ export function gradient(
   return result + "\x1b[39m";
 }
 
+// ── Patch @clack/prompts colors ──────────────────────────────────────────────
+
+/**
+ * Monkey-patch picocolors singleton so @clack/prompts renders
+ * in our gold/wine-red palette instead of default terminal colors.
+ */
+export function patchClackColors(): void {
+  if (noColor || !isTTY) return;
+
+  const gold = rgbAnsi(233, 206, 161);
+  const wineRed = rgbAnsi(134, 38, 51);
+  const boneWhite = rgbAnsi(235, 233, 228);
+  const champagne = rgbAnsi(202, 196, 178);
+
+  const obj = pc as unknown as Record<string, unknown>;
+  obj.green = gold;
+  obj.cyan = gold;
+  obj.yellow = gold;
+  obj.red = wineRed;
+  obj.blue = gold;
+  obj.magenta = gold;
+  obj.white = boneWhite;
+  obj.reset = boneWhite;   // clack wraps note titles in pc.reset()
+  const boneWhiteSoft = rgbAnsi(202, 199, 192);
+  obj.gray = boneWhiteSoft;  // bone white soft for bars and borders
+  obj.dim = boneWhiteSoft;   // clack uses pc.dim for submitted values and separators
+}
+
 // ── Exported theme ───────────────────────────────────────────────────────────
 
 export const theme = {
+  /** Bone white -- primary text color */
+  text: (text: string) => pick("text")(text),
+  /** Light gold -- warm highlight with substance */
+  warm: (text: string) => pick("warm")(text),
+  /** Premium gold -- accent highlights, checkmarks */
   brand: (text: string) => pick("brand")(text),
   accent: (text: string) => pick("accent")(text),
+  /** Warm gray -- secondary/dim text */
   muted: (text: string) => pick("muted")(text),
-  success: (text: string) => pick("success")(text),
-  warn: (text: string) => pick("warn")(text),
+  /** Wine red -- errors only */
   error: (text: string) => pick("error")(text),
 
+  /** Soft white -- slightly muted bone white for table content, option values */
+  soft: (text: string) => noColor || !isTTY ? text : trueColor ? `\x1b[38;2;202;199;192m${text}\x1b[39m` : pc.white(text),
+
   bold: (text: string) => (noColor || !isTTY ? text : pc.bold(text)),
+  /** Bone white + bold -- section headers */
+  textBold: (text: string) => pick("text")(noColor || !isTTY ? text : pc.bold(text)),
   brandBold: (text: string) => pick("brand")(noColor || !isTTY ? text : pc.bold(text)),
+
+  /** Success/positive indicator -- maps to gold in warm palette */
+  success: (text: string) => pick("brand")(text),
+  /** Warning/caution indicator -- maps to warm tone */
+  warn: (text: string) => pick("warm")(text),
+
   accentBold: (text: string) => pick("accent")(noColor || !isTTY ? text : pc.bold(text)),
 
-  /** Styled checkmark */
-  check: () => pick("success")("✓"),
+  /** Styled checkmark in gold */
+  check: () => pick("brand")("\u2713"),
 };

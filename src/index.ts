@@ -49,36 +49,34 @@ patchClackColors();
 
 function printHelp(): void {
   console.log("");
-  console.log(gradient(" clart\u00e9 ", [233, 206, 161], [235, 220, 185], t.brandBold));
+  console.log(gradient(" clart\u00e9 ", [233, 206, 161], [243, 228, 185], t.brandBold));
   console.log(t.muted("  " + DESCRIPTION));
   console.log("");
   console.log(`  ${t.textBold("Usage:")}  ${t.text(`npx ${NAME} [directory] [options]`)}`);
   console.log("");
   console.log(`  ${t.textBold("Options:")}`);
-  console.log(`    ${t.text("-h, --help")}              ${t.text("Show this help message")}`);
-  console.log(`    ${t.text("-V, --version")}           ${t.text("Show version number")}`);
-  console.log(`    ${t.text("--force")}                 ${t.text("Overwrite existing files without asking")}`);
-  console.log(`    ${t.text("--dry-run")}               ${t.text("Preview what would be generated")}`);
-  console.log(`    ${t.text("--reconfigure")}           ${t.text("Re-prompt even if .clarte.json exists")}`);
-  console.log(`    ${t.text("--refresh-snapshot")}      ${t.text("Re-scan source files, update code snapshot only")}`);
-  console.log(`    ${t.text("--check")}                 ${t.text("Exit 0 if snapshot is fresh, 1 if stale (hash-based)")}`);
-  console.log(`    ${t.text("--check=timestamp")}       ${t.text("Exit 0/1 based on age only (no Node.js needed in shell hooks)")}`);
-  console.log(`    ${t.text("--max-tokens=N")}          ${t.text("Set the token budget for the code snapshot")}`);
-  console.log(`    ${t.text("--generate-skills")}       ${t.text("Generate Claude Code skill files")}`);
-  console.log(`    ${t.text("--diff[=REF]")}            ${t.text("Output focused context for changed files (vs HEAD or REF)")}`);
-  console.log(`    ${t.text("-v, --verbose")}           ${t.text("Show detailed progress output")}`);
+  console.log(`    ${t.accent("-h, --help")}              ${t.text("Show this help message")}`);
+  console.log(`    ${t.accent("-V, --version")}           ${t.text("Show version number")}`);
+  console.log(`    ${t.accent("--force")}                 ${t.text("Overwrite existing files without asking")}`);
+  console.log(`    ${t.accent("--dry-run")}               ${t.text("Preview what would be generated")}`);
+  console.log(`    ${t.accent("--reconfigure")}           ${t.text("Re-prompt even if .clarte.json exists")}`);
+  console.log(`    ${t.accent("--refresh-snapshot")}      ${t.text("Re-scan source files, update code snapshot only")}`);
+  console.log(`    ${t.accent("--check")}                 ${t.text("Exit 0 if snapshot is fresh, 1 if stale (hash-based)")}`);
+  console.log(`    ${t.accent("--check=timestamp")}       ${t.text("Exit 0/1 based on age only (no Node.js needed in shell hooks)")}`);
+  console.log(`    ${t.accent("--max-tokens=N")}          ${t.text("Set the token budget for the code snapshot")}`);
+  console.log(`    ${t.accent("--generate-skills")}       ${t.text("Generate Claude Code skill files")}`);
+  console.log(`    ${t.accent("-v, --verbose")}           ${t.text("Show detailed progress output")}`);
   console.log("");
   console.log(`  ${t.textBold("Examples:")}`);
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME}`)}                   ${t.muted("# analyze current directory")}`);
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} ./my-project`)}      ${t.muted("# analyze a specific project")}`);
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --dry-run`)}          ${t.muted("# preview without writing files")}`);
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --refresh-snapshot`)} ${t.muted("# update code snapshot only")}`);
-  console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --diff`)}             ${t.muted("# focused context for uncommitted changes")}`);
-  console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --diff=main`)}        ${t.muted("# focused context vs main branch")}`);
   console.log("");
 }
 
 async function main() {
+  patchClackColors();
   const startTime = performance.now();
   const args = process.argv.slice(2);
 
@@ -118,9 +116,9 @@ async function main() {
 
   if (!hasProjectMarker) {
     console.log("");
-    p.intro(t.bold(" clarte "));
-    p.log.error(t.text(`No project found at ${rootDir}`));
-    p.log.info(t.text("Run ") + t.textBold("npx clarte") + t.text(" from a project directory, or pass a path:\n  ") + t.muted("npx clarte ./my-project"));
+    p.intro(t.textBold(" clart\u00e9 "));
+    p.log.error(`No project found at ${t.accent(rootDir)}`);
+    p.log.info(`Run ${t.bold("npx clarte")} from a project directory, or pass a path:\n  ${t.muted("npx clarte ./my-project")}`);
     p.outro("");
     process.exit(1);
   }
@@ -179,7 +177,7 @@ async function main() {
   }
 
   console.log("");
-  p.intro(gradient(" clart\u00e9 ", [233, 206, 161], [235, 220, 185], t.brandBold));
+  p.intro(gradient(" clart\u00e9 ", [233, 206, 161], [243, 228, 185], t.brandBold));
   p.log.info(t.muted("code analysis for AI context"));
 
   // --refresh-snapshot: fast path, update snapshot in existing context file
@@ -224,27 +222,27 @@ async function main() {
   {
     const lines: string[] = [];
     const lang = detected.hasTypeScript ? "TypeScript" : detected.language !== "other" ? detected.language.charAt(0).toUpperCase() + detected.language.slice(1) : "";
-    if (lang) lines.push(`  ${t.soft("Language")}   ${t.soft(lang)}`);
+    if (lang) lines.push(`  ${"Language"}   ${t.textBold(lang)}`);
     if (detected.frameworks.length > 0) {
-      lines.push(`  ${t.soft("Frameworks")} ${t.soft(detected.frameworks.map((f) => f.name).join(", "))}`);
+      lines.push(`  ${"Frameworks"} ${t.textBold(detected.frameworks.map((f) => f.name).join(", "))}`);
     }
     if (detected.linter !== "none") {
-      lines.push(`  ${t.soft("Linter")}     ${t.soft(detected.linter.charAt(0).toUpperCase() + detected.linter.slice(1))}`);
+      lines.push(`  ${"Linter"}     ${t.textBold(detected.linter.charAt(0).toUpperCase() + detected.linter.slice(1))}`);
     }
     if (detected.packageManager !== "none") {
-      lines.push(`  ${t.soft("Pkg mgr")}    ${t.soft(detected.packageManager)}`);
+      lines.push(`  ${"Pkg mgr"}    ${t.textBold(detected.packageManager)}`);
     }
     if (detected.testFramework) {
-      lines.push(`  ${t.soft("Testing")}    ${t.soft(detected.testFramework)}`);
+      lines.push(`  ${"Testing"}    ${t.textBold(detected.testFramework)}`);
     }
     if (detected.ciProvider) {
-      lines.push(`  ${t.soft("CI")}         ${t.soft(detected.ciProvider)}`);
+      lines.push(`  ${"CI"}         ${t.textBold(detected.ciProvider)}`);
     }
     if (detected.monorepo) {
-      lines.push(`  ${t.soft("Monorepo")}   ${t.soft(`${detected.monorepo.type} (${detected.monorepo.packages.length} package${detected.monorepo.packages.length === 1 ? "" : "s"})`)}`);
+      lines.push(`  ${"Monorepo"}   ${t.textBold(`${detected.monorepo.type} (${detected.monorepo.packages.length} package${detected.monorepo.packages.length === 1 ? "" : "s"})`)}`);
     }
     if (detected.sourceFileCount > 0) {
-      lines.push(`  ${t.soft("Files")}      ${t.soft(`${detected.sourceFileCount} (${formatBytes(detected.totalSourceBytes)})`)}`);
+      lines.push(`  ${"Files"}      ${t.textBold(`${detected.sourceFileCount}`)} ${t.muted(`(${formatBytes(detected.totalSourceBytes)})`)}`);
     }
     if (lines.length > 0) {
       p.note(lines.join("\n"), "Detected Stack");
@@ -308,21 +306,17 @@ async function main() {
     var analysisLayerEdges = layerEdges;
   }
 
-  // Instability metrics
-  {
-    const s = startShimmer("Computing instability metrics...");
-    const instabilities = computeInstability(graph);
-    s.stop();
-    const highInstability = instabilities.filter((f) => f.instability > 0.8);
-    p.log.step(
-      highInstability.length > 0
-        ? `${t.text("Instability")}    ${t.text(String(highInstability.length))} ${t.text(`high-risk file${highInstability.length === 1 ? "" : "s"}`)}`
-        : `${t.text("Instability")}    ${t.muted("all files within healthy range")} ${t.check()}`,
-    );
-    if (verbose && highInstability.length > 0) {
-      for (const f of highInstability.slice(0, 5)) {
-        p.log.info(t.muted(`  ${f.path} (I=${f.instability.toFixed(2)}, fan-in=${f.fanIn}, fan-out=${f.fanOut})`));
-      }
+  // Instability metrics (no dedicated animation, fast computation)
+  const instabilities = computeInstability(graph);
+  const highInstability = instabilities.filter((f) => f.instability > 0.8);
+  p.log.step(
+    highInstability.length > 0
+      ? `${t.brand("Instability")}    ${t.bold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"} ${t.warn("\u26A0")}`
+      : `${t.brand("Instability")}    ${t.muted("all files within healthy range")} ${t.check()}`,
+  );
+  if (verbose && highInstability.length > 0) {
+    for (const f of highInstability.slice(0, 5)) {
+      p.log.info(t.muted(`  ${f.path} (I=${f.instability.toFixed(2)}, fan-in=${f.fanIn}, fan-out=${f.fanOut})`));
     }
     var analysisInstabilities = instabilities;
   }
@@ -491,19 +485,18 @@ async function main() {
   // Analysis report box
   {
     const reportLines: string[] = [];
-    reportLines.push(`  ${t.soft("Files analyzed")}  ${t.soft(String(fileCount))}`);
-    reportLines.push(`  ${t.soft("Import edges")}    ${t.soft(String(graph.edges.length))}`);
-    reportLines.push(`  ${t.soft("External pkgs")}   ${t.soft(String(graph.externalImportCounts.size))}`);
-    if (analysisHubFiles.length > 0) {
-      const mostConnected = analysisHubFiles[0].path;
-      reportLines.push(`  ${t.soft("Hub files")}       ${t.soft(`${analysisHubFiles.length} (most connected: ${mostConnected})`)}`);
+    reportLines.push(`  ${"Files analyzed"}  ${t.textBold(String(fileCount))}`);
+    reportLines.push(`  ${"Import edges"}    ${t.textBold(String(graph.edges.length))}`);
+    reportLines.push(`  ${"External pkgs"}   ${t.textBold(String(graph.externalImportCounts.size))}`);
+    if (hubFiles.length > 0) {
+      reportLines.push(`  ${"Hub files"}       ${t.textBold(String(hubFiles.length))}` + (hubFiles[0] ? ` ${t.muted(`(most connected: ${hubFiles[0].path})`)}` : ""));
     }
-    if (analysisLayers.length > 0) {
-      reportLines.push(`  ${t.soft("Architecture")}    ${t.soft(analysisLayers.map((l) => l.name).join(" \u2192 "))}`);
+    if (layers.length > 0) {
+      reportLines.push(`  ${"Architecture"}    ${t.textBold(layers.map((l) => l.name).join(" → "))}`);
     }
-    reportLines.push(`  ${t.soft("Circular deps")}   ${analysisCircularDeps.length === 0 ? t.soft("none") : t.soft(`${analysisCircularDeps.length} chain${analysisCircularDeps.length === 1 ? "" : "s"}`)}`);
+    reportLines.push(`  ${"Circular deps"}   ${circularDeps.length === 0 ? t.textBold("none") : t.text(`${circularDeps.length} chain${circularDeps.length === 1 ? "" : "s"}`)}`);
     if (gitActivity) {
-      reportLines.push(`  ${t.soft("Hot files (90d)")} ${t.soft(String(gitActivity.hotFiles.length))}`);
+      reportLines.push(`  ${"Hot files (90d)"} ${t.textBold(String(gitActivity.hotFiles.length))}`);
     }
     p.note(reportLines.join("\n"), "Analysis Report");
 
