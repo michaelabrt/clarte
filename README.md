@@ -141,7 +141,7 @@ Your answers are saved to `.clarte.json` so future runs skip the prompts.
 | Language | Import parsing | Snapshot extraction |
 |----------|---------------|---------------------|
 | TypeScript / JavaScript | `import`, `require` | types, interfaces, functions, components, hooks, stores |
-| Python | `import`, `from ... import` | classes (BaseModel, TypedDict, dataclass, Enum), functions, type aliases |
+| Python | `import`, `from ... import` | classes (with public method signatures), functions, type aliases |
 | Go | `import` | - |
 | Rust | `use` | - |
 | Java | `import` | - |
@@ -223,7 +223,7 @@ Identifies files with zero in-degree (nothing imports them), excluding known ent
 
 ### Dead Export Removal
 
-Cross-references every named export against the import graph. If nothing in the project imports it, it's excluded from the snapshot.
+Cross-references every named export against the import graph. If nothing in the project imports it, it's excluded from the snapshot. Library projects (detected via `main`/`exports`/`bin` fields in `package.json`) skip this filtering to preserve public API exports.
 
 This catches leftover refactors, over-exported utilities, and test-only helpers, keeping the context lean.
 

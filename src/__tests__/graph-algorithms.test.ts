@@ -85,6 +85,46 @@ describe("findCircularDeps", () => {
     const deps = findCircularDeps(graph, 2);
     expect(deps.length).toBeLessThanOrEqual(2);
   });
+
+  it("reports only valid paths (every consecutive pair has an edge)", () => {
+    // SCC {A, B, C} with edges A->B, B->A, B->C, C->B (two overlapping 2-cycles)
+    // Previously this would report [A, B, C, A] which has no edge A->C
+    const graph = makeGraph(["a", "b", "c"], [
+      edge("a", "b"),
+      edge("b", "a"),
+      edge("b", "c"),
+      edge("c", "b"),
+    ]);
+    const deps = findCircularDeps(graph);
+    expect(deps.length).toBeGreaterThan(0);
+
+    // Build adjacency set for edge validation
+    const edgeSet = new Set<string>();
+    for (const e of graph.edges) {
+      if (!e.isExternal) edgeSet.add(`${e.from}->${e.to}`);
+    }
+
+    // Every consecutive pair in each chain must be a real edge
+    for (const dep of deps) {
+      for (let i = 0; i < dep.chain.length - 1; i++) {
+        const key = `${dep.chain[i]}->${dep.chain[i + 1]}`;
+        expect(edgeSet.has(key)).toBe(true);
+      }
+    }
+  });
+
+  it("finds mutual imports as 2-cycles", () => {
+    const graph = makeGraph(["a", "b", "c"], [
+      edge("a", "b"),
+      edge("b", "a"),
+      edge("b", "c"),
+      edge("c", "b"),
+    ]);
+    const deps = findCircularDeps(graph);
+    // Should find both 2-cycles: a<->b and b<->c
+    const twoCycles = deps.filter((d) => d.chain.length === 3);
+    expect(twoCycles.length).toBe(2);
+  });
 });
 
 describe("computeHITS", () => {

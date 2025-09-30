@@ -306,18 +306,6 @@ export interface Community {
   label: string;
 }
 
-/** Export coverage metric for a file */
-export interface ExportCoverage {
-  /** Relative file path */
-  file: string;
-  /** Total number of named exports */
-  totalExports: number;
-  /** Number of exports used by other files */
-  usedExports: number;
-  /** Coverage ratio: usedExports / totalExports */
-  coverage: number;
-}
-
 /** A directed edge between two architectural layers */
 export interface LayerEdge {
   from: string;
@@ -404,6 +392,8 @@ export interface Chokepoint {
   separates: number;
   /** Number of files that import this file */
   importedBy: number;
+  /** Files that would be disconnected from the main component if this file were removed */
+  dependents?: string[];
 }
 
 /** Inferred coding conventions from source analysis */
@@ -420,6 +410,32 @@ export interface InferredConventions {
     barrelFileCount: number;
   };
   importOrdering?: string;
+}
+
+/** Transitive dependency risk score for a file */
+export interface TransitiveDependencyRisk {
+  /** Relative file path */
+  path: string;
+  /** Direct volatility (own churn normalized 0-1) */
+  directVolatility: number;
+  /** Weighted transitive volatility from dependencies */
+  transitiveVolatility: number;
+  /** Composite risk score: directVolatility * 0.3 + transitiveVolatility * 0.7 */
+  riskScore: number;
+}
+
+/** Graph topology metrics (connected components, diameter, reachability) */
+export interface GraphTopology {
+  /** Number of connected components */
+  componentCount: number;
+  /** Sizes of each connected component, sorted descending */
+  componentSizes: number[];
+  /** Approximate graph diameter (longest shortest path sampled) */
+  approximateDiameter: number;
+  /** Fraction of files reachable from the largest component */
+  reachability: number;
+  /** Whether the codebase has independent subsystems (>1 component with 5+ files) */
+  isFragmented: boolean;
 }
 
 /** Test-to-source file mapping */
@@ -445,8 +461,6 @@ export interface ContextAnalysis {
   instabilities: FileInstability[];
   /** Detected module clusters/communities */
   communities: Community[];
-  /** Export coverage metrics per file */
-  exportCoverage?: ExportCoverage[];
   /** Files with zero in-degree (not imported by anything) */
   deadFiles?: string[];
   /** Extracted config constraints (tsconfig, linter, formatter) */
@@ -461,4 +475,6 @@ export interface ContextAnalysis {
   conventions?: InferredConventions;
   /** Test-to-source file mapping */
   testMapping?: TestMapping;
+  /** Graph topology metrics */
+  graphTopology?: GraphTopology;
 }

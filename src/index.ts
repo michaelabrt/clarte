@@ -22,12 +22,13 @@ import {
   findCircularDeps,
   detectArchitecturalLayers,
   computeInstability,
+  INSTABILITY_THRESHOLD,
   detectCommunities,
-  computeExportCoverage,
   findDeadFiles,
   findCrossCuttingFiles,
   computeLayerConsistency,
   findChokepoints,
+  computeGraphTopology,
 } from "./graph.js";
 import { analyzeGitActivity } from "./git-analysis.js";
 import { scanConfigConstraints } from "./config-scan.js";
@@ -315,7 +316,7 @@ async function main() {
 
   // Instability metrics (no dedicated animation, fast computation)
   const instabilities = computeInstability(graph);
-  const highInstability = instabilities.filter((f) => f.instability > 0.8);
+  const highInstability = instabilities.filter((f) => f.instability > INSTABILITY_THRESHOLD);
   p.log.step(
     highInstability.length > 0
       ? `${t.brand("Instability")}    ${t.textBold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"} ${t.warn("\u26A0")}`
@@ -340,28 +341,6 @@ async function main() {
       p.log.info(t.muted(`  ${c.label} (${c.files.length} files)`));
     }
     var analysisCommunities = communities;
-  }
-
-  // Export coverage
-  {
-    const s = startShimmer("Scanning export coverage...");
-    const exportCoverage = computeExportCoverage(graph);
-    s.stop();
-    const totalExp = exportCoverage.reduce((sum, e) => sum + e.totalExports, 0);
-    const totalUsed = exportCoverage.reduce((sum, e) => sum + e.usedExports, 0);
-    const unusedCount = totalExp - totalUsed;
-    const filesWithUnused = exportCoverage.filter((e) => e.usedExports < e.totalExports).length;
-    p.log.step(
-      unusedCount > 0
-        ? `${t.brand("Exports")}        ${t.textBold(String(unusedCount))} unused export${unusedCount === 1 ? "" : "s"} in ${t.textBold(String(filesWithUnused))} file${filesWithUnused === 1 ? "" : "s"} ${t.warn("\u26A0")}`
-        : `${t.brand("Exports")}        ${t.muted("all exports used")} ${t.check()}`,
-    );
-    if (verbose && unusedCount > 0) {
-      for (const e of exportCoverage.filter((e) => e.usedExports < e.totalExports).slice(0, 5)) {
-        p.log.info(t.muted(`  ${e.file}: ${e.totalExports - e.usedExports} unused of ${e.totalExports}`));
-      }
-    }
-    var analysisExportCoverage = exportCoverage;
   }
 
   // Git history
@@ -483,7 +462,24 @@ async function main() {
     }
   }
 
-  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, exportCoverage, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined };
+  // Graph topology (connected components, diameter)
+  const graphTopology = computeGraphTopology(graph);
+  if (graphTopology.isFragmented) {
+    p.log.step(
+      `${t.brand("Topology")}       ${t.textBold(String(graphTopology.componentCount))} connected component${graphTopology.componentCount === 1 ? "" : "s"} (fragmented) ${t.warn("\u26A0")}`,
+    );
+    if (verbose) {
+      const sizes = graphTopology.componentSizes.slice(0, 5).join(", ");
+      p.log.info(t.muted(`  Component sizes: ${sizes}${graphTopology.componentSizes.length > 5 ? ", ..." : ""}`));
+      p.log.info(t.muted(`  Approximate diameter: ${graphTopology.approximateDiameter} hops`));
+    }
+  } else if (verbose) {
+    p.log.step(
+      `${t.brand("Topology")}       single connected graph, diameter ~${graphTopology.approximateDiameter} hops`,
+    );
+  }
+
+  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined, graphTopology };
 
   // Analysis report box
   {
