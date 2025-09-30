@@ -1,4 +1,4 @@
-import { theme as t, gradient } from "./theme.js";
+import { theme as t, gradient, getGradientBarColors } from "./theme.js";
 import type { CodeSnapshot, ContextAnalysis, DetectedContext, GeneratedFile } from "./types.js";
 import { estimateTokens, formatBytes } from "./utils.js";
 
@@ -170,18 +170,18 @@ export function printSummary(
   const afterBarLen = Math.max(1, Math.round((afterTotal / maxVal) * BAR_MAX));
   const savedLen = Math.max(0, beforeBarLen - afterBarLen);
 
-  // Before: warm gold gradient
+  // Palette-derived gradient colors
+  const barColors = getGradientBarColors();
   const beforeBar = gradient(
     "\u2588".repeat(beforeBarLen),
-    [233, 206, 161],  // warm gold
-    [243, 228, 185],  // light gold
+    barColors.from,
+    barColors.to,
     t.brand,
   );
-  // After: same gold palette
   const afterBar = gradient(
     "\u2588".repeat(afterBarLen),
-    [233, 206, 161],  // warm gold
-    [243, 228, 185],  // light gold
+    barColors.from,
+    barColors.to,
     t.accent,
   );
   const savedBar = t.muted("\u2591".repeat(savedLen));

@@ -44,6 +44,7 @@ export async function loadConfig(
     snapshotGeneratedAt: cfg.snapshotGeneratedAt,
     language: cfg.language,
     staleDays: cfg.staleDays,
+    colorScheme: cfg.colorScheme,
   };
 }
 
@@ -75,6 +76,7 @@ export async function saveConfig(
       : {}),
     ...(language ? { language } : {}),
     ...(existing?.staleDays != null ? { staleDays: existing.staleDays } : {}),
+    ...(existing?.colorScheme ? { colorScheme: existing.colorScheme } : {}),
   };
   await writeFileSafe(configPath, JSON.stringify(cfg, null, 2) + "\n");
 }
@@ -95,6 +97,23 @@ export function configToAnswers(config: ProjectConfig): UserAnswers {
     stackCorrections: config.stackCorrections,
     generatePerPackage: config.generatePerPackage,
   };
+}
+
+/**
+ * Save just the colorScheme field into an existing .clarte.json.
+ * If the config file doesn't exist yet, creates a minimal one.
+ */
+export async function saveColorScheme(
+  rootDir: string,
+  colorScheme: "dark" | "light",
+): Promise<void> {
+  const configPath = path.join(rootDir, CONFIG_FILENAME);
+  const existing = await readJsonFile(configPath) as Record<string, unknown> | null;
+  if (existing) {
+    existing.colorScheme = colorScheme;
+    await writeFileSafe(configPath, JSON.stringify(existing, null, 2) + "\n");
+  }
+  // If no config yet, colorScheme will be saved when saveConfig() runs later
 }
 
 /**
