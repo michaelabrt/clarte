@@ -1,7 +1,7 @@
 import path from "node:path";
 import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
-import { theme as t, gradient, patchClackColors } from "./theme.js";
+import { theme as t, initTheme } from "./theme.js";
 import { fileExists } from "./utils.js";
 import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import { runPrompts } from "./prompts.js";
@@ -11,6 +11,7 @@ import { printSummary } from "./summary.js";
 import {
   loadConfig,
   saveConfig,
+  saveColorScheme,
   configToAnswers,
   computeSnapshotHash,
 } from "./config.js";
@@ -34,7 +35,7 @@ import { inferConventions } from "./conventions.js";
 import { buildTestMapping } from "./test-map.js";
 import { formatBytes } from "./utils.js";
 import { startShimmer } from "./animations.js";
-import type { ContextAnalysis, ImportGraph, ProgressCallback } from "./types.js";
+import type { ContextAnalysis, ProgressCallback } from "./types.js";
 
 declare const PKG_VERSION: string;
 declare const PKG_NAME: string;
@@ -49,7 +50,7 @@ patchClackColors();
 
 function printHelp(): void {
   console.log("");
-  console.log(gradient(" clart\u00e9 ", [233, 206, 161], [243, 228, 185], t.brandBold));
+  console.log(t.brandBold(" Clart") + t.textBold("\u00e9 "));
   console.log(t.muted("  " + DESCRIPTION));
   console.log("");
   console.log(`  ${t.textBold("Usage:")}  ${t.text(`npx ${NAME} [directory] [options]`)}`);
@@ -76,12 +77,12 @@ function printHelp(): void {
 }
 
 async function main() {
-  patchClackColors();
   const startTime = performance.now();
   const args = process.argv.slice(2);
 
   // Early-exit flags (before any project validation)
   if (args.includes("--help") || args.includes("-h")) {
+    initTheme("dark");
     printHelp();
     process.exit(0);
   }
@@ -115,11 +116,11 @@ async function main() {
   )).some(Boolean);
 
   if (!hasProjectMarker) {
+    initTheme("dark");
     console.log("");
-    p.intro(t.textBold(" clart\u00e9 "));
-    p.log.error(`No project found at ${t.accent(rootDir)}`);
-    p.log.info(`Run ${t.bold("npx clarte")} from a project directory, or pass a path:\n  ${t.muted("npx clarte ./my-project")}`);
-    p.outro("");
+    console.log(t.error(`No project found at ${rootDir}`));
+    console.log(t.text(`Run ${t.accent("npx clarte")} from a project directory, or pass a path:`));
+    console.log(t.muted("  npx clarte ./my-project"));
     process.exit(1);
   }
 
@@ -165,19 +166,37 @@ async function main() {
     process.exit(0);
   }
 
-  // --diff: focused context for changed files
-  if (diffMode) {
-    console.log("");
-    p.intro(gradient(" clart\u00e9 ", [233, 206, 161], [235, 220, 185], t.brandBold));
-    p.log.info(t.muted("diff-aware context"));
-    await runDiffMode(rootDir, diffRef, verbose);
-    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-    p.outro(t.brand(`Done in ${elapsed}s`));
-    return;
+  // Determine color scheme: env var > saved config > interactive prompt
+  let colorScheme: "dark" | "light" = "dark";
+  const envTheme = process.env.CLARTE_THEME;
+  if (envTheme === "dark" || envTheme === "light") {
+    colorScheme = envTheme;
+  } else {
+    const earlyConfig = await loadConfig(rootDir);
+    if (earlyConfig?.colorScheme) {
+      colorScheme = earlyConfig.colorScheme;
+    } else {
+      // First run: ask with unpatched clack (default ANSI colors)
+      const selected = await p.select({
+        message: "Which terminal background are you using?",
+        options: [
+          { value: "dark" as const, label: "Dark background", hint: "default" },
+          { value: "light" as const, label: "Light background" },
+        ],
+      });
+      if (p.isCancel(selected)) {
+        process.exit(0);
+      }
+      colorScheme = selected;
+      // Persist for future runs (into existing config if present)
+      await saveColorScheme(rootDir, colorScheme);
+    }
   }
 
+  initTheme(colorScheme);
+
   console.log("");
-  p.intro(gradient(" clart\u00e9 ", [233, 206, 161], [243, 228, 185], t.brandBold));
+  p.intro(t.brandBold(" Clart") + t.textBold("\u00e9 "));
   p.log.info(t.muted("code analysis for AI context"));
 
   // --refresh-snapshot: fast path, update snapshot in existing context file
@@ -191,24 +210,21 @@ async function main() {
     p.log.warn(t.text("DRY RUN: no files will be written"));
   }
 
-  p.log.info(t.text(`Analyzing ${rootDir}`));
+  p.log.info(t.text(`Analyzing ${t.accent(rootDir)}`));
 
   // Step 1: Auto-detect
-  const shimmer = startShimmer("Detecting tech stack...");
-  const shimmerProgress: ProgressCallback = (msg) => shimmer.message(msg);
-
-  const detected = await detectContext(rootDir, shimmerProgress);
+  let shimmer = startShimmer("Detecting stack...");
+  const detected = await detectContext(rootDir, verbose ? verboseLog : (msg) => shimmer.message(msg));
   shimmer.stop();
   p.log.step(t.text("Detection complete."));
 
   // Step 1.5: Build import graph
-  const graphShimmer = startShimmer(`Building import graph (${detected.sourceFileCount} files)...`);
-  const graphProgress: ProgressCallback = (msg) => graphShimmer.message(msg);
-  const graph = await buildImportGraph(rootDir, detected.language, verbose ? verboseLog : graphProgress);
+  shimmer = startShimmer(`Building import graph (${detected.sourceFileCount} files)...`);
+  const graph = await buildImportGraph(rootDir, detected.language, verbose ? verboseLog : (msg) => shimmer.message(msg));
   const topHub = getHubFiles(graph, 1)[0];
-  graphShimmer.stop();
+  shimmer.stop();
   p.log.step(
-    t.text(`Import graph: ${graph.edges.length} edges, ${graph.externalImportCounts.size} packages.`) +
+    `${t.text("Import graph:")} ${t.textBold(String(graph.edges.length))} ${t.text("edges,")} ${t.textBold(String(graph.externalImportCounts.size))} ${t.text("packages.")}` +
       (topHub ? t.muted(` Top hub: ${topHub.path}`) : ""),
   );
 
@@ -253,12 +269,11 @@ async function main() {
   const fileCount = graph.centrality.size;
 
   // HITS analysis
-  await animatePageRank();
   const hubFiles = getHubFiles(graph);
   const topHubName = hubFiles[0]?.path ?? "";
   p.log.step(
     hubFiles.length > 0
-      ? `${t.brand("HITS")}           found ${t.bold(String(hubFiles.length))} key files` +
+      ? `${t.brand("HITS")}           found ${t.textBold(String(hubFiles.length))} key files` +
         (topHubName ? t.muted(` (top: ${topHubName})`) : "")
       : `${t.brand("HITS")}           ${t.muted("no key files detected")}`,
   );
@@ -269,38 +284,30 @@ async function main() {
     var analysisHubFiles = hubFiles;
   }
 
-  // Tarjan SCC: cycle detection
-  {
-    const s = startShimmer("Finding circular import chains...");
-    const circularDeps = findCircularDeps(graph);
-    s.stop();
-    p.log.step(
-      circularDeps.length === 0
-        ? `${t.text("Tarjan SCC")}     ${t.text("no cycles found")} ${t.check()}`
-        : `${t.text("Tarjan SCC")}     ${t.text(String(circularDeps.length))} ${t.text(`cycle${circularDeps.length === 1 ? "" : "s"} found`)}`,
-    );
-    if (verbose && circularDeps.length > 0) {
-      for (const c of circularDeps.slice(0, 3)) {
-        p.log.info(t.muted(`  ${c.chain.join(" \u2192 ")}`));
-      }
+  // Tarjan SCC: cycle detection (single call with real data)
+  const circularDeps = findCircularDeps(graph);
+  p.log.step(
+    circularDeps.length === 0
+      ? `${t.brand("Tarjan SCC")}     no cycles found ${t.check()}`
+      : `${t.brand("Tarjan SCC")}     ${t.textBold(String(circularDeps.length))} cycle${circularDeps.length === 1 ? "" : "s"} found ${t.warn("\u26A0")}`,
+  );
+  if (verbose && circularDeps.length > 0) {
+    for (const c of circularDeps.slice(0, 3)) {
+      p.log.info(t.muted(`  ${c.chain.join(" → ")}`));
     }
     var analysisCircularDeps = circularDeps;
   }
 
   // Architecture layers
-  {
-    const s = startShimmer("Detecting architecture layers...");
-    const { layers, layerEdges } = detectArchitecturalLayers(graph);
-    s.stop();
-    p.log.step(
-      layers.length > 0
-        ? `${t.text("Layers")}         ${t.text(layers.map((l) => l.name).join(" \u2192 "))}`
-        : `${t.text("Layers")}         ${t.muted("no clear layers detected")}`,
-    );
-    if (verbose && layers.length > 0) {
-      for (const l of layers) {
-        p.log.info(t.muted(`  ${l.name}: ${l.files.length} files, depends on: ${l.dependsOn.join(", ") || "none"}`));
-      }
+  const { layers, layerEdges } = detectArchitecturalLayers(graph);
+  p.log.step(
+    layers.length > 0
+      ? `${t.brand("Layers")}         ${layers.map((l) => l.name).join(" \u2192 ")}`
+      : `${t.brand("Layers")}         ${t.muted("no clear layers detected")}`,
+  );
+  if (verbose && layers.length > 0) {
+    for (const l of layers) {
+      p.log.info(t.muted(`  ${l.name}: ${l.files.length} files, depends on: ${l.dependsOn.join(", ") || "none"}`));
     }
     var analysisLayers = layers;
     var analysisLayerEdges = layerEdges;
@@ -311,7 +318,7 @@ async function main() {
   const highInstability = instabilities.filter((f) => f.instability > 0.8);
   p.log.step(
     highInstability.length > 0
-      ? `${t.brand("Instability")}    ${t.bold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"} ${t.warn("\u26A0")}`
+      ? `${t.brand("Instability")}    ${t.textBold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"} ${t.warn("\u26A0")}`
       : `${t.brand("Instability")}    ${t.muted("all files within healthy range")} ${t.check()}`,
   );
   if (verbose && highInstability.length > 0) {
@@ -322,19 +329,15 @@ async function main() {
   }
 
   // Communities
-  {
-    const s = startShimmer("Clustering module communities...");
-    const communities = detectCommunities(graph);
-    s.stop();
-    p.log.step(
-      communities.length > 0
-        ? `${t.text("Communities")}    ${t.text(String(communities.length))} ${t.text(`module cluster${communities.length === 1 ? "" : "s"}`)}`
-        : `${t.text("Communities")}    ${t.muted("single cohesive module")}`,
-    );
-    if (verbose && communities.length > 0) {
-      for (const c of communities.slice(0, 5)) {
-        p.log.info(t.muted(`  ${c.label} (${c.files.length} files)`));
-      }
+  const communities = detectCommunities(graph);
+  p.log.step(
+    communities.length > 0
+      ? `${t.brand("Communities")}    ${t.textBold(String(communities.length))} module cluster${communities.length === 1 ? "" : "s"}`
+      : `${t.brand("Communities")}    ${t.muted("single cohesive module")}`,
+  );
+  if (verbose && communities.length > 0) {
+    for (const c of communities.slice(0, 5)) {
+      p.log.info(t.muted(`  ${c.label} (${c.files.length} files)`));
     }
     var analysisCommunities = communities;
   }
@@ -350,8 +353,8 @@ async function main() {
     const filesWithUnused = exportCoverage.filter((e) => e.usedExports < e.totalExports).length;
     p.log.step(
       unusedCount > 0
-        ? `${t.text("Exports")}        ${t.text(`${unusedCount} unused export${unusedCount === 1 ? "" : "s"} in ${filesWithUnused} file${filesWithUnused === 1 ? "" : "s"}`)}`
-        : `${t.text("Exports")}        ${t.muted("all exports used")} ${t.check()}`,
+        ? `${t.brand("Exports")}        ${t.textBold(String(unusedCount))} unused export${unusedCount === 1 ? "" : "s"} in ${t.textBold(String(filesWithUnused))} file${filesWithUnused === 1 ? "" : "s"} ${t.warn("\u26A0")}`
+        : `${t.brand("Exports")}        ${t.muted("all exports used")} ${t.check()}`,
     );
     if (verbose && unusedCount > 0) {
       for (const e of exportCoverage.filter((e) => e.usedExports < e.totalExports).slice(0, 5)) {
@@ -372,7 +375,7 @@ async function main() {
   if (gitActivity) {
     const coupledPairs = gitActivity.changeCoupling.length;
     p.log.step(
-      `${t.text("Git (90d)")}      ${t.text(`${gitActivity.hotFiles.length} active file${gitActivity.hotFiles.length === 1 ? "" : "s"}, ${coupledPairs} coupled pair${coupledPairs === 1 ? "" : "s"}`)}`,
+      `${t.brand("Git (90d)")}      ${t.textBold(String(gitActivity.hotFiles.length))} active file${gitActivity.hotFiles.length === 1 ? "" : "s"}, ${t.textBold(String(coupledPairs))} coupled pair${coupledPairs === 1 ? "" : "s"}`,
     );
     if (verbose) {
       for (const h of gitActivity.hotFiles.slice(0, 5)) {
@@ -387,7 +390,7 @@ async function main() {
   const deadFiles = findDeadFiles(graph);
   if (deadFiles.length > 0) {
     p.log.step(
-      `${t.warn("Dead files")}     ${t.bold(String(deadFiles.length))} file${deadFiles.length === 1 ? "" : "s"} not imported by anything`,
+      `${t.brand("Dead files")}     ${t.textBold(String(deadFiles.length))} file${deadFiles.length === 1 ? "" : "s"} not imported by anything ${t.warn("\u26A0")}`,
     );
     if (verbose) {
       for (const f of deadFiles.slice(0, 5)) {
@@ -400,7 +403,7 @@ async function main() {
   const crossCuttingFiles = findCrossCuttingFiles(graph, layers);
   if (crossCuttingFiles.length > 0) {
     p.log.step(
-      `${t.brand("Cross-cutting")}  ${t.bold(String(crossCuttingFiles.length))} file${crossCuttingFiles.length === 1 ? "" : "s"} span ${t.bold("3+")} layers`,
+      `${t.brand("Cross-cutting")}  ${t.textBold(String(crossCuttingFiles.length))} file${crossCuttingFiles.length === 1 ? "" : "s"} span ${t.textBold("3+")} layers`,
     );
     if (verbose) {
       for (const f of crossCuttingFiles.slice(0, 5)) {
@@ -419,7 +422,7 @@ async function main() {
     p.log.step(
       violationCount === 0
         ? `${t.brand("Layer order")}    ${pct}% consistent ${t.check()}`
-        : `${t.warn("Layer order")}    ${pct}% consistent, ${t.bold(String(violationCount))} violation${violationCount === 1 ? "" : "s"}`,
+        : `${t.brand("Layer order")}    ${pct}% consistent, ${t.textBold(String(violationCount))} violation${violationCount === 1 ? "" : "s"} ${t.warn("\u26A0")}`,
     );
     if (verbose && violationCount > 0) {
       for (const v of layerConsistency.violations.slice(0, 3)) {
@@ -432,7 +435,7 @@ async function main() {
   const chokepoints = findChokepoints(graph);
   if (chokepoints.length > 0) {
     p.log.step(
-      `${t.brand("Chokepoints")}   ${t.bold(String(chokepoints.length))} structural chokepoint${chokepoints.length === 1 ? "" : "s"}`,
+      `${t.brand("Chokepoints")}   ${t.textBold(String(chokepoints.length))} structural chokepoint${chokepoints.length === 1 ? "" : "s"}`,
     );
     if (verbose) {
       for (const cp of chokepoints.slice(0, 5)) {
@@ -470,7 +473,7 @@ async function main() {
     const coveredCount = testMapping.sourceToTests.size;
     const untestedCount = testMapping.untestedFiles.length;
     p.log.step(
-      `${t.brand("Test map")}       ${t.bold(String(coveredCount))} source file${coveredCount === 1 ? "" : "s"} with tests` +
+      `${t.brand("Test map")}       ${t.textBold(String(coveredCount))} source file${coveredCount === 1 ? "" : "s"} with tests` +
         (untestedCount > 0 ? `, ${t.warn(String(untestedCount))} untested` : ` ${t.check()}`),
     );
     if (verbose && untestedCount > 0) {
@@ -489,7 +492,7 @@ async function main() {
     reportLines.push(`  ${"Import edges"}    ${t.textBold(String(graph.edges.length))}`);
     reportLines.push(`  ${"External pkgs"}   ${t.textBold(String(graph.externalImportCounts.size))}`);
     if (hubFiles.length > 0) {
-      reportLines.push(`  ${"Hub files"}       ${t.textBold(String(hubFiles.length))}` + (hubFiles[0] ? ` ${t.muted(`(most connected: ${hubFiles[0].path})`)}` : ""));
+      reportLines.push(`  ${"Hub files"}       ${t.textBold(String(hubFiles.length))}` + (hubFiles[0] ? ` ${t.text(`(most connected: ${hubFiles[0].path})`)}` : ""));
     }
     if (layers.length > 0) {
       reportLines.push(`  ${"Architecture"}    ${t.textBold(layers.map((l) => l.name).join(" → "))}`);
@@ -532,7 +535,7 @@ async function main() {
   if (savedConfig && !reconfigure) {
     // Use saved config, skip prompts
     p.log.info(
-      t.text("Using saved config from ") + t.brand(".clarte.json") + " " +
+      t.text(`Using saved config from ${t.accent(".clarte.json")}`) + " " +
         t.muted("(run with --reconfigure to change)"),
     );
     answers = configToAnswers(savedConfig);
@@ -562,17 +565,16 @@ async function main() {
   // Step 3: Code snapshot (if requested)
   let snapshot = null;
   if (answers.generateSnapshot) {
-    const snapshotShimmer = startShimmer("Scanning source files for code snapshot...");
-    const snapshotProgress: ProgressCallback = (msg) => snapshotShimmer.message(msg);
-    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens, verbose ? verboseLog : snapshotProgress, gitActivity);
-    snapshotShimmer.stop();
+    shimmer = startShimmer("Scanning source files for code snapshot...");
+    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens, verbose ? verboseLog : (msg) => shimmer.message(msg), gitActivity);
+    shimmer.stop();
     const count = snapshot.entries.length;
     const budgetNote = snapshot.budgetExcluded
       ? ` (${snapshot.budgetExcluded} excluded by token budget)`
       : "";
     p.log.step(
       count > 0
-        ? t.text(`Found ${count} type${count === 1 ? "" : "s"}/signature${count === 1 ? "" : "s"}.${budgetNote}`)
+        ? `${t.text("Found")} ${t.textBold(String(count))} ${t.text(`type${count === 1 ? "" : "s"}/signature${count === 1 ? "" : "s"}.${budgetNote}`)}`
         : t.text("No extractable types found (snapshot will be skipped)."),
     );
 
@@ -582,18 +584,16 @@ async function main() {
   }
 
   // Step 4: Generate files
-  const genShimmer = startShimmer(
+  shimmer = startShimmer(
     dryRun ? "Preparing context files..." : "Generating context files...",
   );
   const shouldGenerateSkills = generateSkills || answers.ides.includes("claude");
   const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills, verbose ? verboseLog : undefined);
-  genShimmer.stop();
+  shimmer.stop();
   p.log.step(
-    t.text(
-      dryRun
-        ? `Would generate ${files.length} file${files.length === 1 ? "" : "s"}.`
-        : `Generated ${files.length} file${files.length === 1 ? "" : "s"}.`,
-    ),
+    dryRun
+      ? `${t.text("Would generate")} ${t.textBold(String(files.length))} ${t.text(`file${files.length === 1 ? "" : "s"}.`)}`
+      : `${t.text("Generated")} ${t.textBold(String(files.length))} ${t.text(`file${files.length === 1 ? "" : "s"}.`)}`,
   );
 
   if (files.length === 0) {

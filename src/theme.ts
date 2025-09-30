@@ -2,15 +2,15 @@ import pc from "picocolors";
 
 // ── Environment detection ────────────────────────────────────────────────────
 
-const isTTY = !!process.stdout.isTTY;
-const noColor = !!process.env.NO_COLOR;
+export const isTTY = !!process.stdout.isTTY;
+export const noColor = !!process.env.NO_COLOR;
 
 /**
  * Detect 24-bit true color support.
  * Checks COLORTERM env (common in modern terminals) and falls back
  * to TERM containing "256color" as a proxy for likely truecolor support.
  */
-const trueColor =
+export const trueColor =
   !noColor &&
   isTTY &&
   (process.env.COLORTERM === "truecolor" ||
@@ -19,53 +19,90 @@ const trueColor =
 
 // ── 24-bit ANSI helpers ──────────────────────────────────────────────────────
 
-function rgb(r: number, g: number, b: number): (text: string) => string {
-  if (noColor || !isTTY) return (t) => t;
-  if (!trueColor) {
-    // Fallback: return identity, caller maps to picocolors fallback
-    return (t) => t;
-  }
-  const open = `\x1b[38;2;${r};${g};${b}m`;
-  const close = "\x1b[39m";
-  return (text: string) => `${open}${text}${close}`;
+export type RGB = [number, number, number];
+
+type ColorMode = "dark" | "light";
+
+// ── Palettes ─────────────────────────────────────────────────────────────────
+//
+// Each palette defines raw RGB triples for every semantic role.
+// Dark: light text on dark background (current aesthetic)
+// Light: dark text on light background (inverted brightness, same accent family)
+//
+
+interface PaletteRGB {
+  boneWhite: RGB;
+  offWhite: RGB;
+  brand: RGB;
+  warm: RGB;
+  muted: RGB;
+  error: RGB;
+  ghostWhite: RGB;
 }
 
+const darkPalette: PaletteRGB = {
+  boneWhite: [240, 238, 233],
+  offWhite: [200, 200, 204],
+  brand: [255, 217, 171],
+  warm: [222, 200, 175],
+  muted: [190, 186, 178],
+  error: [134, 38, 51],
+  ghostWhite: [158, 156, 150],
+};
+
+const lightPalette: PaletteRGB = {
+  boneWhite: [50, 50, 55],
+  offWhite: [80, 80, 86],
+  brand: [170, 120, 40],
+  warm: [160, 110, 30],
+  muted: [140, 140, 146],
+  error: [140, 35, 50],
+  ghostWhite: [180, 180, 186],
+};
+
+// ── Mutable state ────────────────────────────────────────────────────────────
+
+let currentPalette: PaletteRGB = darkPalette;
+let offWhiteClose = "\x1b[38;2;200;200;204m";
+
+function rgb(r: number, g: number, b: number): (text: string) => string {
+  if (noColor || !isTTY) return (t) => t;
+  if (!trueColor) return (t) => t;
+  const open = `\x1b[38;2;${r};${g};${b}m`;
+  return (text: string) => `${open}${text}${offWhiteClose}`;
+}
+
+/** Raw ANSI helper for clack patching (closes with terminal default). */
 function rgbAnsi(r: number, g: number, b: number): (text: string) => string {
   const open = `\x1b[38;2;${r};${g};${b}m`;
   const close = "\x1b[39m";
   return (text: string) => `${open}${text}${close}`;
 }
 
-// ── Palette ──────────────────────────────────────────────────────────────────
-
-const palette = {
-  text: rgb(235, 233, 228),    // bone white -- clean off-white
-  warm: rgb(224, 220, 210),    // light gold -- warm highlight with body
-  brand: rgb(233, 206, 161),   // warm gold (#E9CEA1)
-  accent: rgb(233, 206, 161),  // warm gold (same as brand)
-  muted: rgb(202, 196, 178),   // light champagne (#CAC4B2)
-  error: rgb(134, 38, 51),     // wine red
-};
-
 // ── Fallback mapping (basic ANSI via picocolors) ─────────────────────────────
 
 const fallback = {
-  text: pc.white,
-  warm: pc.white,
+  boneWhite: pc.white,
+  offWhite: pc.white,
+  warm: pc.yellow,
   brand: pc.yellow,
   accent: pc.yellow,
   muted: pc.dim,
   error: pc.red,
 };
 
-function pick(key: keyof typeof palette): (text: string) => string {
+type PaletteKey = "boneWhite" | "offWhite" | "warm" | "brand" | "accent" | "muted" | "error";
+
+function pick(key: PaletteKey): (text: string) => string {
   if (noColor || !isTTY) return (t) => t;
-  return trueColor ? palette[key] : fallback[key];
+  if (!trueColor) return fallback[key];
+  // Build fresh closure from current palette
+  const colorKey = key === "accent" ? "brand" : key;
+  const [r, g, b] = currentPalette[colorKey];
+  return rgb(r, g, b);
 }
 
 // ── Gradient ─────────────────────────────────────────────────────────────────
-
-export type RGB = [number, number, number];
 
 /**
  * Apply a per-character color gradient across `text`.
@@ -82,7 +119,7 @@ export function gradient(
 
   const len = text.length;
   if (len === 0) return text;
-  if (len === 1) return `\x1b[38;2;${from[0]};${from[1]};${from[2]}m${text}\x1b[39m`;
+  if (len === 1) return `\x1b[38;2;${from[0]};${from[1]};${from[2]}m${text}${offWhiteClose}`;
 
   let result = "";
   for (let i = 0; i < len; i++) {
@@ -92,45 +129,73 @@ export function gradient(
     const b = Math.round(from[2] + (to[2] - from[2]) * ratio);
     result += `\x1b[38;2;${r};${g};${b}m${text[i]}`;
   }
-  return result + "\x1b[39m";
+  return result + offWhiteClose;
 }
 
-// ── Patch @clack/prompts colors ──────────────────────────────────────────────
+// ── Theme init ───────────────────────────────────────────────────────────────
 
 /**
- * Monkey-patch picocolors singleton so @clack/prompts renders
- * in our gold/wine-red palette instead of default terminal colors.
+ * Initialize the theme for the given color mode.
+ * Sets the active palette, updates the off-white close sequence,
+ * and monkey-patches picocolors so @clack/prompts renders in our palette.
  */
-export function patchClackColors(): void {
+export function initTheme(mode: ColorMode): void {
+  currentPalette = mode === "light" ? lightPalette : darkPalette;
+  const [r, g, b] = currentPalette.offWhite;
+  offWhiteClose = `\x1b[38;2;${r};${g};${b}m`;
+
   if (noColor || !isTTY) return;
 
-  const gold = rgbAnsi(233, 206, 161);
-  const wineRed = rgbAnsi(134, 38, 51);
-  const boneWhite = rgbAnsi(235, 233, 228);
-  const champagne = rgbAnsi(202, 196, 178);
+  const p = currentPalette;
+  const copper = rgbAnsi(...p.brand);
+  const wineRed = rgbAnsi(...p.error);
+  const boneWhite = rgbAnsi(...p.boneWhite);
+  const ghostWhite = rgbAnsi(...p.ghostWhite);
 
   const obj = pc as unknown as Record<string, unknown>;
-  obj.green = gold;
-  obj.cyan = gold;
-  obj.yellow = gold;
+  obj.green = copper;
+  obj.cyan = copper;
+  obj.yellow = copper;
   obj.red = wineRed;
-  obj.blue = gold;
-  obj.magenta = gold;
+  obj.blue = copper;
+  obj.magenta = copper;
   obj.white = boneWhite;
-  obj.reset = boneWhite;   // clack wraps note titles in pc.reset()
-  const boneWhiteSoft = rgbAnsi(202, 199, 192);
-  obj.gray = boneWhiteSoft;  // bone white soft for bars and borders
-  obj.dim = boneWhiteSoft;   // clack uses pc.dim for submitted values and separators
+  obj.reset = boneWhite;
+  obj.gray = ghostWhite;
+  obj.dim = boneWhite;
+}
+
+// ── Shimmer color accessor ───────────────────────────────────────────────────
+
+/**
+ * Return the current palette's shimmer base and highlight colors.
+ * Used by animations.ts to avoid hardcoded RGB values.
+ */
+export function getShimmerColors(): { base: RGB; highlight: RGB } {
+  return {
+    base: currentPalette.offWhite,
+    highlight: currentPalette.brand,
+  };
+}
+
+/**
+ * Return the current palette's gradient bar colors for summary charts.
+ */
+export function getGradientBarColors(): { from: RGB; to: RGB } {
+  if (currentPalette === lightPalette) {
+    return { from: [160, 130, 90], to: [190, 160, 120] };
+  }
+  return { from: [220, 198, 185], to: [235, 218, 208] };
 }
 
 // ── Exported theme ───────────────────────────────────────────────────────────
 
 export const theme = {
-  /** Bone white -- primary text color */
-  text: (text: string) => pick("text")(text),
-  /** Light gold -- warm highlight with substance */
+  /** Off-white -- regular body text (also auto-applied after any themed segment) */
+  text: (text: string) => pick("offWhite")(text),
+  /** Dawn amber -- warning highlight */
   warm: (text: string) => pick("warm")(text),
-  /** Premium gold -- accent highlights, checkmarks */
+  /** Warm gold -- accent highlights, checkmarks */
   brand: (text: string) => pick("brand")(text),
   accent: (text: string) => pick("accent")(text),
   /** Warm gray -- secondary/dim text */
@@ -138,21 +203,21 @@ export const theme = {
   /** Wine red -- errors only */
   error: (text: string) => pick("error")(text),
 
-  /** Soft white -- slightly muted bone white for table content, option values */
-  soft: (text: string) => noColor || !isTTY ? text : trueColor ? `\x1b[38;2;202;199;192m${text}\x1b[39m` : pc.white(text),
+  /** Off-white -- alias for text */
+  soft: (text: string) => pick("offWhite")(text),
 
   bold: (text: string) => (noColor || !isTTY ? text : pc.bold(text)),
-  /** Bone white + bold -- section headers */
-  textBold: (text: string) => pick("text")(noColor || !isTTY ? text : pc.bold(text)),
+  /** Bone white + bold -- emphasis, section headers */
+  textBold: (text: string) => pick("boneWhite")(noColor || !isTTY ? text : pc.bold(text)),
   brandBold: (text: string) => pick("brand")(noColor || !isTTY ? text : pc.bold(text)),
 
-  /** Success/positive indicator -- maps to gold in warm palette */
+  /** Success/positive indicator -- maps to warm gold */
   success: (text: string) => pick("brand")(text),
-  /** Warning/caution indicator -- maps to warm tone */
+  /** Warning/caution indicator -- maps to dawn amber */
   warn: (text: string) => pick("warm")(text),
 
   accentBold: (text: string) => pick("accent")(noColor || !isTTY ? text : pc.bold(text)),
 
-  /** Styled checkmark in gold */
+  /** Styled checkmark in warm gold */
   check: () => pick("brand")("\u2713"),
 };

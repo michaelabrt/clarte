@@ -1,12 +1,12 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
 import { theme as t } from "./theme.js";
+import { startShimmer } from "./animations.js";
 import { detectContext } from "./detect.js";
 import { generateSnapshot } from "./snapshot.js";
 import { buildImportGraph } from "./graph.js";
 import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "./config.js";
 import { fileExists, readFileOr, writeFileSafe } from "./utils.js";
-import type { ProgressCallback } from "./types.js";
 
 /** Known context files in priority order */
 const CONTEXT_FILES = [
@@ -59,8 +59,6 @@ async function findContextFile(
  * Auto-detects which file to update.
  */
 export async function refreshSnapshot(rootDir: string): Promise<void> {
-  const spinner = p.spinner();
-
   // 1. Find context file
   const found = await findContextFile(rootDir);
   if (!found) {
@@ -99,19 +97,19 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   p.log.info(t.text("Refreshing snapshot in ") + t.accent(found.path));
 
   // 3. Detect context and generate new snapshot
-  spinner.start("Scanning source files...");
-  const progress: ProgressCallback = (msg) => spinner.message(msg);
-  const detected = await detectContext(rootDir, progress);
+  const shimmer = startShimmer("Scanning source files...");
+  const detected = await detectContext(rootDir, (msg) => shimmer.message(msg));
 
   // Build import graph for better snapshot quality
-  const graph = await buildImportGraph(rootDir, detected.language, progress);
+  const graph = await buildImportGraph(rootDir, detected.language, (msg) => shimmer.message(msg));
 
   // Load snapshot paths from config if available
   const config = await loadConfig(rootDir);
   const snapshotPaths = config?.snapshotPaths ?? [];
 
-  const snapshot = await generateSnapshot(detected, snapshotPaths, graph, undefined, progress);
-  spinner.stop(
+  const snapshot = await generateSnapshot(detected, snapshotPaths, graph, undefined, (msg) => shimmer.message(msg));
+  shimmer.stop();
+  p.log.step(
     snapshot.entries.length > 0
       ? `Found ${snapshot.entries.length} type${snapshot.entries.length === 1 ? "" : "s"}/signature${snapshot.entries.length === 1 ? "" : "s"}.`
       : "No extractable types found.",

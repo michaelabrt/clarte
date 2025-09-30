@@ -176,6 +176,8 @@ export interface ProjectConfig {
   language?: Language;
   /** Number of days before snapshot is considered stale (default: 7) */
   staleDays?: number;
+  /** Terminal color scheme preference */
+  colorScheme?: "dark" | "light";
 }
 
 /** A generated file ready to be written */
