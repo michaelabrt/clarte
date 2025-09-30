@@ -7,9 +7,9 @@ import type {
   CircularDependency,
   Community,
   CrossCuttingFile,
-  ExportCoverage,
   FileInstability,
   FileRole,
+  GraphTopology,
   HubFile,
   ImportEdge,
   ImportGraph,
@@ -18,6 +18,7 @@ import type {
   LayerEdge,
   LayerViolation,
   ProgressCallback,
+  TransitiveDependencyRisk,
 } from "./types.js";
 
 // ── Import regex patterns per language ────────────────────────────────
@@ -44,6 +45,9 @@ const GO_IMPORT_BLOCK = /import\s*\(([^)]+)\)/gs;
 const RUST_USE = /(?:pub\s+)?use\s+((?:crate|super|self)(?:::\w+)*(?:::\{[^}]*\})?)/g;
 /** Rust: mod foo; */
 const RUST_MOD = /mod\s+(\w+)\s*;/g;
+
+/** Java: import com.foo.Bar; or import static com.foo.Bar.method; */
+const JAVA_IMPORT = /^import\s+(?:static\s+)?([\w.]+(?:\.\*)?)\s*;/gm;
 
 // ── Comment/string stripping for accurate import parsing ──────────────
 
@@ -362,8 +366,10 @@ function getSourceGlob(lang: Language): string[] {
       return ["**/*.go"];
     case "rust":
       return ["**/*.rs"];
+    case "java":
+      return ["**/*.java"];
     default:
-      return ["**/*.{ts,tsx,js,jsx,py,go,rs}"];
+      return ["**/*.{ts,tsx,js,jsx,py,go,rs,java}"];
   }
 }
 
@@ -381,6 +387,7 @@ export function parseJsImports(content: string): RawImport[] {
   const imports: RawImport[] = [];
 
   // import { a, b } from '...' / import Foo from '...' / import Foo, { a } from '...' / import * as Foo from '...'
+  const fromSpecifiers = new Set<string>();
   for (const m of cleaned.matchAll(JS_IMPORT_FROM)) {
     const isTypeOnly = !!m[1]; // group 1: "type " keyword
     const names: string[] = [];
@@ -393,13 +400,14 @@ export function parseJsImports(content: string): RawImport[] {
       }
     }
     if (m[4]) names.push(...m[4].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
+    fromSpecifiers.add(m[5]);
     imports.push({ specifier: m[5], importedNames: names, isTypeOnly });
   }
 
   // import '...' (side-effect)
   for (const m of cleaned.matchAll(JS_IMPORT_SIDE)) {
-    // Skip if already captured by JS_IMPORT_FROM (side-effect imports have no bindings)
-    if (!cleaned.includes(`from '${m[1]}'`) && !cleaned.includes(`from "${m[1]}"`)) {
+    // Skip if already captured by JS_IMPORT_FROM
+    if (!fromSpecifiers.has(m[1])) {
       imports.push({ specifier: m[1], importedNames: [] });
     }
   }
@@ -483,6 +491,20 @@ export function parseRustImports(content: string): RawImport[] {
   return imports;
 }
 
+export function parseJavaImports(content: string): RawImport[] {
+  const imports: RawImport[] = [];
+
+  for (const m of content.matchAll(JAVA_IMPORT)) {
+    const fullPath = m[1]; // e.g. "com.example.Foo" or "com.example.*"
+    const parts = fullPath.split(".");
+    const lastName = parts[parts.length - 1];
+    const names = lastName === "*" ? [] : [lastName];
+    imports.push({ specifier: fullPath, importedNames: names });
+  }
+
+  return imports;
+}
+
 function parseImports(content: string, lang: Language): RawImport[] {
   switch (lang) {
     case "typescript":
@@ -494,6 +516,8 @@ function parseImports(content: string, lang: Language): RawImport[] {
       return parseGoImports(content);
     case "rust":
       return parseRustImports(content);
+    case "java":
+      return parseJavaImports(content);
     default:
       return parseJsImports(content);
   }
@@ -679,6 +703,9 @@ async function resolveBarrelFiles(
  * Edge weight: (1 - typeOnlyDiscount) * specificity
  * - typeOnlyDiscount = 0.7 if isTypeOnly, else 0
  * - specificity = log2(importedNames.length + 1) / log2(6), clamped min 0.2
+ *
+ * Uses teleportation smoothing (alpha=0.15) to avoid extreme score distributions
+ * in star-shaped graphs. Hub update uses prior-iteration authority (standard HITS).
  */
 export function computeHITS(
   files: string[],
@@ -690,6 +717,8 @@ export function computeHITS(
   if (n === 0) return { authority: new Map(), hub: new Map() };
 
   const fileSet = new Set(files);
+  const alpha = 0.15; // teleportation smoothing factor
+  const baseScore = 1 / n;
 
   // Build weighted adjacency lists (internal edges only)
   // forward: from -> [{to, weight}]   (for hub update)
@@ -727,24 +756,26 @@ export function computeHITS(
     const newAuth = new Float64Array(n);
     const newHub = new Float64Array(n);
 
-    // Update authorities: newAuth[v] = Σ hub[u] * w(u→v)
+    // Update authorities with teleportation:
+    // newAuth[v] = alpha * baseScore + (1 - alpha) * Σ hub[u] * w(u->v)
     for (let vi = 0; vi < n; vi++) {
       const file = files[vi];
       let sum = 0;
       for (const { from, weight } of reverse.get(file)!) {
         sum += hub[fileIndex.get(from)!] * weight;
       }
-      newAuth[vi] = sum;
+      newAuth[vi] = alpha * baseScore + (1 - alpha) * sum;
     }
 
-    // Update hubs (using new auth): newHub[v] = Σ newAuth[w] * w(v→w)
+    // Update hubs with teleportation (using PRIOR auth, not newAuth):
+    // newHub[v] = alpha * baseScore + (1 - alpha) * Σ auth[w] * w(v->w)
     for (let vi = 0; vi < n; vi++) {
       const file = files[vi];
       let sum = 0;
       for (const { to, weight } of forward.get(file)!) {
-        sum += newAuth[fileIndex.get(to)!] * weight;
+        sum += auth[fileIndex.get(to)!] * weight;
       }
-      newHub[vi] = sum;
+      newHub[vi] = alpha * baseScore + (1 - alpha) * sum;
     }
 
     // L2 normalize
@@ -1144,15 +1175,18 @@ export function findSCCs(graph: ImportGraph): string[][] {
 }
 
 /**
- * Detect circular dependencies using Tarjan's SCC algorithm.
- * For each SCC, finds the shortest actual cycle via BFS for actionable output.
- * Returns up to maxCycles results.
+ * Detect circular dependencies using Tarjan's SCC algorithm,
+ * then extract actual valid cycles via BFS within each SCC.
+ * Returns up to maxCycles results, shortest first.
  */
 export function findCircularDeps(
   graph: ImportGraph,
   maxCycles = 10,
 ): CircularDependency[] {
   const sccs = findSCCs(graph);
+
+  // Sort SCCs by size (smallest first, more actionable)
+  sccs.sort((a, b) => a.length - b.length);
 
   // Build adjacency restricted to internal edges
   const adj = new Map<string, Set<string>>();
@@ -1162,24 +1196,118 @@ export function findCircularDeps(
     adj.get(edge.from)!.add(edge.to);
   }
 
-  // Sort by size (smallest first, more actionable)
-  sccs.sort((a, b) => a.length - b.length);
+  const allCycles: CircularDependency[] = [];
 
-  const cycles: CircularDependency[] = [];
   for (const scc of sccs) {
-    if (cycles.length >= maxCycles) break;
+    if (allCycles.length >= maxCycles) break;
+    const found = findActualCycles(scc, adj, maxCycles - allCycles.length);
+    allCycles.push(...found);
+  }
 
-    // Find shortest cycle in this SCC via BFS from the first node
-    const sccSet = new Set(scc);
-    const shortestCycle = findShortestCycleInSCC(scc[0], sccSet, adj);
-    if (shortestCycle) {
-      cycles.push({ chain: shortestCycle });
+  return allCycles;
+}
+
+/**
+ * Canonicalize a cycle by rotating so the lexicographically smallest node is first.
+ */
+function canonicalizeCycle(cycle: string[]): string {
+  // cycle is [a, b, c, a] -- last element duplicates first
+  const nodes = cycle.slice(0, -1);
+  let minIdx = 0;
+  for (let i = 1; i < nodes.length; i++) {
+    if (nodes[i] < nodes[minIdx]) minIdx = i;
+  }
+  const rotated = [...nodes.slice(minIdx), ...nodes.slice(0, minIdx)];
+  return rotated.join("||");
+}
+
+/**
+ * Find actual valid cycles within an SCC using BFS.
+ * Returns deduplicated cycles sorted by length (shortest first).
+ */
+function findActualCycles(
+  scc: string[],
+  adj: Map<string, Set<string>>,
+  maxCycles: number,
+): CircularDependency[] {
+  const sccSet = new Set(scc);
+
+  // Build SCC-restricted adjacency
+  const sccAdj = new Map<string, string[]>();
+  for (const node of scc) {
+    const neighbors = adj.get(node);
+    if (neighbors) {
+      sccAdj.set(node, [...neighbors].filter((n) => sccSet.has(n)));
     } else {
-      // Fallback: just close the loop with SCC order
-      cycles.push({ chain: [...scc, scc[0]] });
+      sccAdj.set(node, []);
     }
   }
 
+  const seenCanonical = new Set<string>();
+  const cycles: CircularDependency[] = [];
+
+  // 1. Find all mutual imports (2-cycles) first -- most actionable
+  const sortedScc = [...scc].sort();
+  for (const a of sortedScc) {
+    for (const b of sccAdj.get(a) ?? []) {
+      if (a < b && (sccAdj.get(b) ?? []).includes(a)) {
+        const chain = [a, b, a];
+        const key = canonicalizeCycle(chain);
+        if (!seenCanonical.has(key)) {
+          seenCanonical.add(key);
+          cycles.push({ chain });
+          if (cycles.length >= maxCycles) return cycles;
+        }
+      }
+    }
+  }
+
+  // 2. BFS shortest cycle through each node
+  for (const start of sortedScc) {
+    if (cycles.length >= maxCycles) break;
+
+    // BFS from start, looking for path back to start
+    const visited = new Set<string>();
+    const queue: Array<{ node: string; path: string[] }> = [];
+
+    for (const neighbor of sccAdj.get(start) ?? []) {
+      queue.push({ node: neighbor, path: [start, neighbor] });
+    }
+
+    while (queue.length > 0) {
+      const { node, path } = queue.shift()!;
+
+      if (node === start) {
+        // path already ends with start, forming a closed cycle
+        const chain = path;
+        // Skip 2-cycles (already found above)
+        if (chain.length > 3) {
+          const key = canonicalizeCycle(chain);
+          if (!seenCanonical.has(key)) {
+            seenCanonical.add(key);
+            cycles.push({ chain });
+            if (cycles.length >= maxCycles) return cycles;
+          }
+        }
+        continue;
+      }
+
+      if (visited.has(node)) continue;
+      visited.add(node);
+
+      // Cap path length at SCC size to avoid explosion
+      if (path.length >= scc.length) continue;
+
+      for (const next of sccAdj.get(node) ?? []) {
+        if (!visited.has(next) || next === start) {
+          queue.push({ node: next, path: [...path, next] });
+        }
+      }
+    }
+  }
+
+  // Sort by length (shortest = most actionable)
+  cycles.sort((a, b) => a.chain.length - b.chain.length);
   return cycles;
 }
 
@@ -1296,10 +1424,13 @@ export function detectArchitecturalLayers(graph: ImportGraph): { layers: Archite
   return { layers, layerEdges };
 }
 
+/** Threshold above which a file is considered high-instability */
+export const INSTABILITY_THRESHOLD = 0.8;
+
 /**
  * Compute instability metric (Robert C. Martin) for each file.
  * instability = fanOut / (fanIn + fanOut)
- * Returns files with instability > 0.7 and fanIn >= 1 (high-risk zones).
+ * Returns files with instability > INSTABILITY_THRESHOLD and fanIn >= 1 (high-risk zones).
  */
 export function computeInstability(graph: ImportGraph): FileInstability[] {
   // Count outgoing internal edges per file
@@ -1316,7 +1447,7 @@ export function computeInstability(graph: ImportGraph): FileInstability[] {
     const total = fanIn + fanOut;
     if (total === 0) continue;
     const instability = fanOut / total;
-    if (instability > 0.7 && fanIn >= 1) {
+    if (instability > INSTABILITY_THRESHOLD && fanIn >= 1) {
       results.push({ path: filePath, fanIn, fanOut, instability });
     }
   }
@@ -1327,10 +1458,13 @@ export function computeInstability(graph: ImportGraph): FileInstability[] {
 }
 
 /**
- * Detect communities of tightly-connected files using label propagation.
- * Each file starts with a unique label; iteratively adopts the most common
- * label among its neighbors (both directions). Returns communities with size >= 3.
- * Uses deterministic ordering (sorted by file path) for reproducible results.
+ * Detect communities of tightly-connected files using directory-seeded
+ * modularity optimization. Deterministic (no random shuffling).
+ *
+ * Phase 1: Seed communities from directory structure.
+ * Phase 2: Merge tiny communities (< 3 files) into their best neighbor.
+ * Phase 3: Reassign files with majority cross-community imports.
+ * Phase 4: Validate novelty (skip if communities just mirror directories).
  */
 export function detectCommunities(graph: ImportGraph): Community[] {
   // Build undirected adjacency from internal edges
@@ -1352,66 +1486,194 @@ export function detectCommunities(graph: ImportGraph): Community[] {
   const files = [...allFiles].sort();
   if (files.length === 0) return [];
 
-  // Initialize: each file gets its own numeric label
-  const labels = new Map<string, number>();
-  for (let i = 0; i < files.length; i++) {
-    labels.set(files[i], i);
+  // Phase 1: Seed from directory structure (deepest meaningful directory)
+  const dirLabels = new Map<string, number>();
+  const fileToCommunity = new Map<string, number>();
+  let nextLabel = 0;
+
+  for (const file of files) {
+    const dir = getDeepestDir(file);
+    if (!dirLabels.has(dir)) {
+      dirLabels.set(dir, nextLabel++);
+    }
+    fileToCommunity.set(file, dirLabels.get(dir)!);
   }
 
-  // Iterate label propagation (~10 rounds) with deterministic ordering
-  for (let iter = 0; iter < 10; iter++) {
-    let changed = false;
+  // Phase 2: Merge tiny communities (< 3 files) into best neighbor
+  for (let round = 0; round < 3; round++) {
+    const groups = groupByCommunity(fileToCommunity);
+    let merged = false;
 
-    for (const file of files) {
-      const neighbors = adj.get(file);
-      if (!neighbors || neighbors.size === 0) continue;
+    for (const [label, members] of groups) {
+      if (members.length >= 3) continue;
 
-      // Count neighbor labels
-      const labelCounts = new Map<number, number>();
-      for (const neighbor of neighbors) {
-        const lbl = labels.get(neighbor)!;
-        labelCounts.set(lbl, (labelCounts.get(lbl) ?? 0) + 1);
-      }
-
-      // Find most common label (break ties by smallest label for determinism)
-      let maxCount = 0;
-      let bestLabel = labels.get(file)!;
-      for (const [lbl, count] of labelCounts) {
-        if (count > maxCount || (count === maxCount && lbl < bestLabel)) {
-          maxCount = count;
-          bestLabel = lbl;
+      // Find neighboring community with most edges
+      const neighborCounts = new Map<number, number>();
+      for (const file of members) {
+        for (const neighbor of adj.get(file) ?? []) {
+          const nLabel = fileToCommunity.get(neighbor);
+          if (nLabel != null && nLabel !== label) {
+            neighborCounts.set(nLabel, (neighborCounts.get(nLabel) ?? 0) + 1);
+          }
         }
       }
 
-      if (bestLabel !== labels.get(file)) {
-        labels.set(file, bestLabel);
-        changed = true;
+      if (neighborCounts.size === 0) continue;
+
+      // Merge into most-connected neighbor
+      let bestNeighbor = label;
+      let bestCount = 0;
+      for (const [nLabel, count] of neighborCounts) {
+        if (count > bestCount) {
+          bestCount = count;
+          bestNeighbor = nLabel;
+        }
+      }
+
+      if (bestNeighbor !== label) {
+        for (const file of members) {
+          fileToCommunity.set(file, bestNeighbor);
+        }
+        merged = true;
       }
     }
 
+    if (!merged) break;
+  }
+
+  // Phase 3: Reassign files with >50% cross-community imports
+  for (let round = 0; round < 3; round++) {
+    let changed = false;
+    // Process in deterministic sorted order
+    for (const file of files.sort()) {
+      const currentLabel = fileToCommunity.get(file)!;
+      const neighbors = adj.get(file);
+      if (!neighbors || neighbors.size === 0) continue;
+
+      // Count which communities neighbors belong to
+      const communityEdges = new Map<number, number>();
+      for (const neighbor of neighbors) {
+        const nLabel = fileToCommunity.get(neighbor);
+        if (nLabel != null) {
+          communityEdges.set(nLabel, (communityEdges.get(nLabel) ?? 0) + 1);
+        }
+      }
+
+      // If majority of edges go to a different community, reassign
+      let bestCommunity = currentLabel;
+      let bestEdges = communityEdges.get(currentLabel) ?? 0;
+      for (const [cLabel, count] of communityEdges) {
+        if (count > bestEdges) {
+          bestEdges = count;
+          bestCommunity = cLabel;
+        }
+      }
+
+      if (bestCommunity !== currentLabel && bestEdges > neighbors.size / 2) {
+        fileToCommunity.set(file, bestCommunity);
+        changed = true;
+      }
+    }
     if (!changed) break;
   }
 
-  // Group files by label
-  const groups = new Map<number, string[]>();
-  for (const [file, label] of labels) {
-    const group = groups.get(label) ?? [];
-    group.push(file);
-    groups.set(label, group);
-  }
-
-  // Filter to communities with size >= 3, derive labels from common dir prefix
+  // Build final communities
+  const finalGroups = groupByCommunity(fileToCommunity);
   const communities: Community[] = [];
   let id = 0;
-  for (const files of groups.values()) {
-    if (files.length < 3) continue;
-    const label = deriveLabel(files);
-    communities.push({ id: id++, files: files.sort(), label });
+
+  for (const memberFiles of finalGroups.values()) {
+    if (memberFiles.length < 3) continue;
+    const label = deriveLabel(memberFiles);
+    communities.push({ id: id++, files: memberFiles.sort(), label });
+  }
+
+  // Phase 4: Validate novelty using Adjusted Rand Index
+  // If communities closely mirror directory structure, return empty
+  const dirOnlyCommunities = new Map<string, number>();
+  let dirNextLabel = 0;
+  for (const file of files) {
+    const dir = getDeepestDir(file);
+    if (!dirOnlyCommunities.has(dir)) dirOnlyCommunities.set(dir, dirNextLabel++);
+  }
+  const ari = computeARI(files, fileToCommunity, file => dirOnlyCommunities.get(getDeepestDir(file))!);
+  if (ari > 0.85) {
+    // Communities just restate directory tree; no novel insight
+    return [];
   }
 
   // Sort by size descending
   communities.sort((a, b) => b.files.length - a.files.length);
   return communities;
+}
+
+/**
+ * Get the deepest meaningful directory for a file path.
+ * e.g. "src/components/Button.tsx" -> "src/components"
+ */
+function getDeepestDir(filePath: string): string {
+  const parts = filePath.split("/");
+  return parts.length > 1 ? parts.slice(0, -1).join("/") : ".";
+}
+
+/**
+ * Group files by their community label.
+ */
+function groupByCommunity(fileToCommunity: Map<string, number>): Map<number, string[]> {
+  const groups = new Map<number, string[]>();
+  for (const [file, label] of fileToCommunity) {
+    const group = groups.get(label) ?? [];
+    group.push(file);
+    groups.set(label, group);
+  }
+  return groups;
+}
+
+/**
+ * Compute Adjusted Rand Index between two clusterings of the same files.
+ * Returns a value between -1 and 1, where 1 means identical clusterings.
+ */
+function computeARI(
+  files: string[],
+  labelingA: Map<string, number>,
+  getLabelB: (file: string) => number,
+): number {
+  const n = files.length;
+  if (n < 2) return 1;
+
+  // Build contingency table
+  const contingency = new Map<string, number>();
+  const aCounts = new Map<number, number>();
+  const bCounts = new Map<number, number>();
+
+  for (const file of files) {
+    const a = labelingA.get(file)!;
+    const b = getLabelB(file);
+    const key = `${a}|${b}`;
+    contingency.set(key, (contingency.get(key) ?? 0) + 1);
+    aCounts.set(a, (aCounts.get(a) ?? 0) + 1);
+    bCounts.set(b, (bCounts.get(b) ?? 0) + 1);
+  }
+
+  // Choose-2 helper
+  const c2 = (x: number) => (x * (x - 1)) / 2;
+
+  let sumNij = 0;
+  for (const nij of contingency.values()) sumNij += c2(nij);
+
+  let sumAi = 0;
+  for (const ai of aCounts.values()) sumAi += c2(ai);
+
+  let sumBj = 0;
+  for (const bj of bCounts.values()) sumBj += c2(bj);
+
+  const totalC2 = c2(n);
+  const expected = (sumAi * sumBj) / totalC2;
+  const maxIndex = (sumAi + sumBj) / 2;
+  const denominator = maxIndex - expected;
+
+  if (denominator === 0) return 1;
+  return (sumNij - expected) / denominator;
 }
 
 /**
@@ -1465,9 +1727,9 @@ export function findDeadFiles(
     if (/\.(config|rc)\.[jt]sx?$/.test(file)) continue;
     // Skip entry points by convention
     const basename = file.split("/").pop() ?? "";
-    if (/^(index|main|app|server|cli)\.[jt]sx?$/.test(basename)) continue;
+    if (/^(index|main|app|server|cli|worker|seed|migrate|setup|cron|bootstrap|handler|lambda)\.[jt]sx?$/.test(basename)) continue;
     if (basename === "mod.ts" || basename === "lib.rs" || basename === "main.rs") continue;
-    if (basename === "main.go" || basename === "main.py") continue;
+    if (basename === "main.go" || basename === "main.py" || basename === "manage.py" || basename === "wsgi.py" || basename === "asgi.py") continue;
 
     dead.push(file);
   }
@@ -1475,45 +1737,6 @@ export function findDeadFiles(
   return dead.sort();
 }
 
-/**
- * Compute export coverage for each file: how many of its exports
- * are actually imported by other files in the project.
- */
-export function computeExportCoverage(graph: ImportGraph): ExportCoverage[] {
-  const usedExports = findUsedExports(graph.edges);
-
-  // Count total named exports per file (from outgoing edges' importedNames at target)
-  // We know a file exports a name if any edge targets it with that name
-  const allExportsByFile = new Map<string, Set<string>>();
-
-  for (const edge of graph.edges) {
-    if (edge.isExternal) continue;
-    for (const name of edge.importedNames) {
-      if (!allExportsByFile.has(edge.to)) allExportsByFile.set(edge.to, new Set());
-      allExportsByFile.get(edge.to)!.add(name);
-    }
-  }
-
-  const results: ExportCoverage[] = [];
-  for (const [file, exports] of allExportsByFile) {
-    const totalExports = exports.size;
-    if (totalExports === 0) continue;
-    let usedCount = 0;
-    for (const name of exports) {
-      if (usedExports.has(`${file}::${name}`)) usedCount++;
-    }
-    results.push({
-      file,
-      totalExports,
-      usedExports: usedCount,
-      coverage: usedCount / totalExports,
-    });
-  }
-
-  // Sort by coverage ascending (worst coverage first)
-  results.sort((a, b) => a.coverage - b.coverage);
-  return results;
-}
 
 // ── §1.7 Cross-Layer Fan-In Analysis ──────────────────────────────────
 
@@ -1765,14 +1988,15 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
     }
   }
 
-  // For each articulation point, count how many components exist without it
+  // For each articulation point, find components without it and disconnected files
   const results: Chokepoint[] = [];
   for (const cp of articulationPoints) {
-    const components = countComponentsWithout(adj, allFiles, cp);
+    const { componentCount, disconnected } = analyzeComponentsWithout(adj, allFiles, cp);
     results.push({
       file: cp,
-      separates: components,
+      separates: componentCount,
       importedBy: graph.inDegree.get(cp) ?? 0,
+      dependents: disconnected.slice(0, 10), // Cap at 10 for context size
     });
   }
 
@@ -1782,25 +2006,26 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
 }
 
 /**
- * Count the number of connected components in the graph after removing a node.
+ * Analyze the graph after removing a node: count components and find
+ * files disconnected from the largest remaining component.
  */
-function countComponentsWithout(
+function analyzeComponentsWithout(
   adj: Map<string, Set<string>>,
   allFiles: Set<string>,
   removed: string,
-): number {
+): { componentCount: number; disconnected: string[] } {
   const visited = new Set<string>();
   visited.add(removed);
-  let components = 0;
+  const componentMembers: string[][] = [];
 
   for (const file of allFiles) {
     if (visited.has(file)) continue;
-    components++;
-    // BFS from this file
+    const component: string[] = [];
     const queue = [file];
     visited.add(file);
     while (queue.length > 0) {
       const current = queue.shift()!;
+      component.push(current);
       for (const neighbor of adj.get(current) ?? []) {
         if (!visited.has(neighbor)) {
           visited.add(neighbor);
@@ -1808,7 +2033,241 @@ function countComponentsWithout(
         }
       }
     }
+    componentMembers.push(component);
   }
 
-  return components;
+  // Find the largest component; all other files are "disconnected"
+  componentMembers.sort((a, b) => b.length - a.length);
+  const disconnected: string[] = [];
+  for (let i = 1; i < componentMembers.length; i++) {
+    disconnected.push(...componentMembers[i]);
+  }
+  disconnected.sort();
+
+  return { componentCount: componentMembers.length, disconnected };
+}
+
+// ── BFS Shortest Path ──────────────────────────────────────────────────
+
+/**
+ * Find the shortest path between two files in the import graph using BFS.
+ * Follows directed edges (from -> to). Returns the path as an array of
+ * file paths including both endpoints, or null if no path exists.
+ */
+export function bfsShortestPath(
+  graph: ImportGraph,
+  from: string,
+  to: string,
+): string[] | null {
+  if (from === to) return [from];
+
+  // Build directed adjacency from internal edges
+  const adj = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    const list = adj.get(edge.from) ?? [];
+    list.push(edge.to);
+    adj.set(edge.from, list);
+  }
+
+  const visited = new Set<string>();
+  const parent = new Map<string, string>();
+  const queue = [from];
+  visited.add(from);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const neighbor of adj.get(current) ?? []) {
+      if (visited.has(neighbor)) continue;
+      visited.add(neighbor);
+      parent.set(neighbor, current);
+      if (neighbor === to) {
+        // Reconstruct path
+        const path: string[] = [to];
+        let node = to;
+        while (node !== from) {
+          node = parent.get(node)!;
+          path.unshift(node);
+        }
+        return path;
+      }
+      queue.push(neighbor);
+    }
+  }
+
+  return null;
+}
+
+// ── Graph Topology Analysis ────────────────────────────────────────────
+
+/**
+ * Compute graph topology metrics: connected components, approximate diameter,
+ * and reachability. Helps LLMs understand whether a project has independent
+ * subsystems or is a tightly connected monolith.
+ */
+export function computeGraphTopology(graph: ImportGraph): GraphTopology {
+  // Build undirected adjacency from internal edges
+  const adj = new Map<string, Set<string>>();
+  const allFiles = new Set<string>();
+
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    allFiles.add(edge.from);
+    allFiles.add(edge.to);
+
+    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
+    if (!adj.has(edge.to)) adj.set(edge.to, new Set());
+    adj.get(edge.from)!.add(edge.to);
+    adj.get(edge.to)!.add(edge.from);
+  }
+
+  const totalFiles = allFiles.size;
+  if (totalFiles === 0) {
+    return { componentCount: 0, componentSizes: [], approximateDiameter: 0, reachability: 0, isFragmented: false };
+  }
+
+  // 1. Find connected components via BFS
+  const visited = new Set<string>();
+  const components: string[][] = [];
+
+  for (const file of allFiles) {
+    if (visited.has(file)) continue;
+    const component: string[] = [];
+    const queue = [file];
+    visited.add(file);
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      component.push(current);
+      for (const neighbor of adj.get(current) ?? []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+    components.push(component);
+  }
+
+  components.sort((a, b) => b.length - a.length);
+  const componentSizes = components.map((c) => c.length);
+
+  // 2. Approximate diameter of the largest component using multi-source BFS
+  const largest = components[0];
+  let approximateDiameter = 0;
+
+  if (largest.length > 1) {
+    // Sample up to 3 nodes deterministically (first, middle, last)
+    const samples = [
+      largest[0],
+      largest[Math.floor(largest.length / 2)],
+      largest[largest.length - 1],
+    ];
+
+    for (const start of samples) {
+      // BFS to find max distance from start
+      const dist = new Map<string, number>();
+      dist.set(start, 0);
+      const bfsQueue = [start];
+      let maxDist = 0;
+
+      while (bfsQueue.length > 0) {
+        const current = bfsQueue.shift()!;
+        const d = dist.get(current)!;
+        for (const neighbor of adj.get(current) ?? []) {
+          if (!dist.has(neighbor)) {
+            const nd = d + 1;
+            dist.set(neighbor, nd);
+            if (nd > maxDist) maxDist = nd;
+            bfsQueue.push(neighbor);
+          }
+        }
+      }
+
+      if (maxDist > approximateDiameter) approximateDiameter = maxDist;
+    }
+  }
+
+  // 3. Reachability: fraction of files in the largest component
+  const reachability = totalFiles > 0 ? largest.length / totalFiles : 0;
+
+  // 4. Fragmentation: more than one component with 5+ files
+  const isFragmented = components.length > 1 && components[1].length >= 5;
+
+  return { componentCount: components.length, componentSizes, approximateDiameter, reachability, isFragmented };
+}
+
+// ── Transitive Dependency Risk ─────────────────────────────────────────
+
+/**
+ * Compute transitive dependency risk for each file by weighting instability
+ * with dependency volatility. Uses BFS with exponential decay.
+ *
+ * A file importing 5 stable utilities scores lower than a file importing
+ * 1 volatile service, because the transitive risk from volatile dependencies
+ * propagates through the graph.
+ *
+ * Requires git analysis data for churn information. Returns empty array
+ * if git data is unavailable.
+ */
+export function computeTransitiveRisk(
+  graph: ImportGraph,
+  commitCounts: Map<string, number>,
+  maxDepth = 5,
+  topN = 15,
+): TransitiveDependencyRisk[] {
+  if (commitCounts.size === 0) return [];
+
+  // Build directed adjacency from internal edges (outgoing deps)
+  const outgoing = new Map<string, Set<string>>();
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    if (!outgoing.has(edge.from)) outgoing.set(edge.from, new Set());
+    outgoing.get(edge.from)!.add(edge.to);
+  }
+
+  // Normalize churn across all files
+  let maxChurn = 0;
+  for (const count of commitCounts.values()) {
+    if (count > maxChurn) maxChurn = count;
+  }
+  if (maxChurn === 0) return [];
+
+  const results: TransitiveDependencyRisk[] = [];
+
+  for (const [file] of graph.inDegree) {
+    const visited = new Set<string>();
+    const queue: Array<{ node: string; depth: number }> = [{ node: file, depth: 0 }];
+    let transitiveRisk = 0;
+    let totalWeight = 0;
+
+    while (queue.length > 0) {
+      const { node, depth } = queue.shift()!;
+      if (depth > maxDepth || visited.has(node)) continue;
+      visited.add(node);
+
+      if (depth > 0) {
+        const decay = Math.pow(0.5, depth); // half-life per hop
+        const volatility = (commitCounts.get(node) ?? 0) / maxChurn;
+        transitiveRisk += volatility * decay;
+        totalWeight += decay;
+      }
+
+      for (const dep of outgoing.get(node) ?? []) {
+        if (!visited.has(dep)) {
+          queue.push({ node: dep, depth: depth + 1 });
+        }
+      }
+    }
+
+    const directVolatility = (commitCounts.get(file) ?? 0) / maxChurn;
+    const transitiveVolatility = totalWeight > 0 ? transitiveRisk / totalWeight : 0;
+    const riskScore = directVolatility * 0.3 + transitiveVolatility * 0.7;
+
+    if (riskScore > 0.1) { // Only include files with meaningful risk
+      results.push({ path: file, directVolatility, transitiveVolatility, riskScore });
+    }
+  }
+
+  results.sort((a, b) => b.riskScore - a.riskScore);
+  return results.slice(0, topN);
 }

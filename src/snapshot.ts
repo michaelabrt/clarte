@@ -1,6 +1,6 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
-import { estimateTokens, readFileOr } from "./utils.js";
+import { estimateTokens, readFileOr, readJsonFile } from "./utils.js";
 import { findUsedExports, stripCommentsAndStrings } from "./graph.js";
 import type { CodeSnapshot, DetectedContext, GitAnalysis, ImportGraph, Language, ProgressCallback, SnapshotEntry } from "./types.js";
 
@@ -88,6 +88,10 @@ const PATTERNS = {
   propsInterface: /^(?:export\s+)?interface\s+(\w+Props)\s*\{/,
   /** export function foo(...) */
   exportedFunction: /^export\s+(?:async\s+)?function\s+(\w+)/,
+  /** export default function Foo(...) */
+  exportedDefaultFunction: /^export\s+default\s+(?:async\s+)?function\s+(\w+)/,
+  /** export default class Foo */
+  exportedDefaultClass: /^export\s+default\s+class\s+(\w+)/,
   /** export const foo = (arrow function or function expression) */
   exportedConstFn: /^export\s+(?:async\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?(?:\(|<|\w+\s*=>)/,
   /** StateCreator<...> pattern (Zustand slices) */
@@ -149,12 +153,33 @@ async function extractFromFile(
       }
     }
 
+    // -- Default export functions and classes --
+    const defaultFuncMatch = trimmed.match(PATTERNS.exportedDefaultFunction);
+    if (defaultFuncMatch) {
+      const [, name] = defaultFuncMatch;
+      let category: SnapshotEntry["category"] = "function";
+      if (isHook || name.startsWith("use")) category = "hook";
+      else if (isComponent && name[0] === name[0].toUpperCase()) category = "component";
+      else if (isStore) category = "store";
+
+      const sig = extractSignatureLine(lines, i);
+      entries.push({ file: relPath, category, signature: sig });
+      continue;
+    }
+
+    const defaultClassMatch = trimmed.match(PATTERNS.exportedDefaultClass);
+    if (defaultClassMatch) {
+      const block = extractBlock(lines, i);
+      entries.push({ file: relPath, category: isComponent ? "component" : "type", signature: block });
+      continue;
+    }
+
     // -- Exported functions --
     const funcMatch = trimmed.match(PATTERNS.exportedFunction) ?? trimmed.match(PATTERNS.exportedConstFn);
     if (funcMatch) {
       const [, name] = funcMatch;
 
-      // Skip React component default exports like `export function MyComponent(`
+      // Skip React component exports like `export function MyComponent(`
       // unless it's clearly a hook or service
       if (isComponent && name[0] === name[0].toUpperCase() && !name.startsWith("use")) {
         // This is likely a component; we only care about its Props, not its body
@@ -270,6 +295,7 @@ const PY_DATACLASS_DECORATORS = new Set([
 
 /**
  * Extract snapshot entries from a single Python file.
+ * Handles top-level definitions and class methods (for non-data classes).
  */
 async function extractFromPythonFile(
   filePath: string,
@@ -283,20 +309,32 @@ async function extractFromPythonFile(
 
   // Track decorators for the next class/function
   let pendingDecorators: string[] = [];
+  // Track whether we're inside a non-data class (for method extraction)
+  let insideClass = false;
+  let classBodyIndent = -1;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmed = line.trimStart();
     const indent = line.length - trimmed.length;
 
-    // Skip deeply indented lines (nested classes/functions)
-    if (indent > 0 && !pendingDecorators.length) {
-      // Only process top-level (indent 0) or class-level methods (indent 4)
-      // For snapshot purposes, we only want top-level definitions
-      if (indent > 4) continue;
+    // Track when we exit a class body
+    if (insideClass && indent === 0 && trimmed && !trimmed.startsWith("#")) {
+      insideClass = false;
+      classBodyIndent = -1;
     }
 
-    // Collect decorators
+    // Skip deeply nested code (beyond class methods)
+    if (indent > 0 && !pendingDecorators.length) {
+      if (insideClass) {
+        // Inside a class: process class-level methods (at classBodyIndent)
+        if (indent > classBodyIndent && classBodyIndent > 0) continue;
+      } else {
+        if (indent > 4) continue;
+      }
+    }
+
+    // Collect decorators (at any indent level where we process definitions)
     const decoMatch = trimmed.match(PY_PATTERNS.decorator);
     if (decoMatch) {
       pendingDecorators.push(decoMatch[1]);
@@ -326,9 +364,48 @@ async function extractFromPythonFile(
           category = "type";
         }
 
-        // Extract the class block (indentation-based)
-        const block = extractPythonBlock(lines, i, pendingDecorators);
-        entries.push({ file: relPath, category, signature: block });
+        if (isDatalike || isEnum || isProtocol) {
+          // Data-like classes: extract the full block (fields are the API)
+          const block = extractPythonBlock(lines, i, pendingDecorators);
+          entries.push({ file: relPath, category, signature: block });
+          insideClass = false;
+        } else {
+          // Non-data classes (views, endpoints, services): extract class header
+          // then extract public method signatures individually
+          const classHeader = pendingDecorators.map((d) => `@${d}`).join("\n") +
+            (pendingDecorators.length ? "\n" : "") + trimmed;
+          entries.push({ file: relPath, category: "type", signature: classHeader });
+          insideClass = true;
+          // Determine body indentation from next non-blank line
+          classBodyIndent = -1;
+          for (let j = i + 1; j < lines.length && j < i + 10; j++) {
+            const bodyLine = lines[j];
+            const bodyTrimmed = bodyLine.trimStart();
+            if (bodyTrimmed && !bodyTrimmed.startsWith("#")) {
+              classBodyIndent = bodyLine.length - bodyTrimmed.length;
+              break;
+            }
+          }
+        }
+        pendingDecorators = [];
+        continue;
+      }
+    }
+
+    // -- Class methods (inside non-data classes) --
+    if (insideClass && classBodyIndent > 0 && indent === classBodyIndent) {
+      const funcMatch = trimmed.match(PY_PATTERNS.funcDef);
+      if (funcMatch) {
+        const [, , name] = funcMatch;
+
+        // Skip private/dunder methods (except __init__)
+        if (name.startsWith("_") && name !== "__init__") {
+          pendingDecorators = [];
+          continue;
+        }
+
+        const sig = extractPythonFuncSignature(lines, i, pendingDecorators);
+        entries.push({ file: relPath, category: "function", signature: sig });
         pendingDecorators = [];
         continue;
       }
@@ -615,9 +692,19 @@ export async function generateSnapshot(
     }
   }
 
-  // Filter dead exports using import graph
+  // Detect library projects: skip dead export filtering for published packages
+  // since their consumers are external and invisible to the import graph
+  let isLibrary = false;
+  if (ctx.language === "typescript" || ctx.language === "javascript") {
+    const pkg = await readJsonFile(path.join(ctx.rootDir, "package.json"));
+    if (pkg && (pkg.main || pkg.exports || pkg.bin || pkg.module || pkg.types)) {
+      isLibrary = true;
+    }
+  }
+
+  // Filter dead exports using import graph (skip for library projects)
   onProgress?.("Filtering dead exports...");
-  const liveEntries = filterDeadExports(allEntries, graph);
+  const liveEntries = isLibrary ? allEntries : filterDeadExports(allEntries, graph);
 
   // Apply token budget if graph is available
   const budget =

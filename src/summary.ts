@@ -1,6 +1,7 @@
 import { theme as t, gradient, getGradientBarColors } from "./theme.js";
 import type { CodeSnapshot, ContextAnalysis, DetectedContext, GeneratedFile } from "./types.js";
 import { estimateTokens, formatBytes } from "./utils.js";
+import { INSTABILITY_THRESHOLD } from "./graph.js";
 
 /**
  * Print a summary of generated files with token estimates.
@@ -230,15 +231,6 @@ export function printSummary(
       });
     }
 
-    const ec = analysis.exportCoverage;
-    if (ec && ec.length > 0) {
-      const totalExports = ec.reduce((sum, e) => sum + e.totalExports, 0);
-      const totalUsed = ec.reduce((sum, e) => sum + e.usedExports, 0);
-      const coveragePct = totalExports > 0 ? Math.round((totalUsed / totalExports) * 100) : 100;
-      const unused = totalExports - totalUsed;
-      recapRows.push({ label: "Export coverage", result: `${coveragePct}% (${unused} unused export${unused === 1 ? "" : "s"})` });
-    }
-
     if (analysis.communities.length > 0) {
       recapRows.push({ label: "Community detection", result: `${analysis.communities.length} module cluster${analysis.communities.length === 1 ? "" : "s"}` });
     }
@@ -285,8 +277,8 @@ export function printSummary(
       }
     }
 
-    // High-instability files (instability > 0.8)
-    const highInstabilityFiles = analysis.instabilities.filter((f) => f.instability > 0.8);
+    // High-instability files
+    const highInstabilityFiles = analysis.instabilities.filter((f) => f.instability > INSTABILITY_THRESHOLD);
     if (highInstabilityFiles.length > 0) {
       findings.push(`${highInstabilityFiles.length} high-instability file${highInstabilityFiles.length === 1 ? "" : "s"}`);
     }
@@ -294,18 +286,6 @@ export function printSummary(
     // Layer violations
     if (analysis.layerConsistency && analysis.layerConsistency.violations.length > 0) {
       findings.push(`${analysis.layerConsistency.violations.length} layer dependency violation${analysis.layerConsistency.violations.length === 1 ? "" : "s"}`);
-    }
-
-    // Unused exports
-    const ec = analysis.exportCoverage;
-    if (ec && ec.length > 0) {
-      const totalExports = ec.reduce((sum, e) => sum + e.totalExports, 0);
-      const totalUsed = ec.reduce((sum, e) => sum + e.usedExports, 0);
-      const unusedExports = totalExports - totalUsed;
-      const filesWithUnused = ec.filter((e) => e.usedExports < e.totalExports).length;
-      if (unusedExports > 0) {
-        findings.push(`${unusedExports} unused export${unusedExports === 1 ? "" : "s"} in ${filesWithUnused} file${filesWithUnused === 1 ? "" : "s"}`);
-      }
     }
 
     console.log("");

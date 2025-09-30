@@ -174,10 +174,13 @@ export function computeChangeCoupling(commits: ParsedCommit[]): ChangeCoupling[]
   // Raw co-change counts (for display)
   const rawCoChanges = new Map<string, number>();
 
+  /** Skip commits touching too many files (mass renames, generated code) */
+  const MAX_COUPLING_FILES = 30;
+
   for (let ci = 0; ci < commits.length; ci++) {
     const commit = commits[ci];
     const files = commit.files;
-    if (files.length < 2) continue;
+    if (files.length < 2 || files.length > MAX_COUPLING_FILES) continue;
 
     // Track file → commit set membership
     for (const file of files) {
