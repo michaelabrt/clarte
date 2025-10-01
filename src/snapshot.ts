@@ -217,14 +217,12 @@ const PATTERNS = {
   exportedType: /^export\s+(interface|type)\s+(\w+)/,
   /** interface FooProps { ... } (component props, even if not exported) */
   propsInterface: /^(?:export\s+)?interface\s+(\w+Props)\s*\{/,
-  /** export function foo(...) */
-  exportedFunction: /^export\s+(?:async\s+)?function\s+(\w+)/,
+  /** export function foo(...) or export const foo = <fn expr> */
+  exportedFunction: /^export\s+(?:async\s+)?(?:function|const)\s+(\w+)/,
   /** export default function Foo(...) */
   exportedDefaultFunction: /^export\s+default\s+(?:async\s+)?function\s+(\w+)/,
   /** export default class Foo */
   exportedDefaultClass: /^export\s+default\s+class\s+(\w+)/,
-  /** export const foo = (arrow function or function expression) */
-  exportedConstFn: /^export\s+(?:async\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?(?:\(|<|\w+\s*=>)/,
   /** StateCreator<...> pattern (Zustand slices) */
   zustandSlice: /StateCreator<\s*(\w+)/,
   /** export interface FooSlice { ... } */
@@ -306,9 +304,22 @@ async function extractFromFile(
     }
 
     // -- Exported functions --
-    const funcMatch = trimmed.match(PATTERNS.exportedFunction) ?? trimmed.match(PATTERNS.exportedConstFn);
+    const funcMatch = trimmed.match(PATTERNS.exportedFunction);
     if (funcMatch) {
       const [, name] = funcMatch;
+
+      // For `export const` lines, only include if the RHS is a function expression.
+      // Plain value assignments (= "...", = 42, = { ... }, = [...]) should be excluded.
+      if (trimmed.includes(" const ")) {
+        const eqIdx = trimmed.indexOf("=");
+        if (eqIdx >= 0) {
+          const rhs = trimmed.slice(eqIdx + 1).trim();
+          const isFnExpr = /^(?:async\s*)?(?:\(|<)/.test(rhs) ||
+            /^(?:async\s+)?\w+\s*=>/.test(rhs) ||
+            rhs.startsWith("function");
+          if (!isFnExpr) continue;
+        }
+      }
 
       // Skip React component exports like `export function MyComponent(`
       // unless it's clearly a hook or service
@@ -379,19 +390,17 @@ function extractSignatureLine(lines: string[], startIdx: number): string {
     sig += (sig ? " " : "") + lines[i].trim();
     // Stop at opening brace, arrow, or if it looks complete
     if (sig.includes("{") || sig.includes("=>")) {
-      const braceIdx = sig.indexOf("{");
       const arrowIdx = sig.indexOf("=>");
 
       let cutIdx: number;
-      if (arrowIdx >= 0 && (braceIdx < 0 || arrowIdx < braceIdx)) {
-        // Arrow function: preserve "=>" and cut at the opening brace after it
+      if (arrowIdx >= 0) {
+        // Arrow function: cut at the opening brace after "=>" to preserve the arrow
         const braceAfterArrow = sig.indexOf("{", arrowIdx + 2);
         cutIdx = braceAfterArrow >= 0 ? braceAfterArrow : sig.length;
-      } else if (braceIdx >= 0) {
-        // Regular function: cut at opening brace
-        cutIdx = braceIdx;
       } else {
-        cutIdx = sig.length;
+        // Regular function: cut at opening brace
+        const braceIdx = sig.indexOf("{");
+        cutIdx = braceIdx >= 0 ? braceIdx : sig.length;
       }
 
       sig = sig.slice(0, cutIdx).trim();
