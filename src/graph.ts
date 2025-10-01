@@ -18,6 +18,8 @@ import type {
   LayerEdge,
   LayerViolation,
   ProgressCallback,
+  StructuralTemporalMismatch,
+  TightCoupling,
   TransitiveDependencyRisk,
 } from "./types.js";
 
@@ -1190,10 +1192,18 @@ export function findCircularDeps(
 
   // Build adjacency restricted to internal edges
   const adj = new Map<string, Set<string>>();
+  // Build edge lookup for type-only info: "from->to" -> ImportEdge
+  const edgeLookup = new Map<string, ImportEdge>();
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
     if (!adj.has(edge.from)) adj.set(edge.from, new Set());
     adj.get(edge.from)!.add(edge.to);
+    // Keep the edge with most imported names (most specific)
+    const key = `${edge.from}->${edge.to}`;
+    const existing = edgeLookup.get(key);
+    if (!existing || edge.importedNames.length > existing.importedNames.length) {
+      edgeLookup.set(key, edge);
+    }
   }
 
   const allCycles: CircularDependency[] = [];
@@ -1203,6 +1213,42 @@ export function findCircularDeps(
     const found = findActualCycles(scc, adj, maxCycles - allCycles.length);
     allCycles.push(...found);
   }
+
+  // Compute severity and break hints for each cycle
+  const shortName = (f: string) => f.split("/").pop()?.replace(/\.[^.]+$/, "") ?? f;
+  for (const cycle of allCycles) {
+    const edges: Array<{ from: string; to: string; isTypeOnly: boolean }> = [];
+    for (let i = 0; i < cycle.chain.length - 1; i++) {
+      const key = `${cycle.chain[i]}->${cycle.chain[i + 1]}`;
+      const e = edgeLookup.get(key);
+      edges.push({ from: cycle.chain[i], to: cycle.chain[i + 1], isTypeOnly: !!e?.isTypeOnly });
+    }
+    const runtimeEdges = edges.filter((e) => !e.isTypeOnly);
+    cycle.severity = edges.length > 0 ? runtimeEdges.length / edges.length : 0;
+
+    // Break hint: suggest converting the smallest runtime edge to type-only
+    if (runtimeEdges.length === 1) {
+      const e = runtimeEdges[0];
+      cycle.breakHint = `Convert ${shortName(e.from)} -> ${shortName(e.to)} to type-only import`;
+    } else if (runtimeEdges.length > 0 && edges.some((e) => e.isTypeOnly)) {
+      // Mixed: some already type-only, suggest converting remaining
+      cycle.breakHint = `${runtimeEdges.length} of ${edges.length} edges are runtime; convert more to type-only`;
+    } else if (runtimeEdges.length > 0) {
+      // All runtime: suggest extracting shared types
+      const shortest = runtimeEdges.reduce((a, b) => a.from < b.from ? a : b);
+      cycle.breakHint = `Extract shared types from ${shortName(shortest.from)} and ${shortName(shortest.to)}`;
+    }
+  }
+
+  // Sort: type-only-only cycles last, then by severity desc, then shortest first
+  allCycles.sort((a, b) => {
+    const sa = a.severity ?? 1;
+    const sb = b.severity ?? 1;
+    if (sa === 0 && sb > 0) return 1;
+    if (sb === 0 && sa > 0) return -1;
+    if (sa !== sb) return sb - sa;
+    return a.chain.length - b.chain.length;
+  });
 
   return allCycles;
 }
@@ -1296,7 +1342,8 @@ function findActualCycles(
       visited.add(node);
 
       // Cap path length at SCC size to avoid explosion
-      if (path.length >= scc.length) continue;
+      // Use > (not >=) so full-SCC cycles can close (path + closing node = scc.length + 1)
+      if (path.length > scc.length) continue;
 
       for (const next of sccAdj.get(node) ?? []) {
         if (!visited.has(next) || next === start) {
@@ -2269,5 +2316,127 @@ export function computeTransitiveRisk(
   }
 
   results.sort((a, b) => b.riskScore - a.riskScore);
+  return results.slice(0, topN);
+}
+
+// ── Structural-Temporal Mismatch Detection ────────────────────────────
+
+/**
+ * Find file pairs that co-change frequently (high temporal coupling)
+ * but are structurally distant in the import graph (no direct or short path).
+ *
+ * These mismatches suggest hidden dependencies: the files are coupled in
+ * practice but the import graph doesn't reflect it. Common causes:
+ * - Shared database schema or API contract
+ * - Copy-paste duplication
+ * - Missing shared module that should be extracted
+ */
+export function findStructuralTemporalMismatches(
+  graph: ImportGraph,
+  changeCoupling: Array<{ fileA: string; fileB: string; confidence: number; coChangeCount: number }>,
+  minConfidence = 0.4,
+  minDistance = 3,
+  topN = 10,
+): StructuralTemporalMismatch[] {
+  if (changeCoupling.length === 0) return [];
+
+  // Build undirected adjacency for BFS distance
+  const adj = new Map<string, Set<string>>();
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
+    if (!adj.has(edge.to)) adj.set(edge.to, new Set());
+    adj.get(edge.from)!.add(edge.to);
+    adj.get(edge.to)!.add(edge.from);
+  }
+
+  const bfsDistance = (from: string, to: string): number => {
+    if (from === to) return 0;
+    if (!adj.has(from) || !adj.has(to)) return -1;
+    const visited = new Set<string>();
+    const queue: Array<{ node: string; dist: number }> = [{ node: from, dist: 0 }];
+    visited.add(from);
+    while (queue.length > 0) {
+      const { node, dist } = queue.shift()!;
+      for (const neighbor of adj.get(node) ?? []) {
+        if (neighbor === to) return dist + 1;
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push({ node: neighbor, dist: dist + 1 });
+        }
+      }
+    }
+    return -1; // unreachable
+  };
+
+  const results: StructuralTemporalMismatch[] = [];
+
+  for (const pair of changeCoupling) {
+    if (pair.confidence < minConfidence) continue;
+
+    const dist = bfsDistance(pair.fileA, pair.fileB);
+    if (dist >= minDistance || dist === -1) {
+      results.push({
+        fileA: pair.fileA,
+        fileB: pair.fileB,
+        graphDistance: dist,
+        coChangeConfidence: pair.confidence,
+        coChangeCount: pair.coChangeCount,
+      });
+    }
+  }
+
+  // Sort by confidence descending (strongest hidden coupling first)
+  results.sort((a, b) => b.coChangeConfidence - a.coChangeConfidence);
+  return results.slice(0, topN);
+}
+
+// ── Tight Coupling Detection ──────────────────────────────────────────
+
+/**
+ * Find file pairs where one file imports many named exports from another,
+ * indicating tight coupling. High import specificity means the importing
+ * file depends on many implementation details of the imported file.
+ *
+ * Threshold: 5+ named imports from a single file suggests the importing
+ * file may be too tightly coupled and could benefit from an intermediate
+ * interface or facade.
+ */
+export function findTightCouplings(
+  graph: ImportGraph,
+  minNames = 5,
+  topN = 10,
+): TightCoupling[] {
+  // Aggregate named imports per (from, to) pair
+  const pairNames = new Map<string, { from: string; to: string; names: Set<string> }>();
+
+  for (const edge of graph.edges) {
+    if (edge.isExternal || edge.importedNames.length === 0) continue;
+    const key = `${edge.from}->${edge.to}`;
+    let entry = pairNames.get(key);
+    if (!entry) {
+      entry = { from: edge.from, to: edge.to, names: new Set() };
+      pairNames.set(key, entry);
+    }
+    for (const name of edge.importedNames) {
+      entry.names.add(name);
+    }
+  }
+
+  const results: TightCoupling[] = [];
+
+  for (const entry of pairNames.values()) {
+    if (entry.names.size >= minNames) {
+      results.push({
+        from: entry.from,
+        to: entry.to,
+        importedNames: entry.names.size,
+        names: [...entry.names].sort(),
+      });
+    }
+  }
+
+  // Sort by number of imported names descending
+  results.sort((a, b) => b.importedNames - a.importedNames);
   return results.slice(0, topN);
 }

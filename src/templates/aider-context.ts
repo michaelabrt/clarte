@@ -4,6 +4,7 @@ import { getFrameworkHints } from "./framework-hints.js";
 import { renderConstraintsSection } from "../config-scan.js";
 import { renderConventionsSection } from "../conventions.js";
 import { renderTestMappingSection } from "../test-map.js";
+import { buildDirectives } from "./directives.js";
 
 /**
  * Build an Aider config file (.aider.conf.yml) with project conventions.
@@ -127,6 +128,14 @@ export function buildAiderContext(
     }
   }
 
+  // Working guidelines (analysis-derived directives)
+  if (analysis) {
+    const directives = buildDirectives(analysis, ctx);
+    for (const d of directives) {
+      lines.push(`  - "GUIDELINE: ${escapeYaml(d)}"`);
+    }
+  }
+
   // Monorepo info
   if (ctx.monorepo && ctx.monorepo.packages.length > 0) {
     lines.push(
@@ -193,7 +202,11 @@ export function buildAiderContext(
   // Circular dependencies
   if (analysis?.circularDeps && analysis.circularDeps.length > 0) {
     for (const dep of analysis.circularDeps) {
-      lines.push(`  - "CIRCULAR DEP: ${escapeYaml(dep.chain.join(" -> "))}"`);
+      const severity = dep.severity != null
+        ? dep.severity === 0 ? " [type-only]" : dep.severity < 1 ? " [mixed]" : ""
+        : "";
+      const hint = dep.breakHint ? ` -- ${escapeYaml(dep.breakHint)}` : "";
+      lines.push(`  - "CIRCULAR DEP: ${escapeYaml(dep.chain.join(" -> "))}${severity}${hint}"`);
     }
   }
 

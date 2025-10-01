@@ -1,358 +1,450 @@
 import path from "node:path";
-import type { ArchitecturalLayer, CodeSnapshot, ContextAnalysis, DetectedContext, IDETarget, LayerEdge, UserAnswers } from "../types.js";
+import type { ArchitecturalLayer, CodeSnapshot, ContextAnalysis, ContextSection, DetectedContext, IDETarget, LayerEdge, UserAnswers } from "../types.js";
 import { summarizeDetection } from "../detect.js";
-import { readJsonFile, readFileOr } from "../utils.js";
+import { estimateTokens, readJsonFile, readFileOr } from "../utils.js";
 import { getFrameworkHintsSection } from "./framework-hints.js";
 import { renderConstraintsSection } from "../config-scan.js";
 import { renderConventionsSection } from "../conventions.js";
 import { renderTestMappingSection } from "../test-map.js";
+import { renderDirectivesSection } from "./directives.js";
 
 /**
  * Build the main context file content (CLAUDE.md, AGENTS.md, or CONTEXT.md).
+ * When budget > 0, sections are prioritized and trimmed to fit within the token budget.
  */
 export async function buildMainContext(
   ctx: DetectedContext,
   answers: UserAnswers,
   snapshot: CodeSnapshot | null,
   analysis?: ContextAnalysis,
+  budget?: number,
 ): Promise<string> {
+  const allSections = await buildSections(ctx, answers, snapshot, analysis);
+  const effectiveBudget = budget ?? 0;
+
+  if (effectiveBudget <= 0) {
+    // No budget: include all sections (backward compatible)
+    return allSections.map((s) => s.content).join("\n\n").trimEnd() + "\n";
+  }
+
+  const { included, omitted } = applyBudget(allSections, effectiveBudget);
+  let result = included.map((s) => s.content).join("\n\n").trimEnd() + "\n";
+
+  if (omitted.length > 0) {
+    result += `\n<!-- Sections omitted to fit token budget: ${omitted.join(", ")}. Run clarte --budget=0 for full output. -->\n`;
+  }
+
+  return result;
+}
+
+/**
+ * Build all context sections with priority and token estimates.
+ * Exported for use by brief mode and testing.
+ */
+export async function buildSections(
+  ctx: DetectedContext,
+  answers: UserAnswers,
+  snapshot: CodeSnapshot | null,
+  analysis?: ContextAnalysis,
+): Promise<ContextSection[]> {
   const projectName = await getProjectName(ctx);
   const stackSummary = answers.stackConfirmed
     ? summarizeDetection(ctx)
     : answers.stackCorrections || summarizeDetection(ctx);
 
-  const sections: string[] = [];
+  const sections: ContextSection[] = [];
 
-  // -- Header --
-  sections.push(`# ${projectName}`);
-  sections.push("");
+  // -- Priority 0: Always included (header, what-is-this, key-patterns, gotchas, development) --
 
-  // -- Maintenance directive --
-  sections.push(
+  // Header + maintenance directive
+  const headerLines: string[] = [];
+  headerLines.push(`# ${projectName}`);
+  headerLines.push("");
+  headerLines.push(
     "> **Keep this file up to date.** When you change the architecture, add a dependency, create a new pattern, or learn a gotcha, update this file in the same step. This is the source of truth for how the project works.",
   );
-  sections.push(
+  headerLines.push(
     "> **This file is your starting point.** Only read additional files when the task requires implementation details not captured here.",
   );
-
   if (answers.ides.includes("cursor")) {
-    sections.push(
+    headerLines.push(
       "> Scoped rules are in `.cursor/rules/` -- update them when conventions change.",
     );
   }
+  const headerContent = headerLines.join("\n");
+  sections.push({ id: "header", priority: 0, content: headerContent, tokens: estimateTokens(headerContent) });
 
-  sections.push("");
+  // What Is This
+  const whatContent = `## What Is This\n\n${answers.projectPurpose}`;
+  sections.push({ id: "what-is-this", priority: 0, content: whatContent, tokens: estimateTokens(whatContent) });
 
-  // -- What Is This --
-  sections.push("## What Is This");
-  sections.push("");
-  sections.push(answers.projectPurpose);
-  sections.push("");
+  // -- Priority 1: Tech Stack, Config Constraints --
 
-  // -- Tech Stack --
-  sections.push("## Tech Stack");
-  sections.push("");
-  sections.push(buildTechStackSection(ctx, stackSummary));
-  sections.push("");
+  const techContent = `## Tech Stack\n\n${buildTechStackSection(ctx, stackSummary)}`;
+  sections.push({ id: "tech-stack", priority: 1, content: techContent, tokens: estimateTokens(techContent) });
 
-  // -- Config Constraints --
   if (analysis?.configConstraints) {
     const constraintsSection = renderConstraintsSection(analysis.configConstraints);
     if (constraintsSection) {
-      sections.push(constraintsSection);
-      sections.push("");
+      sections.push({ id: "config-constraints", priority: 1, content: constraintsSection, tokens: estimateTokens(constraintsSection) });
     }
   }
 
-  // -- Framework Conventions --
-  const fwHints = getFrameworkHintsSection(ctx);
-  if (fwHints) {
-    sections.push(fwHints);
-  }
+  // -- Priority 2: Working Guidelines, Key Files --
 
-  // -- Inferred Conventions --
-  if (analysis?.conventions) {
-    const conventionsSection = renderConventionsSection(analysis.conventions);
-    if (conventionsSection) {
-      sections.push(conventionsSection);
-      sections.push("");
+  if (analysis) {
+    const directivesSection = renderDirectivesSection(analysis, ctx);
+    if (directivesSection) {
+      sections.push({ id: "working-guidelines", priority: 2, content: directivesSection, tokens: estimateTokens(directivesSection) });
     }
   }
 
-  // -- Project Structure --
-  if (ctx.directories.length > 0) {
-    sections.push("## Project Structure");
-    sections.push("");
-    sections.push("```");
-    sections.push(buildStructureTree(ctx));
-    sections.push("```");
-    sections.push("");
-  }
-
-  // -- Monorepo Structure --
-  if (ctx.monorepo && ctx.monorepo.packages.length > 0) {
-    sections.push("## Monorepo Structure");
-    sections.push("");
-    sections.push(
-      `${ctx.monorepo.type} workspace with ${ctx.monorepo.packages.length} packages:`,
-    );
-    sections.push("");
-    for (const pkg of ctx.monorepo.packages) {
-      const fws =
-        pkg.frameworks.length > 0
-          ? ` (${pkg.frameworks.map((f) => f.name).join(", ")})`
-          : "";
-      sections.push(`- **${pkg.name}** (\`${pkg.path}\`)${fws}`);
-    }
-    sections.push("");
-  }
-
-  // -- Code Snapshot --
-  if (snapshot?.markdown) {
-    sections.push("## Code Snapshot");
-    sections.push("");
-    sections.push(
-      "<!-- CODE SNAPSHOT (auto-generated, update when types/stores/services change) -->",
-    );
-    sections.push("");
-    sections.push(snapshot.markdown);
-    sections.push("");
-    sections.push("<!-- /CODE SNAPSHOT -->");
-    sections.push("");
-  }
-
-  // -- Key Files (hub files) --
   if (analysis?.hubFiles && analysis.hubFiles.length > 0) {
-    // Build instability lookup for flagging risky files
-    const instabilityMap = new Map<string, { instability: number; fanIn: number; fanOut: number }>();
+    const instabilityMap = new Map<string, number>();
     if (analysis.instabilities) {
       for (const inst of analysis.instabilities) {
         instabilityMap.set(inst.path, { instability: inst.instability, fanIn: inst.fanIn, fanOut: inst.fanOut });
       }
     }
-
-    sections.push("## Key Files");
-    sections.push("");
-    sections.push(
-      "These are the most interconnected files. Read these first for architectural understanding.",
-    );
-    sections.push("");
-    sections.push("| File | Imported By | Stability |");
-    sections.push("|------|-------------|-----------|");
+    const keyLines: string[] = [];
+    keyLines.push("## Key Files");
+    keyLines.push("");
+    keyLines.push("These are the most interconnected files. Read these first for architectural understanding.");
+    keyLines.push("");
+    keyLines.push("| File | Imported By | Stability |");
+    keyLines.push("|------|-------------|-----------|");
     for (const hub of analysis.hubFiles) {
       const inst = instabilityMap.get(hub.path);
       const stabilityCell = inst != null
-        ? `${(inst.instability * 100).toFixed(0)}% unstable`
+        ? `${(inst * 100).toFixed(0)}% unstable \u26A0\uFE0F`
         : "stable";
       const roleTag = hub.role !== "Leaf" ? ` (${hub.role})` : "";
-      sections.push(
+      keyLines.push(
         `| \`${hub.path}\`${roleTag} | ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"} | ${stabilityCell} |`,
       );
     }
-    sections.push("");
-
-    // Add explanations for unstable hub files
-    const unstableHubs = analysis.hubFiles.filter(h => instabilityMap.has(h.path));
-    if (unstableHubs.length > 0) {
-      sections.push(
-        "> **Reading guide:** Files with high instability have many outgoing dependencies relative to incoming ones — changes to these files tend to ripple outward. Stable files (low instability) are foundational and widely depended upon — modify them with extra care.",
-      );
-      sections.push("");
-    }
+    const keyContent = keyLines.join("\n");
+    sections.push({ id: "key-files", priority: 2, content: keyContent, tokens: estimateTokens(keyContent) });
   }
 
-  // -- Architecture (layer ordering) --
-  if (analysis?.layers && analysis.layers.length > 1) {
-    sections.push("## Architecture");
-    sections.push("");
-    const diagram = renderArchitectureDiagram(analysis.layers, analysis.layerEdges ?? []);
-    sections.push(diagram);
-    sections.push("");
-  }
+  // -- Priority 3: Circular Dependencies --
 
-  // -- Recently Active Files --
-  if (analysis?.gitActivity && analysis.gitActivity.hotFiles.length > 0) {
-    sections.push("## Recently Active Files");
-    sections.push("");
-    sections.push("| File | Commits (90d) | Last Changed |");
-    sections.push("|------|--------------|--------------|");
-    for (const hot of analysis.gitActivity.hotFiles.slice(0, 10)) {
-      sections.push(
-        `| \`${hot.path}\` | ${hot.commits} | ${hot.lastChanged} |`,
-      );
-    }
-    sections.push("");
-  }
-
-  // -- Change Coupling --
-  if (analysis?.gitActivity?.changeCoupling && analysis.gitActivity.changeCoupling.length > 0) {
-    sections.push("## Change Coupling");
-    sections.push("");
-    sections.push(
-      "Files that frequently change together — when modifying one, check if the other needs updates too.",
-    );
-    sections.push("");
-    sections.push("| File A | File B | Co-changes | Confidence |");
-    sections.push("|--------|--------|------------|------------|");
-    for (const pair of analysis.gitActivity.changeCoupling) {
-      sections.push(
-        `| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${(pair.confidence * 100).toFixed(0)}% |`,
-      );
-    }
-    sections.push("");
-  }
-
-  // -- Cross-Cutting Files --
-  if (analysis?.crossCuttingFiles && analysis.crossCuttingFiles.length > 0) {
-    sections.push("## Cross-Cutting Files");
-    sections.push("");
-    sections.push(
-      "These files are imported across multiple architectural layers. Changes here have wide blast radius.",
-    );
-    sections.push("");
-    sections.push("| File | Imported By | Layers |");
-    sections.push("|------|------------|--------|");
-    for (const f of analysis.crossCuttingFiles) {
-      sections.push(
-        `| \`${f.file}\` | ${f.totalImporters} file${f.totalImporters === 1 ? "" : "s"} | ${f.layers.join(", ")} |`,
-      );
-    }
-    sections.push("");
-  }
-
-  // -- Layer Consistency --
-  if (analysis?.layerConsistency && analysis.layers && analysis.layers.length > 1) {
-    const lc = analysis.layerConsistency;
-    if (lc.violations.length > 0) {
-      sections.push("## Layer Consistency");
-      sections.push("");
-      sections.push(
-        `Dependency direction consistency: ${(lc.consistency * 100).toFixed(0)}% (imports flow downward)`,
-      );
-      sections.push("");
-      sections.push("Violations (imports flowing upward):");
-      sections.push("");
-      for (const v of lc.violations.slice(0, 5)) {
-        sections.push(
-          `- \`${v.from}\` imports from \`${v.to}\` (${v.fromLayer} \u2192 ${v.toLayer})`,
-        );
-      }
-      if (lc.violations.length > 5) {
-        sections.push(`- ... and ${lc.violations.length - 5} more`);
-      }
-      sections.push("");
-    }
-  }
-
-  // -- Architectural Chokepoints --
-  if (analysis?.chokepoints && analysis.chokepoints.length > 0) {
-    sections.push("## Architectural Chokepoints");
-    sections.push("");
-    sections.push(
-      "Files whose removal would disconnect parts of the codebase. Refactor with extreme care.",
-    );
-    sections.push("");
-    sections.push("| File | Separates | Imported By |");
-    sections.push("|------|-----------|-------------|");
-    for (const cp of analysis.chokepoints.slice(0, 10)) {
-      sections.push(
-        `| \`${cp.file}\` | ${cp.separates} component${cp.separates === 1 ? "" : "s"} | ${cp.importedBy} file${cp.importedBy === 1 ? "" : "s"} |`,
-      );
-    }
-    sections.push("");
-  }
-
-  // -- Circular Dependencies --
   if (analysis?.circularDeps && analysis.circularDeps.length > 0) {
-    sections.push("## Circular Dependencies");
-    sections.push("");
-    sections.push(
-      "> Circular imports create tight coupling: changing any file in the cycle may require changes to all others. Break cycles by extracting shared types into a separate file or using dependency inversion.",
-    );
-    sections.push("");
+    const circLines: string[] = [];
+    circLines.push("## Circular Dependencies");
+    circLines.push("");
+    circLines.push("> These circular import chains may cause unexpected behavior when modified.");
+    circLines.push("");
     for (const dep of analysis.circularDeps) {
-      sections.push(`- ${dep.chain.map((f) => `\`${f}\``).join(" -> ")}`);
+      const severity = dep.severity != null
+        ? dep.severity === 0 ? " (type-only)" : dep.severity < 1 ? " (mixed)" : ""
+        : "";
+      const hint = dep.breakHint ? ` -- ${dep.breakHint}` : "";
+      circLines.push(`- ${dep.chain.map((f) => `\`${f}\``).join(" -> ")}${severity}${hint}`);
     }
-    sections.push("");
+    const circContent = circLines.join("\n");
+    sections.push({ id: "circular-deps", priority: 3, content: circContent, tokens: estimateTokens(circContent) });
   }
 
-  // -- Dead Files --
-  if (analysis?.deadFiles && analysis.deadFiles.length > 0) {
-    sections.push("## Dead Files");
-    sections.push("");
-    sections.push(
-      "Files not imported by any other source file. Candidates for removal or missing entry points.",
-    );
-    sections.push("");
-    for (const file of analysis.deadFiles.slice(0, 15)) {
-      sections.push(`- \`${file}\``);
-    }
-    if (analysis.deadFiles.length > 15) {
-      sections.push(`- ... and ${analysis.deadFiles.length - 15} more`);
-    }
-    sections.push("");
+  // -- Priority 4: Architecture --
+
+  if (analysis?.layers && analysis.layers.length > 1) {
+    const archLines: string[] = [];
+    archLines.push("## Architecture");
+    archLines.push("");
+    archLines.push(renderArchitectureDiagram(analysis.layers, analysis.layerEdges ?? []));
+    const archContent = archLines.join("\n");
+    sections.push({ id: "architecture", priority: 4, content: archContent, tokens: estimateTokens(archContent) });
   }
 
-  // -- Test Coverage Map --
+  // -- Priority 5: Framework Hints, Conventions --
+
+  const fwHints = getFrameworkHintsSection(ctx);
+  if (fwHints) {
+    sections.push({ id: "framework-hints", priority: 5, content: fwHints, tokens: estimateTokens(fwHints) });
+  }
+
+  if (analysis?.conventions) {
+    const conventionsSection = renderConventionsSection(analysis.conventions);
+    if (conventionsSection) {
+      sections.push({ id: "conventions", priority: 5, content: conventionsSection, tokens: estimateTokens(conventionsSection) });
+    }
+  }
+
+  // -- Priority 6: Code Snapshot --
+
+  if (snapshot?.markdown) {
+    const snapLines: string[] = [];
+    snapLines.push("## Code Snapshot");
+    snapLines.push("");
+    snapLines.push("<!-- CODE SNAPSHOT (auto-generated, update when types/stores/services change) -->");
+    snapLines.push("");
+    snapLines.push(snapshot.markdown);
+    snapLines.push("");
+    snapLines.push("<!-- /CODE SNAPSHOT -->");
+    const snapContent = snapLines.join("\n");
+    sections.push({ id: "code-snapshot", priority: 6, content: snapContent, tokens: estimateTokens(snapContent) });
+  }
+
+  // -- Priority 7: Hot Files, Change Coupling --
+
+  if (analysis?.gitActivity && analysis.gitActivity.hotFiles.length > 0) {
+    const hotLines: string[] = [];
+    hotLines.push("## Recently Active Files");
+    hotLines.push("");
+    hotLines.push("| File | Commits (90d) | Last Changed |");
+    hotLines.push("|------|--------------|--------------|");
+    for (const hot of analysis.gitActivity.hotFiles.slice(0, 10)) {
+      hotLines.push(`| \`${hot.path}\` | ${hot.commits} | ${hot.lastChanged} |`);
+    }
+    const hotContent = hotLines.join("\n");
+    sections.push({ id: "hot-files", priority: 7, content: hotContent, tokens: estimateTokens(hotContent) });
+  }
+
+  if (analysis?.gitActivity?.changeCoupling && analysis.gitActivity.changeCoupling.length > 0) {
+    const ccLines: string[] = [];
+    ccLines.push("## Change Coupling");
+    ccLines.push("");
+    ccLines.push("Files that frequently change together -- when modifying one, check if the other needs updates too.");
+    ccLines.push("");
+    ccLines.push("| File A | File B | Co-changes | Confidence |");
+    ccLines.push("|--------|--------|------------|------------|");
+    for (const pair of analysis.gitActivity.changeCoupling) {
+      ccLines.push(`| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${(pair.confidence * 100).toFixed(0)}% |`);
+    }
+    const ccContent = ccLines.join("\n");
+    sections.push({ id: "change-coupling", priority: 7, content: ccContent, tokens: estimateTokens(ccContent) });
+  }
+
+  // -- Priority 8: Test Mapping, Structure --
+
   if (analysis?.testMapping) {
     const testSection = renderTestMappingSection(analysis.testMapping, analysis.hubFiles);
     if (testSection) {
-      sections.push(testSection);
-      sections.push("");
+      sections.push({ id: "test-mapping", priority: 8, content: testSection, tokens: estimateTokens(testSection) });
     }
   }
 
-  // -- Key Patterns --
+  if (ctx.directories.length > 0) {
+    const structLines: string[] = [];
+    structLines.push("## Project Structure");
+    structLines.push("");
+    structLines.push("```");
+    structLines.push(buildStructureTree(ctx));
+    structLines.push("```");
+    const structContent = structLines.join("\n");
+    sections.push({ id: "structure", priority: 8, content: structContent, tokens: estimateTokens(structContent) });
+  }
+
+  // Monorepo structure (same priority as structure)
+  if (ctx.monorepo && ctx.monorepo.packages.length > 0) {
+    const monoLines: string[] = [];
+    monoLines.push("## Monorepo Structure");
+    monoLines.push("");
+    monoLines.push(`${ctx.monorepo.type} workspace with ${ctx.monorepo.packages.length} packages:`);
+    monoLines.push("");
+    for (const pkg of ctx.monorepo.packages) {
+      const fws = pkg.frameworks.length > 0
+        ? ` (${pkg.frameworks.map((f) => f.name).join(", ")})`
+        : "";
+      monoLines.push(`- **${pkg.name}** (\`${pkg.path}\`)${fws}`);
+    }
+    const monoContent = monoLines.join("\n");
+    sections.push({ id: "monorepo-structure", priority: 8, content: monoContent, tokens: estimateTokens(monoContent) });
+  }
+
+  // -- Priority 9: Dead Files, Cross-Cutting, Chokepoints --
+
+  if (analysis?.deadFiles && analysis.deadFiles.length > 0) {
+    const deadLines: string[] = [];
+    deadLines.push("## Dead Files");
+    deadLines.push("");
+    deadLines.push("Files not imported by any other source file. Candidates for removal or missing entry points.");
+    deadLines.push("");
+    for (const file of analysis.deadFiles.slice(0, 15)) {
+      deadLines.push(`- \`${file}\``);
+    }
+    if (analysis.deadFiles.length > 15) {
+      deadLines.push(`- ... and ${analysis.deadFiles.length - 15} more`);
+    }
+    const deadContent = deadLines.join("\n");
+    sections.push({ id: "dead-files", priority: 9, content: deadContent, tokens: estimateTokens(deadContent) });
+  }
+
+  if (analysis?.crossCuttingFiles && analysis.crossCuttingFiles.length > 0) {
+    const ccfLines: string[] = [];
+    ccfLines.push("## Cross-Cutting Files");
+    ccfLines.push("");
+    ccfLines.push("These files are imported across multiple architectural layers. Changes here have wide blast radius.");
+    ccfLines.push("");
+    ccfLines.push("| File | Imported By | Layers |");
+    ccfLines.push("|------|------------|--------|");
+    for (const f of analysis.crossCuttingFiles) {
+      ccfLines.push(`| \`${f.file}\` | ${f.totalImporters} file${f.totalImporters === 1 ? "" : "s"} | ${f.layers.join(", ")} |`);
+    }
+    const ccfContent = ccfLines.join("\n");
+    sections.push({ id: "cross-cutting", priority: 9, content: ccfContent, tokens: estimateTokens(ccfContent) });
+  }
+
+  if (analysis?.chokepoints && analysis.chokepoints.length > 0) {
+    const cpLines: string[] = [];
+    cpLines.push("## Architectural Chokepoints");
+    cpLines.push("");
+    cpLines.push("Files whose removal would disconnect parts of the codebase. Refactor with extreme care.");
+    cpLines.push("");
+    cpLines.push("| File | Separates | Imported By |");
+    cpLines.push("|------|-----------|-------------|");
+    for (const cp of analysis.chokepoints.slice(0, 10)) {
+      cpLines.push(`| \`${cp.file}\` | ${cp.separates} component${cp.separates === 1 ? "" : "s"} | ${cp.importedBy} file${cp.importedBy === 1 ? "" : "s"} |`);
+    }
+    const cpContent = cpLines.join("\n");
+    sections.push({ id: "chokepoints", priority: 9, content: cpContent, tokens: estimateTokens(cpContent) });
+  }
+
+  // -- Priority 10: Tight Coupling, Hidden Coupling, Layer Consistency --
+
+  if (analysis?.tightCouplings && analysis.tightCouplings.length > 0) {
+    const tcLines: string[] = [];
+    tcLines.push("## Tight Coupling");
+    tcLines.push("");
+    tcLines.push("File pairs where one file imports many named exports from another, indicating strong coupling. Consider an intermediate interface if refactoring.");
+    tcLines.push("");
+    for (const tc of analysis.tightCouplings) {
+      tcLines.push(`- \`${tc.from}\` imports ${tc.importedNames} names from \`${tc.to}\``);
+    }
+    const tcContent = tcLines.join("\n");
+    sections.push({ id: "tight-coupling", priority: 10, content: tcContent, tokens: estimateTokens(tcContent) });
+  }
+
+  if (analysis?.structuralMismatches && analysis.structuralMismatches.length > 0) {
+    const smLines: string[] = [];
+    smLines.push("## Hidden Coupling");
+    smLines.push("");
+    smLines.push("File pairs that frequently change together but have no direct import path. These suggest hidden dependencies (shared schema, duplicated logic, or a missing shared module).");
+    smLines.push("");
+    smLines.push("| File A | File B | Co-changes | Confidence | Graph Distance |");
+    smLines.push("|--------|--------|------------|------------|----------------|");
+    for (const m of analysis.structuralMismatches) {
+      const dist = m.graphDistance === -1 ? "unreachable" : `${m.graphDistance} hops`;
+      smLines.push(`| \`${m.fileA}\` | \`${m.fileB}\` | ${m.coChangeCount} | ${Math.round(m.coChangeConfidence * 100)}% | ${dist} |`);
+    }
+    const smContent = smLines.join("\n");
+    sections.push({ id: "hidden-coupling", priority: 10, content: smContent, tokens: estimateTokens(smContent) });
+  }
+
+  if (analysis?.layerConsistency && analysis.layers && analysis.layers.length > 1) {
+    const lc = analysis.layerConsistency;
+    if (lc.violations.length > 0) {
+      const lcLines: string[] = [];
+      lcLines.push("## Layer Consistency");
+      lcLines.push("");
+      lcLines.push(`Dependency direction consistency: ${(lc.consistency * 100).toFixed(0)}% (imports flow downward)`);
+      lcLines.push("");
+      lcLines.push("Violations (imports flowing upward):");
+      lcLines.push("");
+      for (const v of lc.violations.slice(0, 5)) {
+        lcLines.push(`- \`${v.from}\` imports from \`${v.to}\` (${v.fromLayer} \u2192 ${v.toLayer})`);
+      }
+      if (lc.violations.length > 5) {
+        lcLines.push(`- ... and ${lc.violations.length - 5} more`);
+      }
+      const lcContent = lcLines.join("\n");
+      sections.push({ id: "layer-consistency", priority: 10, content: lcContent, tokens: estimateTokens(lcContent) });
+    }
+  }
+
+  // -- Priority 0: Key Patterns, Gotchas, Development (always included) --
+
   if (answers.keyPatterns) {
-    sections.push("## Key Patterns");
-    sections.push("");
-    // Split on newlines or periods to create bullet points
+    const patLines: string[] = [];
+    patLines.push("## Key Patterns");
+    patLines.push("");
     const patterns = answers.keyPatterns
       .split(/[.\n]/)
       .map((s) => s.trim())
       .filter(Boolean);
     for (const p of patterns) {
-      sections.push(`- ${p}`);
+      patLines.push(`- ${p}`);
     }
-    sections.push("");
+    const patContent = patLines.join("\n");
+    sections.push({ id: "key-patterns", priority: 0, content: patContent, tokens: estimateTokens(patContent) });
   }
 
-  // -- Gotchas --
   if (answers.gotchas) {
-    sections.push("## Gotchas");
-    sections.push("");
+    const gotLines: string[] = [];
+    gotLines.push("## Gotchas");
+    gotLines.push("");
     const gotchas = answers.gotchas
       .split(/[.\n]/)
       .map((s) => s.trim())
       .filter(Boolean);
     for (const g of gotchas) {
-      sections.push(`- ${g}`);
+      gotLines.push(`- ${g}`);
     }
-    sections.push("");
+    const gotContent = gotLines.join("\n");
+    sections.push({ id: "gotchas", priority: 0, content: gotContent, tokens: estimateTokens(gotContent) });
   }
 
-  // -- Development --
-  sections.push("## Development");
-  sections.push("");
-  sections.push(await buildDevSection(ctx));
-  sections.push("");
+  const devContent = `## Development\n\n${await buildDevSection(ctx)}`;
+  sections.push({ id: "development", priority: 0, content: devContent, tokens: estimateTokens(devContent) });
 
-  return sections.join("\n").trimEnd() + "\n";
+  return sections;
+}
+
+/**
+ * Apply a token budget to sections, including by priority order.
+ * Priority 0 sections are always included.
+ */
+export function applyBudget(
+  sections: ContextSection[],
+  budget: number,
+): { included: ContextSection[]; omitted: string[] } {
+  // Priority 0 is always included
+  const always = sections.filter((s) => s.priority === 0);
+  const budgeted = sections.filter((s) => s.priority > 0);
+
+  // Sort by priority (ascending = highest priority first)
+  budgeted.sort((a, b) => a.priority - b.priority);
+
+  let remaining = budget;
+  for (const s of always) {
+    remaining -= s.tokens;
+  }
+
+  const included: ContextSection[] = [...always];
+  const omitted: string[] = [];
+
+  // Priority 1-2 are always included (even if over budget)
+  for (const s of budgeted) {
+    if (s.priority <= 2) {
+      included.push(s);
+      remaining -= s.tokens;
+    } else if (remaining >= s.tokens) {
+      included.push(s);
+      remaining -= s.tokens;
+    } else {
+      omitted.push(s.id);
+    }
+  }
+
+  // Restore original order by re-sorting based on position in the original array
+  const orderMap = new Map(sections.map((s, i) => [s.id, i]));
+  included.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+
+  return { included, omitted };
 }
 
 /**
  * Render a compact architecture diagram showing dependency flow.
- * Uses inline `types → stores → ...` format to save context tokens.
  */
 function renderArchitectureDiagram(layers: ArchitecturalLayer[], layerEdges: LayerEdge[]): string {
   const layerNames = layers.map((l) => `\`${l.name}\``);
   const lines: string[] = [];
 
-  lines.push("Dependency flow (foundational → consumer):");
+  lines.push("Dependency flow (foundational \u2192 consumer):");
   lines.push("");
-  lines.push(layerNames.join(" → "));
+  lines.push(layerNames.join(" \u2192 "));
 
-  // Show cross-layer edges that don't follow the main flow
   const mainFlow = new Set<string>();
   for (let i = 0; i < layers.length - 1; i++) {
     mainFlow.add(`${layers[i].name}->${layers[i + 1].name}`);
@@ -364,7 +456,7 @@ function renderArchitectureDiagram(layers: ArchitecturalLayer[], layerEdges: Lay
     lines.push("");
     lines.push(
       "Cross-layer edges: " +
-        crossEdges.map((e) => `${e.from} → ${e.to}`).join(", "),
+        crossEdges.map((e) => `${e.from} \u2192 ${e.to}`).join(", "),
     );
   }
 
@@ -372,18 +464,15 @@ function renderArchitectureDiagram(layers: ArchitecturalLayer[], layerEdges: Lay
 }
 
 async function getProjectName(ctx: DetectedContext): Promise<string> {
-  // 1. package.json name field
   const pkg = await readJsonFile(path.join(ctx.rootDir, "package.json"));
   if (pkg?.name && typeof pkg.name === "string") return pkg.name;
 
-  // 2. Cargo.toml [package] name
   const cargo = await readFileOr(path.join(ctx.rootDir, "Cargo.toml"));
   if (cargo) {
     const match = cargo.match(/^\[package\][\s\S]*?^name\s*=\s*"([^"]+)"/m);
     if (match) return match[1];
   }
 
-  // 3. go.mod module path (last segment)
   const gomod = await readFileOr(path.join(ctx.rootDir, "go.mod"));
   if (gomod) {
     const match = gomod.match(/^module\s+(\S+)/m);
@@ -393,14 +482,12 @@ async function getProjectName(ctx: DetectedContext): Promise<string> {
     }
   }
 
-  // 4. pyproject.toml [project] name
   const pyproject = await readFileOr(path.join(ctx.rootDir, "pyproject.toml"));
   if (pyproject) {
     const match = pyproject.match(/^\[project\][\s\S]*?^name\s*=\s*"([^"]+)"/m);
     if (match) return match[1];
   }
 
-  // 5. Fallback: directory name
   const dirName = ctx.rootDir.split("/").pop() ?? "Project";
   return dirName.charAt(0).toUpperCase() + dirName.slice(1);
 }
@@ -439,7 +526,6 @@ function buildTechStackSection(ctx: DetectedContext, summary: string): string {
 }
 
 function buildStructureTree(ctx: DetectedContext): string {
-  // Group directories by top-level
   const lines: string[] = [];
   const grouped = new Map<string, string[]>();
 
@@ -469,11 +555,9 @@ function buildStructureTree(ctx: DetectedContext): string {
 async function buildDevSection(ctx: DetectedContext): Promise<string> {
   const lines: string[] = [];
 
-  // For JS/TS projects, read actual scripts from package.json
   const pkg = await readJsonFile(path.join(ctx.rootDir, "package.json"));
   const scripts = (pkg?.scripts as Record<string, string> | undefined) ?? {};
 
-  // Determine the run prefix for JS package managers
   const runPrefix = (script: string) => {
     switch (ctx.packageManager) {
       case "pnpm": return `pnpm ${script}`;
@@ -501,12 +585,10 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
     case "npm": {
       lines.push("```bash");
       if (installCmd) lines.push(installCmd);
-      // Pick the best dev command from actual scripts
       const devScript = scripts.dev ? "dev" : scripts.start ? "start" : scripts.serve ? "serve" : null;
       if (devScript) lines.push(runPrefix(devScript));
       lines.push("```");
 
-      // Add test command if it exists
       if (scripts.test) {
         lines.push("");
         lines.push("```bash");
@@ -541,7 +623,6 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
       lines.push("(add your build/run commands here)");
   }
 
-  // Lint command
   if (ctx.linter !== "none") {
     lines.push("");
     lines.push(`Linter: **${ctx.linter}**`);

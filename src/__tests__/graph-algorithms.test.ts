@@ -5,6 +5,8 @@ import {
   getHubFiles,
   computeHITS,
   deriveRole,
+  findStructuralTemporalMismatches,
+  findTightCouplings,
 } from "../graph.js";
 import type { ImportEdge, ImportGraph } from "../types.js";
 
@@ -301,5 +303,164 @@ describe("getHubFiles", () => {
 
     expect(typesHub?.role).toBe("Foundation");
     expect(indexHub?.role).toBe("Orchestrator");
+  });
+});
+
+describe("findCircularDeps severity", () => {
+  it("assigns severity 0 for type-only cycles", () => {
+    const graph = makeGraph(["a", "b"], [
+      edge("a", "b", ["Foo"], true),  // type-only
+      edge("b", "a", ["Bar"], true),  // type-only
+    ]);
+    const deps = findCircularDeps(graph);
+    expect(deps).toHaveLength(1);
+    expect(deps[0].severity).toBe(0);
+    expect(deps[0].chain).toContain("a");
+  });
+
+  it("assigns severity 1 for all-runtime cycles", () => {
+    const graph = makeGraph(["a", "b"], [
+      edge("a", "b", ["foo"]),
+      edge("b", "a", ["bar"]),
+    ]);
+    const deps = findCircularDeps(graph);
+    expect(deps).toHaveLength(1);
+    expect(deps[0].severity).toBe(1);
+  });
+
+  it("assigns mixed severity for mixed cycles", () => {
+    const graph = makeGraph(["a", "b", "c"], [
+      edge("a", "b", ["foo"]),       // runtime
+      edge("b", "c", ["Bar"], true), // type-only
+      edge("c", "a", ["baz"]),       // runtime
+    ]);
+    const deps = findCircularDeps(graph);
+    // Should find a 3-cycle with 2/3 runtime edges
+    const threeCycle = deps.find((d) => d.chain.length === 4);
+    expect(threeCycle).toBeDefined();
+    expect(threeCycle!.severity).toBeGreaterThan(0);
+    expect(threeCycle!.severity).toBeLessThan(1);
+  });
+
+  it("provides break hints", () => {
+    const graph = makeGraph(["a", "b"], [
+      edge("a", "b", ["foo"]),
+      edge("b", "a", ["bar"]),
+    ]);
+    const deps = findCircularDeps(graph);
+    expect(deps[0].breakHint).toBeDefined();
+    expect(deps[0].breakHint!.length).toBeGreaterThan(0);
+  });
+
+  it("sorts type-only cycles after runtime cycles", () => {
+    const graph = makeGraph(["a", "b", "c", "d"], [
+      edge("a", "b", ["Foo"], true),  // type-only cycle
+      edge("b", "a", ["Bar"], true),
+      edge("c", "d", ["foo"]),         // runtime cycle
+      edge("d", "c", ["bar"]),
+    ]);
+    const deps = findCircularDeps(graph);
+    expect(deps.length).toBeGreaterThanOrEqual(2);
+    // Runtime cycle should come first
+    const firstSeverity = deps[0].severity ?? 1;
+    const lastSeverity = deps[deps.length - 1].severity ?? 1;
+    expect(firstSeverity).toBeGreaterThanOrEqual(lastSeverity);
+  });
+});
+
+describe("findStructuralTemporalMismatches", () => {
+  it("detects file pairs with high co-change but large graph distance", () => {
+    // Linear chain: a -> b -> c -> d -> e
+    const graph = makeGraph(["a", "b", "c", "d", "e"], [
+      edge("a", "b"),
+      edge("b", "c"),
+      edge("c", "d"),
+      edge("d", "e"),
+    ]);
+    const coupling = [
+      { fileA: "a", fileB: "e", confidence: 0.8, coChangeCount: 5 },
+    ];
+    const mismatches = findStructuralTemporalMismatches(graph, coupling, 0.4, 3);
+    expect(mismatches).toHaveLength(1);
+    expect(mismatches[0].graphDistance).toBe(4);
+    expect(mismatches[0].coChangeConfidence).toBe(0.8);
+  });
+
+  it("ignores pairs within threshold distance", () => {
+    const graph = makeGraph(["a", "b", "c"], [
+      edge("a", "b"),
+      edge("b", "c"),
+    ]);
+    const coupling = [
+      { fileA: "a", fileB: "c", confidence: 0.8, coChangeCount: 5 },
+    ];
+    // Distance is 2 (a->b->c), threshold is 3
+    const mismatches = findStructuralTemporalMismatches(graph, coupling, 0.4, 3);
+    expect(mismatches).toHaveLength(0);
+  });
+
+  it("detects unreachable pairs", () => {
+    const graph = makeGraph(["a", "b", "c", "d"], [
+      edge("a", "b"),
+      edge("c", "d"),
+    ]);
+    const coupling = [
+      { fileA: "a", fileB: "d", confidence: 0.6, coChangeCount: 3 },
+    ];
+    const mismatches = findStructuralTemporalMismatches(graph, coupling, 0.4, 3);
+    expect(mismatches).toHaveLength(1);
+    expect(mismatches[0].graphDistance).toBe(-1);
+  });
+
+  it("returns empty for no coupling data", () => {
+    const graph = makeGraph(["a", "b"], [edge("a", "b")]);
+    expect(findStructuralTemporalMismatches(graph, [])).toHaveLength(0);
+  });
+});
+
+describe("findTightCouplings", () => {
+  it("detects files importing many names", () => {
+    const graph = makeGraph(["a", "b"], [
+      edge("a", "b", ["foo", "bar", "baz", "qux", "quux"]),
+    ]);
+    const couplings = findTightCouplings(graph, 5);
+    expect(couplings).toHaveLength(1);
+    expect(couplings[0].from).toBe("a");
+    expect(couplings[0].to).toBe("b");
+    expect(couplings[0].importedNames).toBe(5);
+  });
+
+  it("ignores pairs below threshold", () => {
+    const graph = makeGraph(["a", "b"], [
+      edge("a", "b", ["foo", "bar"]),
+    ]);
+    const couplings = findTightCouplings(graph, 5);
+    expect(couplings).toHaveLength(0);
+  });
+
+  it("aggregates names across multiple edges", () => {
+    const graph = makeGraph(["a", "b"], [
+      edge("a", "b", ["foo", "bar", "baz"]),
+      edge("a", "b", ["qux", "quux"]),
+    ]);
+    const couplings = findTightCouplings(graph, 5);
+    expect(couplings).toHaveLength(1);
+    expect(couplings[0].importedNames).toBe(5);
+  });
+
+  it("sorts by name count descending", () => {
+    const graph = makeGraph(["a", "b", "c"], [
+      edge("a", "b", ["w", "x", "y", "z", "v"]),
+      edge("a", "c", ["a1", "a2", "a3", "a4", "a5", "a6", "a7"]),
+    ]);
+    const couplings = findTightCouplings(graph, 5);
+    expect(couplings).toHaveLength(2);
+    expect(couplings[0].to).toBe("c"); // 7 names
+    expect(couplings[1].to).toBe("b"); // 5 names
+  });
+
+  it("returns empty for no edges", () => {
+    const graph = makeGraph(["a", "b"], []);
+    expect(findTightCouplings(graph)).toHaveLength(0);
   });
 });

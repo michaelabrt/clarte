@@ -1,5 +1,6 @@
 import type { ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
 import { getFrameworkHints } from "./framework-hints.js";
+import { buildDirectives } from "./directives.js";
 
 interface CursorRule {
   /** Filename (without path) */
@@ -120,7 +121,11 @@ function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analysis?: 
     );
     bodyLines.push("");
     for (const dep of analysis.circularDeps) {
-      bodyLines.push(`- ${dep.chain.join(" -> ")}`);
+      const severity = dep.severity != null
+        ? dep.severity === 0 ? " (type-only)" : dep.severity < 1 ? " (mixed)" : ""
+        : "";
+      const hint = dep.breakHint ? ` -- ${dep.breakHint}` : "";
+      bodyLines.push(`- ${dep.chain.join(" -> ")}${severity}${hint}`);
     }
     bodyLines.push("");
   }
@@ -134,6 +139,19 @@ function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analysis?: 
       bodyLines.push(hint);
     }
     bodyLines.push("");
+  }
+
+  // Working guidelines (analysis-derived directives)
+  if (analysis) {
+    const directives = buildDirectives(analysis, ctx);
+    if (directives.length > 0) {
+      bodyLines.push("## Working Guidelines");
+      bodyLines.push("");
+      for (const d of directives) {
+        bodyLines.push(`- ${d}`);
+      }
+      bodyLines.push("");
+    }
   }
 
   // Linter info

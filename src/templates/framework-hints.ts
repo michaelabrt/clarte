@@ -383,4 +383,63 @@ const HINT_GENERATORS: HintGenerator[] = [
       "- Package with `electron-builder` or `electron-forge`",
     ],
   },
+  {
+    name: "Remix",
+    getHints: () => [
+      "### Remix",
+      "",
+      "- File-based routing in `app/routes/`. Nested routes via directory structure or dot-delimited filenames",
+      "- `loader` functions for GET data fetching, `action` functions for mutations (POST/PUT/DELETE)",
+      "- Use `<Form>` component for progressive enhancement (works without JS)",
+      "- `ErrorBoundary` export per route for granular error handling",
+      "- `defer()` with `<Await>` for streaming deferred data",
+      "- Nested layouts via `<Outlet />`; each route segment can have its own loader/action/boundary",
+    ],
+  },
+  {
+    name: "Astro",
+    getHints: (ctx) => {
+      const hints = [
+        "### Astro",
+        "",
+        "- `.astro` components: frontmatter (server JS) in `---` fences, HTML template below",
+        "- **Zero JS by default**: components ship no client-side JavaScript unless opted in",
+        "- `client:*` directives for hydration: `client:load`, `client:idle`, `client:visible`, `client:media`",
+        "- Content Collections in `src/content/` with schema validation via `defineCollection()`",
+        "- Island architecture: mix framework components (React, Vue, Svelte) in the same page",
+      ];
+      const hasReact = ctx.frameworks.some((f) => f.name === "React");
+      const hasVue = ctx.frameworks.some((f) => f.name === "Vue");
+      const hasSvelte = ctx.frameworks.some((f) => f.name === "Svelte");
+      const integrations = [hasReact && "React", hasVue && "Vue", hasSvelte && "Svelte"].filter(Boolean);
+      if (integrations.length > 0) {
+        hints.push(`- Framework integrations detected: ${integrations.join(", ")}. Use \`client:load\` to hydrate these components`);
+      }
+      return hints;
+    },
+  },
+  {
+    name: "tRPC",
+    getHints: () => [
+      "### tRPC",
+      "",
+      "- Define procedures on `appRouter` using `router()` and `procedure` builders",
+      "- Input validation with Zod schemas: `procedure.input(z.object({ ... })).query/mutation(...)`",
+      "- Middleware via `.use()` for auth, logging, rate limiting",
+      "- Export `AppRouter` type from the server for client-side type inference",
+      "- Client uses React Query hooks (`trpc.useQuery`, `trpc.useMutation`) for data fetching",
+    ],
+  },
+  {
+    name: "Supabase",
+    getHints: () => [
+      "### Supabase",
+      "",
+      "- Create client with `createClient(url, anonKey)`. Use server-side client for privileged operations",
+      "- Auth: `supabase.auth.signInWithPassword()`, `signUp()`, `signOut()`. Session managed automatically",
+      "- Database queries use PostgREST syntax: `supabase.from('table').select().eq('col', val)`",
+      "- **Row Level Security (RLS)**: always enable on tables; write policies for access control",
+      "- Realtime subscriptions: `supabase.channel('name').on('postgres_changes', ...).subscribe()`",
+    ],
+  },
 ];
