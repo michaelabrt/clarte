@@ -3,5 +3,6 @@ dist/
 *.tsbuildinfo
 .npmrc
 .clarte.json
+.clarte-diff.md
 .claude/
 .cursor/

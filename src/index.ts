@@ -2,7 +2,7 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
 import { theme as t, initTheme } from "./theme.js";
-import { fileExists } from "./utils.js";
+import { fileExists, writeFileSafe } from "./utils.js";
 import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import { runPrompts } from "./prompts.js";
 import { generateSnapshot } from "./snapshot.js";
@@ -61,6 +61,7 @@ function printHelp(): void {
   console.log(`    ${t.accent("-V, --version")}           ${t.text("Show version number")}`);
   console.log(`    ${t.accent("--force")}                 ${t.text("Overwrite existing files without asking")}`);
   console.log(`    ${t.accent("--dry-run")}               ${t.text("Preview what would be generated")}`);
+  console.log(`    ${t.accent("--diff[=REF]")}            ${t.text("Generate focused context for changed files (vs HEAD or REF)")}`);
   console.log(`    ${t.accent("--reconfigure")}           ${t.text("Re-prompt even if .clarte.json exists")}`);
   console.log(`    ${t.accent("--refresh-snapshot")}      ${t.text("Re-scan source files, update code snapshot only")}`);
   console.log(`    ${t.accent("--check")}                 ${t.text("Exit 0 if snapshot is fresh, 1 if stale (hash-based)")}`);
@@ -72,6 +73,8 @@ function printHelp(): void {
   console.log(`  ${t.textBold("Examples:")}`);
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME}`)}                   ${t.muted("# analyze current directory")}`);
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} ./my-project`)}      ${t.muted("# analyze a specific project")}`);
+  console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --diff`)}             ${t.muted("# focused context for uncommitted changes")}`);
+  console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --diff=main`)}        ${t.muted("# focused context vs main branch")}`);
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --dry-run`)}          ${t.muted("# preview without writing files")}`);
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --refresh-snapshot`)} ${t.muted("# update code snapshot only")}`);
   console.log("");
@@ -97,6 +100,9 @@ async function main() {
   const dryRun = args.includes("--dry-run");
   const refresh = args.includes("--refresh-snapshot");
   const reconfigure = args.includes("--reconfigure");
+  const diffArg = args.find((a) => a === "--diff" || a.startsWith("--diff="));
+  const diffMode = !!diffArg;
+  const diffRef = diffArg?.startsWith("--diff=") ? diffArg.split("=")[1] : undefined;
   const checkArg = args.find((a) => a === "--check" || a.startsWith("--check="));
   const check = !!checkArg;
   const checkTimestamp = checkArg === "--check=timestamp";
@@ -204,6 +210,13 @@ async function main() {
   if (refresh) {
     await refreshSnapshot(rootDir);
     p.outro(t.text("Snapshot refreshed!"));
+    return;
+  }
+
+  // --diff: focused context for changed files
+  if (diffMode) {
+    p.log.info(t.muted("diff-aware context"));
+    await runDiffMode(rootDir, diffRef, verbose);
     return;
   }
 
@@ -622,19 +635,21 @@ async function main() {
 
 /**
  * --diff mode: generate focused context for changed files and their neighbors.
+ * Writes to .clarte-diff.md instead of stdout.
  */
 async function runDiffMode(rootDir: string, ref?: string, verbose = false): Promise<void> {
   const verboseLog: ProgressCallback = (msg) => {
     if (verbose) p.log.info(t.muted(msg));
   };
 
-  // Get changed files from git
+  // 1. Get changed files from git
   let changedFiles: string[];
+  let diffStat: Map<string, { added: number; removed: number }> | null = null;
   try {
     const cmd = ref
       ? `git diff --name-only ${ref}...HEAD`
       : "git diff --name-only HEAD";
-    let output = execSync(cmd, { cwd: rootDir, encoding: "utf-8", timeout: 5000 }).trim();
+    let output = execSync(cmd, { cwd: rootDir, encoding: "utf-8", timeout: 10000, stdio: ["pipe", "pipe", "pipe"] }).trim();
 
     // Also include staged + unstaged changes if no ref
     if (!ref) {
@@ -644,8 +659,43 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false): Prom
     }
 
     changedFiles = [...new Set(output.split("\n").filter(Boolean))];
-  } catch {
-    p.log.error(t.text("Failed to get changed files from git. Is this a git repo?"));
+
+    // Get line change counts
+    try {
+      const statCmd = ref
+        ? `git diff --numstat ${ref}...HEAD`
+        : "git diff --numstat HEAD";
+      let statOutput = execSync(statCmd, { cwd: rootDir, encoding: "utf-8", timeout: 10000 }).trim();
+      if (!ref) {
+        const stagedStat = execSync("git diff --numstat --cached", { cwd: rootDir, encoding: "utf-8", timeout: 5000 }).trim();
+        const unstagedStat = execSync("git diff --numstat", { cwd: rootDir, encoding: "utf-8", timeout: 5000 }).trim();
+        statOutput = [statOutput, stagedStat, unstagedStat].filter(Boolean).join("\n");
+      }
+      diffStat = new Map();
+      for (const line of statOutput.split("\n").filter(Boolean)) {
+        const [addStr, rmStr, file] = line.split("\t");
+        if (file && addStr !== "-") {
+          const existing = diffStat.get(file);
+          const added = parseInt(addStr, 10) || 0;
+          const removed = parseInt(rmStr, 10) || 0;
+          if (existing) {
+            existing.added += added;
+            existing.removed += removed;
+          } else {
+            diffStat.set(file, { added, removed });
+          }
+        }
+      }
+    } catch {
+      // Line counts are optional; continue without them
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (ref && (msg.includes("unknown revision") || msg.includes("bad revision"))) {
+      p.log.error(t.text(`Failed to resolve ref '${ref}'. Verify the branch or commit exists.`));
+    } else {
+      p.log.error(t.text("Failed to get changed files from git. Is this a git repo?"));
+    }
     process.exit(1);
   }
 
@@ -656,11 +706,13 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false): Prom
 
   p.log.step(t.text(`${changedFiles.length} changed file${changedFiles.length === 1 ? "" : "s"}`));
 
-  // Detect context and build import graph
+  // 2. Detect context and build import graph
+  const shimmer = startShimmer("Building import graph...");
   const detected = await detectContext(rootDir, verboseLog);
   const graph = await buildImportGraph(rootDir, detected.language, verboseLog);
+  shimmer.stop();
 
-  // Expand to 1-hop neighbors in the import graph
+  // 3. Expand to 1-hop neighbors in the import graph
   const changedSet = new Set(changedFiles);
   const neighborSet = new Set<string>();
 
@@ -669,16 +721,33 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false): Prom
     if (changedSet.has(edge.from)) neighborSet.add(edge.to);
     if (changedSet.has(edge.to)) neighborSet.add(edge.from);
   }
-
-  // Remove changed files from neighbors (they're already included)
   for (const f of changedSet) neighborSet.delete(f);
 
-  // Find test files that may cover changed files
+  // 4. Find test files using test mapping
+  const testMapping = buildTestMapping(graph, detected);
   const testFiles = new Set<string>();
+  for (const f of changedSet) {
+    const tests = testMapping?.sourceToTests.get(f);
+    if (tests) {
+      for (const tf of tests) testFiles.add(tf);
+    }
+  }
+  // Also find tests via direct imports (fallback)
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
-    if (changedSet.has(edge.to) && isTestFile(edge.from)) {
+    if (changedSet.has(edge.to) && isDiffTestFile(edge.from)) {
       testFiles.add(edge.from);
+    }
+  }
+
+  // 5. Load snapshot entries for changed + neighbor files
+  const snapshot = await generateSnapshot(detected, [], graph);
+  const entryIndex = new Map<string, typeof snapshot.entries>();
+  if (snapshot) {
+    for (const entry of snapshot.entries) {
+      const arr = entryIndex.get(entry.file) ?? [];
+      arr.push(entry);
+      entryIndex.set(entry.file, arr);
     }
   }
 
@@ -688,20 +757,32 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false): Prom
     t.text(`Scope: ${changedFiles.length} changed, ${neighborSet.size} neighbor${neighborSet.size === 1 ? "" : "s"}, ${testFiles.size} test file${testFiles.size === 1 ? "" : "s"}`),
   );
 
-  // Build focused output
+  // 6. Build markdown output
   const sections: string[] = [];
   sections.push("# Diff Context");
   sections.push("");
-  sections.push(`> Focused context for ${changedFiles.length} changed file${changedFiles.length === 1 ? "" : "s"}${ref ? ` vs \`${ref}\`` : ""}.`);
+  sections.push(`> Focused context for ${changedFiles.length} changed file${changedFiles.length === 1 ? "" : "s"}${ref ? ` vs \`${ref}\`` : ""}. Generated by Clart\u00e9.`);
   sections.push("");
 
-  // Changed files
+  // Changed files table
   sections.push("## Changed Files");
   sections.push("");
-  for (const f of changedFiles) {
-    const importedBy = graph.inDegree.get(f) ?? 0;
-    const note = importedBy > 0 ? ` (imported by ${importedBy} file${importedBy === 1 ? "" : "s"})` : "";
-    sections.push(`- \`${f}\`${note}`);
+  if (diffStat && diffStat.size > 0) {
+    sections.push("| File | Imported By | Lines (+/-) |");
+    sections.push("|------|-------------|-------------|");
+    for (const f of changedFiles) {
+      const importedBy = graph.inDegree.get(f) ?? 0;
+      const stat = diffStat.get(f);
+      const statStr = stat ? `+${stat.added} / -${stat.removed}` : "";
+      sections.push(`| \`${f}\` | ${importedBy} | ${statStr} |`);
+    }
+  } else {
+    sections.push("| File | Imported By |");
+    sections.push("|------|-------------|");
+    for (const f of changedFiles) {
+      const importedBy = graph.inDegree.get(f) ?? 0;
+      sections.push(`| \`${f}\` | ${importedBy} |`);
+    }
   }
   sections.push("");
 
@@ -723,37 +804,72 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false): Prom
   if (testFiles.size > 0) {
     sections.push("## Related Tests");
     sections.push("");
+    sections.push("> Run these tests after your changes.");
+    sections.push("");
     for (const f of [...testFiles].sort()) {
       sections.push(`- \`${f}\``);
     }
     sections.push("");
   }
 
-  // Key types/signatures from changed files
-  const relevantHub = graph.centrality;
+  // Key files in scope by centrality
   const hubInScope = allRelevant
-    .filter(f => (relevantHub.get(f) ?? 0) > 0.1)
-    .sort((a, b) => (relevantHub.get(b) ?? 0) - (relevantHub.get(a) ?? 0));
+    .filter(f => (graph.centrality.get(f) ?? 0) > 0.1)
+    .sort((a, b) => (graph.centrality.get(b) ?? 0) - (graph.centrality.get(a) ?? 0));
 
   if (hubInScope.length > 0) {
     sections.push("## Key Files in Scope");
     sections.push("");
-    sections.push("| File | Centrality | Imported By |");
+    sections.push("| File | Authority | Imported By |");
     sections.push("|------|-----------|-------------|");
     for (const f of hubInScope.slice(0, 10)) {
-      const centrality = (relevantHub.get(f) ?? 0).toFixed(3);
+      const authority = (graph.centrality.get(f) ?? 0).toFixed(3);
       const importedBy = graph.inDegree.get(f) ?? 0;
-      sections.push(`| \`${f}\` | ${centrality} | ${importedBy} |`);
+      sections.push(`| \`${f}\` | ${authority} | ${importedBy} |`);
     }
     sections.push("");
   }
 
-  const output = sections.join("\n");
-  console.log("");
-  console.log(output);
+  // Snapshot entries for changed files
+  const filesWithEntries = [...changedSet, ...neighborSet]
+    .filter(f => entryIndex.has(f))
+    .sort((a, b) => (graph.centrality.get(b) ?? 0) - (graph.centrality.get(a) ?? 0));
+
+  if (filesWithEntries.length > 0) {
+    sections.push("## Signatures in Scope");
+    sections.push("");
+    sections.push("Key type signatures and function declarations from changed and neighbor files.");
+    sections.push("");
+    sections.push("```ts");
+    for (const f of filesWithEntries.slice(0, 20)) {
+      const entries = entryIndex.get(f) ?? [];
+      if (entries.length === 0) continue;
+      sections.push(`// ${f}`);
+      for (const e of entries.slice(0, 5)) {
+        sections.push(e.signature);
+        sections.push("");
+      }
+    }
+    sections.push("```");
+    sections.push("");
+  }
+
+  const content = sections.join("\n");
+
+  // 7. Write to file
+  const outPath = path.join(rootDir, ".clarte-diff.md");
+  await writeFileSafe(outPath, content);
+
+  const elapsed = ((performance.now() - performance.now()) / 1000).toFixed(1);
+  p.log.step(t.text(`Written to ${t.accent(".clarte-diff.md")}`));
+
+  p.outro(
+    t.success("Diff context ready. ") +
+      t.muted(`${allRelevant.length} files in scope.`),
+  );
 }
 
-function isTestFile(filePath: string): boolean {
+function isDiffTestFile(filePath: string): boolean {
   return /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
     /\/__tests__\//.test(filePath) ||
     /\/test_[^/]+\.py$/.test(filePath) ||
