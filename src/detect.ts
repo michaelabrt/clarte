@@ -83,6 +83,15 @@ export const FRAMEWORK_MAP: Record<string, string> = {
   "drizzle-orm": "Drizzle",
   typeorm: "TypeORM",
   mongoose: "Mongoose",
+  // Meta-frameworks
+  "@remix-run/node": "Remix",
+  "@remix-run/react": "Remix",
+  astro: "Astro",
+  // API
+  "@trpc/server": "tRPC",
+  "@trpc/client": "tRPC",
+  // BaaS
+  "@supabase/supabase-js": "Supabase",
 };
 
 /** Python framework detection */
@@ -323,8 +332,10 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
   ctx.ciProvider = await detectCiProvider(rootDir, topEntries);
 
   // -- Detect monorepo --
-
   ctx.monorepo = await detectMonorepo(rootDir, topEntries);
+
+  // -- Detect secondary languages --
+  await detectLanguageBreakdown(ctx, rootDir);
 
   return ctx;
 }
@@ -383,6 +394,78 @@ function getExtensionsForLanguage(lang: Language): string[] {
       return [".java"];
     default:
       return [".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs"];
+  }
+}
+
+/** Extension to language mapping for secondary language detection */
+const EXT_TO_LANGUAGE: Record<string, Language> = {
+  ".ts": "typescript", ".tsx": "typescript",
+  ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript",
+  ".py": "python",
+  ".go": "go",
+  ".rs": "rust",
+  ".java": "java",
+};
+
+/**
+ * Detect secondary languages in the project.
+ * Populates `ctx.languageBreakdown` and `ctx.secondaryLanguages`.
+ */
+async function detectLanguageBreakdown(ctx: DetectedContext, rootDir: string): Promise<void> {
+  // Only scan if we have a primary language that isn't "other"
+  if (ctx.language === "other") return;
+
+  try {
+    const allSourceFiles = await glob(
+      ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs",
+       "**/*.py", "**/*.go", "**/*.rs", "**/*.java"],
+      {
+        cwd: rootDir,
+        ignore: [
+          "**/node_modules/**", "**/dist/**", "**/build/**",
+          "**/.next/**", "**/target/**", "**/vendor/**",
+          "**/__pycache__/**", "**/venv/**", "**/.venv/**",
+          "**/.Trash/**", "**/Library/**", "**/.git/**",
+        ],
+      },
+    );
+
+    if (allSourceFiles.length === 0) return;
+
+    // Count files per language
+    const counts: Record<string, number> = {};
+    for (const file of allSourceFiles) {
+      const ext = path.extname(file).toLowerCase();
+      const lang = EXT_TO_LANGUAGE[ext];
+      if (lang) {
+        counts[lang] = (counts[lang] ?? 0) + 1;
+      }
+    }
+
+    // Merge TS and JS counts under the primary if applicable
+    if (ctx.language === "typescript" && counts["javascript"]) {
+      counts["typescript"] = (counts["typescript"] ?? 0) + counts["javascript"];
+      delete counts["javascript"];
+    }
+
+    ctx.languageBreakdown = counts;
+
+    // Find secondary languages (>15% of total source files)
+    const totalFiles = allSourceFiles.length;
+    const threshold = totalFiles * 0.15;
+    const secondary: Language[] = [];
+
+    for (const [lang, count] of Object.entries(counts)) {
+      if (lang !== ctx.language && count >= threshold) {
+        secondary.push(lang as Language);
+      }
+    }
+
+    if (secondary.length > 0) {
+      ctx.secondaryLanguages = secondary;
+    }
+  } catch {
+    // Non-critical
   }
 }
 

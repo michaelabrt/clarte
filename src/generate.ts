@@ -41,6 +41,7 @@ export async function generateFiles(
   analysis?: ContextAnalysis,
   generateSkills: boolean = false,
   onVerbose?: ProgressCallback,
+  budget?: number,
 ): Promise<GeneratedFile[]> {
   // Deduplicate files by path (e.g. claude + cursor both produce CLAUDE.md)
   const fileMap = new Map<string, GeneratedFile>();
@@ -63,7 +64,7 @@ export async function generateFiles(
     const mainContent =
       ide === "aider"
         ? buildAiderContext(ctx, answers, snapshot, analysis)
-        : await buildMainContext(ctx, answers, snapshot, analysis);
+        : await buildMainContext(ctx, answers, snapshot, analysis, budget);
     await addFile(mainFilename, mainContent);
 
     // 2. Cursor-specific scoped rules

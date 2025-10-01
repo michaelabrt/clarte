@@ -1,4 +1,5 @@
 import type { ClaudeSkill, ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
+import { buildDirectives } from "./directives.js";
 
 /**
  * Build Claude Code skills based on detected project context.
@@ -18,7 +19,7 @@ export function buildClaudeSkills(
   }
 
   // Architecture exploration skill
-  const archSkill = buildArchitectureSkill(analysis);
+  const archSkill = buildArchitectureSkill(analysis, ctx);
   if (archSkill) skills.push(archSkill);
 
   return skills;
@@ -73,9 +74,9 @@ function getRunCommand(ctx: DetectedContext): string {
 }
 
 /**
- * Build an architecture exploration skill with hub files, layers, and circular deps.
+ * Build an architecture exploration skill with hub files, layers, circular deps, and directives.
  */
-function buildArchitectureSkill(analysis?: ContextAnalysis): ClaudeSkill | null {
+function buildArchitectureSkill(analysis?: ContextAnalysis, ctx?: DetectedContext): ClaudeSkill | null {
   if (!analysis) return null;
 
   const bodyLines: string[] = [
@@ -107,9 +108,26 @@ function buildArchitectureSkill(analysis?: ContextAnalysis): ClaudeSkill | null 
     bodyLines.push("## Circular Dependencies");
     bodyLines.push("");
     for (const dep of analysis.circularDeps) {
-      bodyLines.push(`- ${dep.chain.map((f) => `\`${f}\``).join(" -> ")}`);
+      const severity = dep.severity != null
+        ? dep.severity === 0 ? " (type-only)" : dep.severity < 1 ? " (mixed)" : ""
+        : "";
+      const hint = dep.breakHint ? ` -- ${dep.breakHint}` : "";
+      bodyLines.push(`- ${dep.chain.map((f) => `\`${f}\``).join(" -> ")}${severity}${hint}`);
     }
     bodyLines.push("");
+  }
+
+  // Working guidelines
+  if (ctx) {
+    const directives = buildDirectives(analysis, ctx);
+    if (directives.length > 0) {
+      bodyLines.push("## Working Guidelines");
+      bodyLines.push("");
+      for (const d of directives) {
+        bodyLines.push(`- ${d}`);
+      }
+      bodyLines.push("");
+    }
   }
 
   // Only create the skill if there's meaningful content

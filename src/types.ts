@@ -124,6 +124,10 @@ export interface DetectedContext {
   testFramework?: string;
   /** Detected CI provider (e.g. "GitHub Actions") */
   ciProvider?: string;
+  /** Secondary languages with >15% of source files */
+  secondaryLanguages?: Language[];
+  /** File count per language */
+  languageBreakdown?: Record<string, number>;
 }
 
 /** User-provided answers from the interactive prompts */
@@ -270,6 +274,10 @@ export interface HubFile {
 export interface CircularDependency {
   /** File paths forming the cycle */
   chain: string[];
+  /** Severity 0-1: 0 = all type-only imports, 1 = all runtime imports */
+  severity?: number;
+  /** Suggestion for breaking the cycle (e.g. "Convert X -> Y to type-only import") */
+  breakHint?: string;
 }
 
 /** Instability metric (Robert C. Martin) for a file */
@@ -424,6 +432,30 @@ export interface TransitiveDependencyRisk {
   riskScore: number;
 }
 
+/** File pair that co-changes frequently but is structurally distant */
+export interface StructuralTemporalMismatch {
+  fileA: string;
+  fileB: string;
+  /** BFS shortest path distance in the import graph (-1 if unreachable) */
+  graphDistance: number;
+  /** Co-change confidence from git analysis */
+  coChangeConfidence: number;
+  /** Number of co-changes */
+  coChangeCount: number;
+}
+
+/** File pair with high import specificity (many named imports) */
+export interface TightCoupling {
+  /** The file doing the importing */
+  from: string;
+  /** The file being imported from */
+  to: string;
+  /** Number of named imports */
+  importedNames: number;
+  /** The actual imported names */
+  names: string[];
+}
+
 /** Graph topology metrics (connected components, diameter, reachability) */
 export interface GraphTopology {
   /** Number of connected components */
@@ -447,6 +479,18 @@ export interface TestMapping {
     convention: string;
     filePattern: string;
   };
+}
+
+/** A rendered section of the context file with priority and token estimate */
+export interface ContextSection {
+  /** Unique section identifier */
+  id: string;
+  /** Priority level: 0 = always included, 1 = highest, 10 = lowest */
+  priority: number;
+  /** Rendered markdown content */
+  content: string;
+  /** Estimated token count */
+  tokens: number;
 }
 
 /** Bundle of all structural analysis results */
@@ -477,4 +521,8 @@ export interface ContextAnalysis {
   testMapping?: TestMapping;
   /** Graph topology metrics */
   graphTopology?: GraphTopology;
+  /** File pairs that co-change frequently but are structurally distant */
+  structuralMismatches?: StructuralTemporalMismatch[];
+  /** File pairs with high import specificity (tight coupling) */
+  tightCouplings?: TightCoupling[];
 }

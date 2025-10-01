@@ -16,6 +16,7 @@ import {
   computeSnapshotHash,
 } from "./config.js";
 import { refreshSnapshot } from "./refresh.js";
+import { runBriefMode } from "./brief.js";
 import {
   buildImportGraph,
   getHubFiles,
@@ -29,6 +30,8 @@ import {
   computeLayerConsistency,
   findChokepoints,
   computeGraphTopology,
+  findStructuralTemporalMismatches,
+  findTightCouplings,
 } from "./graph.js";
 import { analyzeGitActivity } from "./git-analysis.js";
 import { scanConfigConstraints } from "./config-scan.js";
@@ -37,6 +40,8 @@ import { buildTestMapping } from "./test-map.js";
 import { formatBytes } from "./utils.js";
 import { startShimmer } from "./animations.js";
 import type { ContextAnalysis, ProgressCallback } from "./types.js";
+import { serializeAnalysis } from "./serialize.js";
+import { buildDirectives } from "./templates/directives.js";
 
 declare const PKG_VERSION: string;
 declare const PKG_NAME: string;
@@ -56,6 +61,9 @@ function printHelp(): void {
   console.log("");
   console.log(`  ${t.textBold("Usage:")}  ${t.text(`npx ${NAME} [directory] [options]`)}`);
   console.log("");
+  console.log(`  ${t.textBold("Commands:")}`);
+  console.log(`    ${t.accent("brief")}                   ${t.text("Compact summary for session hooks (stdout, no ANSI)")}`);
+  console.log("");
   console.log(`  ${t.textBold("Options:")}`);
   console.log(`    ${t.accent("-h, --help")}              ${t.text("Show this help message")}`);
   console.log(`    ${t.accent("-V, --version")}           ${t.text("Show version number")}`);
@@ -67,6 +75,8 @@ function printHelp(): void {
   console.log(`    ${t.accent("--check")}                 ${t.text("Exit 0 if snapshot is fresh, 1 if stale (hash-based)")}`);
   console.log(`    ${t.accent("--check=timestamp")}       ${t.text("Exit 0/1 based on age only (no Node.js needed in shell hooks)")}`);
   console.log(`    ${t.accent("--max-tokens=N")}          ${t.text("Set the token budget for the code snapshot")}`);
+  console.log(`    ${t.accent("--format=json")}           ${t.text("Output full analysis as structured JSON to stdout")}`);
+  console.log(`    ${t.accent("--budget=N")}              ${t.text("Set token budget for the context file (prioritized sections)")}`);
   console.log(`    ${t.accent("--generate-skills")}       ${t.text("Generate Claude Code skill files")}`);
   console.log(`    ${t.accent("-v, --verbose")}           ${t.text("Show detailed progress output")}`);
   console.log("");
@@ -113,8 +123,20 @@ async function main() {
   const diffRef = diffArg?.startsWith("--diff=") ? diffArg.split("=")[1] : undefined;
   const maxTokensArg = args.find((a) => a.startsWith("--max-tokens="));
   const maxTokens = maxTokensArg ? parseInt(maxTokensArg.split("=")[1], 10) : undefined;
-  const targetDir = args.find((a) => !a.startsWith("-") && a !== "-v") ?? process.cwd();
+  const formatArg = args.find((a) => a.startsWith("--format="));
+  const jsonMode = formatArg?.split("=")[1] === "json";
+  const budgetArg = args.find((a) => a.startsWith("--budget="));
+  const budget = budgetArg ? parseInt(budgetArg.split("=")[1], 10) : undefined;
+  const briefMode = args[0] === "brief";
+  const targetDir = args.find((a) => !a.startsWith("-") && a !== "brief" && a !== "-v") ?? process.cwd();
   const rootDir = path.resolve(targetDir);
+
+  // brief: compact summary for session hooks (no ANSI, stdout only)
+  // Must be before project marker check: brief is a silent no-op in non-project dirs.
+  if (briefMode) {
+    await runBriefMode(rootDir, maxTokens ?? budget ?? 3000, verbose);
+    process.exit(0);
+  }
 
   // Early validation: ensure this looks like a project directory
   const PROJECT_MARKERS = ["package.json", "go.mod", "Cargo.toml", "pyproject.toml", "requirements.txt"];
@@ -131,10 +153,11 @@ async function main() {
     process.exit(1);
   }
 
-  // Verbose logger: persists messages on screen (not swallowed by shimmer)
-  const verboseLog: ProgressCallback = (msg) => {
-    if (verbose) p.log.info(t.muted(msg));
-  };
+  // Verbose logger: persists messages on screen (not swallowed by spinner)
+  const noopProgress: ProgressCallback = () => {};
+  const verboseLog: ProgressCallback = jsonMode
+    ? noopProgress
+    : (msg) => { if (verbose) p.log.info(t.muted(msg)); };
 
   // --check: fast path for shell integration (silent, exit code only)
   if (check) {
@@ -175,36 +198,42 @@ async function main() {
 
   // Determine color scheme: env var > saved config > interactive prompt
   let colorScheme: "dark" | "light" = "dark";
-  const envTheme = process.env.CLARTE_THEME;
-  if (envTheme === "dark" || envTheme === "light") {
-    colorScheme = envTheme;
+  if (jsonMode) {
+    // JSON mode: skip theme selection, use default
+    initTheme("dark");
   } else {
-    const earlyConfig = await loadConfig(rootDir);
-    if (earlyConfig?.colorScheme) {
-      colorScheme = earlyConfig.colorScheme;
+    const envTheme = process.env.CLARTE_THEME;
+    if (envTheme === "dark" || envTheme === "light") {
+      colorScheme = envTheme;
     } else {
-      // First run: ask with unpatched clack (default ANSI colors)
-      const selected = await p.select({
-        message: "Which terminal background are you using?",
-        options: [
-          { value: "dark" as const, label: "Dark background", hint: "default" },
-          { value: "light" as const, label: "Light background" },
-        ],
-      });
-      if (p.isCancel(selected)) {
-        process.exit(0);
+      const earlyConfig = await loadConfig(rootDir);
+      if (earlyConfig?.colorScheme) {
+        colorScheme = earlyConfig.colorScheme;
+      } else {
+        // First run: ask with unpatched clack (default ANSI colors)
+        const selected = await p.select({
+          message: "Which terminal background are you using?",
+          options: [
+            { value: "dark" as const, label: "Dark background", hint: "default" },
+            { value: "light" as const, label: "Light background" },
+          ],
+        });
+        if (p.isCancel(selected)) {
+          process.exit(0);
+        }
+        colorScheme = selected;
+        // Persist for future runs (into existing config if present)
+        await saveColorScheme(rootDir, colorScheme);
       }
-      colorScheme = selected;
-      // Persist for future runs (into existing config if present)
-      await saveColorScheme(rootDir, colorScheme);
     }
+    initTheme(colorScheme);
   }
 
-  initTheme(colorScheme);
-
-  console.log("");
-  p.intro(t.brandBold(" Clart") + t.textBold("\u00e9 "));
-  p.log.info(t.muted("code analysis for AI context"));
+  if (!jsonMode) {
+    console.log("");
+    p.intro(t.brandBold(" Clart") + t.textBold("\u00e9 "));
+    p.log.info(t.muted("code analysis for AI context"));
+  }
 
   // --refresh-snapshot: fast path, update snapshot in existing context file
   if (refresh) {
@@ -220,27 +249,56 @@ async function main() {
     return;
   }
 
-  if (dryRun) {
-    p.log.warn(t.text("DRY RUN: no files will be written"));
+  if (!jsonMode && dryRun) {
+    p.log.warn(t.warn("DRY RUN: no files will be written"));
   }
 
-  p.log.info(t.text(`Analyzing ${t.accent(rootDir)}`));
+  if (!jsonMode) p.log.info(t.text(`Analyzing ${t.accent(rootDir)}`));
 
   // Step 1: Auto-detect
-  let shimmer = startShimmer("Detecting stack...");
+  const noopShimmer = { message: (_: string) => {}, stop: () => {} };
+  let shimmer = jsonMode ? noopShimmer : startShimmer("Detecting stack...");
   const detected = await detectContext(rootDir, verbose ? verboseLog : (msg) => shimmer.message(msg));
   shimmer.stop();
-  p.log.step(t.text("Detection complete."));
+  if (!jsonMode) p.log.step(t.text("Detection complete."));
 
-  // Step 1.5: Build import graph
-  shimmer = startShimmer(`Building import graph (${detected.sourceFileCount} files)...`);
+  // Step 1.5: Build import graph (including secondary languages)
+  shimmer = jsonMode ? noopShimmer : startShimmer(`Building import graph (${detected.sourceFileCount} files)...`);
   const graph = await buildImportGraph(rootDir, detected.language, verbose ? verboseLog : (msg) => shimmer.message(msg));
+
+  // Merge secondary language graphs if present
+  if (detected.secondaryLanguages) {
+    for (const secLang of detected.secondaryLanguages) {
+      shimmer.message(`Building ${secLang} import graph...`);
+      const secGraph = await buildImportGraph(rootDir, secLang, verbose ? verboseLog : undefined);
+      // Merge edges and maps (no cross-language edges)
+      graph.edges.push(...secGraph.edges);
+      for (const [k, v] of secGraph.inDegree) {
+        graph.inDegree.set(k, (graph.inDegree.get(k) ?? 0) + v);
+      }
+      for (const [k, v] of secGraph.centrality) {
+        if (!graph.centrality.has(k)) graph.centrality.set(k, v);
+      }
+      for (const [k, v] of secGraph.externalImportCounts) {
+        graph.externalImportCounts.set(k, (graph.externalImportCounts.get(k) ?? 0) + v);
+      }
+      for (const [k, v] of secGraph.authority) {
+        if (!graph.authority.has(k)) graph.authority.set(k, v);
+      }
+      for (const [k, v] of secGraph.hubScores) {
+        if (!graph.hubScores.has(k)) graph.hubScores.set(k, v);
+      }
+    }
+  }
+
   const topHub = getHubFiles(graph, 1)[0];
   shimmer.stop();
-  p.log.step(
-    `${t.text("Import graph:")} ${t.textBold(String(graph.edges.length))} ${t.text("edges,")} ${t.textBold(String(graph.externalImportCounts.size))} ${t.text("packages.")}` +
-      (topHub ? t.muted(` Top hub: ${topHub.path}`) : ""),
-  );
+  if (!jsonMode) {
+    p.log.step(
+      `${t.text("Import graph:")} ${t.textBold(String(graph.edges.length))} ${t.text("edges,")} ${t.textBold(String(graph.externalImportCounts.size))} ${t.text("packages.")}` +
+        (topHub ? t.muted(` Top hub: ${topHub.path}`) : ""),
+    );
+  }
 
   // Step 1.6: Enrich framework detection with actual import usage
   detected.frameworks = enrichFrameworksWithUsage(
@@ -249,7 +307,7 @@ async function main() {
   );
 
   // Discovery log (enhanced stack box)
-  {
+  if (!jsonMode) {
     const lines: string[] = [];
     const lang = detected.hasTypeScript ? "TypeScript" : detected.language !== "other" ? detected.language.charAt(0).toUpperCase() + detected.language.slice(1) : "";
     if (lang) lines.push(`  ${"Language"}   ${t.textBold(lang)}`);
@@ -284,44 +342,50 @@ async function main() {
 
   // HITS analysis
   const hubFiles = getHubFiles(graph);
-  const topHubName = hubFiles[0]?.path ?? "";
-  p.log.step(
-    hubFiles.length > 0
-      ? `${t.brand("HITS")}           found ${t.textBold(String(hubFiles.length))} key files` +
-        (topHubName ? t.muted(` (top: ${topHubName})`) : "")
-      : `${t.brand("HITS")}           ${t.muted("no key files detected")}`,
-  );
-  if (verbose && hubFiles.length > 0) {
-    for (const h of hubFiles.slice(0, 5)) {
-      p.log.info(t.muted(`  ${h.path} (auth: ${h.authority.toFixed(3)}, hub: ${h.hubScore.toFixed(3)}, role: ${h.role})`));
+  if (!jsonMode) {
+    const topHubName = hubFiles[0]?.path ?? "";
+    p.log.step(
+      hubFiles.length > 0
+        ? `${t.brand("HITS")}           found ${t.textBold(String(hubFiles.length))} key files` +
+          (topHubName ? t.muted(` (top: ${topHubName})`) : "")
+        : `${t.brand("HITS")}           ${t.muted("no key files detected")}`,
+    );
+    if (verbose && hubFiles.length > 0) {
+      for (const h of hubFiles.slice(0, 5)) {
+        p.log.info(t.muted(`  ${h.path} (auth: ${h.authority.toFixed(3)}, hub: ${h.hubScore.toFixed(3)}, role: ${h.role})`));
+      }
     }
     var analysisHubFiles = hubFiles;
   }
 
   // Tarjan SCC: cycle detection (single call with real data)
   const circularDeps = findCircularDeps(graph);
-  p.log.step(
-    circularDeps.length === 0
-      ? `${t.brand("Tarjan SCC")}     no cycles found ${t.check()}`
-      : `${t.brand("Tarjan SCC")}     ${t.textBold(String(circularDeps.length))} cycle${circularDeps.length === 1 ? "" : "s"} found ${t.warn("\u26A0")}`,
-  );
-  if (verbose && circularDeps.length > 0) {
-    for (const c of circularDeps.slice(0, 3)) {
-      p.log.info(t.muted(`  ${c.chain.join(" → ")}`));
+  if (!jsonMode) {
+    p.log.step(
+      circularDeps.length === 0
+        ? `${t.brand("Tarjan SCC")}     no cycles found ${t.check()}`
+        : `${t.brand("Tarjan SCC")}     ${t.textBold(String(circularDeps.length))} cycle${circularDeps.length === 1 ? "" : "s"} found ${t.warn("\u26A0")}`,
+    );
+    if (verbose && circularDeps.length > 0) {
+      for (const c of circularDeps.slice(0, 3)) {
+        p.log.info(t.muted(`  ${c.chain.join(" → ")}`));
+      }
     }
     var analysisCircularDeps = circularDeps;
   }
 
   // Architecture layers
   const { layers, layerEdges } = detectArchitecturalLayers(graph);
-  p.log.step(
-    layers.length > 0
-      ? `${t.brand("Layers")}         ${layers.map((l) => l.name).join(" \u2192 ")}`
-      : `${t.brand("Layers")}         ${t.muted("no clear layers detected")}`,
-  );
-  if (verbose && layers.length > 0) {
-    for (const l of layers) {
-      p.log.info(t.muted(`  ${l.name}: ${l.files.length} files, depends on: ${l.dependsOn.join(", ") || "none"}`));
+  if (!jsonMode) {
+    p.log.step(
+      layers.length > 0
+        ? `${t.brand("Layers")}         ${layers.map((l) => l.name).join(" \u2192 ")}`
+        : `${t.brand("Layers")}         ${t.muted("no clear layers detected")}`,
+    );
+    if (verbose && layers.length > 0) {
+      for (const l of layers) {
+        p.log.info(t.muted(`  ${l.name}: ${l.files.length} files, depends on: ${l.dependsOn.join(", ") || "none"}`));
+      }
     }
     var analysisLayers = layers;
     var analysisLayerEdges = layerEdges;
@@ -329,58 +393,58 @@ async function main() {
 
   // Instability metrics (no dedicated animation, fast computation)
   const instabilities = computeInstability(graph);
-  const highInstability = instabilities.filter((f) => f.instability > INSTABILITY_THRESHOLD);
-  p.log.step(
-    highInstability.length > 0
-      ? `${t.brand("Instability")}    ${t.textBold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"} ${t.warn("\u26A0")}`
-      : `${t.brand("Instability")}    ${t.muted("all files within healthy range")} ${t.check()}`,
-  );
-  if (verbose && highInstability.length > 0) {
-    for (const f of highInstability.slice(0, 5)) {
-      p.log.info(t.muted(`  ${f.path} (I=${f.instability.toFixed(2)}, fan-in=${f.fanIn}, fan-out=${f.fanOut})`));
+  if (!jsonMode) {
+    const highInstability = instabilities.filter((f) => f.instability > INSTABILITY_THRESHOLD);
+    p.log.step(
+      highInstability.length > 0
+        ? `${t.brand("Instability")}    ${t.textBold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"} ${t.warn("\u26A0")}`
+        : `${t.brand("Instability")}    ${t.muted("all files within healthy range")} ${t.check()}`,
+    );
+    if (verbose && highInstability.length > 0) {
+      for (const f of highInstability.slice(0, 5)) {
+        p.log.info(t.muted(`  ${f.path} (I=${f.instability.toFixed(2)}, fan-in=${f.fanIn}, fan-out=${f.fanOut})`));
+      }
     }
     var analysisInstabilities = instabilities;
   }
 
   // Communities
   const communities = detectCommunities(graph);
-  p.log.step(
-    communities.length > 0
-      ? `${t.brand("Communities")}    ${t.textBold(String(communities.length))} module cluster${communities.length === 1 ? "" : "s"}`
-      : `${t.brand("Communities")}    ${t.muted("single cohesive module")}`,
-  );
-  if (verbose && communities.length > 0) {
-    for (const c of communities.slice(0, 5)) {
-      p.log.info(t.muted(`  ${c.label} (${c.files.length} files)`));
+  if (!jsonMode) {
+    p.log.step(
+      communities.length > 0
+        ? `${t.brand("Communities")}    ${t.textBold(String(communities.length))} module cluster${communities.length === 1 ? "" : "s"}`
+        : `${t.brand("Communities")}    ${t.muted("single cohesive module")}`,
+    );
+    if (verbose && communities.length > 0) {
+      for (const c of communities.slice(0, 5)) {
+        p.log.info(t.muted(`  ${c.label} (${c.files.length} files)`));
+      }
     }
     var analysisCommunities = communities;
   }
 
   // Git history
-  const noopProgress: ProgressCallback = () => {};
-  let gitActivity = null;
-  if (detected.isGitRepo) {
-    const s = startShimmer("Analyzing git history (90 days)...");
-    gitActivity = await analyzeGitActivity(rootDir, verbose ? verboseLog : noopProgress);
-    s.stop();
-  }
-  if (gitActivity) {
-    const coupledPairs = gitActivity.changeCoupling.length;
-    p.log.step(
-      `${t.brand("Git (90d)")}      ${t.textBold(String(gitActivity.hotFiles.length))} active file${gitActivity.hotFiles.length === 1 ? "" : "s"}, ${t.textBold(String(coupledPairs))} coupled pair${coupledPairs === 1 ? "" : "s"}`,
-    );
-    if (verbose) {
-      for (const h of gitActivity.hotFiles.slice(0, 5)) {
-        p.log.info(t.muted(`  ${h.path} (${h.commits} commits, last: ${h.lastChanged})`));
+  const gitActivity = detected.isGitRepo ? await analyzeGitActivity(rootDir, verbose ? verboseLog : noopProgress) : null;
+  if (!jsonMode) {
+    if (gitActivity) {
+      const coupledPairs = gitActivity.changeCoupling.length;
+      p.log.step(
+        `${t.brand("Git (90d)")}      ${t.textBold(String(gitActivity.hotFiles.length))} active file${gitActivity.hotFiles.length === 1 ? "" : "s"}, ${t.textBold(String(coupledPairs))} coupled pair${coupledPairs === 1 ? "" : "s"}`,
+      );
+      if (verbose) {
+        for (const h of gitActivity.hotFiles.slice(0, 5)) {
+          p.log.info(t.muted(`  ${h.path} (${h.commits} commits, last: ${h.lastChanged})`));
+        }
       }
+    } else {
+      p.log.step(`${t.brand("Git")}            ${t.muted("not a git repo, skipped")}`);
     }
-  } else {
-    p.log.step(`${t.text("Git")}            ${t.muted("not a git repo, skipped")}`);
   }
 
   // Dead files (zero in-degree, excluding entry points and tests)
   const deadFiles = findDeadFiles(graph);
-  if (deadFiles.length > 0) {
+  if (!jsonMode && deadFiles.length > 0) {
     p.log.step(
       `${t.brand("Dead files")}     ${t.textBold(String(deadFiles.length))} file${deadFiles.length === 1 ? "" : "s"} not imported by anything ${t.warn("\u26A0")}`,
     );
@@ -393,7 +457,7 @@ async function main() {
 
   // Cross-cutting files (imported across multiple layers)
   const crossCuttingFiles = findCrossCuttingFiles(graph, layers);
-  if (crossCuttingFiles.length > 0) {
+  if (!jsonMode && crossCuttingFiles.length > 0) {
     p.log.step(
       `${t.brand("Cross-cutting")}  ${t.textBold(String(crossCuttingFiles.length))} file${crossCuttingFiles.length === 1 ? "" : "s"} span ${t.textBold("3+")} layers`,
     );
@@ -408,7 +472,7 @@ async function main() {
   const layerConsistency = layers.length >= 2
     ? computeLayerConsistency(graph, layers, layerEdges)
     : undefined;
-  if (layerConsistency) {
+  if (!jsonMode && layerConsistency) {
     const pct = (layerConsistency.consistency * 100).toFixed(0);
     const violationCount = layerConsistency.violations.length;
     p.log.step(
@@ -425,7 +489,7 @@ async function main() {
 
   // Chokepoints (articulation points)
   const chokepoints = findChokepoints(graph);
-  if (chokepoints.length > 0) {
+  if (!jsonMode && chokepoints.length > 0) {
     p.log.step(
       `${t.brand("Chokepoints")}   ${t.textBold(String(chokepoints.length))} structural chokepoint${chokepoints.length === 1 ? "" : "s"}`,
     );
@@ -438,18 +502,20 @@ async function main() {
 
   // Config constraint extraction
   const configConstraints = await scanConfigConstraints(rootDir, detected);
-  const hasConstraints = configConstraints.typescript || configConstraints.linter || configConstraints.formatter;
-  if (hasConstraints) {
-    const parts: string[] = [];
-    if (configConstraints.typescript) parts.push("tsconfig");
-    if (configConstraints.linter) parts.push(configConstraints.linter.tool.toLowerCase());
-    if (configConstraints.formatter && !configConstraints.linter) parts.push(configConstraints.formatter.tool.toLowerCase());
-    p.log.step(`${t.brand("Config")}         extracted constraints from ${parts.join(", ")}`);
+  if (!jsonMode) {
+    const hasConstraints = configConstraints.typescript || configConstraints.linter || configConstraints.formatter;
+    if (hasConstraints) {
+      const parts: string[] = [];
+      if (configConstraints.typescript) parts.push("tsconfig");
+      if (configConstraints.linter) parts.push(configConstraints.linter.tool.toLowerCase());
+      if (configConstraints.formatter && !configConstraints.linter) parts.push(configConstraints.formatter.tool.toLowerCase());
+      p.log.step(`${t.brand("Config")}         extracted constraints from ${parts.join(", ")}`);
+    }
   }
 
   // Convention inference (fills gaps not covered by config constraints)
   const conventions = await inferConventions(rootDir, graph, configConstraints);
-  if (conventions) {
+  if (!jsonMode && conventions) {
     const parts: string[] = [];
     if (Object.values(conventions.naming).some((v) => v !== "mixed")) parts.push("naming");
     if (conventions.exportStyle.preferNamed) parts.push("exports");
@@ -461,7 +527,7 @@ async function main() {
 
   // Test-source mapping
   const testMapping = buildTestMapping(graph, detected);
-  if (testMapping) {
+  if (!jsonMode && testMapping) {
     const coveredCount = testMapping.sourceToTests.size;
     const untestedCount = testMapping.untestedFiles.length;
     p.log.step(
@@ -477,22 +543,46 @@ async function main() {
 
   // Graph topology (connected components, diameter)
   const graphTopology = computeGraphTopology(graph);
-  if (graphTopology.isFragmented) {
-    p.log.step(
-      `${t.brand("Topology")}       ${t.textBold(String(graphTopology.componentCount))} connected component${graphTopology.componentCount === 1 ? "" : "s"} (fragmented) ${t.warn("\u26A0")}`,
-    );
-    if (verbose) {
-      const sizes = graphTopology.componentSizes.slice(0, 5).join(", ");
-      p.log.info(t.muted(`  Component sizes: ${sizes}${graphTopology.componentSizes.length > 5 ? ", ..." : ""}`));
-      p.log.info(t.muted(`  Approximate diameter: ${graphTopology.approximateDiameter} hops`));
+  if (!jsonMode) {
+    if (graphTopology.isFragmented) {
+      p.log.step(
+        `${t.brand("Topology")}       ${t.textBold(String(graphTopology.componentCount))} connected component${graphTopology.componentCount === 1 ? "" : "s"} (fragmented) ${t.warn("\u26A0")}`,
+      );
+      if (verbose) {
+        const sizes = graphTopology.componentSizes.slice(0, 5).join(", ");
+        p.log.info(t.muted(`  Component sizes: ${sizes}${graphTopology.componentSizes.length > 5 ? ", ..." : ""}`));
+        p.log.info(t.muted(`  Approximate diameter: ${graphTopology.approximateDiameter} hops`));
+      }
+    } else if (verbose) {
+      p.log.step(
+        `${t.brand("Topology")}       single connected graph, diameter ~${graphTopology.approximateDiameter} hops`,
+      );
     }
-  } else if (verbose) {
-    p.log.step(
-      `${t.brand("Topology")}       single connected graph, diameter ~${graphTopology.approximateDiameter} hops`,
-    );
   }
 
-  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined, graphTopology };
+  // Structural-temporal mismatch detection
+  const structuralMismatches = gitActivity
+    ? findStructuralTemporalMismatches(graph, gitActivity.changeCoupling)
+    : undefined;
+
+  // Tight coupling detection
+  const tightCouplings = findTightCouplings(graph);
+
+  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined, graphTopology, structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined, tightCouplings: tightCouplings.length ? tightCouplings : undefined };
+
+  // --format=json: output full analysis as structured JSON and exit
+  if (jsonMode) {
+    const savedCfg = await loadConfig(rootDir);
+    let snapshot = null;
+    if (savedCfg?.generateSnapshot !== false) {
+      snapshot = await generateSnapshot(detected, savedCfg?.snapshotPaths ?? [], graph, maxTokens);
+      if (snapshot.entries.length === 0) snapshot = null;
+    }
+    const directives = buildDirectives(analysis, detected);
+    const output = serializeAnalysis(detected, analysis, snapshot, graph, directives);
+    process.stdout.write(JSON.stringify(output, null, 2) + "\n");
+    process.exit(0);
+  }
 
   // Analysis report box
   {
@@ -597,7 +687,7 @@ async function main() {
     dryRun ? "Preparing context files..." : "Generating context files...",
   );
   const shouldGenerateSkills = generateSkills || answers.ides.includes("claude");
-  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills, verbose ? verboseLog : undefined);
+  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills, verbose ? verboseLog : undefined, budget);
   shimmer.stop();
   p.log.step(
     dryRun
@@ -710,6 +800,30 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false): Prom
   const shimmer = startShimmer("Building import graph...");
   const detected = await detectContext(rootDir, verboseLog);
   const graph = await buildImportGraph(rootDir, detected.language, verboseLog);
+
+  // Merge secondary language graphs
+  if (detected.secondaryLanguages) {
+    for (const secLang of detected.secondaryLanguages) {
+      const secGraph = await buildImportGraph(rootDir, secLang, verboseLog);
+      graph.edges.push(...secGraph.edges);
+      for (const [k, v] of secGraph.inDegree) {
+        graph.inDegree.set(k, (graph.inDegree.get(k) ?? 0) + v);
+      }
+      for (const [k, v] of secGraph.centrality) {
+        if (!graph.centrality.has(k)) graph.centrality.set(k, v);
+      }
+      for (const [k, v] of secGraph.externalImportCounts) {
+        graph.externalImportCounts.set(k, (graph.externalImportCounts.get(k) ?? 0) + v);
+      }
+      for (const [k, v] of secGraph.authority) {
+        if (!graph.authority.has(k)) graph.authority.set(k, v);
+      }
+      for (const [k, v] of secGraph.hubScores) {
+        if (!graph.hubScores.has(k)) graph.hubScores.set(k, v);
+      }
+    }
+  }
+
   shimmer.stop();
 
   // 3. Expand to 1-hop neighbors in the import graph

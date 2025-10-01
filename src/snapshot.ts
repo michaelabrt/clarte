@@ -8,10 +8,18 @@ import type { CodeSnapshot, DetectedContext, GitAnalysis, ImportGraph, Language,
  * Auto-detect which directories to scan for code snapshots.
  */
 function getDefaultScanPaths(ctx: DetectedContext): string[] {
-  if (ctx.language === "python") {
-    return getDefaultPythonScanPaths(ctx);
+  switch (ctx.language) {
+    case "python":
+      return getDefaultPythonScanPaths(ctx);
+    case "go":
+      return getDefaultGoScanPaths(ctx);
+    case "rust":
+      return getDefaultRustScanPaths(ctx);
+    case "java":
+      return getDefaultJavaScanPaths(ctx);
+    default:
+      return getDefaultJsTsScanPaths(ctx);
   }
-  return getDefaultJsTsScanPaths(ctx);
 }
 
 function getDefaultJsTsScanPaths(ctx: DetectedContext): string[] {
@@ -73,6 +81,129 @@ function getDefaultPythonScanPaths(ctx: DetectedContext): string[] {
   // Fallback: common Python project roots
   if (paths.length === 0) {
     paths.push("src", "app", "lib", ".");
+  }
+
+  return paths;
+}
+
+/**
+ * Get default scan paths for a specific language (used by multi-language support).
+ */
+function getDefaultScanPathsForLanguage(lang: Language, ctx: DetectedContext): string[] {
+  switch (lang) {
+    case "python": return getDefaultPythonScanPaths(ctx);
+    case "go": return getDefaultGoScanPaths(ctx);
+    case "rust": return getDefaultRustScanPaths(ctx);
+    case "java": return getDefaultJavaScanPaths(ctx);
+    default: return getDefaultJsTsScanPaths(ctx);
+  }
+}
+
+/**
+ * Get glob, extractor, and ignore patterns for a specific language.
+ */
+function getLanguageConfig(lang: Language): {
+  glob: string;
+  extractor: (filePath: string, relPath: string) => Promise<SnapshotEntry[]>;
+  ignore: string[];
+} {
+  switch (lang) {
+    case "python":
+      return {
+        glob: "**/*.py",
+        extractor: extractFromPythonFile,
+        ignore: ["**/__pycache__/**", "**/venv/**", "**/.venv/**", "**/env/**",
+                 "**/migrations/**", "**/test_*.py", "**/tests/**", "**/conftest.py", "**/setup.py"],
+      };
+    case "go":
+      return {
+        glob: "**/*.go",
+        extractor: extractFromGoFile,
+        ignore: ["**/*_test.go", "**/vendor/**", "**/testdata/**"],
+      };
+    case "rust":
+      return {
+        glob: "**/*.rs",
+        extractor: extractFromRustFile,
+        ignore: ["**/target/**", "**/tests/**", "**/*.pb.rs"],
+      };
+    case "java":
+      return {
+        glob: "**/*.java",
+        extractor: extractFromJavaFile,
+        ignore: ["**/target/**", "**/build/**", "**/src/test/**", "**/*Test.java", "**/*Spec.java"],
+      };
+    default:
+      return {
+        glob: "**/*.{ts,tsx,js,jsx}",
+        extractor: extractFromFile,
+        ignore: [],
+      };
+  }
+}
+
+function getDefaultGoScanPaths(ctx: DetectedContext): string[] {
+  const paths: string[] = [];
+  const dirs = ctx.directories;
+
+  for (const d of dirs) {
+    const last = d.split("/").pop() ?? d;
+    if (
+      ["models", "handlers", "services", "api", "internal", "pkg",
+       "cmd", "server", "domain", "repository"].includes(last)
+    ) {
+      paths.push(d);
+    }
+  }
+
+  if (paths.length === 0) {
+    paths.push(".", "internal", "pkg", "cmd");
+  }
+
+  return paths;
+}
+
+function getDefaultRustScanPaths(ctx: DetectedContext): string[] {
+  const paths: string[] = [];
+  const dirs = ctx.directories;
+
+  for (const d of dirs) {
+    const last = d.split("/").pop() ?? d;
+    if (
+      ["src", "lib", "api", "models", "handlers", "services", "domain"].includes(last)
+    ) {
+      paths.push(d);
+    }
+  }
+
+  if (paths.length === 0) {
+    paths.push("src");
+  }
+
+  return paths;
+}
+
+function getDefaultJavaScanPaths(ctx: DetectedContext): string[] {
+  const paths: string[] = [];
+  const dirs = ctx.directories;
+
+  for (const d of dirs) {
+    const last = d.split("/").pop() ?? d;
+    if (
+      ["controllers", "services", "repositories", "models",
+       "entities", "dto", "domain"].includes(last)
+    ) {
+      paths.push(d);
+    }
+  }
+
+  // Also check for standard Maven/Gradle layout
+  if (dirs.some((d) => d === "src" || d.startsWith("src/"))) {
+    paths.push("src/main/java");
+  }
+
+  if (paths.length === 0) {
+    paths.push("src/main/java", "src");
   }
 
   return paths;
@@ -543,6 +674,509 @@ function extractPythonFuncSignature(
   return parts.join("\n");
 }
 
+// ── Go extraction ─────────────────────────────────────────────────────────────
+
+const GO_PATTERNS = {
+  /** type Foo struct { ... } or type Foo interface { ... } */
+  typeBlock: /^type\s+([A-Z]\w*)\s+(struct|interface)\s*\{/,
+  /** type Foo = ... or type Foo int64 etc. */
+  typeAlias: /^type\s+([A-Z]\w*)\s+/,
+  /** func FooBar(...) */
+  funcDef: /^func\s+([A-Z]\w*)\s*\(/,
+  /** func (r *Receiver) FooBar(...) */
+  methodDef: /^func\s+\([^)]+\)\s+([A-Z]\w*)\s*\(/,
+  /** const ( ... ) block */
+  constBlock: /^const\s*\(/,
+  /** Code generated header */
+  generatedHeader: /^\/\/\s*Code generated/,
+};
+
+/**
+ * Extract snapshot entries from a single Go file.
+ * Only captures exported symbols (uppercase first letter).
+ */
+async function extractFromGoFile(
+  filePath: string,
+  relPath: string,
+): Promise<SnapshotEntry[]> {
+  const content = await readFileOr(filePath);
+  if (!content) return [];
+
+  const lines = content.split("\n");
+
+  // Skip generated files
+  if (lines.length > 0 && GO_PATTERNS.generatedHeader.test(lines[0].trim())) {
+    return [];
+  }
+
+  const entries: SnapshotEntry[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+
+    // -- type Foo struct/interface { ... } --
+    const typeBlockMatch = trimmed.match(GO_PATTERNS.typeBlock);
+    if (typeBlockMatch) {
+      const [, name, kind] = typeBlockMatch;
+      const category: SnapshotEntry["category"] = kind === "interface" ? "interface" : "type";
+      const block = extractGoBlock(lines, i);
+      entries.push({ file: relPath, category, signature: block });
+      // Skip past the block
+      i = skipGoBlock(lines, i);
+      continue;
+    }
+
+    // -- type Foo = ... or type Foo SomeType --
+    const typeAliasMatch = trimmed.match(GO_PATTERNS.typeAlias);
+    if (typeAliasMatch && !trimmed.includes("{")) {
+      entries.push({ file: relPath, category: "type", signature: trimmed });
+      continue;
+    }
+
+    // -- func (r *Receiver) FooBar(...) --
+    const methodMatch = trimmed.match(GO_PATTERNS.methodDef);
+    if (methodMatch) {
+      const sig = extractGoFuncSignature(lines, i);
+      entries.push({ file: relPath, category: "function", signature: sig });
+      continue;
+    }
+
+    // -- func FooBar(...) --
+    const funcMatch = trimmed.match(GO_PATTERNS.funcDef);
+    if (funcMatch) {
+      const sig = extractGoFuncSignature(lines, i);
+      entries.push({ file: relPath, category: "function", signature: sig });
+      continue;
+    }
+
+    // -- const ( ... ) with exported names (enum-like iota blocks) --
+    if (GO_PATTERNS.constBlock.test(trimmed)) {
+      const block = extractGoConstBlock(lines, i);
+      if (block) {
+        entries.push({ file: relPath, category: "type", signature: block });
+        i = skipGoBlock(lines, i);
+      }
+      continue;
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Extract a Go block (struct, interface) from opening brace to closing brace.
+ */
+function extractGoBlock(lines: string[], startIdx: number): string {
+  let depth = 0;
+  let result = "";
+  const maxLines = 30;
+
+  for (let i = startIdx; i < lines.length && i < startIdx + maxLines; i++) {
+    const line = lines[i];
+    result += (result ? "\n" : "") + line.trimStart();
+
+    for (const ch of line) {
+      if (ch === "{") depth++;
+      if (ch === "}") depth--;
+    }
+
+    if (depth <= 0 && i > startIdx) break;
+  }
+
+  return result.trim();
+}
+
+/**
+ * Skip past a Go block and return the last line index.
+ */
+function skipGoBlock(lines: string[], startIdx: number): number {
+  let depth = 0;
+  for (let i = startIdx; i < lines.length; i++) {
+    for (const ch of lines[i]) {
+      if (ch === "{") depth++;
+      if (ch === "}") depth--;
+    }
+    if (depth <= 0 && i > startIdx) return i;
+  }
+  return lines.length - 1;
+}
+
+/**
+ * Extract a Go function signature (up to the opening brace or end of line).
+ */
+function extractGoFuncSignature(lines: string[], startIdx: number): string {
+  let sig = "";
+  for (let i = startIdx; i < lines.length && i < startIdx + 5; i++) {
+    sig += (sig ? " " : "") + lines[i].trimStart();
+    if (sig.includes("{")) {
+      sig = sig.slice(0, sig.indexOf("{")).trim();
+      break;
+    }
+  }
+  return sig;
+}
+
+/**
+ * Extract a const block if it contains exported names (enum-like iota patterns).
+ */
+function extractGoConstBlock(lines: string[], startIdx: number): string | null {
+  let depth = 0;
+  let result = "";
+  let hasExported = false;
+  const maxLines = 30;
+
+  for (let i = startIdx; i < lines.length && i < startIdx + maxLines; i++) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+    result += (result ? "\n" : "") + trimmed;
+
+    // Check if any const name is exported (uppercase)
+    if (i > startIdx && trimmed && !trimmed.startsWith("//")) {
+      const nameMatch = trimmed.match(/^([A-Z]\w*)\s/);
+      if (nameMatch) hasExported = true;
+    }
+
+    for (const ch of line) {
+      if (ch === "(") depth++;
+      if (ch === ")") depth--;
+    }
+
+    if (depth <= 0 && i > startIdx) break;
+  }
+
+  return hasExported ? result.trim() : null;
+}
+
+// ── Rust extraction ───────────────────────────────────────────────────────────
+
+const RUST_PATTERNS = {
+  /** pub struct Foo { ... } or pub struct Foo; or pub struct Foo(...) */
+  pubStruct: /^pub(?:\(crate\))?\s+struct\s+(\w+)/,
+  /** pub enum Foo { ... } */
+  pubEnum: /^pub(?:\(crate\))?\s+enum\s+(\w+)/,
+  /** pub trait Foo { ... } */
+  pubTrait: /^pub(?:\(crate\))?\s+trait\s+(\w+)/,
+  /** pub fn foo(...) or pub async fn foo(...) */
+  pubFn: /^pub(?:\(crate\))?\s+(?:async\s+)?fn\s+(\w+)/,
+  /** pub type Foo = ... */
+  pubTypeAlias: /^pub(?:\(crate\))?\s+type\s+(\w+)/,
+  /** impl Foo { ... } */
+  implBlock: /^impl(?:<[^>]*>)?\s+(\w+)/,
+  /** #[cfg(test)] */
+  cfgTest: /^#\[cfg\(test\)\]/,
+};
+
+/**
+ * Extract snapshot entries from a single Rust file.
+ * Only captures `pub` items.
+ */
+async function extractFromRustFile(
+  filePath: string,
+  relPath: string,
+): Promise<SnapshotEntry[]> {
+  const content = await readFileOr(filePath);
+  if (!content) return [];
+
+  const entries: SnapshotEntry[] = [];
+  const lines = content.split("\n");
+  let inCfgTest = false;
+  let cfgTestDepth = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+
+    // Track #[cfg(test)] module blocks
+    if (RUST_PATTERNS.cfgTest.test(trimmed)) {
+      inCfgTest = true;
+      cfgTestDepth = 0;
+      continue;
+    }
+
+    if (inCfgTest) {
+      for (const ch of trimmed) {
+        if (ch === "{") cfgTestDepth++;
+        if (ch === "}") cfgTestDepth--;
+      }
+      if (cfgTestDepth <= 0 && trimmed.includes("}")) {
+        inCfgTest = false;
+      }
+      continue;
+    }
+
+    // -- pub struct --
+    if (RUST_PATTERNS.pubStruct.test(trimmed)) {
+      if (trimmed.includes("{")) {
+        const block = extractGoBlock(lines, i); // reuse Go block extractor (same brace logic)
+        entries.push({ file: relPath, category: "type", signature: block });
+        i = skipGoBlock(lines, i);
+      } else {
+        // Tuple struct or unit struct
+        entries.push({ file: relPath, category: "type", signature: trimmed.replace(/;$/, "").trim() });
+      }
+      continue;
+    }
+
+    // -- pub enum --
+    if (RUST_PATTERNS.pubEnum.test(trimmed)) {
+      const block = extractGoBlock(lines, i);
+      entries.push({ file: relPath, category: "type", signature: block });
+      i = skipGoBlock(lines, i);
+      continue;
+    }
+
+    // -- pub trait --
+    if (RUST_PATTERNS.pubTrait.test(trimmed)) {
+      const block = extractGoBlock(lines, i);
+      entries.push({ file: relPath, category: "interface", signature: block });
+      i = skipGoBlock(lines, i);
+      continue;
+    }
+
+    // -- pub type alias --
+    if (RUST_PATTERNS.pubTypeAlias.test(trimmed) && !trimmed.includes("{")) {
+      entries.push({ file: relPath, category: "type", signature: trimmed.replace(/;$/, "").trim() });
+      continue;
+    }
+
+    // -- pub fn (top-level or inside impl) --
+    if (RUST_PATTERNS.pubFn.test(trimmed)) {
+      const sig = extractRustFuncSignature(lines, i);
+      entries.push({ file: relPath, category: "function", signature: sig });
+      continue;
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Extract a Rust function signature up to the opening brace.
+ */
+function extractRustFuncSignature(lines: string[], startIdx: number): string {
+  let sig = "";
+  for (let i = startIdx; i < lines.length && i < startIdx + 5; i++) {
+    sig += (sig ? " " : "") + lines[i].trimStart();
+    if (sig.includes("{")) {
+      sig = sig.slice(0, sig.indexOf("{")).trim();
+      break;
+    }
+  }
+  return sig;
+}
+
+// ── Java extraction ───────────────────────────────────────────────────────────
+
+const JAVA_PATTERNS = {
+  /** public class Foo, public abstract class Foo, etc. */
+  publicClass: /^(?:@\w+\s+)*public\s+(?:abstract\s+|final\s+)?class\s+(\w+)/,
+  /** public interface Foo */
+  publicInterface: /^(?:@\w+\s+)*public\s+interface\s+(\w+)/,
+  /** public enum Foo */
+  publicEnum: /^(?:@\w+\s+)*public\s+enum\s+(\w+)/,
+  /** public record Foo(...) */
+  publicRecord: /^(?:@\w+\s+)*public\s+record\s+(\w+)/,
+  /** public ... methodName(...) */
+  publicMethod: /^(?:@\w+\s+)*public\s+(?:static\s+|abstract\s+|final\s+|synchronized\s+)*(?:<[^>]+>\s+)?(\S+)\s+(\w+)\s*\(/,
+  /** @Generated annotation */
+  generatedAnnotation: /^@Generated/,
+  /** Common annotations to capture as part of signatures */
+  annotation: /^@(\w+)/,
+};
+
+/**
+ * Extract snapshot entries from a single Java file.
+ * Only captures `public` declarations.
+ */
+async function extractFromJavaFile(
+  filePath: string,
+  relPath: string,
+): Promise<SnapshotEntry[]> {
+  const content = await readFileOr(filePath);
+  if (!content) return [];
+
+  const entries: SnapshotEntry[] = [];
+  const lines = content.split("\n");
+  let pendingAnnotations: string[] = [];
+  let inPublicClass = false;
+  let classDepth = 0;
+  let skipGenerated = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+
+    // Skip @Generated items and their subsequent declaration
+    if (JAVA_PATTERNS.generatedAnnotation.test(trimmed)) {
+      pendingAnnotations = [];
+      skipGenerated = true;
+      continue;
+    }
+
+    if (skipGenerated) {
+      // Skip annotation lines that follow @Generated
+      if (trimmed.startsWith("@") || !trimmed) continue;
+      // Skip the declaration itself (and its entire block if it has braces)
+      if (trimmed.includes("{")) {
+        i = skipGoBlock(lines, i);
+      }
+      skipGenerated = false;
+      continue;
+    }
+
+    // Collect annotations
+    const annoMatch = trimmed.match(JAVA_PATTERNS.annotation);
+    if (annoMatch && !trimmed.includes("class ") && !trimmed.includes("interface ") &&
+        !trimmed.includes("enum ") && !trimmed.includes("record ")) {
+      pendingAnnotations.push(trimmed.split(/\s/)[0]); // capture just the annotation
+      continue;
+    }
+
+    // -- public interface --
+    if (JAVA_PATTERNS.publicInterface.test(trimmed)) {
+      const block = extractJavaTypeBlock(lines, i, pendingAnnotations);
+      entries.push({ file: relPath, category: "interface", signature: block });
+      pendingAnnotations = [];
+      i = skipGoBlock(lines, i);
+      continue;
+    }
+
+    // -- public enum --
+    if (JAVA_PATTERNS.publicEnum.test(trimmed)) {
+      const block = extractJavaTypeBlock(lines, i, pendingAnnotations);
+      entries.push({ file: relPath, category: "type", signature: block });
+      pendingAnnotations = [];
+      i = skipGoBlock(lines, i);
+      continue;
+    }
+
+    // -- public record --
+    if (JAVA_PATTERNS.publicRecord.test(trimmed)) {
+      const sig = extractJavaRecordSignature(lines, i, pendingAnnotations);
+      entries.push({ file: relPath, category: "type", signature: sig });
+      pendingAnnotations = [];
+      i = skipGoBlock(lines, i);
+      continue;
+    }
+
+    // -- public class --
+    if (JAVA_PATTERNS.publicClass.test(trimmed)) {
+      const header = [...pendingAnnotations, trimmed.replace(/\s*\{.*$/, "").trim()].join("\n");
+      entries.push({ file: relPath, category: "type", signature: header });
+      inPublicClass = true;
+      classDepth = 0;
+      for (const ch of line) {
+        if (ch === "{") classDepth++;
+        if (ch === "}") classDepth--;
+      }
+      pendingAnnotations = [];
+      continue;
+    }
+
+    // Track brace depth inside class
+    if (inPublicClass) {
+      for (const ch of line) {
+        if (ch === "{") classDepth++;
+        if (ch === "}") classDepth--;
+      }
+      if (classDepth <= 0) {
+        inPublicClass = false;
+        pendingAnnotations = [];
+        continue;
+      }
+    }
+
+    // -- public methods inside a class --
+    if (inPublicClass && JAVA_PATTERNS.publicMethod.test(trimmed)) {
+      const sig = extractJavaMethodSignature(lines, i, pendingAnnotations);
+      entries.push({ file: relPath, category: "function", signature: sig });
+      pendingAnnotations = [];
+      continue;
+    }
+
+    // Reset annotations on non-annotation, non-blank lines
+    if (trimmed && !trimmed.startsWith("//") && !trimmed.startsWith("/*") && !trimmed.startsWith("*")) {
+      pendingAnnotations = [];
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Extract a Java type block (interface, enum) with annotations, capped at 30 lines.
+ */
+function extractJavaTypeBlock(
+  lines: string[],
+  startIdx: number,
+  annotations: string[],
+): string {
+  const parts = [...annotations];
+  let depth = 0;
+  const maxLines = 30;
+
+  for (let i = startIdx; i < lines.length && parts.length < maxLines + annotations.length; i++) {
+    const line = lines[i].trimStart();
+    parts.push(line);
+
+    for (const ch of lines[i]) {
+      if (ch === "{") depth++;
+      if (ch === "}") depth--;
+    }
+
+    if (depth <= 0 && i > startIdx) break;
+  }
+
+  return parts.join("\n").trim();
+}
+
+/**
+ * Extract a Java record signature (up to the closing paren or brace).
+ */
+function extractJavaRecordSignature(
+  lines: string[],
+  startIdx: number,
+  annotations: string[],
+): string {
+  const parts = [...annotations];
+  let sig = "";
+  for (let i = startIdx; i < lines.length && i < startIdx + 5; i++) {
+    sig += (sig ? " " : "") + lines[i].trimStart();
+    if (sig.includes("{")) {
+      sig = sig.slice(0, sig.indexOf("{")).trim();
+      break;
+    }
+  }
+  parts.push(sig);
+  return parts.join("\n");
+}
+
+/**
+ * Extract a Java method signature with preceding annotations.
+ */
+function extractJavaMethodSignature(
+  lines: string[],
+  startIdx: number,
+  annotations: string[],
+): string {
+  const parts = [...annotations];
+  let sig = "";
+  for (let i = startIdx; i < lines.length && i < startIdx + 5; i++) {
+    sig += (sig ? " " : "") + lines[i].trimStart();
+    if (sig.includes("{")) {
+      sig = sig.slice(0, sig.indexOf("{")).trim();
+      break;
+    }
+    if (sig.includes(";")) {
+      sig = sig.replace(/;$/, "").trim();
+      break;
+    }
+  }
+  parts.push(sig);
+  return parts.join("\n");
+}
+
 /**
  * Append an "imported by N files" comment to signatures of highly-imported entries.
  */
@@ -560,11 +1194,35 @@ function annotateSignature(entry: SnapshotEntry, commentPrefix = "//"): string {
 /**
  * Condense snapshot entries into a readable markdown block.
  */
+/** Map language to code fence identifier */
+const LANG_FENCE_MAP: Record<string, string> = {
+  python: "python",
+  go: "go",
+  rust: "rust",
+  java: "java",
+};
+
+/** Map language to comment prefix */
+const LANG_COMMENT_MAP: Record<string, string> = {
+  python: "#",
+};
+
+/** Infer language from file extension */
+function inferLanguageFromPath(filePath: string): Language {
+  if (filePath.endsWith(".py")) return "python";
+  if (filePath.endsWith(".go")) return "go";
+  if (filePath.endsWith(".rs")) return "rust";
+  if (filePath.endsWith(".java")) return "java";
+  if (filePath.endsWith(".ts") || filePath.endsWith(".tsx")) return "typescript";
+  if (filePath.endsWith(".js") || filePath.endsWith(".jsx") || filePath.endsWith(".mjs")) return "javascript";
+  return "other";
+}
+
 function renderSnapshot(entries: SnapshotEntry[], language: Language = "typescript"): string {
   if (entries.length === 0) return "";
 
-  const lang = language === "python" ? "python" : "ts";
-  const comment = language === "python" ? "#" : "//";
+  const lang = LANG_FENCE_MAP[language] ?? "ts";
+  const comment = LANG_COMMENT_MAP[language] ?? "//";
 
   let md = "";
 
@@ -609,6 +1267,40 @@ function renderSnapshot(entries: SnapshotEntry[], language: Language = "typescri
 }
 
 /**
+ * Render snapshot entries from a multi-language project.
+ * Groups entries by language and renders each group in the appropriate code fence.
+ */
+function renderMultiLangSnapshot(entries: SnapshotEntry[], primaryLang: Language): string {
+  if (entries.length === 0) return "";
+
+  // Group entries by their file's language
+  const byLang = new Map<Language, SnapshotEntry[]>();
+  for (const entry of entries) {
+    const lang = inferLanguageFromPath(entry.file);
+    const effective = lang === "other" ? primaryLang : lang;
+    const existing = byLang.get(effective) ?? [];
+    existing.push(entry);
+    byLang.set(effective, existing);
+  }
+
+  // Render primary language first, then secondary
+  const parts: string[] = [];
+  const primaryEntries = byLang.get(primaryLang);
+  if (primaryEntries && primaryEntries.length > 0) {
+    parts.push(renderSnapshot(primaryEntries, primaryLang));
+    byLang.delete(primaryLang);
+  }
+
+  for (const [lang, langEntries] of byLang) {
+    if (langEntries.length > 0) {
+      parts.push(renderSnapshot(langEntries, lang));
+    }
+  }
+
+  return parts.join("\n\n");
+}
+
+/**
  * Generate a code snapshot for the project.
  */
 export async function generateSnapshot(
@@ -631,8 +1323,30 @@ export async function generateSnapshot(
   onProgress?.(`Scanning ${scanPaths.length} directories: ${dirNames.join(", ")}...`);
 
   // File patterns and extractor based on language
-  const isPython = ctx.language === "python";
-  const fileGlob = isPython ? "**/*.py" : "**/*.{ts,tsx,js,jsx}";
+  let fileGlob: string;
+  let extractor: (filePath: string, relPath: string) => Promise<SnapshotEntry[]>;
+  switch (ctx.language) {
+    case "python":
+      fileGlob = "**/*.py";
+      extractor = extractFromPythonFile;
+      break;
+    case "go":
+      fileGlob = "**/*.go";
+      extractor = extractFromGoFile;
+      break;
+    case "rust":
+      fileGlob = "**/*.rs";
+      extractor = extractFromRustFile;
+      break;
+    case "java":
+      fileGlob = "**/*.java";
+      extractor = extractFromJavaFile;
+      break;
+    default:
+      fileGlob = "**/*.{ts,tsx,js,jsx}";
+      extractor = extractFromFile;
+      break;
+  }
   const patterns = scanPaths.map((p) => `${p}/${fileGlob}`);
 
   const ignorePatterns = [
@@ -646,18 +1360,45 @@ export async function generateSnapshot(
     "**/Library/**",
     "**/.git/**",
   ];
-  if (isPython) {
-    ignorePatterns.push(
-      "**/__pycache__/**",
-      "**/venv/**",
-      "**/.venv/**",
-      "**/env/**",
-      "**/migrations/**",
-      "**/test_*.py",
-      "**/tests/**",
-      "**/conftest.py",
-      "**/setup.py",
-    );
+
+  // Language-specific ignore patterns
+  switch (ctx.language) {
+    case "python":
+      ignorePatterns.push(
+        "**/__pycache__/**",
+        "**/venv/**",
+        "**/.venv/**",
+        "**/env/**",
+        "**/migrations/**",
+        "**/test_*.py",
+        "**/tests/**",
+        "**/conftest.py",
+        "**/setup.py",
+      );
+      break;
+    case "go":
+      ignorePatterns.push(
+        "**/*_test.go",
+        "**/vendor/**",
+        "**/testdata/**",
+      );
+      break;
+    case "rust":
+      ignorePatterns.push(
+        "**/target/**",
+        "**/tests/**",
+        "**/*.pb.rs",
+      );
+      break;
+    case "java":
+      ignorePatterns.push(
+        "**/target/**",
+        "**/build/**",
+        "**/src/test/**",
+        "**/*Test.java",
+        "**/*Spec.java",
+      );
+      break;
   }
 
   const files = await glob(patterns, {
@@ -667,7 +1408,6 @@ export async function generateSnapshot(
   });
 
   const allEntries: SnapshotEntry[] = [];
-  const extractor = isPython ? extractFromPythonFile : extractFromFile;
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -680,6 +1420,27 @@ export async function generateSnapshot(
     const absPath = path.join(ctx.rootDir, file);
     const entries = await extractor(absPath, file);
     allEntries.push(...entries);
+  }
+
+  // Multi-language support: also scan secondary languages
+  if (ctx.secondaryLanguages && customPaths.length === 0) {
+    for (const secLang of ctx.secondaryLanguages) {
+      const secScanPaths = getDefaultScanPathsForLanguage(secLang, ctx);
+      const { glob: secGlob, extractor: secExtractor, ignore: secIgnore } = getLanguageConfig(secLang);
+      const secPatterns = secScanPaths.map((p) => `${p}/${secGlob}`);
+      const secFiles = await glob(secPatterns, {
+        cwd: ctx.rootDir,
+        ignore: [...ignorePatterns, ...secIgnore],
+        absolute: false,
+      });
+
+      onProgress?.(`Scanning ${secFiles.length} ${secLang} files...`);
+      for (const file of secFiles) {
+        const absPath = path.join(ctx.rootDir, file);
+        const entries = await secExtractor(absPath, file);
+        allEntries.push(...entries);
+      }
+    }
   }
 
   // Populate importedByCount from graph
@@ -709,11 +1470,18 @@ export async function generateSnapshot(
   // Apply token budget if graph is available
   const budget =
     maxTokens ??
-    Math.min(16000, 4000 + Math.floor(ctx.sourceFileCount / 25) * 500);
+    Math.min(20000, 4000 + Math.floor(Math.sqrt(ctx.sourceFileCount) * 400));
   onProgress?.(`Applying token budget (${budget.toLocaleString()} tokens)...`);
   const { selected, excluded } = applyTokenBudget(liveEntries, budget, graph, gitActivity);
 
-  const markdown = renderSnapshot(selected, ctx.language);
+  // For multi-language projects, render each language group separately
+  const hasMultiLang = ctx.secondaryLanguages && ctx.secondaryLanguages.length > 0;
+  let markdown: string;
+  if (hasMultiLang) {
+    markdown = renderMultiLangSnapshot(selected, ctx.language);
+  } else {
+    markdown = renderSnapshot(selected, ctx.language);
+  }
 
   return {
     entries: selected,
@@ -738,6 +1506,15 @@ const ENTRY_POINT_PATTERNS = [
   /(?:^|\/)app\.py$/,
   /(?:^|\/)wsgi\.py$/,
   /(?:^|\/)asgi\.py$/,
+  // Go entry points
+  /(?:^|\/)main\.go$/,
+  /(?:^|\/)cmd\//,
+  // Rust entry points
+  /(?:^|\/)main\.rs$/,
+  /(?:^|\/)lib\.rs$/,
+  // Java entry points
+  /(?:^|\/)Main\.java$/,
+  /(?:^|\/)Application\.java$/,
 ];
 
 /**
@@ -755,7 +1532,23 @@ function extractNameFromSignature(sig: string): string | null {
   const pyMatch = sig.match(
     /(?:class|(?:async\s+)?def)\s+(\w+)/,
   );
-  return pyMatch?.[1] ?? null;
+  if (pyMatch) return pyMatch[1];
+
+  // Go: "type Foo struct" or "func FooBar(" or "func (r *R) FooBar("
+  const goTypeMatch = sig.match(/^type\s+(\w+)/);
+  if (goTypeMatch) return goTypeMatch[1];
+  const goFuncMatch = sig.match(/^func\s+(?:\([^)]+\)\s+)?(\w+)/);
+  if (goFuncMatch) return goFuncMatch[1];
+
+  // Rust: "pub struct Foo" or "pub fn foo" or "pub trait Foo"
+  const rustMatch = sig.match(/^pub(?:\(crate\))?\s+(?:async\s+)?(?:struct|enum|trait|fn|type)\s+(\w+)/);
+  if (rustMatch) return rustMatch[1];
+
+  // Java: "public class Foo" or "public void foo("
+  const javaMatch = sig.match(/public\s+(?:static\s+|abstract\s+|final\s+)?(?:class|interface|enum|record|\S+)\s+(\w+)/);
+  if (javaMatch) return javaMatch[1];
+
+  return null;
 }
 
 /**
@@ -823,18 +1616,38 @@ function applyTokenBudget(
     return { entry, tokens, value };
   });
 
-  // Sort by value descending
-  scored.sort((a, b) => b.value - a.value);
-
-  // Greedily select
+  // Submodular greedy selection with diversity discount:
+  // After selecting an entry, discount remaining entries from the same file
+  // to ensure diverse file coverage in the snapshot.
   let remaining = budget;
   const selected: SnapshotEntry[] = [];
+  const selectedFiles = new Set<string>();
+  const consumed = new Set<number>();
 
-  for (const { entry, tokens } of scored) {
-    if (tokens <= remaining) {
-      selected.push(entry);
-      remaining -= tokens;
+  while (remaining > 0) {
+    // Re-score with diversity discount and find best remaining entry
+    let bestIdx = -1;
+    let bestValue = -1;
+
+    for (let j = 0; j < scored.length; j++) {
+      if (consumed.has(j)) continue;
+      const { entry, tokens, value } = scored[j];
+      if (tokens > remaining) continue;
+
+      const adjustedValue = selectedFiles.has(entry.file) ? value * 0.5 : value;
+      if (adjustedValue > bestValue) {
+        bestValue = adjustedValue;
+        bestIdx = j;
+      }
     }
+
+    if (bestIdx === -1) break;
+
+    const { entry, tokens } = scored[bestIdx];
+    selected.push(entry);
+    remaining -= tokens;
+    selectedFiles.add(entry.file);
+    consumed.add(bestIdx);
   }
 
   return {
