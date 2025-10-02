@@ -4,7 +4,8 @@
   "description": "Bootstrap optimized AI context files for any project. Auto-detect stack, generate code snapshots, produce config for Claude Code, Cursor, Copilot, Windsurf, Cline, Continue, Aider, and more.",
   "type": "module",
   "bin": {
-    "clarte": "dist/index.js"
+    "clarte": "dist/index.js",
+    "clarte-mcp": "dist/mcp-server.js"
   },
   "scripts": {
     "build": "tsup",
@@ -47,8 +48,9 @@
   ],
   "dependencies": {
     "@clack/prompts": "^1.0.1",
-    "tinyglobby": "^0.2.12",
-    "picocolors": "^1.1.1"
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "picocolors": "^1.1.1",
+    "tinyglobby": "^0.2.12"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",

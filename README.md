@@ -205,7 +205,7 @@ Runs [Kleinberg's HITS algorithm](https://en.wikipedia.org/wiki/HITS_algorithm) 
 - **Authorities** (high authority score): files imported by many others, i.e. stable foundations like `types.ts`, `utils.ts`. Read these to understand the vocabulary.
 - **Hubs** (high hub score): files that import many others, i.e. orchestration points like `index.ts`, controllers. Read these to understand the flow.
 
-Each file is assigned a role based on its scores: **Foundation**, **Orchestrator**, **Bridge**, **Utility**, or **Leaf**. Edges are weighted by import specificity (number of named imports) and type-only imports contribute less weight (0.3x).
+Each file is assigned a role based on its scores: **Foundation**, **Orchestrator**, **Bridge**, **Utility**, **Leaf**, or **Barrel** (re-export files). Edges are weighted by import specificity (number of named imports), with type-only imports at 0.3x weight and dynamic `import()` expressions at 0.5x weight.
 
 ### Config Constraints
 
@@ -359,11 +359,14 @@ npx clarte [directory] [options]
 | `--force` | Overwrite existing files without asking |
 | `--dry-run` | Preview what would be generated |
 | `--diff[=base]` | Generate focused context for changed files only (default base: `main`) |
+| `--diff-file=PATH` | Write diff output to a file instead of stdout |
 | `--refresh-snapshot` | Re-scan source files and update just the code snapshot |
 | `--reconfigure` | Re-prompt even if `.clarte.json` exists |
 | `--check` | Check if the snapshot is stale via hash comparison (exit 0 = fresh, 1 = stale) |
 | `--check=timestamp` | Timestamp-only staleness check, no file hashing (for shell hooks) |
 | `--max-tokens=N` | Set the token budget for the code snapshot |
+| `--budget=N` | Set token budget for the context file (prioritized sections) |
+| `--format=json` | Output full analysis as structured JSON to stdout |
 | `--generate-skills` | Generate Claude Code skill files |
 | `-v, --verbose` | Show detailed progress output |
 
@@ -376,7 +379,34 @@ npx clarte --diff         # diff against main
 npx clarte --diff=develop # diff against a specific branch
 ```
 
-This gets changed files from `git diff`, expands to 1-hop neighbors in the import graph, includes test files that cover changed files, and outputs a compact markdown summary to stdout. Useful before every LLM session to give the agent targeted context.
+Outputs to stdout by default (use `--diff-file=PATH` for file output). For each changed file, the diff includes:
+
+- **Risk annotations**: file role, dependent count, and impact warnings
+- **Temporal coupling**: files that frequently co-change but aren't in the current diff
+- **Cycle context**: circular dependencies involving changed files, with break hints
+- **Scoped directives**: architectural guidelines filtered to the changed files only
+
+### Brief Mode
+
+Output a compact, token-budgeted architectural summary to stdout, designed for AI tool session hooks:
+
+```bash
+npx clarte brief                    # Default 3000-token budget
+npx clarte brief --max-tokens=1500  # Constrained budget
+```
+
+Silent no-op when no `.clarte.json` exists, making it safe to install globally. Automatically detects if a Clarte MCP server is running and emits minimal output in that case.
+
+### Hook Installation
+
+One-command setup for Claude Code session hooks:
+
+```bash
+npx clarte hooks install    # Add SessionStart + PreCompact hooks
+npx clarte hooks uninstall  # Remove clarte hooks
+```
+
+This configures `~/.claude/settings.json` so that `clarte brief` runs automatically at session start and before context compaction, keeping the agent informed about your architecture.
 
 ### Refreshing Snapshots
 
@@ -454,6 +484,44 @@ end
 
 > **Tip:** Set `"staleDays": 14` in `.clarte.json` to customize the threshold. For CI/pre-commit use the hash-based `--check` instead.
 
+## MCP Server
+
+Clarte includes an MCP (Model Context Protocol) server that exposes architectural analysis as live, queryable tools. Instead of reading a static context file, agents can query specific architectural data mid-session.
+
+### Setup
+
+Add the following to your Claude Code settings (`~/.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "clarte": {
+      "command": "npx",
+      "args": ["clarte-mcp"]
+    }
+  }
+}
+```
+
+The server runs the full analysis pipeline on startup, then serves queries via stdio transport.
+
+### Available Tools
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_hub_files` | `limit?, min_centrality?` | Top files by HITS authority with role, centrality, import counts |
+| `get_file_info` | `path` | Full analysis for a single file: role, imports, importers, layer, tests, coupling partners |
+| `what_imports` | `path` | Files that import the given file (reverse dependency lookup) |
+| `what_does_import` | `path` | Files the given path imports (forward dependency lookup) |
+| `find_circular_deps` | `involving?` | Circular dependencies, optionally filtered to a specific file |
+| `get_layers` | (none) | Architectural layers with dependency flow and consistency score |
+| `get_layer_for` | `path` | Which architectural layer a file belongs to |
+| `get_related_tests` | `path` | Test files associated with a given source file |
+| `get_change_partners` | `path` | Files that frequently co-change with the given file |
+| `get_architecture_summary` | `max_tokens?` | Token-budgeted text summary of the project architecture |
+
+When the MCP server is active, `clarte brief` automatically detects it and emits minimal output to avoid redundancy.
+
 ## Config File
 
 On first run, Clarté saves your answers to `.clarte.json`:
@@ -473,6 +541,23 @@ On first run, Clarté saves your answers to `.clarte.json`:
 ```
 
 Subsequent runs load this config and skip all prompts. Use `--reconfigure` to re-prompt.
+
+### Custom Layer Patterns
+
+Projects using non-standard architectures (hexagonal, clean architecture, DDD) can define custom layer patterns:
+
+```json
+{
+  "layers": [
+    { "name": "domain", "pattern": "domain/" },
+    { "name": "infrastructure", "pattern": "infra(structure)?/" },
+    { "name": "adapters", "pattern": "adapters?/" },
+    { "name": "ports", "pattern": "ports?/" }
+  ]
+}
+```
+
+Custom patterns are matched as regex and take priority over the built-in patterns (`types`, `stores`, `hooks`, `services`, `components`, `pages`, `utils`, `config`).
 
 Add `.clarte.json` to your `.gitignore`. It's local tool config, not project docs.
 
