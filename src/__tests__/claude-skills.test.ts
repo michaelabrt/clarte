@@ -55,39 +55,39 @@ function mockAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
 }
 
 describe("buildClaudeSkills", () => {
-  it("generates script-based skills from package.json scripts", () => {
+  it("generates script-based skills from package.json scripts", async () => {
     const scripts = { test: "vitest run", build: "tsup", dev: "tsup --watch" };
-    const skills = buildClaudeSkills(mockCtx(), mockAnswers(), undefined, scripts);
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers(), undefined, scripts);
     const names = skills.map((s) => s.name);
     expect(names).toContain("test");
     expect(names).toContain("build");
     expect(names).toContain("dev");
   });
 
-  it("script skills are disable-model-invocation", () => {
+  it("script skills are disable-model-invocation", async () => {
     const scripts = { test: "vitest run" };
-    const skills = buildClaudeSkills(mockCtx(), mockAnswers(), undefined, scripts);
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers(), undefined, scripts);
     const testSkill = skills.find((s) => s.name === "test");
     expect(testSkill?.disableModelInvocation).toBe(true);
   });
 
-  it("generates architecture skill when analysis has hub files", () => {
-    const skills = buildClaudeSkills(mockCtx(), mockAnswers(), mockAnalysis());
+  it("generates architecture skill when analysis has hub files", async () => {
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers(), mockAnalysis());
     const archSkill = skills.find((s) => s.name === "architecture");
     expect(archSkill).toBeDefined();
     expect(archSkill!.body).toContain("src/index.ts");
     expect(archSkill!.allowedTools).toBe("Read, Grep, Glob");
   });
 
-  it("skips architecture skill when no analysis", () => {
-    const skills = buildClaudeSkills(mockCtx(), mockAnswers());
+  it("skips architecture skill when no analysis", async () => {
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers());
     const archSkill = skills.find((s) => s.name === "architecture");
     expect(archSkill).toBeUndefined();
   });
 
-  it("uses correct run command for pnpm", () => {
+  it("uses correct run command for pnpm", async () => {
     const scripts = { test: "vitest run" };
-    const skills = buildClaudeSkills(
+    const skills = await buildClaudeSkills(
       mockCtx({ packageManager: "pnpm" }),
       mockAnswers(),
       undefined,
@@ -95,6 +95,41 @@ describe("buildClaudeSkills", () => {
     );
     const testSkill = skills.find((s) => s.name === "test");
     expect(testSkill?.body).toContain("pnpm test");
+  });
+
+  it("generates clarte-brief skill with disableModelInvocation=true", async () => {
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers());
+    const briefSkill = skills.find((s) => s.name === "clarte-brief");
+    expect(briefSkill).toBeDefined();
+    expect(briefSkill!.disableModelInvocation).toBe(true);
+    expect(briefSkill!.allowedTools).toBe("Bash");
+  });
+
+  it("generates clarte-file skill with --format=json reference", async () => {
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers());
+    const fileSkill = skills.find((s) => s.name === "clarte-file");
+    expect(fileSkill).toBeDefined();
+    expect(fileSkill!.body).toContain("--format=json");
+    expect(fileSkill!.allowedTools).toBe("Bash");
+  });
+
+  it("generates clarte-impact skill with --diff reference", async () => {
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers());
+    const impactSkill = skills.find((s) => s.name === "clarte-impact");
+    expect(impactSkill).toBeDefined();
+    expect(impactSkill!.body).toContain("--diff");
+    expect(impactSkill!.allowedTools).toBe("Bash");
+  });
+
+  it("always generates all three clarte skills regardless of analysis", async () => {
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers());
+    const clarteSkills = skills.filter((s) => s.name.startsWith("clarte-"));
+    expect(clarteSkills).toHaveLength(3);
+    expect(clarteSkills.map((s) => s.name)).toEqual([
+      "clarte-brief",
+      "clarte-file",
+      "clarte-impact",
+    ]);
   });
 });
 
@@ -125,5 +160,4 @@ describe("renderClaudeSkill", () => {
     expect(rendered).toContain("allowed-tools: Read, Grep, Glob");
     expect(rendered).not.toContain("disable-model-invocation");
   });
-
 });

@@ -1,16 +1,16 @@
 import type { ClaudeSkill, ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
-import { buildDirectives } from "./directives.js";
+import { buildDirectives, computeFileComplexity } from "./directives.js";
 
 /**
  * Build Claude Code skills based on detected project context.
  * @param scripts - Record of script name -> command from package.json (or equivalent)
  */
-export function buildClaudeSkills(
+export async function buildClaudeSkills(
   ctx: DetectedContext,
   answers: UserAnswers,
   analysis?: ContextAnalysis,
   scripts?: Record<string, string>,
-): ClaudeSkill[] {
+): Promise<ClaudeSkill[]> {
   const skills: ClaudeSkill[] = [];
 
   // Script-based skills from package.json
@@ -19,8 +19,11 @@ export function buildClaudeSkills(
   }
 
   // Architecture exploration skill
-  const archSkill = buildArchitectureSkill(analysis, ctx);
+  const archSkill = await buildArchitectureSkill(analysis, ctx);
   if (archSkill) skills.push(archSkill);
+
+  // CLI-invoking skills (always generated, they invoke clarte at runtime)
+  skills.push(...buildClarteSkills());
 
   return skills;
 }
@@ -76,7 +79,7 @@ function getRunCommand(ctx: DetectedContext): string {
 /**
  * Build an architecture exploration skill with hub files, layers, circular deps, and directives.
  */
-function buildArchitectureSkill(analysis?: ContextAnalysis, ctx?: DetectedContext): ClaudeSkill | null {
+async function buildArchitectureSkill(analysis?: ContextAnalysis, ctx?: DetectedContext): Promise<ClaudeSkill | null> {
   if (!analysis) return null;
 
   const bodyLines: string[] = [
@@ -119,7 +122,10 @@ function buildArchitectureSkill(analysis?: ContextAnalysis, ctx?: DetectedContex
 
   // Working guidelines
   if (ctx) {
-    const directives = buildDirectives(analysis, ctx);
+    const fileComplexity = analysis.hubFiles?.length
+      ? await computeFileComplexity(ctx.rootDir, analysis.hubFiles)
+      : undefined;
+    const directives = buildDirectives(analysis, ctx, fileComplexity);
     if (directives.length > 0) {
       bodyLines.push("## Working Guidelines");
       bodyLines.push("");
@@ -142,6 +148,72 @@ function buildArchitectureSkill(analysis?: ContextAnalysis, ctx?: DetectedContex
     allowedTools: "Read, Grep, Glob",
     body: bodyLines.join("\n"),
   };
+}
+
+/**
+ * Build CLI-invoking skills that let the agent query Clarte on demand.
+ * These are always generated regardless of analysis data.
+ */
+function buildClarteSkills(): ClaudeSkill[] {
+  return [
+    {
+      name: "clarte-brief",
+      description:
+        "Get a compact architectural overview of this codebase including key files, layers, circular dependencies, and conventions.",
+      disableModelInvocation: true,
+      allowedTools: "Bash",
+      body: [
+        "# Clarte Brief",
+        "",
+        "Run `npx clarte brief` and present the output to the user.",
+        "",
+        "Use this skill when the user asks about the overall architecture, project structure, or key files.",
+      ].join("\n"),
+    },
+    {
+      name: "clarte-file",
+      description:
+        "Get detailed architectural analysis for a specific file: its role, centrality, what imports it, what it imports, related tests, and co-change partners.",
+      disableModelInvocation: false,
+      allowedTools: "Bash",
+      body: [
+        "# Clarte File Analysis",
+        "",
+        "To analyze a specific file's architectural role:",
+        "",
+        "1. Run `npx clarte --format=json` to get the full analysis",
+        "2. Parse the JSON output",
+        "3. Find the file in `analysis.hubFiles` for its role, centrality, and import counts",
+        "4. Check `analysis.circularDeps` for cycles involving this file",
+        "5. Check `analysis.testMapping.sourceToTests` for related test files",
+        "6. Check `analysis.gitActivity.changeCoupling` for co-change partners",
+        "",
+        "Present a concise summary: role, how many files import it, what it imports, related tests, and files that frequently change with it.",
+      ].join("\n"),
+    },
+    {
+      name: "clarte-impact",
+      description:
+        "Assess the impact of modifying a file: what would break, which files to also check, and what tests to run.",
+      disableModelInvocation: false,
+      allowedTools: "Bash",
+      body: [
+        "# Clarte Impact Assessment",
+        "",
+        "To assess the impact of changing a file:",
+        "",
+        "1. Run `npx clarte --diff` to get change-aware context",
+        "2. Or run `npx clarte --format=json` and analyze:",
+        "   - Find the file in `analysis.hubFiles` for its role and `importedBy` count",
+        "   - Check `analysis.circularDeps` for cycles it participates in",
+        "   - Check `analysis.chokepoints` to see if it's a structural chokepoint",
+        "   - Check `analysis.gitActivity.changeCoupling` for files that frequently co-change",
+        "   - Check `analysis.testMapping.sourceToTests` for tests to run",
+        "",
+        "Present: risk level (based on role + importedBy count), files likely affected, co-change partners to also check, and tests to run.",
+      ].join("\n"),
+    },
+  ];
 }
 
 /**
