@@ -368,6 +368,7 @@ npx clarte [directory] [options]
 | `--budget=N` | Set token budget for the context file (prioritized sections) |
 | `--format=json` | Output full analysis as structured JSON to stdout |
 | `--generate-skills` | Generate Claude Code skill files |
+| `--watch` | Watch for file changes and re-analyze continuously |
 | `-v, --verbose` | Show detailed progress output |
 
 ### Diff Mode
@@ -407,6 +408,17 @@ npx clarte hooks uninstall  # Remove clarte hooks
 ```
 
 This configures `~/.claude/settings.json` so that `clarte brief` runs automatically at session start and before context compaction, keeping the agent informed about your architecture.
+
+### Watch Mode
+
+Run continuous analysis in a terminal tab while you develop:
+
+```bash
+npx clarte --watch          # Watch and re-analyze on file changes
+npx clarte --watch -v       # Verbose output
+```
+
+On each source file change (debounced 500ms), Clarte rebuilds the import graph incrementally and runs the full analysis pipeline. Architecture deltas (new hub files, resolved cycles, new dead files, etc.) are logged as they are detected. Agent sessions started via `clarte brief` hooks will always see current data.
 
 ### Refreshing Snapshots
 

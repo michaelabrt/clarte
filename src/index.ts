@@ -17,6 +17,9 @@ import {
 } from "./config.js";
 import { refreshSnapshot } from "./refresh.js";
 import { runBriefMode } from "./brief.js";
+import { installHooks, uninstallHooks } from "./hooks.js";
+import { runWatchMode } from "./watch.js";
+import { buildGraphWithCache } from "./cache.js";
 import {
   buildImportGraph,
   getHubFiles,
@@ -42,6 +45,14 @@ import { startShimmer } from "./animations.js";
 import type { ContextAnalysis, ProgressCallback } from "./types.js";
 import { serializeAnalysis } from "./serialize.js";
 import { buildDirectives } from "./templates/directives.js";
+import {
+  extractSnapshot,
+  loadPreviousSnapshot,
+  saveSnapshot,
+  computeDelta,
+  isDeltaEmpty,
+  renderDeltaSection,
+} from "./delta.js";
 
 declare const PKG_VERSION: string;
 declare const PKG_NAME: string;
@@ -63,6 +74,8 @@ function printHelp(): void {
   console.log("");
   console.log(`  ${t.textBold("Commands:")}`);
   console.log(`    ${t.accent("brief")}                   ${t.text("Compact summary for session hooks (stdout, no ANSI)")}`);
+  console.log(`    ${t.accent("hooks install")}           ${t.text("Add clarte hooks to Claude Code settings")}`);
+  console.log(`    ${t.accent("hooks uninstall")}         ${t.text("Remove clarte hooks from Claude Code settings")}`);
   console.log("");
   console.log(`  ${t.textBold("Options:")}`);
   console.log(`    ${t.accent("-h, --help")}              ${t.text("Show this help message")}`);
@@ -70,6 +83,7 @@ function printHelp(): void {
   console.log(`    ${t.accent("--force")}                 ${t.text("Overwrite existing files without asking")}`);
   console.log(`    ${t.accent("--dry-run")}               ${t.text("Preview what would be generated")}`);
   console.log(`    ${t.accent("--diff[=REF]")}            ${t.text("Generate focused context for changed files (vs HEAD or REF)")}`);
+  console.log(`    ${t.accent("--diff-file=PATH")}        ${t.text("Write diff context to file instead of stdout")}`);
   console.log(`    ${t.accent("--reconfigure")}           ${t.text("Re-prompt even if .clarte.json exists")}`);
   console.log(`    ${t.accent("--refresh-snapshot")}      ${t.text("Re-scan source files, update code snapshot only")}`);
   console.log(`    ${t.accent("--check")}                 ${t.text("Exit 0 if snapshot is fresh, 1 if stale (hash-based)")}`);
@@ -78,6 +92,7 @@ function printHelp(): void {
   console.log(`    ${t.accent("--format=json")}           ${t.text("Output full analysis as structured JSON to stdout")}`);
   console.log(`    ${t.accent("--budget=N")}              ${t.text("Set token budget for the context file (prioritized sections)")}`);
   console.log(`    ${t.accent("--generate-skills")}       ${t.text("Generate Claude Code skill files")}`);
+  console.log(`    ${t.accent("--watch")}                 ${t.text("Watch for file changes and re-analyze continuously")}`);
   console.log(`    ${t.accent("-v, --verbose")}           ${t.text("Show detailed progress output")}`);
   console.log("");
   console.log(`  ${t.textBold("Examples:")}`);
@@ -117,6 +132,7 @@ async function main() {
   const check = !!checkArg;
   const checkTimestamp = checkArg === "--check=timestamp";
   const verbose = args.includes("--verbose") || args.includes("-v");
+  const watchMode = args.includes("--watch");
   const generateSkills = args.includes("--generate-skills");
   const diffArg = args.find((a) => a === "--diff" || a.startsWith("--diff="));
   const diffMode = !!diffArg;
@@ -128,13 +144,31 @@ async function main() {
   const budgetArg = args.find((a) => a.startsWith("--budget="));
   const budget = budgetArg ? parseInt(budgetArg.split("=")[1], 10) : undefined;
   const briefMode = args[0] === "brief";
-  const targetDir = args.find((a) => !a.startsWith("-") && a !== "brief" && a !== "-v") ?? process.cwd();
+  const hooksMode = args[0] === "hooks";
+  const diffFileArg = args.find((a) => a.startsWith("--diff-file="));
+  const diffFile = diffFileArg?.split("=")[1];
+  const targetDir = args.find((a) => !a.startsWith("-") && a !== "brief" && a !== "hooks" && a !== "install" && a !== "uninstall" && a !== "-v") ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
   // brief: compact summary for session hooks (no ANSI, stdout only)
   // Must be before project marker check: brief is a silent no-op in non-project dirs.
   if (briefMode) {
     await runBriefMode(rootDir, maxTokens ?? budget ?? 3000, verbose);
+    process.exit(0);
+  }
+
+  // hooks: install/uninstall clarte hooks in Claude Code settings
+  if (hooksMode) {
+    const subcommand = args[1];
+    if (subcommand === "install") {
+      await installHooks();
+    } else if (subcommand === "uninstall") {
+      await uninstallHooks();
+    } else {
+      console.error(`Unknown hooks subcommand: ${subcommand ?? "(none)"}`);
+      console.error("Usage: clarte hooks install | uninstall");
+      process.exit(1);
+    }
     process.exit(0);
   }
 
@@ -151,6 +185,12 @@ async function main() {
     console.log(t.text(`Run ${t.accent("npx clarte")} from a project directory, or pass a path:`));
     console.log(t.muted("  npx clarte ./my-project"));
     process.exit(1);
+  }
+
+  // --watch: continuous analysis mode
+  if (watchMode) {
+    await runWatchMode(rootDir, verbose);
+    return; // runWatchMode never returns, but just in case
   }
 
   // Verbose logger: persists messages on screen (not swallowed by spinner)
@@ -245,7 +285,7 @@ async function main() {
   // --diff: focused context for changed files
   if (diffMode) {
     p.log.info(t.muted("diff-aware context"));
-    await runDiffMode(rootDir, diffRef, verbose);
+    await runDiffMode(rootDir, diffRef, verbose, diffFile);
     return;
   }
 
@@ -264,7 +304,7 @@ async function main() {
 
   // Step 1.5: Build import graph (including secondary languages)
   shimmer = jsonMode ? noopShimmer : startShimmer(`Building import graph (${detected.sourceFileCount} files)...`);
-  const graph = await buildImportGraph(rootDir, detected.language, verbose ? verboseLog : (msg) => shimmer.message(msg));
+  const graph = await buildGraphWithCache(rootDir, detected.language, verbose ? verboseLog : (msg) => shimmer.message(msg));
 
   // Merge secondary language graphs if present
   if (detected.secondaryLanguages) {
@@ -375,7 +415,7 @@ async function main() {
   }
 
   // Architecture layers
-  const { layers, layerEdges } = detectArchitecturalLayers(graph);
+  const { layers, layerEdges } = detectArchitecturalLayers(graph, answers.layers);
   if (!jsonMode) {
     p.log.step(
       layers.length > 0
@@ -570,6 +610,26 @@ async function main() {
 
   const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined, graphTopology, structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined, tightCouplings: tightCouplings.length ? tightCouplings : undefined };
 
+  // Architecture delta tracking
+  const currentAnalysisSnapshot = extractSnapshot(analysis);
+  const prevSnapshot = await loadPreviousSnapshot(rootDir);
+  let deltaSection: string | null = null;
+  if (prevSnapshot) {
+    const delta = computeDelta(prevSnapshot, currentAnalysisSnapshot);
+    if (!isDeltaEmpty(delta)) {
+      deltaSection = renderDeltaSection(delta);
+      if (!jsonMode && deltaSection) {
+        p.log.step(`${t.brand("Delta")}          architecture changes detected since last run`);
+        if (verbose) {
+          for (const line of deltaSection.split("\n").filter((l) => l.startsWith("- "))) {
+            p.log.info(t.muted(`  ${line.slice(2)}`));
+          }
+        }
+      }
+    }
+  }
+  await saveSnapshot(rootDir, currentAnalysisSnapshot);
+
   // --format=json: output full analysis as structured JSON and exit
   if (jsonMode) {
     const savedCfg = await loadConfig(rootDir);
@@ -725,9 +785,9 @@ async function main() {
 
 /**
  * --diff mode: generate focused context for changed files and their neighbors.
- * Writes to .clarte-diff.md instead of stdout.
+ * Outputs to stdout by default; use --diff-file=PATH to write to a file.
  */
-async function runDiffMode(rootDir: string, ref?: string, verbose = false): Promise<void> {
+async function runDiffMode(rootDir: string, ref?: string, verbose = false, outputFile?: string): Promise<void> {
   const verboseLog: ProgressCallback = (msg) => {
     if (verbose) p.log.info(t.muted(msg));
   };
@@ -799,7 +859,7 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false): Prom
   // 2. Detect context and build import graph
   const shimmer = startShimmer("Building import graph...");
   const detected = await detectContext(rootDir, verboseLog);
-  const graph = await buildImportGraph(rootDir, detected.language, verboseLog);
+  const graph = await buildGraphWithCache(rootDir, detected.language, verboseLog);
 
   // Merge secondary language graphs
   if (detected.secondaryLanguages) {
@@ -823,6 +883,12 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false): Prom
       }
     }
   }
+
+  // Enrich frameworks
+  detected.frameworks = enrichFrameworksWithUsage(
+    detected.frameworks,
+    graph.externalImportCounts,
+  );
 
   shimmer.stop();
 
@@ -854,7 +920,28 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false): Prom
     }
   }
 
-  // 5. Load snapshot entries for changed + neighbor files
+  // 5. Run structural analysis for risk annotations
+  const diffConfig = await loadConfig(rootDir);
+  const customLayers = diffConfig?.layers;
+  const hubFiles = getHubFiles(graph);
+  const hubFileMap = new Map(hubFiles.map((h) => [h.path, h]));
+  const circularDeps = findCircularDeps(graph);
+  const { layers, layerEdges } = detectArchitecturalLayers(graph, customLayers);
+  const instabilities = computeInstability(graph);
+  const communities = detectCommunities(graph);
+  const gitActivity = detected.isGitRepo ? analyzeGitActivity(rootDir, verboseLog) : null;
+
+  const analysis: ContextAnalysis = {
+    hubFiles,
+    circularDeps,
+    layers,
+    layerEdges,
+    gitActivity,
+    instabilities,
+    communities,
+  };
+
+  // 6. Load snapshot entries for changed + neighbor files
   const snapshot = await generateSnapshot(detected, [], graph);
   const entryIndex = new Map<string, typeof snapshot.entries>();
   if (snapshot) {
@@ -871,34 +958,115 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false): Prom
     t.text(`Scope: ${changedFiles.length} changed, ${neighborSet.size} neighbor${neighborSet.size === 1 ? "" : "s"}, ${testFiles.size} test file${testFiles.size === 1 ? "" : "s"}`),
   );
 
-  // 6. Build markdown output
+  // 7. Build markdown output
   const sections: string[] = [];
   sections.push("# Diff Context");
   sections.push("");
   sections.push(`> Focused context for ${changedFiles.length} changed file${changedFiles.length === 1 ? "" : "s"}${ref ? ` vs \`${ref}\`` : ""}. Generated by Clart\u00e9.`);
   sections.push("");
 
-  // Changed files table
+  // Changed files with per-file risk annotations
   sections.push("## Changed Files");
   sections.push("");
   if (diffStat && diffStat.size > 0) {
-    sections.push("| File | Imported By | Lines (+/-) |");
-    sections.push("|------|-------------|-------------|");
+    sections.push("| File | Role | Imported By | Lines (+/-) |");
+    sections.push("|------|------|-------------|-------------|");
     for (const f of changedFiles) {
+      const hub = hubFileMap.get(f);
       const importedBy = graph.inDegree.get(f) ?? 0;
+      const role = hub?.role ?? "Leaf";
       const stat = diffStat.get(f);
       const statStr = stat ? `+${stat.added} / -${stat.removed}` : "";
-      sections.push(`| \`${f}\` | ${importedBy} | ${statStr} |`);
+      sections.push(`| \`${f}\` | ${role} | ${importedBy} | ${statStr} |`);
     }
   } else {
-    sections.push("| File | Imported By |");
-    sections.push("|------|-------------|");
+    sections.push("| File | Role | Imported By |");
+    sections.push("|------|------|-------------|");
     for (const f of changedFiles) {
+      const hub = hubFileMap.get(f);
       const importedBy = graph.inDegree.get(f) ?? 0;
-      sections.push(`| \`${f}\` | ${importedBy} |`);
+      const role = hub?.role ?? "Leaf";
+      sections.push(`| \`${f}\` | ${role} | ${importedBy} |`);
     }
   }
   sections.push("");
+
+  // Per-file risk annotations
+  const riskNotes: string[] = [];
+  for (const f of changedFiles) {
+    const hub = hubFileMap.get(f);
+    if (hub && (hub.role === "Foundation" || hub.role === "Orchestrator" || hub.role === "Bridge")) {
+      riskNotes.push(
+        `\`${f}\` is a ${hub.role} file, imported by ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"}. Check dependents for breaking changes.`,
+      );
+    }
+  }
+  if (riskNotes.length > 0) {
+    sections.push("### Risk Annotations");
+    sections.push("");
+    for (const note of riskNotes) {
+      sections.push(`- ${note}`);
+    }
+    sections.push("");
+  }
+
+  // Temporal coupling suggestions (>= 50% confidence, not in current diff)
+  if (gitActivity?.changeCoupling) {
+    const suggestions: string[] = [];
+    for (const f of changedFiles) {
+      const partners = gitActivity.changeCoupling
+        .filter(
+          (c) =>
+            c.confidence >= 0.5 &&
+            ((c.fileA === f && !changedSet.has(c.fileB)) ||
+              (c.fileB === f && !changedSet.has(c.fileA))),
+        )
+        .map((c) => {
+          const partner = c.fileA === f ? c.fileB : c.fileA;
+          const pct = Math.round(c.confidence * 100);
+          return `\`${partner}\` (${pct}% co-change)`;
+        });
+      if (partners.length > 0) {
+        suggestions.push(
+          `When modifying \`${f}\`, consider also checking: ${partners.join(", ")}`,
+        );
+      }
+    }
+    if (suggestions.length > 0) {
+      sections.push("### Temporal Coupling");
+      sections.push("");
+      sections.push("> Files that frequently change together but are not in this diff.");
+      sections.push("");
+      for (const s of suggestions) {
+        sections.push(`- ${s}`);
+      }
+      sections.push("");
+    }
+  }
+
+  // Cycle context: if any changed file participates in a circular dependency
+  const cycleNotes: string[] = [];
+  for (const dep of circularDeps) {
+    const involved = dep.chain.filter((f) => changedSet.has(f));
+    if (involved.length > 0) {
+      const chainStr = dep.chain.map((f) => `\`${f}\``).join(" -> ");
+      if (dep.breakHint) {
+        cycleNotes.push(`Cycle: ${chainStr}. ${dep.breakHint}`);
+      } else {
+        cycleNotes.push(`Cycle: ${chainStr}. Consider breaking this circular dependency.`);
+      }
+    }
+  }
+  if (cycleNotes.length > 0) {
+    sections.push("### Circular Dependencies");
+    sections.push("");
+    sections.push("> Changed files participate in these cycles.");
+    sections.push("");
+    for (const note of cycleNotes) {
+      sections.push(`- ${note}`);
+    }
+    sections.push("");
+  }
 
   // Neighbor files (1-hop)
   if (neighborSet.size > 0) {
@@ -922,24 +1090,6 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false): Prom
     sections.push("");
     for (const f of [...testFiles].sort()) {
       sections.push(`- \`${f}\``);
-    }
-    sections.push("");
-  }
-
-  // Key files in scope by centrality
-  const hubInScope = allRelevant
-    .filter(f => (graph.centrality.get(f) ?? 0) > 0.1)
-    .sort((a, b) => (graph.centrality.get(b) ?? 0) - (graph.centrality.get(a) ?? 0));
-
-  if (hubInScope.length > 0) {
-    sections.push("## Key Files in Scope");
-    sections.push("");
-    sections.push("| File | Authority | Imported By |");
-    sections.push("|------|-----------|-------------|");
-    for (const f of hubInScope.slice(0, 10)) {
-      const authority = (graph.centrality.get(f) ?? 0).toFixed(3);
-      const importedBy = graph.inDegree.get(f) ?? 0;
-      sections.push(`| \`${f}\` | ${authority} | ${importedBy} |`);
     }
     sections.push("");
   }
@@ -968,14 +1118,32 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false): Prom
     sections.push("");
   }
 
+  // Scoped directives: filter buildDirectives to only include ones mentioning changed files
+  const allDirectives = buildDirectives(analysis, detected);
+  const scopedDirectives = allDirectives.filter((d) =>
+    changedFiles.some((f) => d.includes(f)),
+  );
+  if (scopedDirectives.length > 0) {
+    sections.push("## Working Guidelines");
+    sections.push("");
+    sections.push("> Scoped directives for changed files.");
+    sections.push("");
+    for (const d of scopedDirectives) {
+      sections.push(`- ${d}`);
+    }
+    sections.push("");
+  }
+
   const content = sections.join("\n");
 
-  // 7. Write to file
-  const outPath = path.join(rootDir, ".clarte-diff.md");
-  await writeFileSafe(outPath, content);
-
-  const elapsed = ((performance.now() - performance.now()) / 1000).toFixed(1);
-  p.log.step(t.text(`Written to ${t.accent(".clarte-diff.md")}`));
+  // 8. Output: stdout by default, file if --diff-file specified
+  if (outputFile) {
+    const outPath = path.resolve(rootDir, outputFile);
+    await writeFileSafe(outPath, content);
+    p.log.step(t.text(`Written to ${t.accent(outputFile)}`));
+  } else {
+    process.stdout.write(content);
+  }
 
   p.outro(
     t.success("Diff context ready. ") +
