@@ -1,14 +1,71 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { ContextAnalysis, DetectedContext } from "../types.js";
+import type { ContextAnalysis, DetectedContext, HubFile } from "../types.js";
+
+/** Lightweight complexity metrics for a source file */
+export interface FileComplexityInfo {
+  path: string;
+  exports: number;
+  lines: number;
+  branchPoints: number;
+}
+
+/**
+ * Compute lightweight complexity indicators for hub files by reading source.
+ * Counts exports, lines, and branching keywords (if, else, for, while,
+ * switch, case, catch, &&, ||, ternary).
+ */
+export async function computeFileComplexity(
+  rootDir: string,
+  hubFiles: HubFile[],
+): Promise<FileComplexityInfo[]> {
+  const results: FileComplexityInfo[] = [];
+
+  for (const hub of hubFiles) {
+    try {
+      const content = await fs.readFile(path.join(rootDir, hub.path), "utf-8");
+      const lines = content.split("\n").length;
+      const exports = (content.match(/\bexport\b/g) ?? []).length;
+
+      // Cyclomatic complexity proxy: count branching keywords
+      const branchPatterns = [
+        /\bif\b/g,
+        /\belse\b/g,
+        /\bfor\b/g,
+        /\bwhile\b/g,
+        /\bswitch\b/g,
+        /\bcase\b/g,
+        /\bcatch\b/g,
+        /&&/g,
+        /\|\|/g,
+        /\?\s*[^?]/g, // ternary (? not followed by ?)
+      ];
+
+      let branchPoints = 0;
+      for (const pat of branchPatterns) {
+        branchPoints += (content.match(pat) ?? []).length;
+      }
+
+      results.push({ path: hub.path, exports, lines, branchPoints });
+    } catch {
+      // File unreadable; skip
+    }
+  }
+
+  return results;
+}
 
 /**
  * Generate actionable, analysis-derived directives for AI agent workflows.
- * Returns imperative one-liners across 7 categories (max ~15 total).
+ * Returns imperative one-liners across 9 categories (max ~20 total).
+ *
+ * The optional fileComplexity parameter provides pre-computed complexity data
+ * for hub files. When omitted, complexity warning directives are skipped.
  */
 export function buildDirectives(
   analysis: ContextAnalysis,
   ctx: DetectedContext,
+  fileComplexity?: FileComplexityInfo[],
 ): string[] {
   const directives: string[] = [];
 
@@ -88,9 +145,53 @@ export function buildDirectives(
     }
   }
 
-  // 7. Tool integration hints (check for .beads, .beans, .beans.yml)
+  // 7. High-churn caution (top 3 by commits, >= 10 commits, max 3)
+  if (analysis.gitActivity?.hotFiles) {
+    const highChurn = analysis.gitActivity.hotFiles
+      .filter((h) => h.commits >= 10)
+      .slice(0, 3);
+    for (const hot of highChurn) {
+      directives.push(
+        `\`${hot.path}\` is a high-churn file (${hot.commits} commits in 90 days). Review recent changes before modifying to avoid conflicts.`,
+      );
+    }
+  }
+
+  // 8. Complexity warnings (hub files with Medium or High complexity, max 3)
+  if (fileComplexity && analysis.hubFiles) {
+    const complexityMap = new Map(fileComplexity.map((fc) => [fc.path, fc]));
+    const hubRoleMap = new Map(analysis.hubFiles.map((h) => [h.path, h.role]));
+    let complexCount = 0;
+
+    for (const hub of analysis.hubFiles) {
+      if (complexCount >= 3) break;
+      const fc = complexityMap.get(hub.path);
+      if (!fc) continue;
+
+      const band = fc.branchPoints > 50 ? "high" : fc.branchPoints >= 20 ? "medium" : "low";
+      if (band === "low") continue;
+
+      const role = hubRoleMap.get(hub.path) ?? "Leaf";
+      const lineDesc = fc.lines >= 1000 ? `${Math.floor(fc.lines / 100) * 100}+` : `${fc.lines}`;
+      directives.push(
+        `\`${hub.path}\` is a ${role} file with ${band} complexity (${fc.exports} exports, ${lineDesc} lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.`,
+      );
+      complexCount++;
+    }
+  }
+
+  // 9. Tool integration hints (check for .beads, .beans, .beans.yml)
   const toolHints = buildToolHints(ctx);
   directives.push(...toolHints);
+
+  // 10. Encapsulation violation warnings (max 3)
+  if (analysis.monorepoAnalysis?.encapsulationViolations) {
+    for (const v of analysis.monorepoAnalysis.encapsulationViolations.slice(0, 3)) {
+      directives.push(
+        `\`${v.from}\` imports internal file \`${v.to}\` from package ${v.toPackage}. Use the package's public API instead.`,
+      );
+    }
+  }
 
   return directives;
 }
@@ -119,12 +220,17 @@ function buildToolHints(ctx: DetectedContext): string[] {
 /**
  * Render a "Working Guidelines" markdown section from analysis-derived directives.
  * Returns null if no directives are generated.
+ * Async because it computes file complexity for hub files.
  */
-export function renderDirectivesSection(
+export async function renderDirectivesSection(
   analysis: ContextAnalysis,
   ctx: DetectedContext,
-): string | null {
-  const directives = buildDirectives(analysis, ctx);
+): Promise<string | null> {
+  const fileComplexity = analysis.hubFiles.length > 0
+    ? await computeFileComplexity(ctx.rootDir, analysis.hubFiles)
+    : undefined;
+
+  const directives = buildDirectives(analysis, ctx, fileComplexity);
   if (directives.length === 0) return null;
 
   const lines: string[] = [];

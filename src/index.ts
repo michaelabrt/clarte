@@ -17,6 +17,7 @@ import {
 } from "./config.js";
 import { refreshSnapshot } from "./refresh.js";
 import { runBriefMode } from "./brief.js";
+import { validateContextPaths } from "./check.js";
 import { installHooks, uninstallHooks } from "./hooks.js";
 import { runWatchMode } from "./watch.js";
 import { buildGraphWithCache } from "./cache.js";
@@ -37,6 +38,7 @@ import {
   findTightCouplings,
 } from "./graph.js";
 import { analyzeGitActivity } from "./git-analysis.js";
+import { analyzeMonorepoGraph } from "./monorepo-analysis.js";
 import { scanConfigConstraints } from "./config-scan.js";
 import { inferConventions } from "./conventions.js";
 import { buildTestMapping } from "./test-map.js";
@@ -216,6 +218,14 @@ async function main() {
         console.log(`clarte: snapshot is ${daysSince}d old. Run: npx clarte --refresh-snapshot`);
         process.exit(1);
       }
+      // Path validation (also runs for timestamp checks)
+      if (config) {
+        const pathResult = await validateContextPaths(rootDir, config);
+        if (pathResult && pathResult.broken.length > 0) {
+          console.log(`clarte: ${pathResult.broken.length} broken file reference(s) in ${pathResult.file}: ${pathResult.broken.join(", ")}`);
+          process.exit(1);
+        }
+      }
       process.exit(0);
     }
 
@@ -231,6 +241,13 @@ async function main() {
         : 0;
       const staleMsg = daysSince > 0 ? ` (last generated ${daysSince}d ago)` : "";
       console.log(`clarte: snapshot is stale${staleMsg}. Run npx clarte --refresh-snapshot`);
+      process.exit(1);
+    }
+
+    // Path validation: check for broken file references in context file
+    const pathResult = await validateContextPaths(rootDir, config);
+    if (pathResult && pathResult.broken.length > 0) {
+      console.log(`clarte: ${pathResult.broken.length} broken file reference(s) in ${pathResult.file}: ${pathResult.broken.join(", ")}`);
       process.exit(1);
     }
     process.exit(0);
@@ -608,7 +625,27 @@ async function main() {
   // Tight coupling detection
   const tightCouplings = findTightCouplings(graph);
 
-  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined, graphTopology, structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined, tightCouplings: tightCouplings.length ? tightCouplings : undefined };
+  // Monorepo graph analysis
+  const monorepoAnalysis = detected.monorepo
+    ? await analyzeMonorepoGraph(rootDir, graph, detected.monorepo)
+    : undefined;
+  if (!jsonMode && monorepoAnalysis) {
+    const edgeCount = monorepoAnalysis.crossPackageEdges.length;
+    const violationCount = monorepoAnalysis.encapsulationViolations.length;
+    if (edgeCount > 0) {
+      p.log.step(
+        `${t.brand("Packages")}      ${t.textBold(String(edgeCount))} cross-package edge${edgeCount === 1 ? "" : "s"}` +
+          (violationCount > 0 ? `, ${t.warn(String(violationCount))} encapsulation violation${violationCount === 1 ? "" : "s"}` : ` ${t.check()}`),
+      );
+      if (verbose && violationCount > 0) {
+        for (const v of monorepoAnalysis.encapsulationViolations.slice(0, 5)) {
+          p.log.info(t.muted(`  ${v.from} -> ${v.to} (${v.fromPackage} -> ${v.toPackage})`));
+        }
+      }
+    }
+  }
+
+  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined, graphTopology, structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined, tightCouplings: tightCouplings.length ? tightCouplings : undefined, monorepoAnalysis };
 
   // Architecture delta tracking
   const currentAnalysisSnapshot = extractSnapshot(analysis);

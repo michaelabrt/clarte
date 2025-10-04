@@ -93,7 +93,7 @@ export async function buildSections(
   // -- Priority 2: Working Guidelines, Key Files --
 
   if (analysis) {
-    const directivesSection = renderDirectivesSection(analysis, ctx);
+    const directivesSection = await renderDirectivesSection(analysis, ctx);
     if (directivesSection) {
       sections.push({ id: "working-guidelines", priority: 2, content: directivesSection, tokens: estimateTokens(directivesSection) });
     }
@@ -155,6 +155,52 @@ export async function buildSections(
     archLines.push(renderArchitectureDiagram(analysis.layers, analysis.layerEdges ?? []));
     const archContent = archLines.join("\n");
     sections.push({ id: "architecture", priority: 4, content: archContent, tokens: estimateTokens(archContent) });
+  }
+
+  // -- Priority 4: Package Dependencies (monorepo cross-package analysis) --
+
+  if (analysis?.monorepoAnalysis && analysis.monorepoAnalysis.crossPackageEdges.length > 0) {
+    const mono = analysis.monorepoAnalysis;
+    const pkgLines: string[] = [];
+    pkgLines.push("## Package Dependencies");
+    pkgLines.push("");
+    pkgLines.push("Inter-package import edges in this monorepo.");
+    pkgLines.push("");
+
+    // Build summary table: group by (fromPackage, toPackage)
+    const pairMap = new Map<string, { edges: number; violations: number }>();
+    for (const edge of mono.crossPackageEdges) {
+      const key = `${edge.fromPackage}|${edge.toPackage}`;
+      const entry = pairMap.get(key) ?? { edges: 0, violations: 0 };
+      entry.edges++;
+      if (edge.isEncapsulationViolation) entry.violations++;
+      pairMap.set(key, entry);
+    }
+
+    pkgLines.push("| From Package | To Package | Edges | Violations |");
+    pkgLines.push("|-------------|------------|-------|------------|");
+    for (const [key, val] of pairMap) {
+      const [fromPkg, toPkg] = key.split("|");
+      pkgLines.push(`| \`${fromPkg}\` | \`${toPkg}\` | ${val.edges} | ${val.violations} |`);
+    }
+
+    // Encapsulation violations detail
+    if (mono.encapsulationViolations.length > 0) {
+      pkgLines.push("");
+      pkgLines.push("### Encapsulation Violations");
+      pkgLines.push("");
+      pkgLines.push("These imports bypass a package's public API and access internal files directly.");
+      pkgLines.push("");
+      for (const v of mono.encapsulationViolations.slice(0, 10)) {
+        pkgLines.push(`- \`${v.from}\` imports \`${v.to}\` (use \`${v.toPackage}\` public API instead)`);
+      }
+      if (mono.encapsulationViolations.length > 10) {
+        pkgLines.push(`- ... and ${mono.encapsulationViolations.length - 10} more`);
+      }
+    }
+
+    const pkgContent = pkgLines.join("\n");
+    sections.push({ id: "package-dependencies", priority: 4, content: pkgContent, tokens: estimateTokens(pkgContent) });
   }
 
   // -- Priority 5: Framework Hints, Conventions --
@@ -593,6 +639,12 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
         lines.push("");
         lines.push("```bash");
         lines.push(runPrefix("test"));
+        lines.push("```");
+      }
+      if (scripts.build) {
+        lines.push("");
+        lines.push("```bash");
+        lines.push(runPrefix("build"));
         lines.push("```");
       }
       break;
