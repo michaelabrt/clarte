@@ -1,5 +1,5 @@
 /** Functional role derived from HITS authority/hub scores */
-export type FileRole = "Foundation" | "Orchestrator" | "Bridge" | "Utility" | "Leaf";
+export type FileRole = "Foundation" | "Orchestrator" | "Bridge" | "Utility" | "Leaf" | "Barrel";
 
 /** Extracted constraints from tsconfig, linter, and formatter configs */
 export interface ConfigConstraints {
@@ -150,6 +150,8 @@ export interface UserAnswers {
   stackCorrections: string;
   /** Whether to generate per-package context files in a monorepo */
   generatePerPackage: boolean;
+  /** Custom architectural layer patterns (name + regex string) */
+  layers?: Array<{ name: string; pattern: string }>;
 }
 
 /** Persisted project config (.clarte.json) */
@@ -182,6 +184,8 @@ export interface ProjectConfig {
   staleDays?: number;
   /** Terminal color scheme preference */
   colorScheme?: "dark" | "light";
+  /** Custom architectural layer patterns (name + regex string) */
+  layers?: Array<{ name: string; pattern: string }>;
 }
 
 /** A generated file ready to be written */
@@ -234,6 +238,8 @@ export interface ImportEdge {
   importedNames: string[];
   /** Whether this is a type-only import (import type { ... }) */
   isTypeOnly?: boolean;
+  /** Whether this is a dynamic import (import('...')) */
+  isDynamic?: boolean;
 }
 
 /** Full import graph for a project */
@@ -250,6 +256,8 @@ export interface ImportGraph {
   authority: Map<string, number>;
   /** HITS hub scores (0-1): how much a file depends on others */
   hubScores: Map<string, number>;
+  /** Files detected as barrel/index files (>50% re-export statements) */
+  barrelFiles?: Set<string>;
 }
 
 /** A highly-connected file identified by HITS analysis */
@@ -493,6 +501,30 @@ export interface ContextSection {
   tokens: number;
 }
 
+/** A cross-package import edge in a monorepo */
+export interface CrossPackageEdge {
+  /** Source file (relative path) */
+  from: string;
+  /** Target file (relative path) */
+  to: string;
+  /** Source package name */
+  fromPackage: string;
+  /** Target package name */
+  toPackage: string;
+  /** Whether this import accesses internal files (not the package's public API) */
+  isEncapsulationViolation: boolean;
+}
+
+/** Monorepo-specific analysis results */
+export interface MonorepoAnalysis {
+  /** Import edges crossing package boundaries */
+  crossPackageEdges: CrossPackageEdge[];
+  /** Encapsulation violations (imports of internal files) */
+  encapsulationViolations: CrossPackageEdge[];
+  /** Dependencies between packages (package name -> set of dependent package names) */
+  packageDependencies: Map<string, Set<string>>;
+}
+
 /** Bundle of all structural analysis results */
 export interface ContextAnalysis {
   hubFiles: HubFile[];
@@ -525,4 +557,6 @@ export interface ContextAnalysis {
   structuralMismatches?: StructuralTemporalMismatch[];
   /** File pairs with high import specificity (tight coupling) */
   tightCouplings?: TightCoupling[];
+  /** Monorepo-specific analysis (cross-package edges, encapsulation violations) */
+  monorepoAnalysis?: MonorepoAnalysis;
 }

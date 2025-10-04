@@ -59,6 +59,23 @@ export interface ClarteJsonOutput {
     };
     graphTopology?: ContextAnalysis["graphTopology"];
     structuralMismatches?: ContextAnalysis["structuralMismatches"];
+    monorepoAnalysis?: {
+      crossPackageEdges: Array<{
+        from: string;
+        to: string;
+        fromPackage: string;
+        toPackage: string;
+        isEncapsulationViolation: boolean;
+      }>;
+      encapsulationViolations: Array<{
+        from: string;
+        to: string;
+        fromPackage: string;
+        toPackage: string;
+        isEncapsulationViolation: boolean;
+      }>;
+      packageDependencies: Record<string, string[]>;
+    };
   };
   snapshot: {
     entries: Array<{ file: string; category: string; signature: string; importedByCount?: number }>;
@@ -150,6 +167,19 @@ export function serializeAnalysis(
         : undefined,
       graphTopology: analysis.graphTopology,
       structuralMismatches: analysis.structuralMismatches,
+      monorepoAnalysis: analysis.monorepoAnalysis
+        ? {
+            crossPackageEdges: analysis.monorepoAnalysis.crossPackageEdges,
+            encapsulationViolations: analysis.monorepoAnalysis.encapsulationViolations,
+            packageDependencies: mapToRecord(
+              new Map(
+                [...analysis.monorepoAnalysis.packageDependencies.entries()].map(
+                  ([k, v]) => [k, [...v]],
+                ),
+              ),
+            ),
+          }
+        : undefined,
     },
     snapshot: snapshot
       ? {
