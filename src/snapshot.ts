@@ -1418,17 +1418,14 @@ export async function generateSnapshot(
 
   const allEntries: SnapshotEntry[] = [];
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-
-    if ((i + 1) % 20 === 0 || i === files.length - 1) {
-      const dir = path.dirname(file).split("/").pop() ?? "";
-      onProgress?.(`Extracting signatures... ${i + 1}/${files.length} files (${dir}/)`);
-    }
-
-    const absPath = path.join(ctx.rootDir, file);
-    const entries = await extractor(absPath, file);
-    allEntries.push(...entries);
+  const chunkSize = 50;
+  for (let i = 0; i < files.length; i += chunkSize) {
+    const chunk = files.slice(i, i + chunkSize);
+    onProgress?.(`Extracting signatures... ${Math.min(i + chunkSize, files.length)}/${files.length} files`);
+    const results = await Promise.all(
+      chunk.map((file) => extractor(path.join(ctx.rootDir, file), file)),
+    );
+    for (const entries of results) allEntries.push(...entries);
   }
 
   // Multi-language support: also scan secondary languages
