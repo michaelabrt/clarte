@@ -164,8 +164,6 @@ export async function buildSections(
     const pkgLines: string[] = [];
     pkgLines.push("## Package Dependencies");
     pkgLines.push("");
-    pkgLines.push("Inter-package import edges in this monorepo.");
-    pkgLines.push("");
 
     // Build summary table: group by (fromPackage, toPackage)
     const pairMap = new Map<string, { edges: number; violations: number }>();
@@ -184,18 +182,27 @@ export async function buildSections(
       pkgLines.push(`| \`${fromPkg}\` | \`${toPkg}\` | ${val.edges} | ${val.violations} |`);
     }
 
-    // Encapsulation violations detail
+    // Encapsulation violations as directives
     if (mono.encapsulationViolations.length > 0) {
       pkgLines.push("");
       pkgLines.push("### Encapsulation Violations");
       pkgLines.push("");
-      pkgLines.push("These imports bypass a package's public API and access internal files directly.");
-      pkgLines.push("");
       for (const v of mono.encapsulationViolations.slice(0, 10)) {
-        pkgLines.push(`- \`${v.from}\` imports \`${v.to}\` (use \`${v.toPackage}\` public API instead)`);
+        pkgLines.push(`- Import \`${v.toPackage}\` through its public API instead of importing internal file \`${v.to}\` directly (from \`${v.from}\`).`);
       }
       if (mono.encapsulationViolations.length > 10) {
         pkgLines.push(`- ... and ${mono.encapsulationViolations.length - 10} more`);
+      }
+    }
+
+    // Per-package top hub files
+    if (mono.packageHubFiles && mono.packageHubFiles.size > 0) {
+      pkgLines.push("");
+      pkgLines.push("### Key Files by Package");
+      pkgLines.push("");
+      for (const [pkgName, hubFiles] of mono.packageHubFiles) {
+        if (hubFiles.length === 0) continue;
+        pkgLines.push(`**${pkgName}**: ${hubFiles.map((f) => `\`${f.path}\``).join(", ")}`);
       }
     }
 
@@ -389,7 +396,7 @@ export async function buildSections(
       lcLines.push("Violations (imports flowing upward):");
       lcLines.push("");
       for (const v of lc.violations.slice(0, 5)) {
-        lcLines.push(`- \`${v.from}\` imports from \`${v.to}\` (${v.fromLayer} \u2192 ${v.toLayer})`);
+        lcLines.push(`- \`${v.from}\` imports from \`${v.to}\` (${v.fromLayer} -> ${v.toLayer})`);
       }
       if (lc.violations.length > 5) {
         lcLines.push(`- ... and ${lc.violations.length - 5} more`);
@@ -487,9 +494,9 @@ function renderArchitectureDiagram(layers: ArchitecturalLayer[], layerEdges: Lay
   const layerNames = layers.map((l) => `\`${l.name}\``);
   const lines: string[] = [];
 
-  lines.push("Dependency flow (foundational \u2192 consumer):");
+  lines.push("Dependency flow (foundational -> consumer):");
   lines.push("");
-  lines.push(layerNames.join(" \u2192 "));
+  lines.push(layerNames.join(" -> "));
 
   const mainFlow = new Set<string>();
   for (let i = 0; i < layers.length - 1; i++) {
@@ -502,7 +509,7 @@ function renderArchitectureDiagram(layers: ArchitecturalLayer[], layerEdges: Lay
     lines.push("");
     lines.push(
       "Cross-layer edges: " +
-        crossEdges.map((e) => `${e.from} \u2192 ${e.to}`).join(", "),
+        crossEdges.map((e) => `${e.from} -> ${e.to}`).join(", "),
     );
   }
 

@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { analyzeMonorepoGraph } from "../monorepo-analysis.js";
+import { analyzeMonorepoGraph, annotateCrossPackageEdges, computePackageCentrality } from "../monorepo-analysis.js";
 import type { ImportEdge, ImportGraph, MonorepoInfo } from "../types.js";
 
 /** Helper to create a minimal ImportGraph from edges */
@@ -242,5 +242,121 @@ describe("analyzeMonorepoGraph", () => {
 
     // scripts/build.ts does not belong to any package, so no cross-package edge
     expect(result.crossPackageEdges).toHaveLength(0);
+  });
+
+  it("annotates graph edges with crossPackage flag", async () => {
+    await setupPackageJsons();
+
+    const graph = makeGraph([
+      edge("packages/web/src/app.ts", "packages/shared/src/index.ts"),
+      edge("packages/web/src/app.ts", "packages/web/src/utils.ts"),
+    ]);
+
+    await analyzeMonorepoGraph(tmpDir, graph, monorepo);
+
+    // Cross-package edge should be annotated
+    const crossEdge = graph.edges.find(
+      (e) => e.from === "packages/web/src/app.ts" && e.to === "packages/shared/src/index.ts",
+    );
+    expect(crossEdge?.crossPackage).toBe(true);
+
+    // Same-package edge should not be annotated
+    const sameEdge = graph.edges.find(
+      (e) => e.from === "packages/web/src/app.ts" && e.to === "packages/web/src/utils.ts",
+    );
+    expect(sameEdge?.crossPackage).toBeUndefined();
+  });
+});
+
+describe("annotateCrossPackageEdges", () => {
+  const monorepo: MonorepoInfo = {
+    type: "pnpm-workspaces",
+    packages: [
+      { name: "@app/web", path: "packages/web", dependencies: [], frameworks: [] },
+      { name: "@app/shared", path: "packages/shared", dependencies: [], frameworks: [] },
+    ],
+  };
+
+  it("sets crossPackage on edges crossing package boundaries", () => {
+    const graph = makeGraph([
+      edge("packages/web/src/app.ts", "packages/shared/src/index.ts"),
+      edge("packages/web/src/app.ts", "packages/web/src/utils.ts"),
+    ]);
+
+    annotateCrossPackageEdges(graph, monorepo);
+
+    const crossEdge = graph.edges.find(
+      (e) => e.to === "packages/shared/src/index.ts",
+    );
+    expect(crossEdge?.crossPackage).toBe(true);
+
+    const sameEdge = graph.edges.find(
+      (e) => e.to === "packages/web/src/utils.ts",
+    );
+    expect(sameEdge?.crossPackage).toBeUndefined();
+  });
+
+  it("does not annotate external edges", () => {
+    const graph = makeGraph([
+      {
+        from: "packages/web/src/app.ts",
+        to: "react",
+        isExternal: true,
+        specifier: "react",
+        importedNames: [],
+      },
+    ]);
+
+    annotateCrossPackageEdges(graph, monorepo);
+
+    expect(graph.edges[0].crossPackage).toBeUndefined();
+  });
+});
+
+describe("computePackageCentrality", () => {
+  it("computes HITS within a single package subgraph", () => {
+    // Create a graph with edges in two packages
+    const graph = makeGraph([
+      // @app/shared internal edges: types.ts is depended on by many
+      edge("packages/shared/src/utils.ts", "packages/shared/src/types.ts"),
+      edge("packages/shared/src/api.ts", "packages/shared/src/types.ts"),
+      edge("packages/shared/src/api.ts", "packages/shared/src/utils.ts"),
+      // @app/web internal edges (should be excluded from shared subgraph)
+      edge("packages/web/src/app.ts", "packages/web/src/utils.ts"),
+      // Cross-package edge (should be excluded from shared subgraph)
+      edge("packages/web/src/app.ts", "packages/shared/src/types.ts"),
+    ]);
+
+    const { authority, hub } = computePackageCentrality(graph, "packages/shared");
+
+    // types.ts should have the highest authority (imported by 2 files within package)
+    expect(authority.has("packages/shared/src/types.ts")).toBe(true);
+    expect(authority.has("packages/shared/src/utils.ts")).toBe(true);
+    expect(authority.has("packages/shared/src/api.ts")).toBe(true);
+
+    // types.ts should have higher authority than api.ts
+    const typesAuth = authority.get("packages/shared/src/types.ts") ?? 0;
+    const apiAuth = authority.get("packages/shared/src/api.ts") ?? 0;
+    expect(typesAuth).toBeGreaterThan(apiAuth);
+
+    // api.ts should have the highest hub score (imports 2 files)
+    const apiHub = hub.get("packages/shared/src/api.ts") ?? 0;
+    const typesHub = hub.get("packages/shared/src/types.ts") ?? 0;
+    expect(apiHub).toBeGreaterThan(typesHub);
+
+    // Should NOT include web package files
+    expect(authority.has("packages/web/src/app.ts")).toBe(false);
+    expect(authority.has("packages/web/src/utils.ts")).toBe(false);
+  });
+
+  it("returns empty maps for a package with no edges", () => {
+    const graph = makeGraph([
+      edge("packages/web/src/app.ts", "packages/web/src/utils.ts"),
+    ]);
+
+    const { authority, hub } = computePackageCentrality(graph, "packages/shared");
+
+    expect(authority.size).toBe(0);
+    expect(hub.size).toBe(0);
   });
 });
