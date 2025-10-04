@@ -184,7 +184,94 @@ export function buildDirectives(
   const toolHints = buildToolHints(ctx);
   directives.push(...toolHints);
 
-  // 10. Encapsulation violation warnings (max 3)
+  // 10. Technical debt flags (files with 2+ risk factors, max 5)
+  {
+    const riskFactors = new Map<string, string[]>();
+
+    // Risk factor: high churn (>= 10 commits)
+    if (analysis.gitActivity?.hotFiles) {
+      for (const hot of analysis.gitActivity.hotFiles) {
+        if (hot.commits >= 10) {
+          const factors = riskFactors.get(hot.path) ?? [];
+          factors.push("high churn");
+          riskFactors.set(hot.path, factors);
+        }
+      }
+    }
+
+    // Risk factor: no tests
+    if (analysis.testMapping?.untestedFiles) {
+      for (const file of analysis.testMapping.untestedFiles) {
+        const factors = riskFactors.get(file) ?? [];
+        factors.push("no tests");
+        riskFactors.set(file, factors);
+      }
+    }
+
+    // Risk factor: circular dependency
+    if (analysis.circularDeps) {
+      for (const dep of analysis.circularDeps) {
+        for (const file of dep.chain) {
+          const factors = riskFactors.get(file) ?? [];
+          if (!factors.includes("circular dep")) {
+            factors.push("circular dep");
+            riskFactors.set(file, factors);
+          }
+        }
+      }
+    }
+
+    // Risk factor: high instability (>= 0.8 AND fanIn >= 3)
+    if (analysis.instabilities) {
+      for (const inst of analysis.instabilities) {
+        if (inst.instability >= 0.8 && inst.fanIn >= 3) {
+          const factors = riskFactors.get(inst.path) ?? [];
+          factors.push("high instability");
+          riskFactors.set(inst.path, factors);
+        }
+      }
+    }
+
+    // Risk factor: tightly coupled
+    if (analysis.tightCouplings) {
+      for (const tc of analysis.tightCouplings) {
+        const factors = riskFactors.get(tc.from) ?? [];
+        if (!factors.includes("tightly coupled")) {
+          factors.push("tightly coupled");
+          riskFactors.set(tc.from, factors);
+        }
+      }
+    }
+
+    // Get churn counts for tiebreaking
+    const churnCounts = analysis.gitActivity?.commitCounts ?? new Map<string, number>();
+
+    // Filter to files with 2+ risk factors, sort by count then churn
+    const flagged = [...riskFactors.entries()]
+      .filter(([, factors]) => factors.length >= 2)
+      .sort((a, b) => {
+        const countDiff = b[1].length - a[1].length;
+        if (countDiff !== 0) return countDiff;
+        return (churnCounts.get(b[0]) ?? 0) - (churnCounts.get(a[0]) ?? 0);
+      })
+      .slice(0, 5);
+
+    for (const [file, factors] of flagged) {
+      const factorList = factors.join(", ");
+      const advice: string[] = [];
+      if (factors.includes("no tests")) advice.push("Add tests");
+      if (factors.includes("circular dep")) advice.push("break the cycle");
+      if (factors.includes("tightly coupled")) advice.push("Consider extracting an interface");
+      if (factors.includes("high instability")) advice.push("Stabilize the API");
+      if (factors.includes("high churn")) advice.push("before making large changes");
+
+      directives.push(
+        `\`${file}\` has multiple risk factors (${factorList}). ${advice.join(" and ")}.`,
+      );
+    }
+  }
+
+  // 11. Encapsulation violation warnings (max 3)
   if (analysis.monorepoAnalysis?.encapsulationViolations) {
     for (const v of analysis.monorepoAnalysis.encapsulationViolations.slice(0, 3)) {
       directives.push(

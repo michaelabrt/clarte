@@ -382,6 +382,8 @@ export interface RawImport {
   importedNames: string[];
   /** Whether this is a type-only import (import type { ... }) */
   isTypeOnly?: boolean;
+  /** Whether this is a dynamic import (import('...')) */
+  isDynamic?: boolean;
 }
 
 export function parseJsImports(content: string): RawImport[] {
@@ -421,7 +423,7 @@ export function parseJsImports(content: string): RawImport[] {
 
   // dynamic import('...')
   for (const m of cleaned.matchAll(JS_DYNAMIC)) {
-    imports.push({ specifier: m[1], importedNames: [] });
+    imports.push({ specifier: m[1], importedNames: [], isDynamic: true });
   }
 
   return imports;
@@ -431,6 +433,7 @@ export function parsePythonImports(content: string): RawImport[] {
   const cleaned = stripPythonComments(content);
   const imports: RawImport[] = [];
 
+  // Parse normal (non-indented) imports
   for (const m of cleaned.matchAll(PY_FROM_IMPORT)) {
     const module = m[1];
     const names = m[2].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
@@ -441,6 +444,47 @@ export function parsePythonImports(content: string): RawImport[] {
     const modules = m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
     for (const mod of modules) {
       imports.push({ specifier: mod, importedNames: [] });
+    }
+  }
+
+  // Detect TYPE_CHECKING guard blocks and parse indented imports as type-only.
+  // The normal regexes use ^from/^import anchors, so indented imports inside
+  // TYPE_CHECKING blocks are not matched above; we parse them separately here.
+  const lines = cleaned.split("\n");
+  const typeCheckingBlockRegex = /^(\s*)if\s+TYPE_CHECKING\s*:/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(typeCheckingBlockRegex);
+    if (!match) continue;
+
+    const guardIndent = match[1].length;
+
+    // Collect block lines, stripping leading indentation so regexes match
+    const blockLines: string[] = [];
+    for (let j = i + 1; j < lines.length; j++) {
+      const line = lines[j];
+      const trimmed = line.trimStart();
+      if (!trimmed) { blockLines.push(""); continue; }
+      const lineIndent = line.length - trimmed.length;
+      if (lineIndent <= guardIndent) break;
+      blockLines.push(trimmed);
+    }
+
+    if (blockLines.length === 0) continue;
+
+    const blockContent = blockLines.join("\n");
+
+    for (const m of blockContent.matchAll(PY_FROM_IMPORT)) {
+      const module = m[1];
+      const names = m[2].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
+      imports.push({ specifier: module, importedNames: names, isTypeOnly: true });
+    }
+
+    for (const m of blockContent.matchAll(PY_IMPORT)) {
+      const modules = m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
+      for (const mod of modules) {
+        imports.push({ specifier: mod, importedNames: [], isTypeOnly: true });
+      }
     }
   }
 
@@ -697,14 +741,53 @@ async function resolveBarrelFiles(
   return { namedExports, starExports };
 }
 
+/** Regex to count re-export statements (non-global, for countReExportStatements) */
+const RE_EXPORT_FROM = /export\s+(?:\{[^}]*\}|\*)\s+from\s+['"][^'"]+['"]/g;
+/** Regex to count all top-level statements (simple heuristic: lines starting at column 0 with a keyword) */
+const TOP_LEVEL_STMT = /^(?:import|export|const|let|var|function|class|type|interface|enum|declare|async\s+function)\b/gm;
+
+/**
+ * Detect barrel files: files where >50% of top-level statements are re-exports.
+ * Returns a Set of relative file paths identified as barrels.
+ */
+export async function detectBarrelFiles(
+  rootDir: string,
+  fileSet: Set<string>,
+): Promise<Set<string>> {
+  const barrels = new Set<string>();
+
+  for (const file of fileSet) {
+    const absPath = path.join(rootDir, file);
+    const content = await readFileOr(absPath);
+    if (!content) continue;
+
+    const cleaned = stripCommentsAndStrings(content, true);
+
+    const reExportCount = [...cleaned.matchAll(RE_EXPORT_FROM)].length;
+    if (reExportCount === 0) continue;
+
+    const totalStatements = [...cleaned.matchAll(TOP_LEVEL_STMT)].length;
+    if (totalStatements === 0) continue;
+
+    if (reExportCount / totalStatements > 0.5) {
+      barrels.add(file);
+    }
+  }
+
+  return barrels;
+}
+
 // ── HITS (Kleinberg) centrality ───────────────────────────────────────
 
 /**
  * Compute HITS authority and hub scores for all files.
  *
- * Edge weight: (1 - typeOnlyDiscount) * specificity
+ * Edge weight: (1 - typeOnlyDiscount) * dynamicDiscount * specificity
  * - typeOnlyDiscount = 0.7 if isTypeOnly, else 0
+ * - dynamicDiscount = 0.5 if isDynamic, else 1.0
  * - specificity = log2(importedNames.length + 1) / log2(6), clamped min 0.2
+ *
+ * Barrel file correction: edges targeting barrel files contribute 0.3x authority.
  *
  * Uses teleportation smoothing (alpha=0.15) to avoid extreme score distributions
  * in star-shaped graphs. Hub update uses prior-iteration authority (standard HITS).
@@ -714,11 +797,13 @@ export function computeHITS(
   edges: ImportEdge[],
   maxIterations = 30,
   epsilon = 1e-6,
+  barrelFiles?: Set<string>,
 ): { authority: Map<string, number>; hub: Map<string, number> } {
   const n = files.length;
   if (n === 0) return { authority: new Map(), hub: new Map() };
 
   const fileSet = new Set(files);
+  const barrels = barrelFiles ?? new Set<string>();
   const alpha = 0.15; // teleportation smoothing factor
   const baseScore = 1 / n;
 
@@ -737,11 +822,17 @@ export function computeHITS(
     if (!fileSet.has(edge.from) || !fileSet.has(edge.to)) continue;
 
     const typeOnlyDiscount = edge.isTypeOnly ? 0.7 : 0;
+    const dynamicDiscount = edge.isDynamic ? 0.5 : 1.0;
     const nameCount = edge.importedNames.length;
     const specificity = nameCount > 0
       ? Math.max(0.2, Math.log2(nameCount + 1) / Math.log2(6))
       : 0.2;
-    const weight = (1 - typeOnlyDiscount) * specificity;
+    let weight = (1 - typeOnlyDiscount) * dynamicDiscount * specificity;
+
+    // Barrel file authority discount: edges targeting barrels contribute less
+    if (barrels.has(edge.to)) {
+      weight *= 0.3;
+    }
 
     forward.get(edge.from)!.push({ to: edge.to, weight });
     reverse.get(edge.to)!.push({ from: edge.from, weight });
@@ -830,8 +921,10 @@ export function computeHITS(
 
 /**
  * Derive a functional role from HITS authority and hub scores.
+ * If isBarrel is true, the file always gets the "Barrel" role.
  */
-export function deriveRole(authority: number, hubScore: number): FileRole {
+export function deriveRole(authority: number, hubScore: number, isBarrel = false): FileRole {
+  if (isBarrel) return "Barrel";
   if (authority > 0.6 && hubScore < 0.3) return "Foundation";
   if (hubScore > 0.6 && authority < 0.3) return "Orchestrator";
   if (authority > 0.4 && hubScore > 0.4) return "Bridge";
@@ -955,6 +1048,7 @@ export async function buildImportGraph(
                 specifier: raw.specifier,
                 importedNames: names,
                 isTypeOnly: raw.isTypeOnly,
+                isDynamic: raw.isDynamic,
               });
               inDegree.set(source, (inDegree.get(source) ?? 0) + 1);
             }
@@ -969,6 +1063,7 @@ export async function buildImportGraph(
                   specifier: raw.specifier,
                   importedNames: unresolved,
                   isTypeOnly: raw.isTypeOnly,
+                  isDynamic: raw.isDynamic,
                 });
                 inDegree.set(starSource, (inDegree.get(starSource) ?? 0) + 1);
               }
@@ -983,6 +1078,7 @@ export async function buildImportGraph(
                 specifier: raw.specifier,
                 importedNames: [],
                 isTypeOnly: raw.isTypeOnly,
+                isDynamic: raw.isDynamic,
               });
               inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
             }
@@ -995,6 +1091,7 @@ export async function buildImportGraph(
               specifier: raw.specifier,
               importedNames: raw.importedNames,
               isTypeOnly: raw.isTypeOnly,
+              isDynamic: raw.isDynamic,
             });
             inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
           }
@@ -1013,6 +1110,7 @@ export async function buildImportGraph(
             specifier: raw.specifier,
             importedNames: raw.importedNames,
             isTypeOnly: raw.isTypeOnly,
+            isDynamic: raw.isDynamic,
           });
           inDegree.set(aliasResolved, (inDegree.get(aliasResolved) ?? 0) + 1);
         } else {
@@ -1026,6 +1124,7 @@ export async function buildImportGraph(
             specifier: raw.specifier,
             importedNames: raw.importedNames,
             isTypeOnly: raw.isTypeOnly,
+            isDynamic: raw.isDynamic,
           });
           externalImportCounts.set(
             pkgName,
@@ -1036,11 +1135,20 @@ export async function buildImportGraph(
     }
   }
 
+  // Detect barrel files for HITS accuracy correction
+  let detectedBarrels = new Set<string>();
+  if (isJsTs) {
+    detectedBarrels = await detectBarrelFiles(rootDir, fileSet);
+    if (detectedBarrels.size > 0) {
+      onProgress?.(`Detected ${detectedBarrels.size} barrel file${detectedBarrels.size === 1 ? "" : "s"}`);
+    }
+  }
+
   onProgress?.("Computing centrality (HITS)...");
-  const { authority, hub: hubScores } = computeHITS(files, edges);
+  const { authority, hub: hubScores } = computeHITS(files, edges, 30, 1e-6, detectedBarrels);
 
   // Use authority as centrality for backward compat (snapshot.ts etc.)
-  return { edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores };
+  return { edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles: detectedBarrels };
 }
 
 /**
@@ -1094,7 +1202,8 @@ export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[] {
     if (importedBy > 0 || imports > 0) {
       const authority = graph.authority?.get(filePath) ?? graph.centrality.get(filePath) ?? 0;
       const hubScore = graph.hubScores?.get(filePath) ?? 0;
-      const role = deriveRole(authority, hubScore);
+      const isBarrel = graph.barrelFiles?.has(filePath) ?? false;
+      const role = deriveRole(authority, hubScore, isBarrel);
       files.push({
         path: filePath,
         centrality: authority,
@@ -1215,16 +1324,27 @@ export function findCircularDeps(
   }
 
   // Compute severity and break hints for each cycle
+  // Severity is a weighted average: type-only edges = 0, dynamic edges = 0.5, static runtime = 1.0
   const shortName = (f: string) => f.split("/").pop()?.replace(/\.[^.]+$/, "") ?? f;
   for (const cycle of allCycles) {
-    const edges: Array<{ from: string; to: string; isTypeOnly: boolean }> = [];
+    const edges: Array<{ from: string; to: string; isTypeOnly: boolean; isDynamic: boolean }> = [];
     for (let i = 0; i < cycle.chain.length - 1; i++) {
       const key = `${cycle.chain[i]}->${cycle.chain[i + 1]}`;
       const e = edgeLookup.get(key);
-      edges.push({ from: cycle.chain[i], to: cycle.chain[i + 1], isTypeOnly: !!e?.isTypeOnly });
+      edges.push({ from: cycle.chain[i], to: cycle.chain[i + 1], isTypeOnly: !!e?.isTypeOnly, isDynamic: !!e?.isDynamic });
     }
     const runtimeEdges = edges.filter((e) => !e.isTypeOnly);
-    cycle.severity = edges.length > 0 ? runtimeEdges.length / edges.length : 0;
+    if (edges.length > 0) {
+      let weightSum = 0;
+      for (const e of edges) {
+        if (e.isTypeOnly) weightSum += 0;
+        else if (e.isDynamic) weightSum += 0.5;
+        else weightSum += 1.0;
+      }
+      cycle.severity = weightSum / edges.length;
+    } else {
+      cycle.severity = 0;
+    }
 
     // Break hint: suggest converting the smallest runtime edge to type-only
     if (runtimeEdges.length === 1) {
@@ -1405,14 +1525,27 @@ const LAYER_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
 /**
  * Classify files into architectural layers and determine their dependency ordering.
  * Returns both the layers and directed edges between them.
+ *
+ * When customLayers is provided, those patterns are matched first (before the
+ * hardcoded LAYER_PATTERNS). Each entry's `pattern` string is compiled to a RegExp.
  */
-export function detectArchitecturalLayers(graph: ImportGraph): { layers: ArchitecturalLayer[]; layerEdges: LayerEdge[] } {
+export function detectArchitecturalLayers(
+  graph: ImportGraph,
+  customLayers?: Array<{ name: string; pattern: string }>,
+): { layers: ArchitecturalLayer[]; layerEdges: LayerEdge[] } {
+  // Build the effective pattern list: user patterns first, then built-in defaults
+  const userPatterns: Array<{ name: string; pattern: RegExp }> = (customLayers ?? []).map((l) => ({
+    name: l.name,
+    pattern: new RegExp(l.pattern),
+  }));
+  const effectivePatterns = [...userPatterns, ...LAYER_PATTERNS];
+
   // Classify each internal file into a layer
   const layerFiles = new Map<string, string[]>();
   const fileToLayer = new Map<string, string>();
 
   for (const [filePath] of graph.centrality) {
-    for (const { name, pattern } of LAYER_PATTERNS) {
+    for (const { name, pattern } of effectivePatterns) {
       if (pattern.test(filePath)) {
         const files = layerFiles.get(name) ?? [];
         files.push(filePath);
