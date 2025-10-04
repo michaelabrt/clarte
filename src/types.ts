@@ -240,6 +240,8 @@ export interface ImportEdge {
   isTypeOnly?: boolean;
   /** Whether this is a dynamic import (import('...')) */
   isDynamic?: boolean;
+  /** Whether this edge crosses monorepo package boundaries */
+  crossPackage?: boolean;
 }
 
 /** Full import graph for a project */
@@ -515,6 +517,14 @@ export interface CrossPackageEdge {
   isEncapsulationViolation: boolean;
 }
 
+/** Top hub file within a package, derived from per-package HITS */
+export interface PackageHubFile {
+  /** Relative file path */
+  path: string;
+  /** HITS authority score within the package subgraph */
+  authority: number;
+}
+
 /** Monorepo-specific analysis results */
 export interface MonorepoAnalysis {
   /** Import edges crossing package boundaries */
@@ -523,6 +533,8 @@ export interface MonorepoAnalysis {
   encapsulationViolations: CrossPackageEdge[];
   /** Dependencies between packages (package name -> set of dependent package names) */
   packageDependencies: Map<string, Set<string>>;
+  /** Top hub files per package (package name -> top files by authority) */
+  packageHubFiles?: Map<string, PackageHubFile[]>;
 }
 
 /** Bundle of all structural analysis results */

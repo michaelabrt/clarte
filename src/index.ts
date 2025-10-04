@@ -38,13 +38,13 @@ import {
   findTightCouplings,
 } from "./graph.js";
 import { analyzeGitActivity } from "./git-analysis.js";
-import { analyzeMonorepoGraph } from "./monorepo-analysis.js";
+import { analyzeMonorepoGraph, computePackageCentrality } from "./monorepo-analysis.js";
 import { scanConfigConstraints } from "./config-scan.js";
 import { inferConventions } from "./conventions.js";
 import { buildTestMapping } from "./test-map.js";
 import { formatBytes } from "./utils.js";
 import { startShimmer } from "./animations.js";
-import type { ContextAnalysis, ProgressCallback } from "./types.js";
+import type { ContextAnalysis, PackageHubFile, ProgressCallback } from "./types.js";
 import { serializeAnalysis } from "./serialize.js";
 import { buildDirectives } from "./templates/directives.js";
 import {
@@ -629,6 +629,22 @@ async function main() {
   const monorepoAnalysis = detected.monorepo
     ? await analyzeMonorepoGraph(rootDir, graph, detected.monorepo)
     : undefined;
+  if (monorepoAnalysis && detected.monorepo) {
+    // Compute per-package hub files (top 3 by authority)
+    const packageHubFiles = new Map<string, PackageHubFile[]>();
+    for (const pkg of detected.monorepo.packages) {
+      const { authority } = computePackageCentrality(graph, pkg.path);
+      const topFiles = [...authority.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .filter(([, score]) => score > 0)
+        .map(([filePath, score]) => ({ path: filePath, authority: score }));
+      if (topFiles.length > 0) {
+        packageHubFiles.set(pkg.name, topFiles);
+      }
+    }
+    monorepoAnalysis.packageHubFiles = packageHubFiles;
+  }
   if (!jsonMode && monorepoAnalysis) {
     const edgeCount = monorepoAnalysis.crossPackageEdges.length;
     const violationCount = monorepoAnalysis.encapsulationViolations.length;

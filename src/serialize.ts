@@ -75,6 +75,7 @@ export interface ClarteJsonOutput {
         isEncapsulationViolation: boolean;
       }>;
       packageDependencies: Record<string, string[]>;
+      packageHubFiles?: Record<string, Array<{ path: string; authority: number }>>;
     };
   };
   snapshot: {
@@ -178,6 +179,9 @@ export function serializeAnalysis(
                 ),
               ),
             ),
+            packageHubFiles: analysis.monorepoAnalysis.packageHubFiles
+              ? mapToRecord(analysis.monorepoAnalysis.packageHubFiles)
+              : undefined,
           }
         : undefined,
     },

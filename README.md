@@ -601,6 +601,8 @@ Clarté detects monorepo tooling and can generate per-package context files:
 
 When detected, you'll be asked if you want per-package files. Each package gets its own scoped context with that package's dependencies, frameworks, and code snapshot.
 
+Cross-package import analysis detects encapsulation violations (imports that bypass a package's public API) and computes per-package centrality to identify key files within each package.
+
 ## Living Documents
 
 Generated files include maintenance directives telling your AI agent to keep them up to date. The code snapshot section uses HTML comment markers (`<!-- CODE SNAPSHOT -->`) so it's clear what to refresh after refactors. Custom sections wrapped in `<!-- clarte:user-start -->` / `<!-- clarte:user-end -->` markers are preserved across regenerations.

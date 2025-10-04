@@ -2,14 +2,16 @@ import path from "node:path";
 import { loadConfig, configToAnswers } from "./config.js";
 import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import { buildImportGraph, getHubFiles, findCircularDeps, detectArchitecturalLayers, computeInstability, detectCommunities, findDeadFiles, findCrossCuttingFiles, computeLayerConsistency, findChokepoints, computeGraphTopology, findStructuralTemporalMismatches, findTightCouplings } from "./graph.js";
+import { buildGraphWithCache } from "./cache.js";
 import { analyzeGitActivity } from "./git-analysis.js";
+import { analyzeMonorepoGraph, computePackageCentrality } from "./monorepo-analysis.js";
 import { scanConfigConstraints } from "./config-scan.js";
 import { inferConventions } from "./conventions.js";
 import { buildTestMapping } from "./test-map.js";
 import { generateSnapshot } from "./snapshot.js";
 import { buildSections, applyBudget } from "./templates/main-context.js";
 import { readFileOr } from "./utils.js";
-import type { ContextAnalysis, ProgressCallback } from "./types.js";
+import type { ContextAnalysis, PackageHubFile, ProgressCallback } from "./types.js";
 
 const DEFAULT_BRIEF_BUDGET = 3000;
 
@@ -42,7 +44,7 @@ export async function runBriefMode(
   const detected = await detectContext(rootDir, noopProgress);
 
   // 4. Build import graph
-  const graph = await buildImportGraph(rootDir, detected.language, noopProgress);
+  const graph = await buildGraphWithCache(rootDir, detected.language, noopProgress);
 
   // Merge secondary language graphs
   if (detected.secondaryLanguages) {
@@ -76,7 +78,7 @@ export async function runBriefMode(
   // 5. Run full analysis pipeline
   const hubFiles = getHubFiles(graph);
   const circularDeps = findCircularDeps(graph);
-  const { layers, layerEdges } = detectArchitecturalLayers(graph);
+  const { layers, layerEdges } = detectArchitecturalLayers(graph, answers.layers);
   const instabilities = computeInstability(graph);
   const communities = detectCommunities(graph);
   const gitActivity = detected.isGitRepo ? analyzeGitActivity(rootDir, noopProgress) : null;
@@ -94,6 +96,26 @@ export async function runBriefMode(
     ? findStructuralTemporalMismatches(graph, gitActivity.changeCoupling)
     : undefined;
   const tightCouplings = findTightCouplings(graph);
+
+  // Monorepo graph analysis
+  const monorepoAnalysis = detected.monorepo
+    ? await analyzeMonorepoGraph(rootDir, graph, detected.monorepo)
+    : undefined;
+  if (monorepoAnalysis && detected.monorepo) {
+    const packageHubFiles = new Map<string, PackageHubFile[]>();
+    for (const pkg of detected.monorepo.packages) {
+      const { authority } = computePackageCentrality(graph, pkg.path);
+      const topFiles = [...authority.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .filter(([, score]) => score > 0)
+        .map(([filePath, score]) => ({ path: filePath, authority: score }));
+      if (topFiles.length > 0) {
+        packageHubFiles.set(pkg.name, topFiles);
+      }
+    }
+    monorepoAnalysis.packageHubFiles = packageHubFiles;
+  }
 
   const analysis: ContextAnalysis = {
     hubFiles,
@@ -113,6 +135,7 @@ export async function runBriefMode(
     graphTopology,
     structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined,
     tightCouplings: tightCouplings.length ? tightCouplings : undefined,
+    monorepoAnalysis,
   };
 
   // 6. Generate snapshot if configured
