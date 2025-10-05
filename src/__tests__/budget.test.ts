@@ -107,8 +107,21 @@ describe("buildSections", () => {
     expect(techStack!.priority).toBe(1);
   });
 
-  it("includes working-guidelines at priority 2 when analysis has directives", async () => {
+  it("includes working-guidelines at priority 1 when single IDE is claude", async () => {
     const sections = await buildSections(mockCtx(), mockAnswers(), null, mockAnalysis());
+    const guidelines = sections.find((s) => s.id === "working-guidelines");
+    expect(guidelines).toBeDefined();
+    // Claude single-IDE boost: working-guidelines is boosted from 2 to 1
+    expect(guidelines!.priority).toBe(1);
+  });
+
+  it("includes working-guidelines at default priority 2 when multiple IDEs", async () => {
+    const sections = await buildSections(
+      mockCtx(),
+      mockAnswers({ ides: ["claude", "cursor"] }),
+      null,
+      mockAnalysis(),
+    );
     const guidelines = sections.find((s) => s.id === "working-guidelines");
     expect(guidelines).toBeDefined();
     expect(guidelines!.priority).toBe(2);
