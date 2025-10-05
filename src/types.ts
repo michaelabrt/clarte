@@ -19,6 +19,18 @@ export interface ConfigConstraints {
     quotes: string;
     semicolons: boolean;
   };
+  go?: {
+    version: string;
+  };
+  rust?: {
+    edition: string;
+    clippy?: string[];
+  };
+  python?: {
+    version?: string;
+    ruff?: string[];
+    mypy?: { strict: boolean };
+  };
 }
 
 /** Supported AI IDE/tool targets */
@@ -186,6 +198,8 @@ export interface ProjectConfig {
   colorScheme?: "dark" | "light";
   /** Custom architectural layer patterns (name + regex string) */
   layers?: Array<{ name: string; pattern: string }>;
+  /** Number of days to analyze in git history (default: 90) */
+  analysisDays?: number;
 }
 
 /** A generated file ready to be written */
@@ -260,6 +274,8 @@ export interface ImportGraph {
   hubScores: Map<string, number>;
   /** Files detected as barrel/index files (>50% re-export statements) */
   barrelFiles?: Set<string>;
+  /** Approximate betweenness centrality scores (0-1) from sampled Brandes */
+  betweennessScores?: Map<string, number>;
 }
 
 /** A highly-connected file identified by HITS analysis */
@@ -342,6 +358,16 @@ export interface ArchitecturalLayer {
   dependsOn: string[];
 }
 
+/** Lag-adjusted temporal coupling (files that change within 1-3 commits of each other) */
+export interface LagCoupling {
+  fileA: string;
+  fileB: string;
+  /** Number of same-commit co-changes */
+  sameCommitCount: number;
+  /** Weighted lag coupling score (inverse-lag weighted) */
+  lagScore: number;
+}
+
 /** Git activity analysis results */
 export interface GitAnalysis {
   /** Map of relative file path -> commit count in analysis window */
@@ -354,6 +380,10 @@ export interface GitAnalysis {
   }>;
   /** Co-change coupling pairs (files that change together) */
   changeCoupling: ChangeCoupling[];
+  /** Lag-adjusted temporal coupling pairs (reactive co-change within 1-3 commits) */
+  lagCouplings?: LagCoupling[];
+  /** Per-file code churn (lines added/removed) in the analysis window */
+  fileChurn?: Map<string, { linesAdded: number; linesRemoved: number }>;
 }
 
 /** A Claude Code skill definition */
@@ -428,6 +458,13 @@ export interface InferredConventions {
     barrelFileCount: number;
   };
   importOrdering?: string;
+  /** Per-directory convention overrides when a directory differs from global conventions */
+  directoryOverrides?: Array<{
+    directory: string;
+    naming: { functions?: string; types?: string; constants?: string; files?: string };
+  }>;
+  /** Detected function name prefix patterns (e.g., use*, is*, get*) */
+  namingPrefixes?: Array<{ prefix: string; count: number; example: string }>;
 }
 
 /** Transitive dependency risk score for a file */
@@ -480,6 +517,9 @@ export interface GraphTopology {
   isFragmented: boolean;
 }
 
+/** Classification of test file type */
+export type TestType = "unit" | "integration" | "e2e";
+
 /** Test-to-source file mapping */
 export interface TestMapping {
   sourceToTests: Map<string, string[]>;
@@ -489,6 +529,8 @@ export interface TestMapping {
     convention: string;
     filePattern: string;
   };
+  /** Classification of each test file by type (unit, integration, e2e) */
+  testTypes?: Map<string, TestType>;
 }
 
 /** A rendered section of the context file with priority and token estimate */
@@ -537,6 +579,20 @@ export interface MonorepoAnalysis {
   packageHubFiles?: Map<string, PackageHubFile[]>;
 }
 
+/** An architectural fitness violation */
+export interface ArchViolation {
+  /** File that violates the rule */
+  from: string;
+  /** File being imported in violation */
+  to: string;
+  /** Rule identifier (e.g. "no-upward-dep", "test-isolation", "layer-skip") */
+  rule: string;
+  /** Human-readable message describing the violation */
+  message: string;
+  /** Severity level */
+  severity: "error" | "warning";
+}
+
 /** Bundle of all structural analysis results */
 export interface ContextAnalysis {
   hubFiles: HubFile[];
@@ -571,4 +627,8 @@ export interface ContextAnalysis {
   tightCouplings?: TightCoupling[];
   /** Monorepo-specific analysis (cross-package edges, encapsulation violations) */
   monorepoAnalysis?: MonorepoAnalysis;
+  /** Change impact predictions for hub files (file -> top affected files with RRF scores) */
+  changeImpact?: Map<string, Array<{ file: string; score: number }>>;
+  /** Architectural fitness violations */
+  archViolations?: ArchViolation[];
 }

@@ -42,6 +42,94 @@ function makeLayers(defs: Array<{ name: string; files: string[] }>): Architectur
   }));
 }
 
+// ── §1.12 User-Configurable Layer Patterns ─────────────────────────────
+
+describe("detectArchitecturalLayers with custom patterns", () => {
+  it("uses custom patterns to classify files", () => {
+    const files = ["src/domain/user.ts", "src/infra/db.ts", "src/app/handler.ts"];
+    const graph = makeGraph(files, [
+      edge("src/app/handler.ts", "src/domain/user.ts"),
+      edge("src/infra/db.ts", "src/domain/user.ts"),
+    ]);
+
+    const customLayers = [
+      { name: "domain", pattern: "(?:^|/)domain/" },
+      { name: "infra", pattern: "(?:^|/)infra/" },
+      { name: "app", pattern: "(?:^|/)app/" },
+    ];
+
+    const { layers } = detectArchitecturalLayers(graph, customLayers);
+    const names = layers.map((l) => l.name);
+    expect(names).toContain("domain");
+    expect(names).toContain("infra");
+    expect(names).toContain("app");
+
+    const domain = layers.find((l) => l.name === "domain")!;
+    expect(domain.files).toEqual(["src/domain/user.ts"]);
+    expect(domain.importedByLayers).toBe(2); // app and infra import domain
+  });
+
+  it("custom patterns take priority over built-in patterns", () => {
+    // "app" matches built-in "pages" pattern, but custom "application" should win
+    const files = ["src/app/index.ts", "src/types/model.ts"];
+    const graph = makeGraph(files, [
+      edge("src/app/index.ts", "src/types/model.ts"),
+    ]);
+
+    const customLayers = [
+      { name: "application", pattern: "(?:^|/)app/" },
+    ];
+
+    const { layers } = detectArchitecturalLayers(graph, customLayers);
+    const names = layers.map((l) => l.name);
+    expect(names).toContain("application");
+    // The built-in "pages" pattern also matches app/, but custom should win
+    expect(names).not.toContain("pages");
+    // Built-in "types" pattern still works for non-overridden paths
+    expect(names).toContain("types");
+  });
+
+  it("falls back to built-in patterns when no custom layers provided", () => {
+    const files = ["src/types/model.ts", "src/components/Button.tsx"];
+    const graph = makeGraph(files, [
+      edge("src/components/Button.tsx", "src/types/model.ts"),
+    ]);
+
+    const { layers } = detectArchitecturalLayers(graph);
+    const names = layers.map((l) => l.name);
+    expect(names).toContain("types");
+    expect(names).toContain("components");
+  });
+
+  it("computes layer edges correctly with custom patterns", () => {
+    const files = ["src/domain/user.ts", "src/infra/db.ts"];
+    const graph = makeGraph(files, [
+      edge("src/infra/db.ts", "src/domain/user.ts"),
+    ]);
+
+    const customLayers = [
+      { name: "domain", pattern: "(?:^|/)domain/" },
+      { name: "infra", pattern: "(?:^|/)infra/" },
+    ];
+
+    const { layerEdges } = detectArchitecturalLayers(graph, customLayers);
+    expect(layerEdges).toHaveLength(1);
+    expect(layerEdges[0]).toEqual({ from: "infra", to: "domain" });
+  });
+
+  it("custom patterns with empty array behave like no custom layers", () => {
+    const files = ["src/hooks/useAuth.ts", "src/types/model.ts"];
+    const graph = makeGraph(files, [
+      edge("src/hooks/useAuth.ts", "src/types/model.ts"),
+    ]);
+
+    const { layers } = detectArchitecturalLayers(graph, []);
+    const names = layers.map((l) => l.name);
+    expect(names).toContain("hooks");
+    expect(names).toContain("types");
+  });
+});
+
 // ── §1.7 Cross-Layer Fan-In Analysis ──────────────────────────────────
 
 describe("findCrossCuttingFiles", () => {

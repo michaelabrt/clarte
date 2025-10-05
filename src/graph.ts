@@ -3,6 +3,7 @@ import { glob } from "tinyglobby";
 import { readFileOr, readJsonFile } from "./utils.js";
 import type {
   ArchitecturalLayer,
+  ArchViolation,
   Chokepoint,
   CircularDependency,
   Community,
@@ -261,6 +262,11 @@ function stripPythonComments(content: string): string {
 
 // ── File extensions to try when resolving relative imports ────────────
 
+/**
+ * Resolution priority: .ts > .tsx > .js > .jsx > .mjs
+ * When both foo.ts and foo.tsx exist, .ts wins deterministically
+ * because it appears first in this array and we return on first match.
+ */
 const JS_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs"];
 const INDEX_FILES = JS_EXTENSIONS.map((e) => `/index${e}`);
 
@@ -921,7 +927,11 @@ export function computeHITS(
 
 /**
  * Derive a functional role from HITS authority and hub scores.
- * If isBarrel is true, the file always gets the "Barrel" role.
+ * If isBarrel is true, the file always gets the "Barrel" role (checked before thresholds).
+ *
+ * Thresholds (0.6, 0.3, 0.4) are empirically tuned for typical project distributions
+ * after min-max normalization of HITS scores. Boundary instability is expected in
+ * small graphs (<10 files) where score ranges compress.
  */
 export function deriveRole(authority: number, hubScore: number, isBarrel = false): FileRole {
   if (isBarrel) return "Barrel";
@@ -1147,8 +1157,14 @@ export async function buildImportGraph(
   onProgress?.("Computing centrality (HITS)...");
   const { authority, hub: hubScores } = computeHITS(files, edges, 30, 1e-6, detectedBarrels);
 
+  onProgress?.("Computing betweenness centrality...");
+  const graphForBetweenness: ImportGraph = {
+    edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles: detectedBarrels,
+  };
+  const betweennessScores = computeBetweenness(graphForBetweenness);
+
   // Use authority as centrality for backward compat (snapshot.ts etc.)
-  return { edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles: detectedBarrels };
+  return { edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles: detectedBarrels, betweennessScores };
 }
 
 /**
@@ -2572,4 +2588,324 @@ export function findTightCouplings(
   // Sort by number of imported names descending
   results.sort((a, b) => b.importedNames - a.importedNames);
   return results.slice(0, topN);
+}
+
+// ── Approximate Betweenness Centrality (sampled Brandes) ──────────────
+
+/**
+ * Compute a simple deterministic hash from a string.
+ * Used to seed the random sampler for reproducible betweenness results.
+ */
+function simpleHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return h >>> 0; // unsigned
+}
+
+/**
+ * Simple seeded PRNG (xorshift32). Returns values in [0, 1).
+ */
+function seededRandom(seed: number): () => number {
+  let state = seed || 1;
+  return () => {
+    state ^= state << 13;
+    state ^= state >> 17;
+    state ^= state << 5;
+    return (state >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Compute approximate betweenness centrality using sampled Brandes algorithm.
+ *
+ * Full Brandes is O(V*E); this samples min(k, V) source nodes for O(k*E).
+ * Uses BFS on an undirected view of the import graph, tracking predecessors,
+ * path counts (sigma), and dependency scores (delta).
+ *
+ * Results are normalized to 0-1 range (divided by max score).
+ * Uses a seeded random for deterministic results across runs.
+ */
+export function computeBetweenness(
+  graph: ImportGraph,
+  k = 50,
+): Map<string, number> {
+  // Build undirected adjacency from internal edges
+  const adj = new Map<string, Set<string>>();
+  const allFiles = new Set<string>();
+
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    allFiles.add(edge.from);
+    allFiles.add(edge.to);
+
+    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
+    if (!adj.has(edge.to)) adj.set(edge.to, new Set());
+    adj.get(edge.from)!.add(edge.to);
+    adj.get(edge.to)!.add(edge.from);
+  }
+
+  const files = [...allFiles].sort();
+  const n = files.length;
+  if (n === 0) return new Map();
+
+  // Initialize betweenness scores
+  const betweenness = new Map<string, number>();
+  for (const f of files) betweenness.set(f, 0);
+
+  // Seed from sorted file list hash for determinism
+  const seedStr = files.join(",");
+  const rng = seededRandom(simpleHash(seedStr));
+
+  // Sample min(k, n) source nodes
+  const sampleSize = Math.min(k, n);
+  let sources: string[];
+
+  if (sampleSize >= n) {
+    sources = files;
+  } else {
+    // Fisher-Yates partial shuffle to pick sampleSize elements
+    const shuffled = [...files];
+    for (let i = 0; i < sampleSize; i++) {
+      const j = i + Math.floor(rng() * (n - i));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    sources = shuffled.slice(0, sampleSize);
+  }
+
+  // Brandes single-source BFS for each sampled source
+  for (const s of sources) {
+    // BFS from source s
+    const stack: string[] = [];
+    const pred = new Map<string, string[]>();
+    const sigma = new Map<string, number>();
+    const dist = new Map<string, number>();
+    const delta = new Map<string, number>();
+
+    for (const f of files) {
+      pred.set(f, []);
+      sigma.set(f, 0);
+      dist.set(f, -1);
+      delta.set(f, 0);
+    }
+
+    sigma.set(s, 1);
+    dist.set(s, 0);
+    const queue: string[] = [s];
+    let qHead = 0;
+
+    while (qHead < queue.length) {
+      const v = queue[qHead++];
+      stack.push(v);
+
+      const dv = dist.get(v)!;
+      for (const w of adj.get(v) ?? []) {
+        // w found for the first time?
+        if (dist.get(w)! < 0) {
+          dist.set(w, dv + 1);
+          queue.push(w);
+        }
+        // Shortest path to w via v?
+        if (dist.get(w) === dv + 1) {
+          sigma.set(w, sigma.get(w)! + sigma.get(v)!);
+          pred.get(w)!.push(v);
+        }
+      }
+    }
+
+    // Accumulate dependencies (back-propagation)
+    while (stack.length > 0) {
+      const w = stack.pop()!;
+      for (const v of pred.get(w)!) {
+        const contribution = (sigma.get(v)! / sigma.get(w)!) * (1 + delta.get(w)!);
+        delta.set(v, delta.get(v)! + contribution);
+      }
+      if (w !== s) {
+        betweenness.set(w, betweenness.get(w)! + delta.get(w)!);
+      }
+    }
+  }
+
+  // Normalize to 0-1 range (divide by max score)
+  let maxScore = 0;
+  for (const score of betweenness.values()) {
+    if (score > maxScore) maxScore = score;
+  }
+
+  if (maxScore > 0) {
+    for (const [file, score] of betweenness) {
+      betweenness.set(file, score / maxScore);
+    }
+  }
+
+  return betweenness;
+}
+
+// ── Architectural Fitness Functions ───────────────────────────────────
+
+/**
+ * Derive a topological ordering of layers from layer dependency edges.
+ * Returns a map of layer name to its depth (0 = lowest/most foundational).
+ * Uses Kahn's algorithm; layers in cycles get the same depth.
+ */
+function computeLayerOrdering(
+  layers: ArchitecturalLayer[],
+  layerEdges: LayerEdge[],
+): Map<string, number> {
+  const layerNames = new Set(layers.map((l) => l.name));
+  const inDegree = new Map<string, number>();
+  const adj = new Map<string, string[]>();
+
+  for (const name of layerNames) {
+    inDegree.set(name, 0);
+    adj.set(name, []);
+  }
+
+  // layerEdges: {from: "components", to: "types"} means components depends on types.
+  // For topological ordering: types is more foundational (lower).
+  // Build graph: to -> from (foundational -> consumer) for topo sort.
+  for (const e of layerEdges) {
+    if (!layerNames.has(e.from) || !layerNames.has(e.to)) continue;
+    adj.get(e.to)!.push(e.from);
+    inDegree.set(e.from, (inDegree.get(e.from) ?? 0) + 1);
+  }
+
+  // Kahn's algorithm
+  const queue: string[] = [];
+  for (const [name, deg] of inDegree) {
+    if (deg === 0) queue.push(name);
+  }
+
+  const ordering = new Map<string, number>();
+  let depth = 0;
+
+  while (queue.length > 0) {
+    const nextQueue: string[] = [];
+    for (const node of queue) {
+      ordering.set(node, depth);
+      for (const neighbor of adj.get(node) ?? []) {
+        const newDeg = (inDegree.get(neighbor) ?? 1) - 1;
+        inDegree.set(neighbor, newDeg);
+        if (newDeg === 0) {
+          nextQueue.push(neighbor);
+        }
+      }
+    }
+    queue.length = 0;
+    queue.push(...nextQueue);
+    depth++;
+  }
+
+  // Assign remaining (cycle members) to the max depth
+  for (const name of layerNames) {
+    if (!ordering.has(name)) {
+      ordering.set(name, depth);
+    }
+  }
+
+  return ordering;
+}
+
+/**
+ * Check architectural fitness rules against the import graph.
+ *
+ * Rules:
+ * 1. No upward dependencies: lower layers should not import higher layers
+ * 2. Test isolation: test files should not import other test files
+ *    (except fixtures/test-utils)
+ * 3. Layer skip detection: imports skipping 2+ intermediate layers
+ *
+ * Returns at most 20 violations to avoid noise.
+ */
+export function checkArchitecturalFitness(
+  graph: ImportGraph,
+  layers: ArchitecturalLayer[],
+  layerEdges: LayerEdge[],
+): ArchViolation[] {
+  const violations: ArchViolation[] = [];
+  const MAX_VIOLATIONS = 20;
+
+  // Build file-to-layer mapping
+  const fileToLayer = new Map<string, string>();
+  for (const layer of layers) {
+    for (const file of layer.files) {
+      fileToLayer.set(file, layer.name);
+    }
+  }
+
+  // Compute layer ordering (depth: 0 = most foundational)
+  const hasLayers = layers.length >= 2;
+  const layerOrder = hasLayers ? computeLayerOrdering(layers, layerEdges) : new Map<string, number>();
+
+  // Test file patterns
+  const testFilePattern = /(?:\.test\.|\.spec\.|__tests__\/|tests?\/)/;
+  const testUtilPattern = /(?:__fixtures__|test[-_]?utils?|test[-_]?helpers?|test[-_]?setup|fixtures)/;
+
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    if (violations.length >= MAX_VIOLATIONS) break;
+
+    // Rule 1 and 3 only apply when we have 2+ layers
+    if (hasLayers) {
+      const fromLayer = fileToLayer.get(edge.from);
+      const toLayer = fileToLayer.get(edge.to);
+
+      if (fromLayer && toLayer && fromLayer !== toLayer) {
+        const fromDepth = layerOrder.get(fromLayer) ?? 0;
+        const toDepth = layerOrder.get(toLayer) ?? 0;
+
+        // Rule 1: No upward dependencies
+        // If fromLayer is lower (more foundational) than toLayer, it's an upward dep
+        if (fromDepth < toDepth) {
+          violations.push({
+            from: edge.from,
+            to: edge.to,
+            rule: "no-upward-dep",
+            message: `\`${edge.from}\` (${fromLayer} layer) should not import from \`${edge.to}\` (${toLayer} layer). Extract shared logic to a lower layer.`,
+            severity: "warning",
+          });
+          if (violations.length >= MAX_VIOLATIONS) break;
+        }
+
+        // Rule 3: Layer skip detection
+        const skipDistance = Math.abs(toDepth - fromDepth);
+        if (skipDistance >= 2) {
+          // Only flag when going from higher to lower (normal direction but skipping)
+          // i.e., fromDepth > toDepth means consumer importing foundational, but skipping
+          if (fromDepth > toDepth) {
+            violations.push({
+              from: edge.from,
+              to: edge.to,
+              rule: "layer-skip",
+              message: `\`${edge.from}\` imports directly from \`${edge.to}\`, skipping ${skipDistance - 1} intermediate layer${skipDistance - 1 === 1 ? "" : "s"}. Consider adding an abstraction in an intermediate layer.`,
+              severity: "warning",
+            });
+            if (violations.length >= MAX_VIOLATIONS) break;
+          }
+        }
+      }
+    }
+
+    // Rule 2: Test isolation (works regardless of layer count)
+    const fromIsTest = testFilePattern.test(edge.from);
+    const toIsTest = testFilePattern.test(edge.to);
+
+    if (fromIsTest && toIsTest) {
+      // Allow imports from fixtures/test-utils
+      const toIsUtility = testUtilPattern.test(edge.to);
+      if (!toIsUtility) {
+        violations.push({
+          from: edge.from,
+          to: edge.to,
+          rule: "test-isolation",
+          message: `\`${edge.from}\` imports another test file \`${edge.to}\`. Extract shared setup to a test utility.`,
+          severity: "warning",
+        });
+        if (violations.length >= MAX_VIOLATIONS) break;
+      }
+    }
+  }
+
+  return violations.slice(0, MAX_VIOLATIONS);
 }
