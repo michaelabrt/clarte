@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { ContextAnalysis, DetectedContext, HubFile } from "../types.js";
+import type { ContextAnalysis, DetectedContext, HubFile, ImportGraph } from "../types.js";
 
 /** Lightweight complexity metrics for a source file */
 export interface FileComplexityInfo {
@@ -57,15 +57,19 @@ export async function computeFileComplexity(
 
 /**
  * Generate actionable, analysis-derived directives for AI agent workflows.
- * Returns imperative one-liners across 9 categories (max ~20 total).
+ * Returns imperative one-liners across multiple categories (max ~20 total).
  *
  * The optional fileComplexity parameter provides pre-computed complexity data
  * for hub files. When omitted, complexity warning directives are skipped.
+ *
+ * The optional graph parameter provides the import graph with betweenness
+ * scores for flow bottleneck detection.
  */
 export function buildDirectives(
   analysis: ContextAnalysis,
   ctx: DetectedContext,
   fileComplexity?: FileComplexityInfo[],
+  graph?: ImportGraph,
 ): string[] {
   const directives: string[] = [];
 
@@ -280,6 +284,106 @@ export function buildDirectives(
     }
   }
 
+  // 12. Lag coupling hints (reactive co-change within 1-3 commits, max 3)
+  if (analysis.gitActivity?.lagCouplings) {
+    for (const lc of analysis.gitActivity.lagCouplings.slice(0, 3)) {
+      directives.push(
+        `When you modify \`${lc.fileA}\`, you'll likely need to also update \`${lc.fileB}\` within the next 1-2 commits (lagged co-change pattern).`,
+      );
+    }
+  }
+
+  // 13. Change impact predictions (one per hub file with predictions, max 5)
+  if (analysis.changeImpact) {
+    let impactCount = 0;
+    for (const [hubFile, predictions] of analysis.changeImpact) {
+      if (impactCount >= 5) break;
+      if (predictions.length === 0) continue;
+      const targets = predictions.slice(0, 4).map((p) => `\`${p.file}\``).join(", ");
+      directives.push(
+        `When modifying \`${hubFile}\`, also check: ${targets}.`,
+      );
+      impactCount++;
+    }
+  }
+
+  // 14. Flow bottleneck directives (high betweenness, NOT articulation points, max 3)
+  if (graph?.betweennessScores) {
+    const chokepointFiles = new Set(
+      (analysis.chokepoints ?? []).map((cp) => cp.file),
+    );
+    const bottlenecks = [...graph.betweennessScores.entries()]
+      .filter(([file, score]) => score > 0.5 && !chokepointFiles.has(file))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    for (const [file] of bottlenecks) {
+      directives.push(
+        `\`${file}\` is a flow bottleneck (many import paths pass through it). Consider splitting if it grows further.`,
+      );
+    }
+  }
+
+  // 15. Architectural fitness violations (grouped by rule, max 5)
+  if (analysis.archViolations && analysis.archViolations.length > 0) {
+    const byRule = new Map<string, typeof analysis.archViolations>();
+    for (const v of analysis.archViolations) {
+      const list = byRule.get(v.rule) ?? [];
+      list.push(v);
+      byRule.set(v.rule, list);
+    }
+
+    let fitnessCount = 0;
+
+    // Test isolation: group summary
+    const testIsolation = byRule.get("test-isolation");
+    if (testIsolation && testIsolation.length > 0 && fitnessCount < 5) {
+      if (testIsolation.length === 1) {
+        directives.push(testIsolation[0].message);
+      } else {
+        directives.push(
+          `${testIsolation.length} test files import other test files directly. Extract shared setup to test-utils/ to maintain test isolation.`,
+        );
+      }
+      fitnessCount++;
+    }
+
+    // Layer skip: emit specific file directives (max 2)
+    const layerSkips = byRule.get("layer-skip");
+    if (layerSkips && layerSkips.length > 0) {
+      for (const v of layerSkips.slice(0, 2)) {
+        if (fitnessCount >= 5) break;
+        directives.push(v.message);
+        fitnessCount++;
+      }
+    }
+
+    // Upward dependencies: group summary
+    const upwardDeps = byRule.get("no-upward-dep");
+    if (upwardDeps && upwardDeps.length > 0 && fitnessCount < 5) {
+      if (upwardDeps.length === 1) {
+        directives.push(upwardDeps[0].message);
+      } else {
+        // Group by (fromLayer, toLayer) pair and show worst
+        const pairCounts = new Map<string, number>();
+        for (const v of upwardDeps) {
+          const fromLayer = v.message.match(/\((\w+) layer\)/)?.[1] ?? "";
+          const toLayer = v.message.match(/\((\w+) layer\).*$/)?.[1] ?? "";
+          const key = `${fromLayer} -> ${toLayer}`;
+          pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+        }
+        const topPair = [...pairCounts.entries()]
+          .sort((a, b) => b[1] - a[1])[0];
+        if (topPair) {
+          directives.push(
+            `${upwardDeps.length} upward dependency violation${upwardDeps.length === 1 ? "" : "s"} detected. Most common: ${topPair[0]} (${topPair[1]} occurrence${topPair[1] === 1 ? "" : "s"}). Do not add more upward imports.`,
+          );
+        }
+      }
+      fitnessCount++;
+    }
+  }
+
   return directives;
 }
 
@@ -308,16 +412,19 @@ function buildToolHints(ctx: DetectedContext): string[] {
  * Render a "Working Guidelines" markdown section from analysis-derived directives.
  * Returns null if no directives are generated.
  * Async because it computes file complexity for hub files.
+ *
+ * The optional graph parameter enables flow bottleneck detection via betweenness scores.
  */
 export async function renderDirectivesSection(
   analysis: ContextAnalysis,
   ctx: DetectedContext,
+  graph?: ImportGraph,
 ): Promise<string | null> {
   const fileComplexity = analysis.hubFiles.length > 0
     ? await computeFileComplexity(ctx.rootDir, analysis.hubFiles)
     : undefined;
 
-  const directives = buildDirectives(analysis, ctx, fileComplexity);
+  const directives = buildDirectives(analysis, ctx, fileComplexity, graph);
   if (directives.length === 0) return null;
 
   const lines: string[] = [];

@@ -206,6 +206,39 @@ import { another } from './also-fake';
   });
 });
 
+describe("parseJsImports dynamic imports", () => {
+  it("flags dynamic import() as isDynamic", () => {
+    const result = parseJsImports(`const mod = import('./lazy-module')`);
+    expect(result).toHaveLength(1);
+    expect(result[0].specifier).toBe("./lazy-module");
+    expect(result[0].isDynamic).toBe(true);
+  });
+
+  it("does not flag static imports as isDynamic", () => {
+    const result = parseJsImports(`import { foo } from './utils'`);
+    expect(result).toHaveLength(1);
+    expect(result[0].isDynamic).toBeFalsy();
+  });
+
+  it("handles mix of static and dynamic imports", () => {
+    const result = parseJsImports(`
+import { foo } from './static';
+const lazy = import('./dynamic');
+`);
+    expect(result).toHaveLength(2);
+    const staticImport = result.find((r) => r.specifier === "./static");
+    const dynamicImport = result.find((r) => r.specifier === "./dynamic");
+    expect(staticImport?.isDynamic).toBeFalsy();
+    expect(dynamicImport?.isDynamic).toBe(true);
+  });
+
+  it("flags require() as not dynamic", () => {
+    const result = parseJsImports(`const fs = require('fs')`);
+    expect(result).toHaveLength(1);
+    expect(result[0].isDynamic).toBeFalsy();
+  });
+});
+
 describe("parsePythonImports ignores comments", () => {
   it("ignores imports in comments", () => {
     const result = parsePythonImports(

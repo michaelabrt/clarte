@@ -7,8 +7,10 @@ import {
   deriveRole,
   findStructuralTemporalMismatches,
   findTightCouplings,
+  computeBetweenness,
+  checkArchitecturalFitness,
 } from "../graph.js";
-import type { ImportEdge, ImportGraph } from "../types.js";
+import type { ArchitecturalLayer, ImportEdge, ImportGraph, LayerEdge } from "../types.js";
 
 function makeGraph(files: string[], edges: ImportEdge[]): ImportGraph {
   const inDegree = new Map<string, number>();
@@ -32,8 +34,12 @@ function makeGraph(files: string[], edges: ImportEdge[]): ImportGraph {
   };
 }
 
-function edge(from: string, to: string, names: string[] = [], isTypeOnly = false): ImportEdge {
-  return { from, to, isExternal: false, specifier: `./${to}`, importedNames: names, isTypeOnly };
+function edge(from: string, to: string, names: string[] = [], isTypeOnly = false, isDynamic = false): ImportEdge {
+  return { from, to, isExternal: false, specifier: `./${to}`, importedNames: names, isTypeOnly, isDynamic };
+}
+
+function dynamicEdge(from: string, to: string, names: string[] = []): ImportEdge {
+  return { from, to, isExternal: false, specifier: `./${to}`, importedNames: names, isDynamic: true };
 }
 
 describe("findSCCs", () => {
@@ -462,5 +468,444 @@ describe("findTightCouplings", () => {
   it("returns empty for no edges", () => {
     const graph = makeGraph(["a", "b"], []);
     expect(findTightCouplings(graph)).toHaveLength(0);
+  });
+});
+
+describe("computeHITS with dynamic imports", () => {
+  it("gives lower authority to dynamically-imported files vs statically-imported", () => {
+    const files = ["a", "b", "staticTarget", "dynamicTarget"];
+    const edges = [
+      edge("a", "staticTarget", ["foo", "bar"]),
+      dynamicEdge("b", "dynamicTarget", ["foo", "bar"]),
+    ];
+
+    const { authority } = computeHITS(files, edges);
+
+    // Static target should have higher authority than dynamic target
+    expect(authority.get("staticTarget")!).toBeGreaterThan(authority.get("dynamicTarget")!);
+  });
+
+  it("dynamic edges weigh between type-only and value imports", () => {
+    const files = ["a", "b", "c", "typeTarget", "dynamicTarget", "valueTarget"];
+    const edges = [
+      edge("a", "typeTarget", ["Foo"], true),     // type-only: 0.3x weight
+      dynamicEdge("b", "dynamicTarget", ["Foo"]),  // dynamic: 0.5x weight
+      edge("c", "valueTarget", ["Foo"]),            // value: 1.0x weight
+    ];
+
+    const { authority } = computeHITS(files, edges);
+
+    expect(authority.get("valueTarget")!).toBeGreaterThan(authority.get("dynamicTarget")!);
+    expect(authority.get("dynamicTarget")!).toBeGreaterThan(authority.get("typeTarget")!);
+  });
+});
+
+describe("computeHITS with barrel files", () => {
+  it("gives lower authority to barrel files", () => {
+    const files = ["a", "b", "barrel", "source"];
+    const edges = [
+      edge("a", "barrel", ["foo", "bar"]),
+      edge("b", "barrel", ["baz"]),
+      edge("a", "source", ["foo", "bar"]),
+      edge("b", "source", ["baz"]),
+    ];
+    const barrelFiles = new Set(["barrel"]);
+
+    const { authority } = computeHITS(files, edges, 30, 1e-6, barrelFiles);
+
+    // Source (non-barrel) should have higher authority than barrel
+    expect(authority.get("source")!).toBeGreaterThan(authority.get("barrel")!);
+  });
+
+  it("non-barrel files are not affected by barrel discount", () => {
+    const files = ["a", "b", "target"];
+    const edges = [
+      edge("a", "target", ["foo"]),
+      edge("b", "target", ["bar"]),
+    ];
+    const barrelFiles = new Set<string>(); // empty
+
+    const withoutBarrels = computeHITS(files, edges);
+    const withBarrels = computeHITS(files, edges, 30, 1e-6, barrelFiles);
+
+    // Results should be identical when no barrels are present
+    expect(withBarrels.authority.get("target")).toBe(withoutBarrels.authority.get("target"));
+  });
+});
+
+describe("deriveRole with barrel files", () => {
+  it("returns Barrel when isBarrel is true, regardless of scores", () => {
+    // High authority + low hub normally = Foundation, but barrel overrides
+    expect(deriveRole(0.9, 0.0, true)).toBe("Barrel");
+    expect(deriveRole(0.5, 0.5, true)).toBe("Barrel");
+    expect(deriveRole(0.0, 0.9, true)).toBe("Barrel");
+  });
+
+  it("returns normal roles when isBarrel is false", () => {
+    expect(deriveRole(0.8, 0.1, false)).toBe("Foundation");
+    expect(deriveRole(0.1, 0.8, false)).toBe("Orchestrator");
+  });
+
+  it("returns normal roles when isBarrel is not provided", () => {
+    expect(deriveRole(0.8, 0.1)).toBe("Foundation");
+  });
+});
+
+describe("findCircularDeps with dynamic imports", () => {
+  it("assigns lower severity to dynamic-only cycles", () => {
+    const graph = makeGraph(["a", "b"], [
+      dynamicEdge("a", "b", ["foo"]),
+      dynamicEdge("b", "a", ["bar"]),
+    ]);
+    const deps = findCircularDeps(graph);
+    expect(deps).toHaveLength(1);
+    // Dynamic-only cycle: each edge contributes 0.5, so severity = 0.5
+    expect(deps[0].severity).toBe(0.5);
+  });
+
+  it("assigns severity 1 for static runtime cycles", () => {
+    const graph = makeGraph(["a", "b"], [
+      edge("a", "b", ["foo"]),
+      edge("b", "a", ["bar"]),
+    ]);
+    const deps = findCircularDeps(graph);
+    expect(deps).toHaveLength(1);
+    expect(deps[0].severity).toBe(1);
+  });
+
+  it("assigns mixed severity for static + dynamic cycles", () => {
+    const graph = makeGraph(["a", "b", "c"], [
+      edge("a", "b", ["foo"]),          // static: 1.0
+      dynamicEdge("b", "c", ["bar"]),   // dynamic: 0.5
+      edge("c", "a", ["baz"]),          // static: 1.0
+    ]);
+    const deps = findCircularDeps(graph);
+    const threeCycle = deps.find((d) => d.chain.length === 4);
+    expect(threeCycle).toBeDefined();
+    // (1.0 + 0.5 + 1.0) / 3 = 0.833...
+    expect(threeCycle!.severity).toBeCloseTo(2.5 / 3, 5);
+  });
+
+  it("sorts dynamic-only cycles after static runtime cycles", () => {
+    const graph = makeGraph(["a", "b", "c", "d"], [
+      dynamicEdge("a", "b"),   // dynamic cycle
+      dynamicEdge("b", "a"),
+      edge("c", "d", ["foo"]), // runtime cycle
+      edge("d", "c", ["bar"]),
+    ]);
+    const deps = findCircularDeps(graph);
+    expect(deps.length).toBeGreaterThanOrEqual(2);
+    // Runtime cycle (severity 1.0) should come before dynamic cycle (severity 0.5)
+    expect(deps[0].severity!).toBeGreaterThan(deps[deps.length - 1].severity!);
+  });
+});
+
+// ── §3.2 Approximate Betweenness Centrality ──────────────────────────
+
+describe("computeBetweenness", () => {
+  it("assigns highest score to star center", () => {
+    // Star graph: center connected to a, b, c, d (no leaf-to-leaf edges)
+    const graph = makeGraph(["center", "a", "b", "c", "d"], [
+      edge("a", "center"),
+      edge("b", "center"),
+      edge("c", "center"),
+      edge("d", "center"),
+    ]);
+
+    const scores = computeBetweenness(graph);
+
+    // Center is on all shortest paths between leaves
+    expect(scores.get("center")).toBe(1);
+    // Leaves have no paths passing through them (they are endpoints)
+    expect(scores.get("a")).toBe(0);
+    expect(scores.get("b")).toBe(0);
+    expect(scores.get("c")).toBe(0);
+    expect(scores.get("d")).toBe(0);
+  });
+
+  it("assigns highest scores to middle nodes in a chain", () => {
+    // Chain: a - b - c - d - e
+    const graph = makeGraph(["a", "b", "c", "d", "e"], [
+      edge("a", "b"),
+      edge("b", "c"),
+      edge("c", "d"),
+      edge("d", "e"),
+    ]);
+
+    const scores = computeBetweenness(graph);
+
+    // Middle nodes (b, c, d) should have higher betweenness than endpoints
+    expect(scores.get("c")!).toBeGreaterThan(scores.get("a")!);
+    expect(scores.get("c")!).toBeGreaterThan(scores.get("e")!);
+    // Center of chain (c) should have highest score
+    expect(scores.get("c")!).toBeGreaterThanOrEqual(scores.get("b")!);
+    expect(scores.get("c")!).toBeGreaterThanOrEqual(scores.get("d")!);
+    // Endpoints should have zero
+    expect(scores.get("a")).toBe(0);
+    expect(scores.get("e")).toBe(0);
+  });
+
+  it("assigns zero betweenness between disconnected components", () => {
+    // Two disconnected pairs: a-b and c-d
+    const graph = makeGraph(["a", "b", "c", "d"], [
+      edge("a", "b"),
+      edge("c", "d"),
+    ]);
+
+    const scores = computeBetweenness(graph);
+
+    // No shortest paths pass through any node between components
+    // In each 2-node component, neither node lies on a path between other nodes
+    for (const [, score] of scores) {
+      expect(score).toBe(0);
+    }
+  });
+
+  it("returns empty map for empty graph", () => {
+    const graph = makeGraph([], []);
+    const scores = computeBetweenness(graph);
+    expect(scores.size).toBe(0);
+  });
+
+  it("produces deterministic results", () => {
+    // Same graph should produce same scores every time
+    const graph = makeGraph(["a", "b", "c", "d", "e", "f"], [
+      edge("a", "b"),
+      edge("b", "c"),
+      edge("c", "d"),
+      edge("d", "e"),
+      edge("a", "f"),
+      edge("f", "e"),
+    ]);
+
+    const scores1 = computeBetweenness(graph);
+    const scores2 = computeBetweenness(graph);
+
+    for (const [file, score] of scores1) {
+      expect(scores2.get(file)).toBe(score);
+    }
+  });
+
+  it("normalizes scores to 0-1 range", () => {
+    const graph = makeGraph(["a", "b", "c", "d"], [
+      edge("a", "b"),
+      edge("b", "c"),
+      edge("c", "d"),
+    ]);
+
+    const scores = computeBetweenness(graph);
+
+    for (const [, score] of scores) {
+      expect(score).toBeGreaterThanOrEqual(0);
+      expect(score).toBeLessThanOrEqual(1);
+    }
+    // At least one score should be 1 (the max)
+    const maxScore = Math.max(...scores.values());
+    expect(maxScore).toBe(1);
+  });
+
+  it("handles single-node graph", () => {
+    // Single node with a self-referencing edge (unusual but should not crash)
+    const graph = makeGraph(["a", "b"], [edge("a", "b")]);
+    const scores = computeBetweenness(graph);
+    // Two-node graph: neither lies on a path between other distinct nodes
+    expect(scores.get("a")).toBe(0);
+    expect(scores.get("b")).toBe(0);
+  });
+});
+
+// ── §3.11 Architectural Fitness Functions ────────────────────────────
+
+function makeLayers(defs: Array<{ name: string; files: string[] }>): ArchitecturalLayer[] {
+  return defs.map((d) => ({
+    name: d.name,
+    files: d.files,
+    importedByLayers: 0,
+    dependsOn: [],
+  }));
+}
+
+describe("checkArchitecturalFitness", () => {
+  it("detects upward dependency violations", () => {
+    const layers = makeLayers([
+      { name: "types", files: ["src/types.ts"] },
+      { name: "services", files: ["src/services.ts"] },
+      { name: "components", files: ["src/components.ts"] },
+    ]);
+
+    // types <- services <- components (expected flow)
+    const layerEdges: LayerEdge[] = [
+      { from: "services", to: "types" },
+      { from: "components", to: "services" },
+    ];
+
+    const graph = makeGraph(
+      ["src/types.ts", "src/services.ts", "src/components.ts"],
+      [
+        edge("src/services.ts", "src/types.ts"),       // correct
+        edge("src/components.ts", "src/services.ts"),   // correct
+        edge("src/types.ts", "src/components.ts"),      // violation: types -> components (upward)
+      ],
+    );
+
+    const violations = checkArchitecturalFitness(graph, layers, layerEdges);
+    const upward = violations.filter((v) => v.rule === "no-upward-dep");
+    expect(upward.length).toBeGreaterThanOrEqual(1);
+    expect(upward[0].from).toBe("src/types.ts");
+    expect(upward[0].to).toBe("src/components.ts");
+    expect(upward[0].severity).toBe("warning");
+  });
+
+  it("detects test isolation violations", () => {
+    const graph = makeGraph(
+      ["src/__tests__/auth.test.ts", "src/__tests__/user.test.ts", "src/auth.ts"],
+      [
+        edge("src/__tests__/auth.test.ts", "src/__tests__/user.test.ts"),  // violation
+        edge("src/__tests__/auth.test.ts", "src/auth.ts"),                  // correct
+      ],
+    );
+
+    const violations = checkArchitecturalFitness(graph, [], []);
+    const testViolations = violations.filter((v) => v.rule === "test-isolation");
+    expect(testViolations).toHaveLength(1);
+    expect(testViolations[0].from).toBe("src/__tests__/auth.test.ts");
+    expect(testViolations[0].to).toBe("src/__tests__/user.test.ts");
+  });
+
+  it("allows test files to import from __fixtures__", () => {
+    const graph = makeGraph(
+      ["src/__tests__/auth.test.ts", "src/__tests__/__fixtures__/mock-user.ts"],
+      [
+        edge("src/__tests__/auth.test.ts", "src/__tests__/__fixtures__/mock-user.ts"),
+      ],
+    );
+
+    const violations = checkArchitecturalFitness(graph, [], []);
+    const testViolations = violations.filter((v) => v.rule === "test-isolation");
+    expect(testViolations).toHaveLength(0);
+  });
+
+  it("allows test files to import from test-utils", () => {
+    const graph = makeGraph(
+      ["src/__tests__/auth.test.ts", "src/test-utils/setup.ts"],
+      [
+        edge("src/__tests__/auth.test.ts", "src/test-utils/setup.ts"),
+      ],
+    );
+
+    const violations = checkArchitecturalFitness(graph, [], []);
+    const testViolations = violations.filter((v) => v.rule === "test-isolation");
+    expect(testViolations).toHaveLength(0);
+  });
+
+  it("detects layer skip violations", () => {
+    const layers = makeLayers([
+      { name: "types", files: ["src/types.ts"] },
+      { name: "utils", files: ["src/utils.ts"] },
+      { name: "services", files: ["src/services.ts"] },
+      { name: "pages", files: ["src/pages.ts"] },
+    ]);
+
+    // types <- utils <- services <- pages
+    const layerEdges: LayerEdge[] = [
+      { from: "utils", to: "types" },
+      { from: "services", to: "utils" },
+      { from: "pages", to: "services" },
+    ];
+
+    const graph = makeGraph(
+      ["src/types.ts", "src/utils.ts", "src/services.ts", "src/pages.ts"],
+      [
+        edge("src/services.ts", "src/utils.ts"),  // correct, skip=1
+        edge("src/pages.ts", "src/types.ts"),      // skip: pages -> types, skipping 2 layers
+      ],
+    );
+
+    const violations = checkArchitecturalFitness(graph, layers, layerEdges);
+    const skips = violations.filter((v) => v.rule === "layer-skip");
+    expect(skips.length).toBeGreaterThanOrEqual(1);
+    expect(skips[0].from).toBe("src/pages.ts");
+    expect(skips[0].to).toBe("src/types.ts");
+    expect(skips[0].message).toContain("skipping");
+  });
+
+  it("does not flag adjacent layer imports as skips", () => {
+    const layers = makeLayers([
+      { name: "types", files: ["src/types.ts"] },
+      { name: "services", files: ["src/services.ts"] },
+    ]);
+
+    const layerEdges: LayerEdge[] = [
+      { from: "services", to: "types" },
+    ];
+
+    const graph = makeGraph(
+      ["src/types.ts", "src/services.ts"],
+      [
+        edge("src/services.ts", "src/types.ts"),  // adjacent, no skip
+      ],
+    );
+
+    const violations = checkArchitecturalFitness(graph, layers, layerEdges);
+    const skips = violations.filter((v) => v.rule === "layer-skip");
+    expect(skips).toHaveLength(0);
+  });
+
+  it("caps total violations at 20", () => {
+    // Create many upward violations
+    const typeFiles = Array.from({ length: 25 }, (_, i) => `src/types/t${i}.ts`);
+    const layers = makeLayers([
+      { name: "types", files: typeFiles },
+      { name: "services", files: ["src/services.ts"] },
+    ]);
+
+    const layerEdges: LayerEdge[] = [
+      { from: "services", to: "types" },
+    ];
+
+    // Each types file imports services (upward violation)
+    const edges = typeFiles.map((f) => edge(f, "src/services.ts"));
+    const graph = makeGraph([...typeFiles, "src/services.ts"], edges);
+
+    const violations = checkArchitecturalFitness(graph, layers, layerEdges);
+    expect(violations.length).toBeLessThanOrEqual(20);
+  });
+
+  it("returns empty for fewer than 2 layers on layer rules", () => {
+    const layers = makeLayers([
+      { name: "types", files: ["src/types.ts"] },
+    ]);
+
+    const graph = makeGraph(["src/types.ts"], []);
+    const violations = checkArchitecturalFitness(graph, layers, []);
+    // No upward or skip violations with only one layer
+    const layerViolations = violations.filter(
+      (v) => v.rule === "no-upward-dep" || v.rule === "layer-skip",
+    );
+    expect(layerViolations).toHaveLength(0);
+  });
+
+  it("ignores external edges", () => {
+    const layers = makeLayers([
+      { name: "types", files: ["src/types.ts"] },
+      { name: "services", files: ["src/services.ts"] },
+    ]);
+
+    const layerEdges: LayerEdge[] = [
+      { from: "services", to: "types" },
+    ];
+
+    const externalEdge: ImportEdge = {
+      from: "src/types.ts", to: "react", isExternal: true,
+      specifier: "react", importedNames: ["useState"],
+    };
+
+    const graph = makeGraph(
+      ["src/types.ts", "src/services.ts"],
+      [externalEdge],
+    );
+
+    const violations = checkArchitecturalFitness(graph, layers, layerEdges);
+    expect(violations).toHaveLength(0);
   });
 });
