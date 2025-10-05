@@ -140,6 +140,10 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     hasYarnLock,
     hasBunLockBin,
     hasBunLockText,
+    hasBunfigToml,
+    hasPomXml,
+    hasBuildGradle,
+    hasBuildGradleKts,
     topEntries,
   ] = await Promise.all([
     fileExists(path.join(rootDir, ".git")),
@@ -154,6 +158,10 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     fileExists(path.join(rootDir, "yarn.lock")),
     fileExists(path.join(rootDir, "bun.lockb")),
     fileExists(path.join(rootDir, "bun.lock")),
+    fileExists(path.join(rootDir, "bunfig.toml")),
+    readFileOr(path.join(rootDir, "pom.xml")),
+    fileExists(path.join(rootDir, "build.gradle")),
+    fileExists(path.join(rootDir, "build.gradle.kts")),
     readDirSafe(rootDir),
   ]);
 
@@ -202,6 +210,12 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
         topEntries.some((e) => e.startsWith(".prettierrc"));
       if (hasEslint) ctx.linter = "eslint";
       else if (hasPrettier) ctx.linter = "prettier";
+    }
+
+    // Detect Bun-specific configuration
+    if (hasBunfigToml && !seen.has("Bun")) {
+      seen.add("Bun");
+      ctx.frameworks.push({ name: "Bun" });
     }
   } else if (hasGoMod) {
     ctx.language = "go";
@@ -259,6 +273,41 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     } else if (hasRuffConfig) {
       ctx.linter = "ruff";
     }
+
+    // Detect additional Python tools (Black, isort, mypy, flake8).
+    // These don't fit the Linter enum, so add them as DetectedFramework entries.
+    const pyContent = hasPyproject
+      ? await readFileOr(path.join(rootDir, "pyproject.toml"))
+      : null;
+    const setupCfg = await readFileOr(path.join(rootDir, "setup.cfg"));
+
+    if (allPyDeps.includes("black") || pyContent?.includes("[tool.black]")) {
+      if (!seenFw.has("Black")) { seenFw.add("Black"); ctx.frameworks.push({ name: "Black" }); }
+    }
+    if (allPyDeps.includes("isort") || pyContent?.includes("[tool.isort]")) {
+      if (!seenFw.has("isort")) { seenFw.add("isort"); ctx.frameworks.push({ name: "isort" }); }
+    }
+    if (
+      allPyDeps.includes("mypy") ||
+      topEntries.includes("mypy.ini") ||
+      setupCfg?.includes("[mypy]") ||
+      pyContent?.includes("[tool.mypy]")
+    ) {
+      if (!seenFw.has("mypy")) { seenFw.add("mypy"); ctx.frameworks.push({ name: "mypy" }); }
+    }
+    if (allPyDeps.includes("flake8") || topEntries.includes(".flake8") || setupCfg?.includes("[flake8]")) {
+      if (!seenFw.has("flake8")) { seenFw.add("flake8"); ctx.frameworks.push({ name: "flake8" }); }
+    }
+  }
+
+  // -- Detect Java build tools (Maven / Gradle) --
+  if (hasPomXml) {
+    if (ctx.language === "other") ctx.language = "java";
+    const mavenVersion = extractMavenVersion(hasPomXml);
+    ctx.frameworks.push({ name: "Maven", version: mavenVersion });
+  } else if (hasBuildGradle || hasBuildGradleKts) {
+    if (ctx.language === "other") ctx.language = "java";
+    ctx.frameworks.push({ name: "Gradle" });
   }
 
   // Report detected stack
@@ -340,18 +389,18 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
   return ctx;
 }
 
-/** Test framework detection: dependency name -> display name */
-const TEST_FRAMEWORK_MAP: Record<string, string> = {
-  vitest: "Vitest",
-  jest: "Jest",
-  playwright: "Playwright",
-  cypress: "Cypress",
-  mocha: "Mocha",
-  pytest: "pytest",
-};
+/** Test framework detection in explicit priority order (highest first). */
+const TEST_FRAMEWORK_PRIORITY: Array<{ dep: string; name: string }> = [
+  { dep: "vitest", name: "Vitest" },
+  { dep: "jest", name: "Jest" },
+  { dep: "mocha", name: "Mocha" },
+  { dep: "playwright", name: "Playwright" },
+  { dep: "cypress", name: "Cypress" },
+  { dep: "pytest", name: "pytest" },
+];
 
 function detectTestFramework(dependencies: string[]): string | undefined {
-  for (const [dep, name] of Object.entries(TEST_FRAMEWORK_MAP)) {
+  for (const { dep, name } of TEST_FRAMEWORK_PRIORITY) {
     if (dependencies.includes(dep)) return name;
   }
   return undefined;
@@ -364,6 +413,14 @@ const CI_PATTERNS: Array<{ path: string; name: string; isDir?: boolean }> = [
   { path: ".circleci", name: "CircleCI", isDir: true },
   { path: "Jenkinsfile", name: "Jenkins" },
   { path: ".travis.yml", name: "Travis CI" },
+  { path: "vercel.json", name: "Vercel" },
+  { path: "netlify.toml", name: "Netlify" },
+  { path: "render.yaml", name: "Render" },
+  { path: "railway.json", name: "Railway" },
+  { path: "railway.toml", name: "Railway" },
+  { path: "fly.toml", name: "Fly.io" },
+  { path: "bitbucket-pipelines.yml", name: "Bitbucket Pipelines" },
+  { path: "azure-pipelines.yml", name: "Azure DevOps" },
 ];
 
 async function detectCiProvider(rootDir: string, topEntries: string[]): Promise<string | undefined> {
@@ -693,6 +750,16 @@ async function parsePyprojectDeps(filePath: string): Promise<string[]> {
   }
 
   return deps;
+}
+
+/**
+ * Extract Maven version from pom.xml content.
+ * Looks for a top-level <version> element (not inside <parent> or <dependency>).
+ */
+function extractMavenVersion(pomXml: string): string | undefined {
+  // Try to get the project version (first <version> outside <parent>)
+  const match = pomXml.match(/<version>([^<]+)<\/version>/);
+  return match?.[1] ?? undefined;
 }
 
 /**

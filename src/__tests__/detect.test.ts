@@ -207,6 +207,189 @@ describe("detectContext", () => {
     const ctx = await detectContext(tmpDir);
     expect(ctx.ciProvider).toBe("GitHub Actions");
   });
+
+  // ── CI provider expansion ───────────────────────────────────────────────
+
+  it("detects Vercel CI", async () => {
+    tmpDir = await makeProject({
+      "vercel.json": '{ "buildCommand": "npm run build" }',
+      "package.json": JSON.stringify({ name: "test" }),
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.ciProvider).toBe("Vercel");
+  });
+
+  it("detects Netlify CI", async () => {
+    tmpDir = await makeProject({
+      "netlify.toml": "[build]\ncommand = \"npm run build\"\n",
+      "package.json": JSON.stringify({ name: "test" }),
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.ciProvider).toBe("Netlify");
+  });
+
+  it("detects Render CI", async () => {
+    tmpDir = await makeProject({
+      "render.yaml": "services:\n  - type: web\n",
+      "package.json": JSON.stringify({ name: "test" }),
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.ciProvider).toBe("Render");
+  });
+
+  it("detects Railway CI from railway.json", async () => {
+    tmpDir = await makeProject({
+      "railway.json": '{ "build": {} }',
+      "package.json": JSON.stringify({ name: "test" }),
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.ciProvider).toBe("Railway");
+  });
+
+  it("detects Railway CI from railway.toml", async () => {
+    tmpDir = await makeProject({
+      "railway.toml": "[build]\ncommand = \"npm run build\"\n",
+      "package.json": JSON.stringify({ name: "test" }),
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.ciProvider).toBe("Railway");
+  });
+
+  it("detects Fly.io CI", async () => {
+    tmpDir = await makeProject({
+      "fly.toml": "app = \"my-app\"\n",
+      "package.json": JSON.stringify({ name: "test" }),
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.ciProvider).toBe("Fly.io");
+  });
+
+  it("detects Bitbucket Pipelines CI", async () => {
+    tmpDir = await makeProject({
+      "bitbucket-pipelines.yml": "pipelines:\n  default:\n",
+      "package.json": JSON.stringify({ name: "test" }),
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.ciProvider).toBe("Bitbucket Pipelines");
+  });
+
+  it("detects Azure DevOps CI", async () => {
+    tmpDir = await makeProject({
+      "azure-pipelines.yml": "trigger:\n  - main\n",
+      "package.json": JSON.stringify({ name: "test" }),
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.ciProvider).toBe("Azure DevOps");
+  });
+
+  // ── Java build tool detection ───────────────────────────────────────────
+
+  it("detects Maven from pom.xml", async () => {
+    tmpDir = await makeProject({
+      "pom.xml": [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<project>',
+        '  <modelVersion>4.0.0</modelVersion>',
+        '  <groupId>com.example</groupId>',
+        '  <artifactId>myapp</artifactId>',
+        '  <version>1.2.3</version>',
+        '</project>',
+      ].join("\n"),
+      "src/main/java/App.java": "public class App {}",
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.language).toBe("java");
+    const maven = ctx.frameworks.find((f) => f.name === "Maven");
+    expect(maven).toBeDefined();
+    expect(maven?.version).toBe("1.2.3");
+  });
+
+  it("detects Gradle from build.gradle", async () => {
+    tmpDir = await makeProject({
+      "build.gradle": "plugins { id 'java' }\n",
+      "src/main/java/App.java": "public class App {}",
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.language).toBe("java");
+    expect(ctx.frameworks.map((f) => f.name)).toContain("Gradle");
+  });
+
+  it("detects Gradle from build.gradle.kts", async () => {
+    tmpDir = await makeProject({
+      "build.gradle.kts": "plugins { java }\n",
+      "src/main/java/App.java": "public class App {}",
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.language).toBe("java");
+    expect(ctx.frameworks.map((f) => f.name)).toContain("Gradle");
+  });
+
+  // ── Bun configuration detection ────────────────────────────────────────
+
+  it("detects bunfig.toml as Bun framework entry", async () => {
+    tmpDir = await makeProject({
+      "package.json": JSON.stringify({ name: "test", dependencies: {} }),
+      "bun.lockb": "",
+      "bunfig.toml": '[install]\nauto = "force"\n',
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.packageManager).toBe("bun");
+    expect(ctx.frameworks.map((f) => f.name)).toContain("Bun");
+  });
+
+  it("does not add Bun framework without bunfig.toml", async () => {
+    tmpDir = await makeProject({
+      "package.json": JSON.stringify({ name: "test", dependencies: {} }),
+      "bun.lockb": "",
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.packageManager).toBe("bun");
+    expect(ctx.frameworks.map((f) => f.name)).not.toContain("Bun");
+  });
+
+  // ── Python tool detection ──────────────────────────────────────────────
+
+  it("detects mypy from [tool.mypy] in pyproject.toml", async () => {
+    tmpDir = await makeProject({
+      "pyproject.toml": [
+        "[project]",
+        'name = "myapp"',
+        "dependencies = []",
+        "",
+        "[tool.mypy]",
+        "strict = true",
+      ].join("\n"),
+      "main.py": "x = 1\n",
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.frameworks.map((f) => f.name)).toContain("mypy");
+  });
+
+  it("detects Black from [tool.black] in pyproject.toml", async () => {
+    tmpDir = await makeProject({
+      "pyproject.toml": [
+        "[project]",
+        'name = "myapp"',
+        "dependencies = []",
+        "",
+        "[tool.black]",
+        "line-length = 88",
+      ].join("\n"),
+      "main.py": "x = 1\n",
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.frameworks.map((f) => f.name)).toContain("Black");
+  });
+
+  it("detects flake8 from .flake8 file", async () => {
+    tmpDir = await makeProject({
+      "requirements.txt": "flask\n",
+      ".flake8": "[flake8]\nmax-line-length = 120\n",
+      "main.py": "x = 1\n",
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.frameworks.map((f) => f.name)).toContain("flake8");
+  });
 });
 
 // ── enrichFrameworksWithUsage ───────────────────────────────────────────────
