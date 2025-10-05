@@ -202,6 +202,20 @@ export async function buildAiderContext(
     }
   }
 
+  // Dead files
+  if (analysis?.deadFiles && analysis.deadFiles.length > 0) {
+    for (const deadFile of analysis.deadFiles.slice(0, 5)) {
+      lines.push(`  - "DEAD FILE: ${escapeYaml(deadFile)} has no importers. Consider removing."`);
+    }
+  }
+
+  // Structural mismatches (hidden coupling)
+  if (analysis?.structuralMismatches && analysis.structuralMismatches.length > 0) {
+    for (const m of analysis.structuralMismatches.slice(0, 3)) {
+      lines.push(`  - "HIDDEN COUPLING: ${escapeYaml(m.fileA)} and ${escapeYaml(m.fileB)} change together but have no import link. Consider adding an explicit dependency."`);
+    }
+  }
+
   // Monorepo cross-package analysis
   if (analysis?.monorepoAnalysis && analysis.monorepoAnalysis.crossPackageEdges.length > 0) {
     const mono = analysis.monorepoAnalysis;

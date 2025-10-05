@@ -1,6 +1,6 @@
 import type { ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
 import { getFrameworkHints } from "./framework-hints.js";
-import { buildDirectives } from "./directives.js";
+import { buildDirectives, computeFileComplexity } from "./directives.js";
 
 interface CursorRule {
   /** Filename (without path) */
@@ -16,15 +16,15 @@ interface CursorRule {
 /**
  * Generate .cursor/rules/*.md files based on detected project structure.
  */
-export function buildCursorRules(
+export async function buildCursorRules(
   ctx: DetectedContext,
   answers: UserAnswers,
   analysis?: ContextAnalysis,
-): CursorRule[] {
+): Promise<CursorRule[]> {
   const rules: CursorRule[] = [];
 
   // Always create a global rule
-  rules.push(buildGlobalRule(ctx, answers, analysis));
+  rules.push(await buildGlobalRule(ctx, answers, analysis));
 
   // Component rule (if components/ directory exists)
   const hasComponents = ctx.directories.some(
@@ -61,7 +61,7 @@ export function buildCursorRules(
   return rules;
 }
 
-function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analysis?: ContextAnalysis): CursorRule {
+async function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analysis?: ContextAnalysis): Promise<CursorRule> {
   const bodyLines: string[] = [
     "# Global Rules",
     "",
@@ -143,7 +143,10 @@ function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analysis?: 
 
   // Working guidelines (analysis-derived directives)
   if (analysis) {
-    const directives = buildDirectives(analysis, ctx);
+    const fileComplexity = analysis.hubFiles?.length
+      ? await computeFileComplexity(ctx.rootDir, analysis.hubFiles)
+      : undefined;
+    const directives = buildDirectives(analysis, ctx, fileComplexity);
     if (directives.length > 0) {
       bodyLines.push("## Working Guidelines");
       bodyLines.push("");

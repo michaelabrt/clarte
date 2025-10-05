@@ -47,6 +47,7 @@ export async function buildSections(
   snapshot: CodeSnapshot | null,
   analysis?: ContextAnalysis,
 ): Promise<ContextSection[]> {
+  resetProjectNameCache();
   const projectName = await getProjectName(ctx);
   const stackSummary = answers.stackConfirmed
     ? summarizeDetection(ctx)
@@ -441,7 +442,69 @@ export async function buildSections(
   const devContent = `## Development\n\n${await buildDevSection(ctx)}`;
   sections.push({ id: "development", priority: 0, content: devContent, tokens: estimateTokens(devContent) });
 
+  // -- Per-IDE section priority boosts (Task 1c) --
+  // Only apply when a single IDE is targeted.
+  if (answers.ides.length === 1) {
+    const ide = answers.ides[0];
+    if (ide === "claude") {
+      applySectionBoost(sections, "working-guidelines", 1);
+      applySectionBoost(sections, "config-constraints", 1);
+    } else if (ide === "cursor") {
+      applySectionBoost(sections, "architecture", 2);
+    } else if (ide === "copilot") {
+      applySectionBoost(sections, "conventions", 2);
+      applySectionBoost(sections, "code-snapshot", 3);
+    }
+  }
+
+  // -- User-controlled section ordering (Task 1a) --
+  // TODO: sectionOrder should be added to UserAnswers/ProjectConfig in types.ts
+  const sectionOrder = (answers as Record<string, unknown>).sectionOrder as string[] | undefined;
+  if (sectionOrder && Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+    const excludeSet = new Set<string>();
+    const orderList: string[] = [];
+
+    for (const entry of sectionOrder) {
+      if (entry.startsWith("-")) {
+        excludeSet.add(entry.slice(1));
+      } else {
+        orderList.push(entry);
+      }
+    }
+
+    // Remove excluded sections
+    for (let i = sections.length - 1; i >= 0; i--) {
+      if (excludeSet.has(sections[i].id)) {
+        sections.splice(i, 1);
+      }
+    }
+
+    // Re-assign priorities based on array position for ordered sections.
+    // Sections not in the list keep their default priority but are offset
+    // so they appear after all explicitly ordered sections.
+    const maxOrderedPriority = orderList.length;
+    for (const section of sections) {
+      const idx = orderList.indexOf(section.id);
+      if (idx !== -1) {
+        section.priority = idx;
+      } else {
+        // Offset non-listed sections so they sort after the ordered ones
+        section.priority = maxOrderedPriority + section.priority;
+      }
+    }
+  }
+
   return sections;
+}
+
+/**
+ * Boost a section's priority if the section exists.
+ */
+function applySectionBoost(sections: ContextSection[], id: string, priority: number): void {
+  const section = sections.find((s) => s.id === id);
+  if (section && section.priority > priority) {
+    section.priority = priority;
+  }
 }
 
 /**
@@ -516,33 +579,67 @@ function renderArchitectureDiagram(layers: ArchitecturalLayer[], layerEdges: Lay
   return lines.join("\n");
 }
 
-async function getProjectName(ctx: DetectedContext): Promise<string> {
-  const pkg = await readJsonFile(path.join(ctx.rootDir, "package.json"));
-  if (pkg?.name && typeof pkg.name === "string") return pkg.name;
+// Cache for getProjectName to avoid redundant filesystem reads within a single
+// generation. Ideally the project name would be threaded through
+// DetectedContext.projectName, but types.ts is owned by another worker.
+let _projectNameCache: { rootDir: string; name: string } | null = null;
 
-  const cargo = await readFileOr(path.join(ctx.rootDir, "Cargo.toml"));
-  if (cargo) {
-    const match = cargo.match(/^\[package\][\s\S]*?^name\s*=\s*"([^"]+)"/m);
-    if (match) return match[1];
+async function getProjectName(ctx: DetectedContext): Promise<string> {
+  // Return cached result if available for the same rootDir
+  if (_projectNameCache && _projectNameCache.rootDir === ctx.rootDir) {
+    return _projectNameCache.name;
   }
 
-  const gomod = await readFileOr(path.join(ctx.rootDir, "go.mod"));
-  if (gomod) {
-    const match = gomod.match(/^module\s+(\S+)/m);
-    if (match) {
-      const parts = match[1].split("/");
-      return parts[parts.length - 1];
+  let name: string | null = null;
+
+  const pkg = await readJsonFile(path.join(ctx.rootDir, "package.json"));
+  if (pkg?.name && typeof pkg.name === "string") {
+    name = pkg.name;
+  }
+
+  if (!name) {
+    const cargo = await readFileOr(path.join(ctx.rootDir, "Cargo.toml"));
+    if (cargo) {
+      const match = cargo.match(/^\[package\][\s\S]*?^name\s*=\s*"([^"]+)"/m);
+      if (match) name = match[1];
     }
   }
 
-  const pyproject = await readFileOr(path.join(ctx.rootDir, "pyproject.toml"));
-  if (pyproject) {
-    const match = pyproject.match(/^\[project\][\s\S]*?^name\s*=\s*"([^"]+)"/m);
-    if (match) return match[1];
+  if (!name) {
+    const gomod = await readFileOr(path.join(ctx.rootDir, "go.mod"));
+    if (gomod) {
+      const match = gomod.match(/^module\s+(\S+)/m);
+      if (match) {
+        const parts = match[1].split("/");
+        name = parts[parts.length - 1];
+      }
+    }
   }
 
-  const dirName = ctx.rootDir.split("/").pop() ?? "Project";
-  return dirName.charAt(0).toUpperCase() + dirName.slice(1);
+  if (!name) {
+    const pyproject = await readFileOr(path.join(ctx.rootDir, "pyproject.toml"));
+    if (pyproject) {
+      const match = pyproject.match(/^\[project\][\s\S]*?^name\s*=\s*"([^"]+)"/m);
+      if (match) name = match[1];
+    }
+  }
+
+  if (!name) {
+    const dirName = ctx.rootDir.split("/").pop() ?? "Project";
+    name = dirName.charAt(0).toUpperCase() + dirName.slice(1);
+  }
+
+  _projectNameCache = { rootDir: ctx.rootDir, name };
+  return name;
+}
+
+/**
+ * Reset the project name cache. Called at the start of buildSections()
+ * to ensure fresh results per generation run.
+ * Exported for testing.
+ */
+export function resetProjectNameCache(): void {
+  _projectNameCache = null;
 }
 
 function buildTechStackSection(ctx: DetectedContext, summary: string): string {
@@ -657,15 +754,36 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
       break;
     }
     case "pip":
-    case "poetry":
+    case "poetry": {
+      const poetryPrefix = ctx.packageManager === "poetry" ? "poetry run " : "";
       lines.push("```bash");
       lines.push(
         ctx.packageManager === "poetry"
           ? "poetry install"
           : "pip install -r requirements.txt",
       );
+
+      // Framework-aware dev commands
+      const fwNames = ctx.frameworks.map((f) => f.name);
+      if (fwNames.includes("Django")) {
+        lines.push(`${poetryPrefix}python manage.py runserver`);
+      } else if (fwNames.includes("FastAPI")) {
+        lines.push(`${poetryPrefix}uvicorn app.main:app --reload`);
+      } else if (fwNames.includes("Flask")) {
+        lines.push(`${poetryPrefix}flask run`);
+      }
+
       lines.push("```");
+
+      // pytest test command
+      if (fwNames.includes("pytest")) {
+        lines.push("");
+        lines.push("```bash");
+        lines.push(`${poetryPrefix}pytest`);
+        lines.push("```");
+      }
       break;
+    }
     case "cargo":
       lines.push("```bash");
       lines.push("cargo build");
