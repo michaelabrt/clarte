@@ -63,13 +63,13 @@ export async function generateFiles(
     const mainFilename = getMainContextFilename(ide);
     const mainContent =
       ide === "aider"
-        ? buildAiderContext(ctx, answers, snapshot, analysis)
+        ? await buildAiderContext(ctx, answers, snapshot, analysis)
         : await buildMainContext(ctx, answers, snapshot, analysis, budget);
     await addFile(mainFilename, mainContent);
 
     // 2. Cursor-specific scoped rules
     if (ide === "cursor") {
-      const rules = buildCursorRules(ctx, answers, analysis);
+      const rules = await buildCursorRules(ctx, answers, analysis);
       for (const rule of rules) {
         const rulePath = `.cursor/rules/${rule.filename}`;
         const ruleContent = renderCursorRule(rule);
@@ -81,7 +81,7 @@ export async function generateFiles(
     if (generateSkills && ide === "claude") {
       const pkgJson = await readJsonFile(path.join(ctx.rootDir, "package.json"));
       const scripts = (pkgJson?.scripts as Record<string, string>) ?? undefined;
-      const skills = buildClaudeSkills(ctx, answers, analysis, scripts);
+      const skills = await buildClaudeSkills(ctx, answers, analysis, scripts);
       for (const skill of skills) {
         const skillPath = `.claude/skills/${skill.name}/SKILL.md`;
         const skillContent = renderClaudeSkill(skill);
@@ -131,7 +131,7 @@ export async function generateFiles(
 
         const pkgContent =
           ide === "aider"
-            ? buildAiderContext(pkgCtx, pkgAnswers, pkgSnapshot)
+            ? await buildAiderContext(pkgCtx, pkgAnswers, pkgSnapshot)
             : await buildMainContext(pkgCtx, pkgAnswers, pkgSnapshot);
 
         const pkgFilePath = path.join(pkg.path, pkgMainFilename);

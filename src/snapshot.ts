@@ -382,27 +382,54 @@ function extractBlock(lines: string[], startIdx: number): string {
 }
 
 /**
+ * Find the index of the first `{` or `=>` that is NOT inside angle brackets.
+ * Returns { type, index } or null if none found at depth 0.
+ */
+function findSignatureTerminator(sig: string): { type: "brace" | "arrow"; index: number } | null {
+  let angleDepth = 0;
+  for (let i = 0; i < sig.length; i++) {
+    const ch = sig[i];
+    if (ch === "<") angleDepth++;
+    else if (ch === ">") angleDepth--;
+    else if (angleDepth === 0) {
+      if (ch === "{") return { type: "brace", index: i };
+      if (ch === "=" && i + 1 < sig.length && sig[i + 1] === ">") return { type: "arrow", index: i };
+    }
+  }
+  return null;
+}
+
+/**
  * Extract a function signature (everything up to the opening brace or arrow).
+ * Tracks angle bracket balance so that `{` or `=>` inside generic parameters
+ * (e.g. `T extends { key: V }`) do not prematurely terminate the signature.
  */
 function extractSignatureLine(lines: string[], startIdx: number): string {
   let sig = "";
   for (let i = startIdx; i < lines.length && i < startIdx + 5; i++) {
     sig += (sig ? " " : "") + lines[i].trim();
-    // Stop at opening brace, arrow, or if it looks complete
-    if (sig.includes("{") || sig.includes("=>")) {
-      const arrowIdx = sig.indexOf("=>");
 
+    // Count unbalanced angle brackets to detect open generic parameters
+    let angleDepth = 0;
+    for (const ch of sig) {
+      if (ch === "<") angleDepth++;
+      else if (ch === ">") angleDepth--;
+    }
+
+    // While inside generic parameters, do not terminate on { or =>
+    if (angleDepth > 0) continue;
+
+    // Find the first terminator ({ or =>) that is outside angle brackets
+    const terminator = findSignatureTerminator(sig);
+    if (terminator) {
       let cutIdx: number;
-      if (arrowIdx >= 0) {
+      if (terminator.type === "arrow") {
         // Arrow function: cut at the opening brace after "=>" to preserve the arrow
-        const braceAfterArrow = sig.indexOf("{", arrowIdx + 2);
-        cutIdx = braceAfterArrow >= 0 ? braceAfterArrow : sig.length;
+        const afterArrow = findSignatureTerminator(sig.slice(terminator.index + 2));
+        cutIdx = afterArrow?.type === "brace" ? terminator.index + 2 + afterArrow.index : sig.length;
       } else {
-        // Regular function: cut at opening brace
-        const braceIdx = sig.indexOf("{");
-        cutIdx = braceIdx >= 0 ? braceIdx : sig.length;
+        cutIdx = terminator.index;
       }
-
       sig = sig.slice(0, cutIdx).trim();
       break;
     }
@@ -1441,10 +1468,12 @@ export async function generateSnapshot(
       });
 
       onProgress?.(`Scanning ${secFiles.length} ${secLang} files...`);
-      for (const file of secFiles) {
-        const absPath = path.join(ctx.rootDir, file);
-        const entries = await secExtractor(absPath, file);
-        allEntries.push(...entries);
+      for (let si = 0; si < secFiles.length; si += chunkSize) {
+        const secChunk = secFiles.slice(si, si + chunkSize);
+        const secResults = await Promise.all(
+          secChunk.map((file) => secExtractor(path.join(ctx.rootDir, file), file)),
+        );
+        for (const entries of secResults) allEntries.push(...entries);
       }
     }
   }
