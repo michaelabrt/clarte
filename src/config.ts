@@ -3,10 +3,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { glob } from "tinyglobby";
 import type { Language, ProjectConfig, UserAnswers } from "./types.js";
-import { readJsonFile, writeFileSafe } from "./utils.js";
+import { readFileOr, readJsonFile, writeFileSafe } from "./utils.js";
 
 const CONFIG_FILENAME = ".clarte.json";
-const CONFIG_VERSION = 1;
+const CONFIG_VERSION = 2;
 
 interface ConfigFile extends ProjectConfig {
   /** Schema version for future migrations */
@@ -14,8 +14,42 @@ interface ConfigFile extends ProjectConfig {
 }
 
 /**
+ * Migrate a raw config object from one version to another.
+ * Each step handles one version increment (e.g. 1->2).
+ *
+ * @param raw - the raw config JSON object
+ * @param fromVersion - the version found in the config file (or 1 if missing)
+ * @param toVersion - the target version to migrate to
+ * @returns the migrated config object
+ */
+export function migrateConfig(
+  raw: Record<string, unknown>,
+  fromVersion: number,
+  toVersion: number,
+): Record<string, unknown> {
+  const result = { ...raw };
+
+  for (let v = fromVersion; v < toVersion; v++) {
+    if (v === 1) {
+      // v1 -> v2: Rename `ide` (string) to `ides` (array) if not already present
+      if (!result.ides && result.ide) {
+        result.ides = [result.ide];
+      }
+      // Add analysisDays default if not present
+      if (result.analysisDays == null) {
+        result.analysisDays = 90;
+      }
+    }
+  }
+
+  result._version = toVersion;
+  return result;
+}
+
+/**
  * Load project config from .clarte.json.
  * Returns null if the file doesn't exist or is invalid.
+ * Automatically runs migrations when the config version is behind.
  */
 export async function loadConfig(
   rootDir: string,
@@ -24,7 +58,13 @@ export async function loadConfig(
   const raw = await readJsonFile(configPath);
   if (!raw) return null;
 
-  const cfg = raw as Partial<ConfigFile>;
+  // Run migrations if the config version is behind the current version
+  const fileVersion = typeof raw._version === "number" ? raw._version : 1;
+  const migrated = fileVersion < CONFIG_VERSION
+    ? migrateConfig(raw, fileVersion, CONFIG_VERSION)
+    : raw;
+
+  const cfg = migrated as Partial<ConfigFile>;
 
   // Validate required fields: support old `ide` (string) or new `ides` (array)
   const ides = cfg.ides ?? (cfg.ide ? [cfg.ide] : undefined);
@@ -45,6 +85,8 @@ export async function loadConfig(
     language: cfg.language,
     staleDays: cfg.staleDays,
     colorScheme: cfg.colorScheme,
+    layers: cfg.layers,
+    analysisDays: cfg.analysisDays,
   };
 }
 
@@ -77,6 +119,8 @@ export async function saveConfig(
     ...(language ? { language } : {}),
     ...(existing?.staleDays != null ? { staleDays: existing.staleDays } : {}),
     ...(existing?.colorScheme ? { colorScheme: existing.colorScheme } : {}),
+    ...(answers.layers?.length ? { layers: answers.layers } : {}),
+    ...(existing?.analysisDays != null ? { analysisDays: existing.analysisDays } : {}),
   };
   await writeFileSafe(configPath, JSON.stringify(cfg, null, 2) + "\n");
 }
@@ -96,6 +140,7 @@ export function configToAnswers(config: ProjectConfig): UserAnswers {
     stackConfirmed: true,
     stackCorrections: config.stackCorrections,
     generatePerPackage: config.generatePerPackage,
+    layers: config.layers,
   };
 }
 
@@ -116,8 +161,21 @@ export async function saveColorScheme(
   // If no config yet, colorScheme will be saved when saveConfig() runs later
 }
 
+/** Map of language to the project manifest filename(s) to include in the hash */
+const MANIFEST_FILES: Record<string, string[]> = {
+  typescript: ["package.json"],
+  javascript: ["package.json"],
+  python: ["pyproject.toml", "setup.py", "requirements.txt"],
+  go: ["go.mod"],
+  rust: ["Cargo.toml"],
+  java: ["pom.xml", "build.gradle"],
+  other: ["package.json", "pyproject.toml", "go.mod", "Cargo.toml"],
+};
+
 /**
  * Compute a hash of all source files (path + mtime) to detect changes.
+ * Also includes the project manifest file (package.json, Cargo.toml, etc.)
+ * so that dependency changes make the snapshot stale even if no source files changed.
  * Returns a 16-char hex string.
  */
 export async function computeSnapshotHash(
@@ -156,8 +214,20 @@ export async function computeSnapshotHash(
   );
   entries.sort();
 
+  // Include manifest file content so dependency changes invalidate the hash
+  const manifestCandidates = MANIFEST_FILES[language] ?? MANIFEST_FILES.other;
+  let manifestContent = "";
+  for (const filename of manifestCandidates) {
+    const content = await readFileOr(path.join(rootDir, filename));
+    if (content) {
+      manifestContent += `manifest:${filename}:${content}`;
+      break; // use the first manifest found
+    }
+  }
+
   const hash = createHash("sha256")
     .update(entries.join("\n"))
+    .update(manifestContent)
     .digest("hex")
     .slice(0, 16);
 
