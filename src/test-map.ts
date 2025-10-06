@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { DetectedContext, ImportGraph, TestMapping } from "./types.js";
+import type { DetectedContext, ImportGraph, TestMapping, TestType } from "./types.js";
 
 // ── Test file detection ────────────────────────────────────────────────
 
@@ -48,6 +48,87 @@ function isExcludedFromUntested(filePath: string): boolean {
   return false;
 }
 
+// ── Test type classification ──────────────────────────────────────────
+
+/**
+ * E2E path patterns: files in e2e/, playwright/, or cypress/ directories.
+ */
+const E2E_PATH_PATTERNS = [
+  /(?:^|\/)e2e\//,
+  /(?:^|\/)playwright\//,
+  /(?:^|\/)cypress\//,
+];
+
+/**
+ * Integration path patterns: files in integration/ directories.
+ */
+const INTEGRATION_PATH_PATTERNS = [
+  /(?:^|\/)integration\//,
+];
+
+/**
+ * Classify a test file as unit, integration, or e2e.
+ *
+ * Rules:
+ * - e2e: path contains e2e/, playwright/, or cypress/
+ * - integration: path contains integration/, or imports 3+ distinct source modules
+ * - unit: everything else
+ */
+export function classifyTestType(
+  testFile: string,
+  sourceImportCount: number,
+): TestType {
+  // Check e2e path patterns
+  for (const pattern of E2E_PATH_PATTERNS) {
+    if (pattern.test(testFile)) return "e2e";
+  }
+
+  // Check integration path patterns
+  for (const pattern of INTEGRATION_PATH_PATTERNS) {
+    if (pattern.test(testFile)) return "integration";
+  }
+
+  // If it imports 3+ distinct source modules, classify as integration
+  if (sourceImportCount >= 3) return "integration";
+
+  return "unit";
+}
+
+// ── Monorepo package prefix detection ─────────────────────────────────
+
+const MONOREPO_PREFIX_PATTERNS = [
+  /^(packages\/[^/]+)\//,
+  /^(apps\/[^/]+)\//,
+  /^(libs\/[^/]+)\//,
+  /^(modules\/[^/]+)\//,
+];
+
+/**
+ * Extract the package prefix from a file path.
+ * e.g., "packages/auth/src/login.ts" -> "packages/auth"
+ * Returns null if the file does not belong to a recognized monorepo package directory.
+ */
+function getPackagePrefix(filePath: string): string | null {
+  for (const pattern of MONOREPO_PREFIX_PATTERNS) {
+    const match = filePath.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+/**
+ * Check if the graph contains files from multiple monorepo packages.
+ */
+function detectMonorepoPackages(files: Set<string>): boolean {
+  const packages = new Set<string>();
+  for (const file of files) {
+    const pkg = getPackagePrefix(file);
+    if (pkg) packages.add(pkg);
+    if (packages.size >= 2) return true;
+  }
+  return false;
+}
+
 // ── Public API ────────────────────────────────────────────────────────
 
 /**
@@ -90,11 +171,25 @@ export function buildTestMapping(
     testImports.get(edge.from)!.add(edge.to);
   }
 
+  // Detect if monorepo package structure exists
+  const isMonorepo = detectMonorepoPackages(allFiles);
+
   // Build reverse map: sourceFile -> testFile[]
+  // In monorepo mode, only count tests from the same package as coverage
   const sourceToTests = new Map<string, string[]>();
 
   for (const [testFile, imports] of testImports) {
+    const testPkg = isMonorepo ? getPackagePrefix(testFile) : null;
+
     for (const sourceFile of imports) {
+      if (isMonorepo) {
+        const sourcePkg = getPackagePrefix(sourceFile);
+        // In monorepo mode, only count same-package tests as coverage
+        if (testPkg !== null && sourcePkg !== null && testPkg !== sourcePkg) {
+          continue;
+        }
+      }
+
       if (!sourceToTests.has(sourceFile)) sourceToTests.set(sourceFile, []);
       sourceToTests.get(sourceFile)!.push(testFile);
     }
@@ -130,10 +225,19 @@ export function buildTestMapping(
   // Detect test pattern
   const testPattern = detectTestPattern(testFiles, ctx);
 
+  // Classify test types
+  const testTypes = new Map<string, TestType>();
+  for (const testFile of testFiles) {
+    const sourceImports = testImports.get(testFile);
+    const sourceImportCount = sourceImports ? sourceImports.size : 0;
+    testTypes.set(testFile, classifyTestType(testFile, sourceImportCount));
+  }
+
   return {
     sourceToTests,
     untestedFiles,
     testPattern,
+    testTypes,
   };
 }
 
@@ -155,7 +259,10 @@ export function renderTestMappingSection(
     for (const hub of hubFiles) {
       const tests = mapping.sourceToTests.get(hub.path);
       if (tests && tests.length > 0) {
-        const testList = tests.map((t) => `\`${t}\``).join(", ");
+        const testList = tests.map((t) => {
+          const typeLabel = mapping.testTypes?.get(t);
+          return typeLabel ? `\`${t}\` (${typeLabel})` : `\`${t}\``;
+        }).join(", ");
         directives.push(`- **Must**: When modifying \`${hub.path}\`, run its tests: ${testList}`);
       }
     }
