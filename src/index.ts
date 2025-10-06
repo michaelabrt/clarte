@@ -18,7 +18,7 @@ import {
 import { refreshSnapshot } from "./refresh.js";
 import { runBriefMode } from "./brief.js";
 import { validateContextPaths } from "./check.js";
-import { installHooks, uninstallHooks } from "./hooks.js";
+import { installHooks, uninstallHooks, initPreCommitHook } from "./hooks.js";
 import { runWatchMode } from "./watch.js";
 import { buildGraphWithCache } from "./cache.js";
 import {
@@ -42,6 +42,7 @@ import { analyzeMonorepoGraph, computePackageCentrality } from "./monorepo-analy
 import { scanConfigConstraints } from "./config-scan.js";
 import { inferConventions } from "./conventions.js";
 import { buildTestMapping } from "./test-map.js";
+import { predictChangeImpact } from "./change-impact.js";
 import { formatBytes } from "./utils.js";
 import { startShimmer } from "./animations.js";
 import type { ContextAnalysis, PackageHubFile, ProgressCallback } from "./types.js";
@@ -94,6 +95,7 @@ function printHelp(): void {
   console.log(`    ${t.accent("--format=json")}           ${t.text("Output full analysis as structured JSON to stdout")}`);
   console.log(`    ${t.accent("--budget=N")}              ${t.text("Set token budget for the context file (prioritized sections)")}`);
   console.log(`    ${t.accent("--generate-skills")}       ${t.text("Generate Claude Code skill files")}`);
+  console.log(`    ${t.accent("--init-hook")}             ${t.text("Install git pre-commit hook for snapshot freshness")}`);
   console.log(`    ${t.accent("--watch")}                 ${t.text("Watch for file changes and re-analyze continuously")}`);
   console.log(`    ${t.accent("-v, --verbose")}           ${t.text("Show detailed progress output")}`);
   console.log("");
@@ -145,6 +147,7 @@ async function main() {
   const jsonMode = formatArg?.split("=")[1] === "json";
   const budgetArg = args.find((a) => a.startsWith("--budget="));
   const budget = budgetArg ? parseInt(budgetArg.split("=")[1], 10) : undefined;
+  const initHook = args.includes("--init-hook");
   const briefMode = args[0] === "brief";
   const hooksMode = args[0] === "hooks";
   const diffFileArg = args.find((a) => a.startsWith("--diff-file="));
@@ -171,6 +174,12 @@ async function main() {
       console.error("Usage: clarte hooks install | uninstall");
       process.exit(1);
     }
+    process.exit(0);
+  }
+
+  // --init-hook: install git pre-commit hook
+  if (initHook) {
+    await initPreCommitHook(rootDir);
     process.exit(0);
   }
 
@@ -661,7 +670,24 @@ async function main() {
     }
   }
 
-  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined, graphTopology, structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined, tightCouplings: tightCouplings.length ? tightCouplings : undefined, monorepoAnalysis };
+  // Compute change impact predictions for top hub files (by authority)
+  let changeImpact: Map<string, Array<{ file: string; score: number }>> | undefined;
+  if (hubFiles.length > 0) {
+    const topHubs = hubFiles
+      .slice()
+      .sort((a, b) => b.authority - a.authority)
+      .slice(0, 5);
+    const impactMap = new Map<string, Array<{ file: string; score: number }>>();
+    for (const hub of topHubs) {
+      const predictions = predictChangeImpact(hub.path, graph, gitActivity);
+      if (predictions.length > 0) {
+        impactMap.set(hub.path, predictions);
+      }
+    }
+    if (impactMap.size > 0) changeImpact = impactMap;
+  }
+
+  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined, graphTopology, structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined, tightCouplings: tightCouplings.length ? tightCouplings : undefined, monorepoAnalysis, changeImpact };
 
   // Architecture delta tracking
   const currentAnalysisSnapshot = extractSnapshot(analysis);
@@ -945,16 +971,12 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false, outpu
 
   shimmer.stop();
 
-  // 3. Expand to 1-hop neighbors in the import graph
+  // 3. Expand to 2-hop neighbors in the import graph
   const changedSet = new Set(changedFiles);
-  const neighborSet = new Set<string>();
+  const { hop1: hop1Set, hop2: hop2Set } = computeNeighborhood(changedSet, graph.edges);
 
-  for (const edge of graph.edges) {
-    if (edge.isExternal) continue;
-    if (changedSet.has(edge.from)) neighborSet.add(edge.to);
-    if (changedSet.has(edge.to)) neighborSet.add(edge.from);
-  }
-  for (const f of changedSet) neighborSet.delete(f);
+  // Combined neighbor set for backward-compatible usage
+  const neighborSet = new Set([...hop1Set, ...hop2Set]);
 
   // 4. Find test files using test mapping
   const testMapping = buildTestMapping(graph, detected);
@@ -976,17 +998,21 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false, outpu
   // 5. Run structural analysis for risk annotations
   const diffConfig = await loadConfig(rootDir);
   const customLayers = diffConfig?.layers;
-  const hubFiles = getHubFiles(graph);
-  const hubFileMap = new Map(hubFiles.map((h) => [h.path, h]));
-  const circularDeps = findCircularDeps(graph);
+  const allHubFiles = getHubFiles(graph);
+  const hubFileMap = new Map(allHubFiles.map((h) => [h.path, h]));
+  const allCircularDeps = findCircularDeps(graph);
   const { layers, layerEdges } = detectArchitecturalLayers(graph, customLayers);
   const instabilities = computeInstability(graph);
   const communities = detectCommunities(graph);
   const gitActivity = detected.isGitRepo ? analyzeGitActivity(rootDir, verboseLog) : null;
 
+  // Scope analysis to the neighborhood for focused output
+  const relevantHub = scopeHubFiles(allHubFiles, changedSet, hop1Set, hop2Set);
+  const relevantCycles = scopeCircularDeps(allCircularDeps, changedSet, hop1Set);
+
   const analysis: ContextAnalysis = {
-    hubFiles,
-    circularDeps,
+    hubFiles: relevantHub,
+    circularDeps: relevantCycles,
     layers,
     layerEdges,
     gitActivity,
@@ -1008,7 +1034,7 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false, outpu
   const allRelevant = [...changedSet, ...neighborSet, ...testFiles];
 
   p.log.step(
-    t.text(`Scope: ${changedFiles.length} changed, ${neighborSet.size} neighbor${neighborSet.size === 1 ? "" : "s"}, ${testFiles.size} test file${testFiles.size === 1 ? "" : "s"}`),
+    t.text(`Scope: ${changedFiles.length} changed, ${hop1Set.size} direct + ${hop2Set.size} indirect neighbor${hop1Set.size + hop2Set.size === 1 ? "" : "s"}, ${testFiles.size} test file${testFiles.size === 1 ? "" : "s"}`),
   );
 
   // 7. Build markdown output
@@ -1097,17 +1123,14 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false, outpu
     }
   }
 
-  // Cycle context: if any changed file participates in a circular dependency
+  // Cycle context: cycles involving changed or hop1 files
   const cycleNotes: string[] = [];
-  for (const dep of circularDeps) {
-    const involved = dep.chain.filter((f) => changedSet.has(f));
-    if (involved.length > 0) {
-      const chainStr = dep.chain.map((f) => `\`${f}\``).join(" -> ");
-      if (dep.breakHint) {
-        cycleNotes.push(`Cycle: ${chainStr}. ${dep.breakHint}`);
-      } else {
-        cycleNotes.push(`Cycle: ${chainStr}. Consider breaking this circular dependency.`);
-      }
+  for (const dep of relevantCycles) {
+    const chainStr = dep.chain.map((f) => `\`${f}\``).join(" -> ");
+    if (dep.breakHint) {
+      cycleNotes.push(`Cycle: ${chainStr}. ${dep.breakHint}`);
+    } else {
+      cycleNotes.push(`Cycle: ${chainStr}. Consider breaking this circular dependency.`);
     }
   }
   if (cycleNotes.length > 0) {
@@ -1121,18 +1144,39 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false, outpu
     sections.push("");
   }
 
-  // Neighbor files (1-hop)
-  if (neighborSet.size > 0) {
-    sections.push("## Affected Neighbors");
+  // Neighbor files (hop1 and hop2)
+  if (hop1Set.size > 0 || hop2Set.size > 0) {
+    sections.push("## Neighbors");
     sections.push("");
-    sections.push("> These files import or are imported by changed files. Review for ripple effects.");
-    sections.push("");
-    for (const f of [...neighborSet].sort()) {
-      const importedBy = graph.inDegree.get(f) ?? 0;
-      const note = importedBy > 0 ? ` (imported by ${importedBy})` : "";
-      sections.push(`- \`${f}\`${note}`);
+
+    if (hop1Set.size > 0) {
+      sections.push("### Direct (1-hop)");
+      sections.push("");
+      sections.push("| File | Role | Imported By |");
+      sections.push("|------|------|-------------|");
+      for (const f of [...hop1Set].sort()) {
+        const hub = hubFileMap.get(f);
+        const importedBy = graph.inDegree.get(f) ?? 0;
+        const role = hub?.role ?? "Leaf";
+        sections.push(`| \`${f}\` | ${role} | ${importedBy} |`);
+      }
+      sections.push("");
     }
-    sections.push("");
+
+    if (hop2Set.size > 0) {
+      const hop2Capped = [...hop2Set].sort().slice(0, 15);
+      sections.push("### Indirect (2-hop)");
+      sections.push("");
+      sections.push("| File | Role | Imported By |");
+      sections.push("|------|------|-------------|");
+      for (const f of hop2Capped) {
+        const hub = hubFileMap.get(f);
+        const importedBy = graph.inDegree.get(f) ?? 0;
+        const role = hub?.role ?? "Leaf";
+        sections.push(`| \`${f}\` | ${role} | ${importedBy} |`);
+      }
+      sections.push("");
+    }
   }
 
   // Test files
@@ -1211,7 +1255,79 @@ function isDiffTestFile(filePath: string): boolean {
     /\/tests\//.test(filePath);
 }
 
+// ── Exported helpers for testing diff-mode logic ──────────────────────
+
+/**
+ * Compute 2-hop neighborhoods from a set of changed files in an import graph.
+ * Returns separate sets for 1-hop (direct) and 2-hop (indirect) neighbors.
+ */
+export function computeNeighborhood(
+  changedFiles: Set<string>,
+  edges: Array<{ from: string; to: string; isExternal: boolean }>,
+): { hop1: Set<string>; hop2: Set<string> } {
+  const hop1 = new Set<string>();
+
+  for (const edge of edges) {
+    if (edge.isExternal) continue;
+    if (changedFiles.has(edge.from)) hop1.add(edge.to);
+    if (changedFiles.has(edge.to)) hop1.add(edge.from);
+  }
+  for (const f of changedFiles) hop1.delete(f);
+
+  const hop2 = new Set<string>();
+  for (const edge of edges) {
+    if (edge.isExternal) continue;
+    if (hop1.has(edge.from) && !changedFiles.has(edge.to) && !hop1.has(edge.to)) {
+      hop2.add(edge.to);
+    }
+    if (hop1.has(edge.to) && !changedFiles.has(edge.from) && !hop1.has(edge.from)) {
+      hop2.add(edge.from);
+    }
+  }
+
+  return { hop1, hop2 };
+}
+
+/**
+ * Filter hub files to only those in the given neighborhood (changed + hop1 + hop2).
+ */
+export function scopeHubFiles<T extends { path: string }>(
+  hubFiles: T[],
+  changedSet: Set<string>,
+  hop1Set: Set<string>,
+  hop2Set: Set<string>,
+): T[] {
+  return hubFiles.filter(h =>
+    changedSet.has(h.path) || hop1Set.has(h.path) || hop2Set.has(h.path),
+  );
+}
+
+/**
+ * Filter circular dependencies to only those where at least one file
+ * is in the changed or hop1 neighborhood.
+ */
+export function scopeCircularDeps<T extends { chain: string[] }>(
+  circularDeps: T[],
+  changedSet: Set<string>,
+  hop1Set: Set<string>,
+): T[] {
+  return circularDeps.filter(dep =>
+    dep.chain.some(f => changedSet.has(f) || hop1Set.has(f)),
+  );
+}
+
 main().catch((err) => {
-  console.error(t.error("Fatal error:"), err);
+  const msg = err instanceof Error ? err.message : String(err);
+
+  if (msg.includes("ENOENT")) {
+    console.error(t.error("File not found:"), msg);
+  } else if (msg.includes("ETIMEDOUT") || /\btimeout\b/i.test(msg)) {
+    console.error(t.error("Git operation timed out. Try reducing the analysis window with staleDays in .clarte.json."));
+  } else if (msg.includes("TOML") || /\bparse\b/i.test(msg)) {
+    console.error(t.error("Failed to parse config file:"), msg);
+  } else {
+    console.error(t.error("Fatal error:"), err);
+  }
+
   process.exit(1);
 });
