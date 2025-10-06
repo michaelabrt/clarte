@@ -72,6 +72,24 @@ export async function scanConfigConstraints(
     if (prettierFormatter) constraints.formatter = prettierFormatter;
   }
 
+  // Go config
+  if (ctx.language === "go") {
+    const goConstraints = await scanGoConfig(rootDir);
+    if (goConstraints) constraints.go = goConstraints;
+  }
+
+  // Rust config
+  if (ctx.language === "rust") {
+    const rustConstraints = await scanRustConfig(rootDir);
+    if (rustConstraints) constraints.rust = rustConstraints;
+  }
+
+  // Python config
+  if (ctx.language === "python") {
+    const pythonConstraints = await scanPythonConfig(rootDir);
+    if (pythonConstraints) constraints.python = pythonConstraints;
+  }
+
   return constraints;
 }
 
@@ -288,6 +306,97 @@ async function scanPrettierConfig(rootDir: string) {
   return { tool: "Prettier", indent, quotes, semicolons: semi };
 }
 
+// ── Go scanning ──────────────────────────────────────────────────────
+
+async function scanGoConfig(rootDir: string): Promise<{ version: string } | undefined> {
+  const goMod = await readFileOr(path.join(rootDir, "go.mod"));
+  if (!goMod) return undefined;
+
+  // Match "go 1.21" or "go 1.21.3" directive
+  const match = goMod.match(/^go\s+(\d+\.\d+(?:\.\d+)?)\s*$/m);
+  if (!match) return undefined;
+
+  return { version: match[1] };
+}
+
+// ── Rust scanning ────────────────────────────────────────────────────
+
+async function scanRustConfig(rootDir: string): Promise<{ edition: string; clippy?: string[] } | undefined> {
+  const cargoToml = await readFileOr(path.join(rootDir, "Cargo.toml"));
+  if (!cargoToml) return undefined;
+
+  // Extract edition = "2021"
+  const editionMatch = cargoToml.match(/^edition\s*=\s*"(\d{4})"/m);
+  if (!editionMatch) return undefined;
+
+  const result: { edition: string; clippy?: string[] } = {
+    edition: editionMatch[1],
+  };
+
+  // Extract [lints.clippy] deny rules
+  const clippySection = cargoToml.match(/\[lints\.clippy\]\s*\n([\s\S]*?)(?=\n\[|$)/);
+  if (clippySection) {
+    const denyRules: string[] = [];
+    // Match lines like: pedantic = "deny" or complexity = "deny"
+    const ruleRegex = /^(\w[\w-]*)\s*=\s*"deny"/gm;
+    let ruleMatch: RegExpExecArray | null;
+    while ((ruleMatch = ruleRegex.exec(clippySection[1])) !== null) {
+      denyRules.push(ruleMatch[1]);
+    }
+    if (denyRules.length > 0) {
+      result.clippy = denyRules;
+    }
+  }
+
+  return result;
+}
+
+// ── Python scanning ──────────────────────────────────────────────────
+
+async function scanPythonConfig(rootDir: string): Promise<{ version?: string; ruff?: string[]; mypy?: { strict: boolean } } | undefined> {
+  const pyproject = await readFileOr(path.join(rootDir, "pyproject.toml"));
+  if (!pyproject) return undefined;
+
+  const result: { version?: string; ruff?: string[]; mypy?: { strict: boolean } } = {};
+  let hasData = false;
+
+  // Extract requires-python = ">=3.9"
+  const versionMatch = pyproject.match(/requires-python\s*=\s*"([^"]+)"/);
+  if (versionMatch) {
+    result.version = versionMatch[1];
+    hasData = true;
+  }
+
+  // Extract [tool.ruff] or [tool.ruff.lint] select rules
+  // Use a lookahead for the next TOML section header (line starting with [) to capture the body
+  const ruffSection = pyproject.match(/\[tool\.ruff(?:\.lint)?\]\s*\n([\s\S]*?)(?=\n\[|$)/);
+  if (ruffSection) {
+    const selectMatch = ruffSection[1].match(/select\s*=\s*\[([^\]]*)\]/);
+    if (selectMatch) {
+      const rules = selectMatch[1]
+        .split(",")
+        .map((r) => r.trim().replace(/^["']|["']$/g, ""))
+        .filter(Boolean);
+      if (rules.length > 0) {
+        result.ruff = rules;
+        hasData = true;
+      }
+    }
+  }
+
+  // Extract [tool.mypy] strict mode
+  const mypySection = pyproject.match(/\[tool\.mypy\]\s*\n([\s\S]*?)(?=\n\[|$)/);
+  if (mypySection) {
+    const strictMatch = mypySection[1].match(/strict\s*=\s*(true|false)/i);
+    if (strictMatch) {
+      result.mypy = { strict: strictMatch[1].toLowerCase() === "true" };
+      hasData = true;
+    }
+  }
+
+  return hasData ? result : undefined;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────
 
 function normalizeRuleSetting(value: unknown): string {
@@ -378,6 +487,34 @@ export function renderConstraintsSection(constraints: ConfigConstraints): string
     parts.push(`${f.quotes} quotes`);
     parts.push(f.semicolons ? "semicolons" : "no semicolons");
     lines.push(`- **Style**: ${parts.join(", ")} (${f.tool})`);
+  }
+
+  // Go constraints
+  if (constraints.go) {
+    lines.push(`- **Must**: Target Go ${constraints.go.version} or later.`);
+  }
+
+  // Rust constraints
+  if (constraints.rust) {
+    lines.push(`- **Must**: Use Rust edition ${constraints.rust.edition}.`);
+    if (constraints.rust.clippy?.length) {
+      for (const rule of constraints.rust.clippy) {
+        lines.push(`- **Prefer**: Follow clippy::${rule} lint rules.`);
+      }
+    }
+  }
+
+  // Python constraints
+  if (constraints.python) {
+    if (constraints.python.version) {
+      lines.push(`- **Must**: Support Python ${constraints.python.version}.`);
+    }
+    if (constraints.python.mypy?.strict) {
+      lines.push("- **Must**: mypy strict mode enabled.");
+    }
+    if (constraints.python.ruff?.length) {
+      lines.push(`- **Prefer**: Follow ruff rule selections: ${constraints.python.ruff.join(", ")}.`);
+    }
   }
 
   if (lines.length === 0) return null;

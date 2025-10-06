@@ -304,6 +304,204 @@ describe("scanConfigConstraints — Prettier", () => {
   });
 });
 
+describe("scanConfigConstraints -- Go", () => {
+  it("extracts Go version from go.mod", async () => {
+    mockReadFileOr.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith("go.mod")) {
+        return "module example.com/myapp\n\ngo 1.21\n\nrequire (\n\tgithub.com/gin-gonic/gin v1.9.0\n)\n";
+      }
+      return null;
+    });
+
+    const ctx = makeCtx({ language: "go", hasTypeScript: false });
+    const result = await scanConfigConstraints("/test", ctx);
+
+    expect(result.go).toBeDefined();
+    expect(result.go!.version).toBe("1.21");
+  });
+
+  it("extracts Go version with patch (e.g. 1.21.3)", async () => {
+    mockReadFileOr.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith("go.mod")) {
+        return "module example.com/myapp\n\ngo 1.21.3\n";
+      }
+      return null;
+    });
+
+    const ctx = makeCtx({ language: "go", hasTypeScript: false });
+    const result = await scanConfigConstraints("/test", ctx);
+
+    expect(result.go).toBeDefined();
+    expect(result.go!.version).toBe("1.21.3");
+  });
+
+  it("returns undefined go when go.mod is missing", async () => {
+    mockReadFileOr.mockResolvedValue(null);
+    const ctx = makeCtx({ language: "go", hasTypeScript: false });
+    const result = await scanConfigConstraints("/test", ctx);
+
+    expect(result.go).toBeUndefined();
+  });
+});
+
+describe("scanConfigConstraints -- Rust", () => {
+  it("extracts Rust edition from Cargo.toml", async () => {
+    mockReadFileOr.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith("Cargo.toml")) {
+        return '[package]\nname = "myapp"\nversion = "0.1.0"\nedition = "2021"\n';
+      }
+      return null;
+    });
+
+    const ctx = makeCtx({ language: "rust", hasTypeScript: false });
+    const result = await scanConfigConstraints("/test", ctx);
+
+    expect(result.rust).toBeDefined();
+    expect(result.rust!.edition).toBe("2021");
+    expect(result.rust!.clippy).toBeUndefined();
+  });
+
+  it("extracts clippy deny rules from Cargo.toml", async () => {
+    mockReadFileOr.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith("Cargo.toml")) {
+        return [
+          '[package]',
+          'name = "myapp"',
+          'version = "0.1.0"',
+          'edition = "2021"',
+          '',
+          '[lints.clippy]',
+          'pedantic = "deny"',
+          'complexity = "deny"',
+          'style = "warn"',
+        ].join("\n");
+      }
+      return null;
+    });
+
+    const ctx = makeCtx({ language: "rust", hasTypeScript: false });
+    const result = await scanConfigConstraints("/test", ctx);
+
+    expect(result.rust).toBeDefined();
+    expect(result.rust!.clippy).toEqual(["pedantic", "complexity"]);
+  });
+
+  it("returns undefined rust when Cargo.toml is missing", async () => {
+    mockReadFileOr.mockResolvedValue(null);
+    const ctx = makeCtx({ language: "rust", hasTypeScript: false });
+    const result = await scanConfigConstraints("/test", ctx);
+
+    expect(result.rust).toBeUndefined();
+  });
+});
+
+describe("scanConfigConstraints -- Python", () => {
+  it("extracts requires-python version from pyproject.toml", async () => {
+    mockReadFileOr.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith("pyproject.toml")) {
+        return [
+          '[project]',
+          'name = "myapp"',
+          'requires-python = ">=3.9"',
+        ].join("\n");
+      }
+      return null;
+    });
+
+    const ctx = makeCtx({ language: "python", hasTypeScript: false });
+    const result = await scanConfigConstraints("/test", ctx);
+
+    expect(result.python).toBeDefined();
+    expect(result.python!.version).toBe(">=3.9");
+  });
+
+  it("extracts ruff rule selections", async () => {
+    mockReadFileOr.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith("pyproject.toml")) {
+        return [
+          '[project]',
+          'name = "myapp"',
+          'requires-python = ">=3.9"',
+          '',
+          '[tool.ruff.lint]',
+          'select = ["E", "F", "W", "I"]',
+        ].join("\n");
+      }
+      return null;
+    });
+
+    const ctx = makeCtx({ language: "python", hasTypeScript: false });
+    const result = await scanConfigConstraints("/test", ctx);
+
+    expect(result.python).toBeDefined();
+    expect(result.python!.ruff).toEqual(["E", "F", "W", "I"]);
+  });
+
+  it("extracts ruff rules from [tool.ruff] (without .lint suffix)", async () => {
+    mockReadFileOr.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith("pyproject.toml")) {
+        return [
+          '[project]',
+          'name = "myapp"',
+          '',
+          '[tool.ruff]',
+          'select = ["E", "F"]',
+        ].join("\n");
+      }
+      return null;
+    });
+
+    const ctx = makeCtx({ language: "python", hasTypeScript: false });
+    const result = await scanConfigConstraints("/test", ctx);
+
+    expect(result.python).toBeDefined();
+    expect(result.python!.ruff).toEqual(["E", "F"]);
+  });
+
+  it("extracts mypy strict mode", async () => {
+    mockReadFileOr.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith("pyproject.toml")) {
+        return [
+          '[project]',
+          'name = "myapp"',
+          '',
+          '[tool.mypy]',
+          'strict = true',
+        ].join("\n");
+      }
+      return null;
+    });
+
+    const ctx = makeCtx({ language: "python", hasTypeScript: false });
+    const result = await scanConfigConstraints("/test", ctx);
+
+    expect(result.python).toBeDefined();
+    expect(result.python!.mypy).toEqual({ strict: true });
+  });
+
+  it("returns undefined python when pyproject.toml is missing", async () => {
+    mockReadFileOr.mockResolvedValue(null);
+    const ctx = makeCtx({ language: "python", hasTypeScript: false });
+    const result = await scanConfigConstraints("/test", ctx);
+
+    expect(result.python).toBeUndefined();
+  });
+
+  it("returns undefined python when pyproject.toml has no relevant sections", async () => {
+    mockReadFileOr.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith("pyproject.toml")) {
+        return '[build-system]\nrequires = ["setuptools"]\n';
+      }
+      return null;
+    });
+
+    const ctx = makeCtx({ language: "python", hasTypeScript: false });
+    const result = await scanConfigConstraints("/test", ctx);
+
+    expect(result.python).toBeUndefined();
+  });
+});
+
 describe("renderConstraintsSection", () => {
   it("renders TypeScript strict mode", () => {
     const constraints: ConfigConstraints = {
@@ -358,5 +556,62 @@ describe("renderConstraintsSection", () => {
   it("returns null when no constraints", () => {
     const result = renderConstraintsSection({});
     expect(result).toBeNull();
+  });
+
+  it("renders Go constraints", () => {
+    const constraints: ConfigConstraints = {
+      go: { version: "1.21" },
+    };
+
+    const result = renderConstraintsSection(constraints);
+    expect(result).toContain("## Config Constraints");
+    expect(result).toContain("**Must**: Target Go 1.21 or later.");
+  });
+
+  it("renders Rust constraints with clippy rules", () => {
+    const constraints: ConfigConstraints = {
+      rust: { edition: "2021", clippy: ["pedantic", "complexity"] },
+    };
+
+    const result = renderConstraintsSection(constraints);
+    expect(result).toContain("**Must**: Use Rust edition 2021.");
+    expect(result).toContain("**Prefer**: Follow clippy::pedantic lint rules.");
+    expect(result).toContain("**Prefer**: Follow clippy::complexity lint rules.");
+  });
+
+  it("renders Rust constraints without clippy rules", () => {
+    const constraints: ConfigConstraints = {
+      rust: { edition: "2021" },
+    };
+
+    const result = renderConstraintsSection(constraints);
+    expect(result).toContain("**Must**: Use Rust edition 2021.");
+    expect(result).not.toContain("clippy");
+  });
+
+  it("renders Python constraints with all fields", () => {
+    const constraints: ConfigConstraints = {
+      python: {
+        version: ">=3.9",
+        ruff: ["E", "F", "W"],
+        mypy: { strict: true },
+      },
+    };
+
+    const result = renderConstraintsSection(constraints);
+    expect(result).toContain("**Must**: Support Python >=3.9.");
+    expect(result).toContain("**Must**: mypy strict mode enabled.");
+    expect(result).toContain("**Prefer**: Follow ruff rule selections: E, F, W.");
+  });
+
+  it("renders Python constraints with only version", () => {
+    const constraints: ConfigConstraints = {
+      python: { version: ">=3.9" },
+    };
+
+    const result = renderConstraintsSection(constraints);
+    expect(result).toContain("**Must**: Support Python >=3.9.");
+    expect(result).not.toContain("mypy");
+    expect(result).not.toContain("ruff");
   });
 });
