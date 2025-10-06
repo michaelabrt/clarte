@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import type { ChangeCoupling, GitAnalysis, ProgressCallback } from "./types.js";
+import type { ChangeCoupling, GitAnalysis, LagCoupling, ProgressCallback } from "./types.js";
 
 /**
  * Structured representation of a single commit from git log.
@@ -13,20 +13,33 @@ export interface ParsedCommit {
   files: string[];
 }
 
+/** Time window specification: either a number of days or a git ref for range-based analysis */
+export type TimeWindow = { days: number } | { ref: string };
+
 /**
  * Parse the output of a single git log call into structured commits.
  * Uses a custom separator to split commits efficiently.
+ *
+ * Accepts a TimeWindow to control the analysis range:
+ * - { days: N } uses --since="N days ago" (default: 90)
+ * - { ref: "main" } uses ref..HEAD for branch-specific analysis
  */
-function parseGitLog(rootDir: string): ParsedCommit[] {
+function parseGitLog(rootDir: string, window: TimeWindow = { days: 90 }): ParsedCommit[] {
   const SEP = "---CLARTE_COMMIT_SEP---";
+
+  // Build the range argument based on the time window type
+  const rangeArg = "ref" in window
+    ? `${window.ref}..HEAD`
+    : `--since="${window.days} days ago"`;
 
   // Single git log call with all data:
   // - --no-merges: exclude merge commits (inflates counts and creates spurious coupling)
   // - --diff-filter=ACDMRT: only Added/Copied/Deleted/Modified/Renamed/Type-changed (skip old paths from renames)
   // - --name-only: list changed files
-  // - format: hash, ISO date, relative date, subject line
+  // - format: hash, ISO date, relative date, subject line (separated by ASCII unit separator \x1f to avoid pipe-in-message issues)
+  const US = "\\x1f"; // ASCII unit separator
   const output = execSync(
-    `git log --no-merges --since="90 days ago" --diff-filter=ACDMRT --name-only --format="${SEP}%H|%aI|%ar|%s"`,
+    `git log --no-merges ${rangeArg} --diff-filter=ACDMRT --name-only --format="${SEP}%H${US}%aI${US}%ar${US}%s"`,
     { cwd: rootDir, encoding: "utf-8", timeout: 15000, maxBuffer: 10 * 1024 * 1024 },
   ).trim();
 
@@ -39,21 +52,18 @@ function parseGitLog(rootDir: string): ParsedCommit[] {
     const lines = chunk.split("\n").filter(Boolean);
     if (lines.length === 0) continue;
 
-    // First line: hash|isoDate|relDate|subject
+    // First line: hash\x1fisoDate\x1frelDate\x1fsubject
     const headerLine = lines[0];
-    const pipeIdx1 = headerLine.indexOf("|");
-    const pipeIdx2 = headerLine.indexOf("|", pipeIdx1 + 1);
-    const pipeIdx3 = headerLine.indexOf("|", pipeIdx2 + 1);
+    const parts = headerLine.split("\x1f");
+    if (parts.length < 4) continue;
 
-    if (pipeIdx1 < 0 || pipeIdx2 < 0 || pipeIdx3 < 0) continue;
+    const hash = parts[0];
+    const date = parts[1];
+    const relativeDate = parts[2];
+    const message = parts.slice(3).join("\x1f"); // rejoin in case subject somehow contains \x1f
 
-    const hash = headerLine.slice(0, pipeIdx1);
-    const date = headerLine.slice(pipeIdx1 + 1, pipeIdx2);
-    const relativeDate = headerLine.slice(pipeIdx2 + 1, pipeIdx3);
-    const message = headerLine.slice(pipeIdx3 + 1);
-
-    // Remaining lines are file paths
-    const files = lines.slice(1).map((f) => f.trim()).filter(Boolean);
+    // Remaining lines are file paths, deduplicated to handle renames
+    const files = [...new Set(lines.slice(1).map((f) => f.trim()).filter(Boolean))];
 
     if (files.length > 0) {
       commits.push({ hash, date, relativeDate, message, files });
@@ -68,15 +78,29 @@ function parseGitLog(rootDir: string): ParsedCommit[] {
  * Returns null if not a git repo or git is unavailable.
  *
  * Uses a single git log call for both commit counting and coupling analysis.
+ *
+ * @param rootDir - project root directory
+ * @param onProgress - optional progress callback
+ * @param analysisDays - number of days to look back (default: 90, ignored when sinceRef is set)
+ * @param sinceRef - git ref for range-based analysis (e.g. "main"); when set, analysisDays is ignored
  */
 export function analyzeGitActivity(
   rootDir: string,
   onProgress?: ProgressCallback,
+  analysisDays: number = 90,
+  sinceRef?: string,
 ): GitAnalysis | null {
   try {
-    onProgress?.("Analyzing git history (last 90 days)...");
+    const window: TimeWindow = sinceRef
+      ? { ref: sinceRef }
+      : { days: analysisDays };
 
-    const commits = parseGitLog(rootDir);
+    const windowLabel = sinceRef
+      ? `since ${sinceRef}`
+      : `last ${analysisDays} days`;
+    onProgress?.(`Analyzing git history (${windowLabel})...`);
+
+    const commits = parseGitLog(rootDir, window);
     if (commits.length === 0) return null;
 
     onProgress?.(`Parsed ${commits.length} commits`);
@@ -111,12 +135,76 @@ export function analyzeGitActivity(
 
     // Analyze change coupling using the same parsed commits
     onProgress?.("Analyzing change coupling...");
-    const changeCoupling = computeChangeCoupling(commits);
+    const changeCoupling = computeChangeCoupling(commits, analysisDays);
 
-    return { commitCounts, hotFiles, changeCoupling };
+    // Compute lag coupling for pairs with high same-commit coupling
+    const lagCouplings = computeLagCoupling(commits, changeCoupling);
+
+    // Compute per-file code churn (optional, fail gracefully)
+    const fileChurn = computeFileChurn(rootDir, window);
+
+    return {
+      commitCounts,
+      hotFiles,
+      changeCoupling,
+      lagCouplings: lagCouplings.length > 0 ? lagCouplings : undefined,
+      fileChurn: fileChurn && fileChurn.size > 0 ? fileChurn : undefined,
+    };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     onProgress?.(`Warning: git analysis failed: ${msg}`);
+    return null;
+  }
+}
+
+/**
+ * Compute per-file code churn by running git log --numstat.
+ * Returns a map of file path to lines added/removed.
+ * Returns null on failure (this is optional enrichment data).
+ */
+export function computeFileChurn(
+  rootDir: string,
+  window: TimeWindow = { days: 90 },
+): Map<string, { linesAdded: number; linesRemoved: number }> | null {
+  try {
+    const rangeArg = "ref" in window
+      ? `${window.ref}..HEAD`
+      : `--since="${window.days} days ago"`;
+
+    const output = execSync(
+      `git log --numstat --format="" ${rangeArg} --no-merges`,
+      { cwd: rootDir, encoding: "utf-8", timeout: 15000, maxBuffer: 10 * 1024 * 1024 },
+    ).trim();
+
+    if (!output) return null;
+
+    const churn = new Map<string, { linesAdded: number; linesRemoved: number }>();
+
+    for (const line of output.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Format: <added>\t<removed>\t<file>
+      // Binary files show "-" for added/removed
+      const parts = trimmed.split("\t");
+      if (parts.length < 3) continue;
+
+      const added = parseInt(parts[0], 10);
+      const removed = parseInt(parts[1], 10);
+      if (isNaN(added) || isNaN(removed)) continue;
+
+      const file = parts.slice(2).join("\t"); // filename may contain tabs (rare)
+      const existing = churn.get(file);
+      if (existing) {
+        existing.linesAdded += added;
+        existing.linesRemoved += removed;
+      } else {
+        churn.set(file, { linesAdded: added, linesRemoved: removed });
+      }
+    }
+
+    return churn;
+  } catch {
     return null;
   }
 }
@@ -149,11 +237,28 @@ function commitAgeDays(isoDate: string): number {
 }
 
 /**
- * Temporal decay: recent changes matter more than old ones.
- * Half-life ~31 days (exp(-age/45)).
+ * Compute the decay constant based on repository velocity.
+ * Fast-moving repos (>30 commits/month) use a shorter half-life (20 days),
+ * slow-moving repos (<5 commits/month) use a longer half-life (60 days),
+ * and moderate repos keep the default half-life of ~31 days.
+ *
+ * @param totalCommits - total number of commits in the analysis window
+ * @param windowDays - size of the analysis window in days (default: 90)
  */
-function temporalDecay(ageDays: number): number {
-  return Math.exp(-ageDays / 45);
+export function adaptiveDecayConstant(totalCommits: number, windowDays: number = 90): number {
+  const months = Math.max(windowDays / 30, 1); // avoid division by zero
+  const commitsPerMonth = totalCommits / months;
+  if (commitsPerMonth > 30) return 29; // halfLife ~20 days
+  if (commitsPerMonth < 5) return 87;  // halfLife ~60 days
+  return 45;                           // halfLife ~31 days (default)
+}
+
+/**
+ * Temporal decay: recent changes matter more than old ones.
+ * Decay constant is adaptive based on repository velocity.
+ */
+function temporalDecay(ageDays: number, decayConstant: number = 45): number {
+  return Math.exp(-ageDays / decayConstant);
 }
 
 /**
@@ -166,7 +271,7 @@ function temporalDecay(ageDays: number): number {
  * 3. Noise classification: lint/merge/format commits are discounted
  * 4. Jaccard similarity for symmetric confidence metric
  */
-export function computeChangeCoupling(commits: ParsedCommit[]): ChangeCoupling[] {
+export function computeChangeCoupling(commits: ParsedCommit[], windowDays: number = 90): ChangeCoupling[] {
   // Track which commits each file appears in (for Jaccard)
   const fileCommitSets = new Map<string, Set<number>>();
   // Weighted co-change scores
@@ -176,6 +281,8 @@ export function computeChangeCoupling(commits: ParsedCommit[]): ChangeCoupling[]
 
   /** Skip commits touching too many files (mass renames, generated code) */
   const MAX_COUPLING_FILES = 30;
+
+  const decayConst = adaptiveDecayConstant(commits.length, windowDays);
 
   for (let ci = 0; ci < commits.length; ci++) {
     const commit = commits[ci];
@@ -190,7 +297,7 @@ export function computeChangeCoupling(commits: ParsedCommit[]): ChangeCoupling[]
 
     // Compute per-pair weight for this commit
     const pairWeight = 1 / (files.length - 1); // Inverse commit size
-    const decay = temporalDecay(commitAgeDays(commit.date));
+    const decay = temporalDecay(commitAgeDays(commit.date), decayConst);
     const noise = noiseDiscount(commit.message);
     const weight = pairWeight * decay * noise;
 
@@ -248,4 +355,66 @@ export function computeChangeCoupling(commits: ParsedCommit[]): ChangeCoupling[]
   });
 
   return results.slice(0, 10);
+}
+
+/**
+ * Detect lag-adjusted temporal coupling: files that change within 1-3 commits
+ * of each other (but NOT in the same commit). This captures reactive patterns
+ * where modifying one file predictably triggers changes in another shortly after.
+ *
+ * Only examines pairs that already have high same-commit coupling, since those
+ * are the most likely to exhibit lag patterns.
+ */
+export function computeLagCoupling(
+  commits: ParsedCommit[],
+  couplingResults: ChangeCoupling[],
+): LagCoupling[] {
+  // Build file timeline: map each file to the commit indices it appears in
+  const fileTimeline = new Map<string, number[]>();
+  for (let ci = 0; ci < commits.length; ci++) {
+    for (const file of commits[ci].files) {
+      const timeline = fileTimeline.get(file);
+      if (timeline) {
+        timeline.push(ci);
+      } else {
+        fileTimeline.set(file, [ci]);
+      }
+    }
+  }
+
+  const results: LagCoupling[] = [];
+
+  for (const pair of couplingResults) {
+    const timelineA = fileTimeline.get(pair.fileA);
+    const timelineB = fileTimeline.get(pair.fileB);
+    if (!timelineA || !timelineB) continue;
+
+    const setB = new Set(timelineB);
+
+    // For each commit of fileA, check if fileB changed within 1-3 commits (not same commit)
+    let lagScore = 0;
+    for (const ciA of timelineA) {
+      for (let lag = 1; lag <= 3; lag++) {
+        // Check both directions (fileB changed before or after fileA)
+        if (setB.has(ciA + lag) || setB.has(ciA - lag)) {
+          lagScore += 1 / lag; // Inverse lag weighting
+        }
+      }
+    }
+
+    // Only flag if lag coupling is significant relative to same-commit coupling
+    if (lagScore > pair.coChangeCount * 0.5) {
+      results.push({
+        fileA: pair.fileA,
+        fileB: pair.fileB,
+        sameCommitCount: pair.coChangeCount,
+        lagScore,
+      });
+    }
+  }
+
+  // Sort by lagScore descending
+  results.sort((a, b) => b.lagScore - a.lagScore);
+
+  return results;
 }
