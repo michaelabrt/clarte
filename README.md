@@ -17,6 +17,22 @@ AI coding agents spend their first few minutes reading files, tracing imports, a
 npx clarte
 ```
 
+## Benchmarks
+
+Independent benchmarks on [clarte-benchmark](https://github.com/michaelabrt/clarte-benchmark) measure the impact of Clarte-generated context on AI coding agent performance. Identical tasks run with and without context, compared via statistical testing (Mann-Whitney U, bootstrap confidence intervals, Cliff's delta effect sizes).
+
+**Results (Claude Sonnet 4.5, small TypeScript utility library):**
+
+| Metric | With Clarte | Without Clarte | Improvement |
+|--------|-------------|----------------|-------------|
+| Cost (median) | - | - | **46.5% reduction** |
+| Duration (median) | - | - | **22.6% reduction** |
+| Input tokens | - | - | **54.3% fewer** |
+| Turns | - | - | **29.4% fewer** |
+| Correctness | 100% pass | 100% pass | No impact |
+
+See the [benchmark repo](https://github.com/michaelabrt/clarte-benchmark) for methodology, fixture projects, and full statistical analysis.
+
 ## Before & After
 
 Without Clarté, a typical AI agent session starts like this:
@@ -36,11 +52,14 @@ With Clarté, the agent already knows:
 |------|---------|
 | Tech stack | Next.js 14 (App Router), TypeScript, Zustand, Tailwind |
 | Key files | `src/types.ts` (Foundation), `src/api/client.ts` (Orchestrator) |
-| Architecture | services → hooks → components → pages |
+| Architecture | services -> hooks -> components -> pages |
+| Working guidelines | "When modifying `src/graph.ts`, check `src/types.ts` for breaking changes" |
 | Active areas | `src/auth/` changed 12 times in the last 90 days |
 | Cross-cutting | `src/types.ts` spans 5 layers; changes have wide blast radius |
 | Chokepoints | `src/utils.ts` separates 3 components; no alternative paths |
 | Coupled files | `routes.ts` and `middleware.ts` always change together |
+| Hidden coupling | `schemas/user.ts` and `store/user.ts` co-change but have no import path |
+| Tight coupling | `index.ts` imports 14 names from `graph.ts`; consider an interface |
 | Dead files | Files with zero imports that may be safe to remove |
 | Code snapshot | All public types, interfaces, props, and function signatures |
 
@@ -104,7 +123,7 @@ export function useAuth(): AuthContext  // imported by 9 files
 
 ## Architecture
 
-types → stores → hooks → components → pages
+types -> stores -> hooks -> components -> pages
 
 ## Recently Active Files
 
@@ -112,6 +131,17 @@ types → stores → hooks → components → pages
 |------|--------------|--------------|
 | `src/app/chat/page.tsx` | 14 | 2 days ago |
 | `src/lib/api-client.ts` | 11 | 3 days ago |
+
+## Working Guidelines
+
+> Analysis-derived guidelines. Follow these when making changes.
+
+- When modifying `src/lib/api-client.ts` (Foundation, imported by 12 files),
+  check dependents for breaking changes.
+- `src/types.ts` is a structural chokepoint (separates 3 components).
+  Refactor with extreme care.
+- When modifying `src/lib/api-client.ts`, also check: `src/hooks/useAuth.ts`,
+  `src/store/auth.ts`.
 
 <!-- ... more sections: change coupling, dead files, gotchas -->
 ```
@@ -140,11 +170,11 @@ Your answers are saved to `.clarte.json` so future runs skip the prompts.
 
 | Language | Import parsing | Snapshot extraction |
 |----------|---------------|---------------------|
-| TypeScript / JavaScript | `import`, `require` | types, interfaces, functions, components, hooks, stores |
-| Python | `import`, `from ... import` | classes (with public method signatures), functions, type aliases |
-| Go | `import` | - |
-| Rust | `use` | - |
-| Java | `import` | - |
+| TypeScript / JavaScript | `import`, `require` | types, interfaces, functions, components, hooks, stores (AST-based via oxc-parser) |
+| Python | `import`, `from ... import` | classes (with public method signatures and docstrings), functions, type aliases |
+| Go | `import` | structs, interfaces, functions, methods (grouped by receiver type) |
+| Rust | `use` | structs, enums, traits, functions (with generic bounds and where clauses) |
+| Java | `import` | classes, interfaces, enums, records, methods (with annotations) |
 
 ## Supported Tools
 
@@ -169,6 +199,7 @@ Clarté runs a pipeline of static analysis steps:
 | Step | How | Result |
 |------|-----|--------|
 | [Dependency graph](#dependency-graph) | Parses all `import`/`require`/`use` statements | Maps how files connect to each other |
+| [Deep analysis](#deep-analysis) | Loads TypeScript type checker (opt-in) | Inferred return types and function call graphs |
 | [HITS analysis](#hits-analysis) | Computes authority/hub scores, assigns roles | Surfaces foundations, orchestrators, and bridges |
 | [Config constraints](#config-constraints) | Extracts rules from tsconfig, ESLint, Biome, Prettier | Prevents wrong code from strict mode, linter rules |
 | [Dead file detection](#dead-file-detection) | Finds files nothing imports | Highlights potential cleanup targets |
@@ -180,7 +211,13 @@ Clarté runs a pipeline of static analysis steps:
 | [Cross-cutting analysis](#cross-cutting-analysis) | Finds files imported across 3+ layers | Warns agents about wide blast radius |
 | [Layer consistency](#layer-consistency) | Checks import direction against layer order | Prevents new dependency violations |
 | [Chokepoint detection](#chokepoint-detection) | Finds articulation points in the graph | Highlights irreplaceable connectors |
+| [Tight coupling](#tight-coupling) | Counts named imports between file pairs | Highlights files that may need an interface |
 | [Change coupling](#change-coupling) | Finds files that always change together | Prevents incomplete changes |
+| [Hidden coupling](#hidden-coupling) | Finds co-changing files with no import path | Surfaces implicit dependencies |
+| [Change impact](#change-impact-prediction) | Predicts which files need changes when a hub file is modified | Focuses review scope during refactoring |
+| [Transitive risk](#transitive-dependency-risk) | Propagates volatility through the dependency graph | Flags stable files with risky dependencies |
+| [Architecture delta](#architecture-delta) | Diffs analysis snapshots across runs | Tracks architectural drift over time |
+| [Fitness functions](#architectural-fitness-functions) | Checks structural rules (no upward deps, test isolation, layer skips) | Prevents new architectural violations |
 | [Git activity](#git-activity) | Surfaces recently active files | Shows where current work is focused |
 | [Stale detection](#stale-detection) | Hashes file paths + mtimes | Tells you when to re-run |
 
@@ -194,7 +231,7 @@ src/hooks/useAuth.ts  ──imports──▶  src/types.ts
 src/pages/Login.tsx   ──imports──▶  src/hooks/useAuth.ts
 ```
 
-**Barrel file resolution**: imports from `index.ts` barrel files are followed through re-exports to credit the actual source files, preventing barrel files from inflating centrality scores.
+**Barrel file resolution**: imports through barrel files (detected by content analysis: >50% re-export ratio) are followed through re-exports to credit the actual source files, preventing barrels from inflating centrality scores. Works with `index.ts`, `mod.ts`, and any file that primarily re-exports.
 
 **tsconfig path aliases**: specifiers like `@/utils` are resolved via `tsconfig.json` `paths`/`baseUrl` instead of being counted as external packages.
 
@@ -237,12 +274,20 @@ Large projects may have more types and signatures than fit in the token budget. 
 
 Lower-priority items fill whatever budget remains.
 
+When `--budget` is set, entire context sections are also prioritized for inclusion. Sections are included in priority order until the budget is exhausted:
+
+- **Priority 0** (always): project purpose, key patterns, gotchas, development commands
+- **Priority 1-2**: tech stack, config constraints, working guidelines, key files
+- **Priority 3-5**: circular dependencies, architecture, framework hints, conventions
+- **Priority 6-7**: code snapshot, call graph, hot files, change coupling
+- **Priority 8-10**: test mapping, dead files, cross-cutting files, tight coupling
+
 ### Layer Detection
 
 Classifies files into architecture layers based on directory and naming conventions:
 
 ```
-types  →  stores  →  services  →  hooks  →  components  →  pages
+types  ->  stores  ->  services  ->  hooks  ->  components  ->  pages
                                               ↑
                                             utils, config
 ```
@@ -253,7 +298,9 @@ The generated context includes a dependency-flow summary so agents understand ho
 
 Uses [Tarjan's algorithm](https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm) to find groups of files that form import cycles, then reports the shortest actual cycle within each strongly connected component via BFS.
 
-**Example:** `auth.ts → user.ts → permissions.ts → auth.ts`. All three files are reported as a circular dependency cluster. Agents are warned to avoid deepening the cycle.
+**Example:** `auth.ts -> user.ts -> permissions.ts -> auth.ts`. All three files are reported as a circular dependency cluster.
+
+Each cycle gets a **severity score** (0-1) based on the ratio of runtime to type-only imports, and a **break hint** suggesting how to resolve it (e.g., "Convert X -> Y to type-only import"). Cycles are sorted by severity so agents address the most impactful ones first.
 
 ### Instability Scoring
 
@@ -313,6 +360,65 @@ Analyzes 90 days of git history to find file pairs that frequently appear in the
 
 This catches implicit dependencies that don't show up in imports. Agents know that touching one file likely means touching the other.
 
+### Tight Coupling
+
+Counts named imports between file pairs and flags those with 5+ shared names. This indicates strong coupling where changes to one file's exports are likely to break the other.
+
+**Example output:**
+
+| From | To | Imported Names |
+|------|----|----------------|
+| `src/index.ts` | `src/graph.ts` | 14 names |
+| `src/brief.ts` | `src/graph.ts` | 13 names |
+
+Agents are advised to consider introducing an intermediate interface if refactoring tightly coupled pairs.
+
+### Hidden Coupling
+
+Cross-references change coupling (git co-change data) with graph distance (BFS shortest path). File pairs that frequently change together but have no direct import path between them indicate implicit dependencies: shared schemas, duplicated logic, or missing intermediate modules.
+
+**Example output:**
+
+| File A | File B | Co-changes | Confidence | Graph Distance |
+|--------|--------|------------|------------|----------------|
+| `src/api/types.ts` | `src/hooks/useAuth.ts` | 8 | 75% | unreachable |
+
+### Change Impact Prediction
+
+For each hub file, predicts which files are most likely to need changes when that file is modified. Combines three signals via [Reciprocal Rank Fusion](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf):
+
+1. **Structural proximity**: BFS distance in the import graph
+2. **Temporal coupling**: co-change confidence from git history
+3. **Directory proximity**: shared path segments
+
+Results are rendered as co-change directives in the working guidelines.
+
+### Transitive Dependency Risk
+
+Propagates code churn through the dependency graph using BFS with exponential decay. A stable file that depends on volatile files inherits transitive risk. Composite score: 30% direct volatility + 70% transitive volatility. The top risk files are flagged in directives.
+
+### Architecture Delta
+
+Persists analysis snapshots to `.clarte/history.json` and diffs them across runs. Tracks:
+
+- New/demoted hub files
+- New/resolved circular dependencies
+- New/resurrected dead files
+- New/resolved chokepoints
+- Layer violation count changes
+
+Deltas are rendered as an "Architecture Changes" section in the context file and logged during `--watch` mode.
+
+### Architectural Fitness Functions
+
+Checks three structural rules against the import graph and layer classification:
+
+1. **No upward dependencies**: lower layers should not import from higher layers
+2. **Test isolation**: test files should not import other test files (excluding fixtures)
+3. **No layer skipping**: imports should not skip 2+ intermediate layers
+
+Violations are rendered as directives with severity levels (error/warning).
+
 ### Git Activity
 
 Counts commits per file over the last 90 days to surface:
@@ -368,6 +474,8 @@ npx clarte [directory] [options]
 | `--budget=N` | Set token budget for the context file (prioritized sections) |
 | `--format=json` | Output full analysis as structured JSON to stdout |
 | `--generate-skills` | Generate Claude Code skill files |
+| `--deep` | Run TypeScript type checker for inferred return types and call graphs |
+| `--init-hook` | Install git pre-commit hook for automatic snapshot freshness validation |
 | `--watch` | Watch for file changes and re-analyze continuously |
 | `-v, --verbose` | Show detailed progress output |
 
@@ -419,6 +527,30 @@ npx clarte --watch -v       # Verbose output
 ```
 
 On each source file change (debounced 500ms), Clarte rebuilds the import graph incrementally and runs the full analysis pipeline. Architecture deltas (new hub files, resolved cycles, new dead files, etc.) are logged as they are detected. Agent sessions started via `clarte brief` hooks will always see current data.
+
+### Deep Analysis
+
+Run the TypeScript type checker for richer context:
+
+```bash
+npx clarte --deep
+```
+
+When your project has TypeScript as a dev dependency, `--deep` loads it from `node_modules` and adds:
+
+- **Inferred return types**: Functions without explicit return type annotations get their inferred types added to the snapshot
+- **Function call graph**: Shows which exported functions call which others, surfacing internal dependencies not visible in the import graph
+
+Gracefully falls back to parser-only output if TypeScript is not installed or the project is not TypeScript-based.
+
+### Context Splitting
+
+For large projects (150+ source files or 8000+ estimated context tokens), Clarte automatically splits context into tiered files:
+
+- **Root context file**: Project overview, tech stack, key files, architecture layers, development commands. Links to per-directory files.
+- **Per-directory context files**: Placed in `.clarte/context/`. Each contains local hub files, dependency patterns, test coverage, and related directories.
+
+This keeps each context file focused and within useful token budgets. Monorepo projects are excluded (they already get per-package context).
 
 ### Refreshing Snapshots
 
@@ -554,6 +686,15 @@ On first run, Clarté saves your answers to `.clarte.json`:
 
 Subsequent runs load this config and skip all prompts. Use `--reconfigure` to re-prompt.
 
+Additional options:
+
+| Field | Description |
+|-------|-------------|
+| `analysisDays` | Git history window in days (default: 90) |
+| `staleDays` | Days before snapshot is considered stale in `--check=timestamp` (default: 7) |
+| `sectionOrder` | Custom ordering of context sections; prefix with `-` to exclude a section |
+| `layers` | Custom architectural layer patterns (see below) |
+
 ### Custom Layer Patterns
 
 Projects using non-standard architectures (hexagonal, clean architecture, DDD) can define custom layer patterns:
@@ -603,6 +744,25 @@ When detected, you'll be asked if you want per-package files. Each package gets 
 
 Cross-package import analysis detects encapsulation violations (imports that bypass a package's public API) and computes per-package centrality to identify key files within each package.
 
+## Working Guidelines
+
+The generated context file includes a **Working Guidelines** section with actionable, analysis-derived directives. These are not informational metrics; each one tells the agent what to do differently:
+
+- **Foundation file guards**: "When modifying `src/graph.ts` (imported by 23 files), check dependents for breaking changes"
+- **Chokepoint warnings**: "`src/types.ts` is a structural chokepoint (separates 3 components). Refactor with extreme care."
+- **Co-change reminders**: "When modifying `src/graph.ts`, also check: `src/brief.ts`, `src/cache.ts`"
+- **Circular dependency hints**: "Convert X -> Y to type-only import" (with severity ranking)
+- **Complexity warnings**: Files with high export counts or line counts get "read thoroughly before modifying" directives
+- **Test reminders**: Hub files missing test coverage are flagged with their test coverage map
+
+Guidelines are refreshed on every run. The `--budget` flag controls how many fit within the token limit; they are prioritized at level 2 (high).
+
+## Multi-Language Projects
+
+Clarte automatically detects projects using multiple languages and analyzes each independently. When a secondary language accounts for more than 15% of source files, it runs import parsing and snapshot extraction for that language too. Import graphs are merged, and the snapshot includes entries from all detected languages.
+
+For example, a TypeScript frontend + Python backend project will analyze both languages in a single run, producing a unified context file.
+
 ## Living Documents
 
 Generated files include maintenance directives telling your AI agent to keep them up to date. The code snapshot section uses HTML comment markers (`<!-- CODE SNAPSHOT -->`) so it's clear what to refresh after refactors. Custom sections wrapped in `<!-- clarte:user-start -->` / `<!-- clarte:user-end -->` markers are preserved across regenerations.
@@ -616,6 +776,8 @@ npm run dev        # Watch mode
 npm run typecheck  # Type-check without emitting
 npm test           # Run tests with vitest
 ```
+
+For benchmarks measuring the impact of generated context on AI agent performance, see [clarte-benchmark](https://github.com/michaelabrt/clarte-benchmark).
 
 ## License
 
