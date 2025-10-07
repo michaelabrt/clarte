@@ -23,13 +23,13 @@ Independent benchmarks on [clarte-benchmark](https://github.com/michaelabrt/clar
 
 **Results (Claude Sonnet 4.5, small TypeScript utility library):**
 
-| Metric | With Clarte | Without Clarte | Improvement |
-|--------|-------------|----------------|-------------|
-| Cost (median) | - | - | **46.5% reduction** |
-| Duration (median) | - | - | **22.6% reduction** |
-| Input tokens | - | - | **54.3% fewer** |
-| Turns | - | - | **29.4% fewer** |
-| Correctness | 100% pass | 100% pass | No impact |
+| Metric | Without Context | With Context | Delta |
+|--------|----------------|--------------|-------|
+| Cost (median) | $0.1321 | $0.0706 | **-46.5%** |
+| Duration (median) | 36.0s | 27.9s | **-22.6%** |
+| Input tokens (median) | 35,298 | 16,138 | **-54.3%** |
+| Turns (median) | 8.5 | 6 | **-29.4%** |
+| Pass rate | 100% | 100% | 0.0pp |
 
 See the [benchmark repo](https://github.com/michaelabrt/clarte-benchmark) for methodology, fixture projects, and full statistical analysis.
 
