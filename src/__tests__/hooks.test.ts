@@ -37,13 +37,14 @@ describe("installHooks", () => {
   it("installs hooks into empty settings (creates file and directory)", async () => {
     await installHooks();
     const settings = await readSettings();
-    const hooks = settings.hooks as Record<string, Array<{ type: string; command: string }>>;
+    const hooks = settings.hooks as Record<string, Array<{ matcher: Record<string, unknown>; hooks: Array<{ type: string; command: string }> }>>;
     expect(hooks).toBeDefined();
     expect(hooks.SessionStart).toHaveLength(1);
-    expect(hooks.SessionStart[0].command).toContain("clarte brief");
-    expect(hooks.SessionStart[0].type).toBe("command");
+    expect(hooks.SessionStart[0].hooks[0].command).toContain("clarte brief");
+    expect(hooks.SessionStart[0].hooks[0].type).toBe("command");
+    expect(hooks.SessionStart[0].matcher).toEqual({});
     expect(hooks.PreCompact).toHaveLength(1);
-    expect(hooks.PreCompact[0].command).toContain("clarte brief");
+    expect(hooks.PreCompact[0].hooks[0].command).toContain("clarte brief");
   });
 
   it("preserves existing hooks when installing", async () => {
@@ -60,16 +61,16 @@ describe("installHooks", () => {
 
     await installHooks();
     const settings = await readSettings();
-    const hooks = settings.hooks as Record<string, Array<{ type: string; command: string }>>;
+    const hooks = settings.hooks as Record<string, unknown[]>;
 
     // Existing SessionStart hook preserved, clarte appended
     expect(hooks.SessionStart).toHaveLength(2);
-    expect(hooks.SessionStart[0].command).toBe("echo hello");
-    expect(hooks.SessionStart[1].command).toContain("clarte brief");
+    expect((hooks.SessionStart[0] as any).command).toBe("echo hello");
+    expect((hooks.SessionStart[1] as any).hooks[0].command).toContain("clarte brief");
 
     // Existing PreToolUse hook untouched
     expect(hooks.PreToolUse).toHaveLength(1);
-    expect(hooks.PreToolUse[0].command).toBe("lint");
+    expect((hooks.PreToolUse[0] as any).command).toBe("lint");
 
     // PreCompact hook added
     expect(hooks.PreCompact).toHaveLength(1);
