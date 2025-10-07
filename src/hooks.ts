@@ -5,14 +5,47 @@ import { fileExists, readFileOr, writeFileSafe } from "./utils.js";
 const HOOK_COMMAND = "npx clarte brief";
 const HOOK_MARKER = "clarte";
 
-interface HookEntry {
+/** Legacy format (pre-2026) */
+interface LegacyHookEntry {
   type: string;
   command: string;
 }
 
+/** New format with matchers */
+interface MatcherHookEntry {
+  matcher: Record<string, unknown>;
+  hooks: LegacyHookEntry[];
+}
+
+type HookEntry = LegacyHookEntry | MatcherHookEntry;
+
 interface ClaudeSettings {
   hooks?: Record<string, HookEntry[]>;
   [key: string]: unknown;
+}
+
+function isMatcherEntry(h: HookEntry): h is MatcherHookEntry {
+  return "hooks" in h && Array.isArray((h as MatcherHookEntry).hooks);
+}
+
+/** Check whether any hook entry contains a command matching the marker */
+function hasHookCommand(entries: HookEntry[], marker: string): boolean {
+  return entries.some((h) => {
+    if (isMatcherEntry(h)) {
+      return h.hooks.some((inner) => inner.command?.includes(marker));
+    }
+    return (h as LegacyHookEntry).command?.includes(marker);
+  });
+}
+
+/** Remove hook entries containing a command matching the marker */
+function filterHookCommands(entries: HookEntry[], marker: string): HookEntry[] {
+  return entries.filter((h) => {
+    if (isMatcherEntry(h)) {
+      return !h.hooks.some((inner) => inner.command?.includes(marker));
+    }
+    return !(h as LegacyHookEntry).command?.includes(marker);
+  });
 }
 
 function getSettingsPath(): string {
@@ -52,12 +85,13 @@ export async function installHooks(): Promise<void> {
     }
 
     const existing = settings.hooks[hookType];
-    const alreadyInstalled = existing.some(
-      (h) => h.command.includes(HOOK_MARKER),
-    );
+    const alreadyInstalled = hasHookCommand(existing, HOOK_MARKER);
 
     if (!alreadyInstalled) {
-      existing.push({ type: "command", command: HOOK_COMMAND });
+      existing.push({
+        matcher: {},
+        hooks: [{ type: "command", command: HOOK_COMMAND }],
+      });
       addedCount++;
     }
   }
@@ -105,7 +139,7 @@ export async function uninstallHooks(): Promise<void> {
   let removedCount = 0;
 
   for (const [hookType, entries] of Object.entries(settings.hooks)) {
-    const filtered = entries.filter((h) => !h.command.includes(HOOK_MARKER));
+    const filtered = filterHookCommands(entries, HOOK_MARKER);
     removedCount += entries.length - filtered.length;
     if (filtered.length === 0) {
       delete settings.hooks[hookType];
