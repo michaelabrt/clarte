@@ -13,7 +13,7 @@ interface LegacyHookEntry {
 
 /** New format with matchers */
 interface MatcherHookEntry {
-  matcher: Record<string, unknown>;
+  matcher?: string;
   hooks: LegacyHookEntry[];
 }
 
@@ -89,7 +89,6 @@ export async function installHooks(): Promise<void> {
 
     if (!alreadyInstalled) {
       existing.push({
-        matcher: {},
         hooks: [{ type: "command", command: HOOK_COMMAND }],
       });
       addedCount++;
