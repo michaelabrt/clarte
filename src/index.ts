@@ -328,6 +328,9 @@ async function main() {
   shimmer.stop();
   if (!jsonMode) p.log.step(t.text("Detection complete."));
 
+  // Load saved config early (needed for custom layers during analysis)
+  const savedConfig = await loadConfig(rootDir);
+
   // Step 1.5: Build import graph (including secondary languages)
   shimmer = jsonMode ? noopShimmer : startShimmer(`Building import graph (${detected.sourceFileCount} files)...`);
   const graph = await buildGraphWithCache(rootDir, detected.language, verbose ? verboseLog : (msg) => shimmer.message(msg));
@@ -750,9 +753,7 @@ async function main() {
     }
   }
 
-  // Step 1.8: Check for saved config + staleness
-  const savedConfig = await loadConfig(rootDir);
-
+  // Step 1.8: Check for staleness
   if (savedConfig?.snapshotHash) {
     const currentHash = await computeSnapshotHash(rootDir, detected.language);
     if (currentHash !== savedConfig.snapshotHash && savedConfig.snapshotGeneratedAt) {
