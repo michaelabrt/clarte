@@ -441,7 +441,7 @@ async function main() {
   }
 
   // Architecture layers
-  const { layers, layerEdges } = detectArchitecturalLayers(graph, answers.layers);
+  const { layers, layerEdges } = detectArchitecturalLayers(graph, savedConfig?.layers);
   if (!jsonMode) {
     p.log.step(
       layers.length > 0
