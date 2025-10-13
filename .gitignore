@@ -4,6 +4,8 @@ dist/
 .npmrc
 .clarte.json
 .clarte-diff.md
+.clarte/
 .claude/
 .cursor/
 ROADMAP.md
+TEST-ROADMAP.md

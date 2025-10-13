@@ -85,7 +85,7 @@ function printHelp(): void {
   console.log(`    ${t.accent("-V, --version")}           ${t.text("Show version number")}`);
   console.log(`    ${t.accent("--force")}                 ${t.text("Overwrite existing files without asking")}`);
   console.log(`    ${t.accent("--dry-run")}               ${t.text("Preview what would be generated")}`);
-  console.log(`    ${t.accent("--diff[=REF]")}            ${t.text("Generate focused context for changed files (vs HEAD or REF)")}`);
+  console.log(`    ${t.accent("--diff[=REF] [FILES]")}    ${t.text("Generate focused context for changed files (vs HEAD or REF)")}`);
   console.log(`    ${t.accent("--diff-file=PATH")}        ${t.text("Write diff context to file instead of stdout")}`);
   console.log(`    ${t.accent("--reconfigure")}           ${t.text("Re-prompt even if .clarte.json exists")}`);
   console.log(`    ${t.accent("--refresh-snapshot")}      ${t.text("Re-scan source files, update code snapshot only")}`);
@@ -104,6 +104,7 @@ function printHelp(): void {
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} ./my-project`)}      ${t.muted("# analyze a specific project")}`);
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --diff`)}             ${t.muted("# focused context for uncommitted changes")}`);
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --diff=main`)}        ${t.muted("# focused context vs main branch")}`);
+  console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --diff src/foo.ts`)}  ${t.muted("# diff context for a specific file")}`);
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --dry-run`)}          ${t.muted("# preview without writing files")}`);
   console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} --refresh-snapshot`)} ${t.muted("# update code snapshot only")}`);
   console.log("");
@@ -132,6 +133,16 @@ async function main() {
   const diffArg = args.find((a) => a === "--diff" || a.startsWith("--diff="));
   const diffMode = !!diffArg;
   const diffRef = diffArg?.startsWith("--diff=") ? diffArg.split("=")[1] : undefined;
+  // Collect positional args after --diff as file filters
+  const diffFilterFiles: string[] = [];
+  if (diffMode) {
+    const diffIdx = args.indexOf(diffArg!);
+    for (let i = diffIdx + 1; i < args.length; i++) {
+      const a = args[i];
+      if (a.startsWith("-")) break;
+      diffFilterFiles.push(a);
+    }
+  }
   const checkArg = args.find((a) => a === "--check" || a.startsWith("--check="));
   const check = !!checkArg;
   const checkTimestamp = checkArg === "--check=timestamp";
@@ -152,7 +163,8 @@ async function main() {
   const hooksMode = args[0] === "hooks";
   const diffFileArg = args.find((a) => a.startsWith("--diff-file="));
   const diffFile = diffFileArg?.split("=")[1];
-  const targetDir = args.find((a) => !a.startsWith("-") && a !== "brief" && a !== "hooks" && a !== "install" && a !== "uninstall" && a !== "-v") ?? process.cwd();
+  const diffFilterSet = new Set(diffFilterFiles);
+  const targetDir = args.find((a) => !a.startsWith("-") && a !== "brief" && a !== "hooks" && a !== "install" && a !== "uninstall" && a !== "-v" && !diffFilterSet.has(a)) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
   // brief: compact summary for session hooks (no ANSI, stdout only)
@@ -311,7 +323,7 @@ async function main() {
   // --diff: focused context for changed files
   if (diffMode) {
     p.log.info(t.muted("diff-aware context"));
-    await runDiffMode(rootDir, diffRef, verbose, diffFile);
+    await runDiffMode(rootDir, diffRef, verbose, diffFile, diffFilterFiles);
     return;
   }
 
@@ -867,7 +879,7 @@ async function main() {
  * --diff mode: generate focused context for changed files and their neighbors.
  * Outputs to stdout by default; use --diff-file=PATH to write to a file.
  */
-async function runDiffMode(rootDir: string, ref?: string, verbose = false, outputFile?: string): Promise<void> {
+async function runDiffMode(rootDir: string, ref?: string, verbose = false, outputFile?: string, filterFiles: string[] = []): Promise<void> {
   const verboseLog: ProgressCallback = (msg) => {
     if (verbose) p.log.info(t.muted(msg));
   };
@@ -889,6 +901,12 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false, outpu
     }
 
     changedFiles = [...new Set(output.split("\n").filter(Boolean))];
+
+    // Filter to specific files if provided
+    if (filterFiles.length > 0) {
+      const filterSet = new Set(filterFiles.map(f => path.normalize(f)));
+      changedFiles = changedFiles.filter(f => filterSet.has(path.normalize(f)));
+    }
 
     // Get line change counts
     try {
@@ -930,7 +948,11 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false, outpu
   }
 
   if (changedFiles.length === 0) {
-    p.log.info(t.text("No changed files detected."));
+    if (filterFiles.length > 0) {
+      p.log.info(t.text(`No changes found for: ${filterFiles.join(", ")}`));
+    } else {
+      p.log.info(t.text("No changed files detected."));
+    }
     return;
   }
 
@@ -1040,54 +1062,76 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false, outpu
 
   // 7. Build markdown output
   const sections: string[] = [];
-  sections.push("# Diff Context");
-  sections.push("");
-  sections.push(`> Focused context for ${changedFiles.length} changed file${changedFiles.length === 1 ? "" : "s"}${ref ? ` vs \`${ref}\`` : ""}. Generated by Clart\u00e9.`);
-  sections.push("");
+  const isSingleFile = changedFiles.length === 1;
 
-  // Changed files with per-file risk annotations
-  sections.push("## Changed Files");
-  sections.push("");
-  if (diffStat && diffStat.size > 0) {
-    sections.push("| File | Role | Imported By | Lines (+/-) |");
-    sections.push("|------|------|-------------|-------------|");
-    for (const f of changedFiles) {
-      const hub = hubFileMap.get(f);
-      const importedBy = graph.inDegree.get(f) ?? 0;
-      const role = hub?.role ?? "Leaf";
-      const stat = diffStat.get(f);
-      const statStr = stat ? `+${stat.added} / -${stat.removed}` : "";
-      sections.push(`| \`${f}\` | ${role} | ${importedBy} | ${statStr} |`);
+  if (isSingleFile) {
+    // Compact single-file format: inline description instead of a table
+    const f = changedFiles[0];
+    const hub = hubFileMap.get(f);
+    const importedBy = graph.inDegree.get(f) ?? 0;
+    const role = hub?.role ?? "Leaf";
+    const stat = diffStat?.get(f);
+    const statStr = stat ? `, +${stat.added} / -${stat.removed}` : "";
+    sections.push("# Diff Context");
+    sections.push("");
+    sections.push(`> \`${f}\` (${role}, imported by ${importedBy}${statStr})${ref ? ` vs \`${ref}\`` : ""}. Generated by Clart\u00e9.`);
+    sections.push("");
+
+    // Inline risk annotation for the single file
+    if (hub && (hub.role === "Foundation" || hub.role === "Orchestrator" || hub.role === "Bridge")) {
+      sections.push(`**Risk:** ${hub.role} file, imported by ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"}. Check dependents for breaking changes.`);
+      sections.push("");
     }
   } else {
-    sections.push("| File | Role | Imported By |");
-    sections.push("|------|------|-------------|");
+    // Multi-file format: tables
+    sections.push("# Diff Context");
+    sections.push("");
+    sections.push(`> Focused context for ${changedFiles.length} changed files${ref ? ` vs \`${ref}\`` : ""}. Generated by Clart\u00e9.`);
+    sections.push("");
+
+    sections.push("## Changed Files");
+    sections.push("");
+    if (diffStat && diffStat.size > 0) {
+      sections.push("| File | Role | Imported By | Lines (+/-) |");
+      sections.push("|------|------|-------------|-------------|");
+      for (const f of changedFiles) {
+        const hub = hubFileMap.get(f);
+        const importedBy = graph.inDegree.get(f) ?? 0;
+        const role = hub?.role ?? "Leaf";
+        const stat = diffStat.get(f);
+        const statStr = stat ? `+${stat.added} / -${stat.removed}` : "";
+        sections.push(`| \`${f}\` | ${role} | ${importedBy} | ${statStr} |`);
+      }
+    } else {
+      sections.push("| File | Role | Imported By |");
+      sections.push("|------|------|-------------|");
+      for (const f of changedFiles) {
+        const hub = hubFileMap.get(f);
+        const importedBy = graph.inDegree.get(f) ?? 0;
+        const role = hub?.role ?? "Leaf";
+        sections.push(`| \`${f}\` | ${role} | ${importedBy} |`);
+      }
+    }
+    sections.push("");
+
+    // Per-file risk annotations
+    const riskNotes: string[] = [];
     for (const f of changedFiles) {
       const hub = hubFileMap.get(f);
-      const importedBy = graph.inDegree.get(f) ?? 0;
-      const role = hub?.role ?? "Leaf";
-      sections.push(`| \`${f}\` | ${role} | ${importedBy} |`);
+      if (hub && (hub.role === "Foundation" || hub.role === "Orchestrator" || hub.role === "Bridge")) {
+        riskNotes.push(
+          `\`${f}\` is a ${hub.role} file, imported by ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"}. Check dependents for breaking changes.`,
+        );
+      }
     }
-  }
-  sections.push("");
-
-  // Per-file risk annotations
-  const riskNotes: string[] = [];
-  for (const f of changedFiles) {
-    const hub = hubFileMap.get(f);
-    if (hub && (hub.role === "Foundation" || hub.role === "Orchestrator" || hub.role === "Bridge")) {
-      riskNotes.push(
-        `\`${f}\` is a ${hub.role} file, imported by ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"}. Check dependents for breaking changes.`,
-      );
+    if (riskNotes.length > 0) {
+      sections.push("### Risk Annotations");
+      sections.push("");
+      for (const note of riskNotes) {
+        sections.push(`- ${note}`);
+      }
+      sections.push("");
     }
-  }
-  if (riskNotes.length > 0) {
-    sections.push("### Risk Annotations");
-    sections.push("");
-    for (const note of riskNotes) {
-      sections.push(`- ${note}`);
-    }
-    sections.push("");
   }
 
   // Temporal coupling suggestions (>= 50% confidence, not in current diff)
@@ -1229,6 +1273,12 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false, outpu
     for (const d of scopedDirectives) {
       sections.push(`- ${d}`);
     }
+    sections.push("");
+  }
+
+  // Hint when single-file filter produces sparse output (file not in import graph)
+  if (isSingleFile && hop1Set.size === 0 && testFiles.size === 0 && filesWithEntries.length === 0) {
+    sections.push("> This file is not in the import graph. Run `--diff` without file arguments to see all changes.");
     sections.push("");
   }
 
