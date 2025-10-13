@@ -134,8 +134,8 @@ func (u *User) Validate() error {
 
     expect(result.entries.length).toBe(2);
     expect(result.entries[0].category).toBe("function");
-    expect(result.entries[0].signature).toContain("func (u *User) FullName() string");
-    expect(result.entries[1].signature).toContain("func (u *User) Validate() error");
+    expect(result.entries[0].signature).toContain("(User).FullName() string");
+    expect(result.entries[1].signature).toContain("(User).Validate() error");
   });
 
   it("skips unexported symbols", async () => {
