@@ -214,7 +214,7 @@ function getDefaultJavaScanPaths(ctx: DetectedContext): string[] {
  */
 const PATTERNS = {
   /** export interface Foo { ... } or export type Foo = ... */
-  exportedType: /^export\s+(interface|type)\s+(\w+)/,
+  exportedType: /^export\s+(interface|type|enum)\s+(\w+)/,
   /** interface FooProps { ... } (component props, even if not exported) */
   propsInterface: /^(?:export\s+)?interface\s+(\w+Props)\s*\{/,
   /** export function foo(...) or export const foo = <fn expr> */
@@ -264,7 +264,9 @@ async function extractFromFile(
             ? "component"
             : kind === "interface"
               ? "interface"
-              : "type";
+              : kind === "enum"
+                ? "type"
+                : "type";
 
       // Grab the full declaration (until closing brace or semicolon for type aliases)
       const block = extractBlock(lines, i);
@@ -539,8 +541,12 @@ async function extractFromPythonFile(
         } else {
           // Non-data classes (views, endpoints, services): extract class header
           // then extract public method signatures individually
-          const classHeader = pendingDecorators.map((d) => `@${d}`).join("\n") +
+          let classHeader = pendingDecorators.map((d) => `@${d}`).join("\n") +
             (pendingDecorators.length ? "\n" : "") + trimmed;
+          const classDocComment = extractPythonDocstring(lines, i + 1);
+          if (classDocComment) {
+            classHeader += classDocComment;
+          }
           entries.push({ file: relPath, category: "type", signature: classHeader });
           insideClass = true;
           // Determine body indentation from next non-blank line
@@ -675,6 +681,54 @@ function extractPythonBlock(
 }
 
 /**
+ * Extract a Python docstring comment from lines starting at searchStart.
+ * Returns ` # "docstring text"` or null if no docstring found.
+ */
+function extractPythonDocstring(lines: string[], searchStart: number): string | null {
+  for (let i = searchStart; i < lines.length && i < searchStart + 3; i++) {
+    const trimmed = lines[i].trimStart();
+    if (!trimmed) continue;
+
+    const quoteStyle = trimmed.startsWith('"""') ? '"""' : trimmed.startsWith("'''") ? "'''" : null;
+    if (!quoteStyle) return null;
+
+    let docText: string;
+    const afterOpen = trimmed.slice(3);
+    const closeIdx = afterOpen.indexOf(quoteStyle);
+    if (closeIdx >= 0) {
+      // Single-line: """text"""
+      docText = afterOpen.slice(0, closeIdx).trim();
+    } else {
+      // Multi-line: take text on opening line, or next non-blank line
+      const openingText = afterOpen.trim();
+      if (openingText) {
+        docText = openingText;
+      } else {
+        docText = "";
+        for (let j = i + 1; j < lines.length && j < i + 5; j++) {
+          const dt = lines[j].trimStart();
+          if (!dt) continue;
+          if (dt.startsWith(quoteStyle)) break;
+          docText = dt.replace(new RegExp(`${quoteStyle.replace(/'/g, "\\'")}.*$`), "").trim();
+          break;
+        }
+      }
+    }
+
+    if (docText) {
+      if (docText.length > 80) {
+        docText = docText.slice(0, 77) + "...";
+      }
+      // Normalize single quotes to double quotes
+      docText = docText.replace(/'/g, '"');
+      return ` # "${docText}"`;
+    }
+    return null;
+  }
+  return null;
+}
+
+/**
  * Extract a Python function signature (the `def` line, possibly multi-line).
  * Includes decorators.
  */
@@ -707,6 +761,23 @@ function extractPythonFuncSignature(
   }
 
   parts.push(sig);
+
+  // Look ahead for a docstring after the signature
+  let sigEndLine = startIdx;
+  for (let i = startIdx; i < lines.length && i < startIdx + 10; i++) {
+    const accumulated = lines.slice(startIdx, i + 1).map(l => l.trimStart()).join(" ");
+    if (accumulated.includes("):") || accumulated.includes(") ->")) {
+      sigEndLine = i + 1;
+      break;
+    }
+  }
+
+  const docComment = extractPythonDocstring(lines, sigEndLine);
+  if (docComment) {
+    // Append to the last line of the signature
+    parts[parts.length - 1] += docComment;
+  }
+
   return parts.join("\n");
 }
 
@@ -850,6 +921,14 @@ function extractGoFuncSignature(lines: string[], startIdx: number): string {
       break;
     }
   }
+
+  // Rewrite method receivers: func (r *Type) Method(... -> (Type).Method(...
+  const receiverMatch = sig.match(/^func\s*\(\w+\s+\*?(\w+)\)\s*(\w+)\((.*)$/);
+  if (receiverMatch) {
+    const [, receiverType, methodName, rest] = receiverMatch;
+    return `(${receiverType}).${methodName}(${rest}`;
+  }
+
   return sig;
 }
 
@@ -1065,7 +1144,7 @@ async function extractFromJavaFile(
     const annoMatch = trimmed.match(JAVA_PATTERNS.annotation);
     if (annoMatch && !trimmed.includes("class ") && !trimmed.includes("interface ") &&
         !trimmed.includes("enum ") && !trimmed.includes("record ")) {
-      pendingAnnotations.push(trimmed.split(/\s/)[0]); // capture just the annotation
+      pendingAnnotations.push(trimmed);
       continue;
     }
 
@@ -1127,6 +1206,14 @@ async function extractFromJavaFile(
     if (inPublicClass && JAVA_PATTERNS.publicMethod.test(trimmed)) {
       const sig = extractJavaMethodSignature(lines, i, pendingAnnotations);
       entries.push({ file: relPath, category: "function", signature: sig });
+      pendingAnnotations = [];
+      continue;
+    }
+
+    // -- annotated public fields inside a class --
+    if (inPublicClass && pendingAnnotations.length > 0 && /^public\s+\S+\s+\w+\s*;/.test(trimmed)) {
+      const fieldSig = [...pendingAnnotations, trimmed].join("\n");
+      entries.push({ file: relPath, category: "interface", signature: fieldSig });
       pendingAnnotations = [];
       continue;
     }
