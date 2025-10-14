@@ -226,7 +226,7 @@ function collectExportedFunctions(
   result: Set<string>,
 ): void {
   function visit(node: { kind: number; [key: string]: unknown }): void {
-    const tsNode = node as import("typescript").Node;
+    const tsNode = node as unknown as import("typescript").Node;
 
     // export function foo() { ... }
     if (ts.isFunctionDeclaration(tsNode)) {
@@ -251,12 +251,12 @@ function collectExportedFunctions(
       }
     }
 
-    ts.forEachChild(tsNode, visit as (node: import("typescript").Node) => void);
+    ts.forEachChild(tsNode, visit as unknown as (node: import("typescript").Node) => void);
   }
 
   ts.forEachChild(
     sourceFile as unknown as import("typescript").Node,
-    visit as (node: import("typescript").Node) => void,
+    visit as unknown as (node: import("typescript").Node) => void,
   );
 }
 
