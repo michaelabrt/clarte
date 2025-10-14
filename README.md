@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo-dark.svg" width="140">
+    <source media="(prefers-color-scheme: light)" srcset="logo.svg" width="140">
+    <img src="logo.svg" alt="Clarté logo" width="140">
+  </picture>
+</p>
 <h1 align="center">Clarté</h1>
 <p align="center"><em>/klaʁ.te/</em></p>
 
