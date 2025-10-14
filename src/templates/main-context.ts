@@ -459,7 +459,7 @@ export async function buildSections(
 
   // -- User-controlled section ordering (Task 1a) --
   // TODO: sectionOrder should be added to UserAnswers/ProjectConfig in types.ts
-  const sectionOrder = (answers as Record<string, unknown>).sectionOrder as string[] | undefined;
+  const sectionOrder = (answers as unknown as Record<string, unknown>).sectionOrder as string[] | undefined;
   if (sectionOrder && Array.isArray(sectionOrder) && sectionOrder.length > 0) {
     const excludeSet = new Set<string>();
     const orderList: string[] = [];

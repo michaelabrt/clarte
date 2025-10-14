@@ -28,6 +28,7 @@ import {
   saveSnapshot,
   computeDelta,
   isDeltaEmpty,
+  type AnalysisSnapshot,
 } from "./delta.js";
 import type { ContextAnalysis, ProgressCallback } from "./types.js";
 
@@ -232,7 +233,7 @@ async function runAnalysis(
   answers: ReturnType<typeof configToAnswers>,
   verbose: boolean,
   verboseLog: ProgressCallback,
-  previousSnapshot: ReturnType<Awaited<typeof loadPreviousSnapshot>> | null,
+  previousSnapshot: AnalysisSnapshot | null,
 ): Promise<void> {
   const startTime = performance.now();
   const noopProgress: ProgressCallback = () => {};
