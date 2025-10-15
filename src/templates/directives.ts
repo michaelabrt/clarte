@@ -98,15 +98,40 @@ export function buildDirectives(
   }
 
   // 3. Co-change hints (confidence >= 0.6, max 5)
+  // Uses directional probabilities when available for more precise guidance
   if (analysis.gitActivity?.changeCoupling) {
     const highConfidence = analysis.gitActivity.changeCoupling
       .filter((c) => c.confidence >= 0.6)
       .slice(0, 5);
     for (const pair of highConfidence) {
-      const pct = Math.round(pair.confidence * 100);
-      directives.push(
-        `When modifying \`${pair.fileA}\`, also check \`${pair.fileB}\` (${pct}% co-change confidence).`,
-      );
+      const ab = pair.confidenceAB ?? pair.confidence;
+      const ba = pair.confidenceBA ?? pair.confidence;
+      // Render the stronger direction first; if asymmetric, render both as separate hints
+      if (ab >= 0.6 && ba >= 0.6) {
+        // Both directions are strong: use the higher one as primary
+        if (ab >= ba) {
+          directives.push(
+            `When modifying \`${pair.fileA}\`, also check \`${pair.fileB}\` (${Math.round(ab * 100)}% of the time).`,
+          );
+        } else {
+          directives.push(
+            `When modifying \`${pair.fileB}\`, also check \`${pair.fileA}\` (${Math.round(ba * 100)}% of the time).`,
+          );
+        }
+      } else if (ab >= 0.6) {
+        directives.push(
+          `When modifying \`${pair.fileA}\`, also check \`${pair.fileB}\` (${Math.round(ab * 100)}% of the time).`,
+        );
+      } else if (ba >= 0.6) {
+        directives.push(
+          `When modifying \`${pair.fileB}\`, also check \`${pair.fileA}\` (${Math.round(ba * 100)}% of the time).`,
+        );
+      } else {
+        // Fallback to symmetric
+        directives.push(
+          `When modifying \`${pair.fileA}\`, also check \`${pair.fileB}\` (${Math.round(pair.confidence * 100)}% co-change confidence).`,
+        );
+      }
     }
   }
 

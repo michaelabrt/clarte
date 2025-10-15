@@ -140,6 +140,8 @@ export interface DetectedContext {
   secondaryLanguages?: Language[];
   /** File count per language */
   languageBreakdown?: Record<string, number>;
+  /** Non-fatal warnings collected during detection (e.g. parse failures, ambiguous detection) */
+  warnings?: string[];
 }
 
 /** User-provided answers from the interactive prompts */
@@ -328,6 +330,10 @@ export interface ChangeCoupling {
   support: number;
   /** Confidence: coChangeCount / max(commitsA, commitsB) */
   confidence: number;
+  /** Directional: P(fileB changes | fileA changes) = coChangeCount / commitsA */
+  confidenceAB?: number;
+  /** Directional: P(fileA changes | fileB changes) = coChangeCount / commitsB */
+  confidenceBA?: number;
 }
 
 /** A detected community/cluster of tightly-connected files */

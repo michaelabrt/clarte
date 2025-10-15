@@ -213,6 +213,8 @@ export function computeFileChurn(
 const NOISE_PATTERNS: Array<{ pattern: RegExp; discount: number }> = [
   { pattern: /\b(lint|format|prettier|eslint|style|biome)\b/i, discount: 0.1 },
   { pattern: /\b(merge|bump|release|changelog|version)\b/i, discount: 0.2 },
+  { pattern: /\b(chore|ci|docs|wip|build|revert)\b/i, discount: 0.3 },
+  { pattern: /\b(dependabot|renovate|greenkeeper)\b/i, discount: 0.1 },
   { pattern: /\b(refactor|rename|move)\b/i, discount: 0.5 },
 ];
 
@@ -229,10 +231,11 @@ function noiseDiscount(message: string): number {
 
 /**
  * Compute age of a commit in days from its ISO date string.
+ * @param referenceMs - optional fixed reference timestamp (ms since epoch) for deterministic output
  */
-function commitAgeDays(isoDate: string): number {
+function commitAgeDays(isoDate: string, referenceMs?: number): number {
   const commitDate = new Date(isoDate);
-  const now = Date.now();
+  const now = referenceMs ?? Date.now();
   return Math.max(0, (now - commitDate.getTime()) / (1000 * 60 * 60 * 24));
 }
 
@@ -271,7 +274,7 @@ function temporalDecay(ageDays: number, decayConstant: number = 45): number {
  * 3. Noise classification: lint/merge/format commits are discounted
  * 4. Jaccard similarity for symmetric confidence metric
  */
-export function computeChangeCoupling(commits: ParsedCommit[], windowDays: number = 90): ChangeCoupling[] {
+export function computeChangeCoupling(commits: ParsedCommit[], windowDays: number = 90, referenceMs?: number): ChangeCoupling[] {
   // Track which commits each file appears in (for Jaccard)
   const fileCommitSets = new Map<string, Set<number>>();
   // Weighted co-change scores
@@ -297,7 +300,7 @@ export function computeChangeCoupling(commits: ParsedCommit[], windowDays: numbe
 
     // Compute per-pair weight for this commit
     const pairWeight = 1 / (files.length - 1); // Inverse commit size
-    const decay = temporalDecay(commitAgeDays(commit.date), decayConst);
+    const decay = temporalDecay(commitAgeDays(commit.date, referenceMs), decayConst);
     const noise = noiseDiscount(commit.message);
     const weight = pairWeight * decay * noise;
 
@@ -337,12 +340,18 @@ export function computeChangeCoupling(commits: ParsedCommit[], windowDays: numbe
     const support = totalMultiFileCommits > 0 ? rawCount / totalMultiFileCommits : 0;
 
     if (confidence >= 0.3) {
+      // Directional conditional probabilities
+      const confidenceAB = commitsA.size > 0 ? intersection / commitsA.size : 0;
+      const confidenceBA = commitsB.size > 0 ? intersection / commitsB.size : 0;
+
       results.push({
         fileA,
         fileB,
         coChangeCount: rawCount,
         support,
         confidence,
+        confidenceAB,
+        confidenceBA,
       });
     }
   }
