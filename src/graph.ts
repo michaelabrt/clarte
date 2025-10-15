@@ -1390,6 +1390,39 @@ export function findCircularDeps(
 }
 
 /**
+ * Find the most impactful edges to break in order to resolve circular dependencies.
+ * Uses a greedy approach: count how many cycles each edge participates in,
+ * then report the top edges whose removal would resolve the most cycles.
+ *
+ * @returns Array of { from, to, cyclesResolved } sorted by impact descending, max 3 items.
+ */
+export function findFeedbackEdges(
+  cycles: CircularDependency[],
+  topN = 3,
+): Array<{ from: string; to: string; cyclesResolved: number }> {
+  if (cycles.length === 0) return [];
+
+  // Count how many cycles each directed edge participates in
+  const edgeCounts = new Map<string, number>();
+  for (const cycle of cycles) {
+    for (let i = 0; i < cycle.chain.length - 1; i++) {
+      const key = `${cycle.chain[i]}||${cycle.chain[i + 1]}`;
+      edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
+    }
+  }
+
+  // Sort by count descending and return top N
+  const sorted = [...edgeCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN);
+
+  return sorted.map(([key, count]) => {
+    const [from, to] = key.split("||");
+    return { from, to, cyclesResolved: count };
+  });
+}
+
+/**
  * Canonicalize a cycle by rotating so the lexicographically smallest node is first.
  */
 function canonicalizeCycle(cycle: string[]): string {
@@ -1629,22 +1662,36 @@ export const INSTABILITY_THRESHOLD = 0.8;
  * Returns files with instability > INSTABILITY_THRESHOLD and fanIn >= 1 (high-risk zones).
  */
 export function computeInstability(graph: ImportGraph): FileInstability[] {
-  // Count outgoing internal edges per file
+  /** Type-only imports carry less coupling risk (erased at runtime) */
+  const TYPE_ONLY_WEIGHT = 0.3;
+
+  // Count weighted outgoing internal edges per file
   const fanOutMap = new Map<string, number>();
   for (const edge of graph.edges) {
     if (!edge.isExternal) {
-      fanOutMap.set(edge.from, (fanOutMap.get(edge.from) ?? 0) + 1);
+      const weight = edge.isTypeOnly ? TYPE_ONLY_WEIGHT : 1;
+      fanOutMap.set(edge.from, (fanOutMap.get(edge.from) ?? 0) + weight);
+    }
+  }
+
+  // Count weighted incoming internal edges per file
+  const fanInMap = new Map<string, number>();
+  for (const edge of graph.edges) {
+    if (!edge.isExternal) {
+      const weight = edge.isTypeOnly ? TYPE_ONLY_WEIGHT : 1;
+      fanInMap.set(edge.to, (fanInMap.get(edge.to) ?? 0) + weight);
     }
   }
 
   const results: FileInstability[] = [];
-  for (const [filePath, fanIn] of graph.inDegree) {
+  for (const [filePath] of graph.inDegree) {
     const fanOut = fanOutMap.get(filePath) ?? 0;
+    const fanIn = fanInMap.get(filePath) ?? 0;
     const total = fanIn + fanOut;
     if (total === 0) continue;
     const instability = fanOut / total;
     if (instability > INSTABILITY_THRESHOLD && fanIn >= 1) {
-      results.push({ path: filePath, fanIn, fanOut, instability });
+      results.push({ path: filePath, fanIn: Math.round(fanIn), fanOut: Math.round(fanOut), instability });
     }
   }
 

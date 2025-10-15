@@ -7,6 +7,7 @@ import { renderConstraintsSection } from "../config-scan.js";
 import { renderConventionsSection } from "../conventions.js";
 import { renderTestMappingSection } from "../test-map.js";
 import { renderDirectivesSection } from "./directives.js";
+import { findFeedbackEdges } from "../graph.js";
 
 /**
  * Build the main context file content (CLAUDE.md, AGENTS.md, or CONTEXT.md).
@@ -27,9 +28,12 @@ export async function buildMainContext(
     return allSections.map((s) => s.content).join("\n\n").trimEnd() + "\n";
   }
 
-  const { included, omitted } = applyBudget(allSections, effectiveBudget);
+  const { included, omitted, overflowWarning } = applyBudget(allSections, effectiveBudget);
   let result = included.map((s) => s.content).join("\n\n").trimEnd() + "\n";
 
+  if (overflowWarning) {
+    result += `\n<!-- WARNING: ${overflowWarning} -->\n`;
+  }
   if (omitted.length > 0) {
     result += `\n<!-- Sections omitted to fit token budget: ${omitted.join(", ")}. Run clarte --budget=0 for full output. -->\n`;
   }
@@ -142,6 +146,20 @@ export async function buildSections(
         : "";
       const hint = dep.breakHint ? ` -- ${dep.breakHint}` : "";
       circLines.push(`- ${dep.chain.map((f) => `\`${f}\``).join(" -> ")}${severity}${hint}`);
+    }
+
+    // Add feedback edge suggestions when multiple cycles exist
+    if (analysis.circularDeps.length > 1) {
+      const feedbackEdges = findFeedbackEdges(analysis.circularDeps);
+      if (feedbackEdges.length > 0) {
+        circLines.push("");
+        circLines.push("**Most impactful edges to break:**");
+        for (const edge of feedbackEdges) {
+          const shortFrom = edge.from.split("/").pop()?.replace(/\.[^.]+$/, "") ?? edge.from;
+          const shortTo = edge.to.split("/").pop()?.replace(/\.[^.]+$/, "") ?? edge.to;
+          circLines.push(`- Breaking \`${shortFrom}\` -> \`${shortTo}\` would resolve ${edge.cyclesResolved} of ${analysis.circularDeps.length} cycles`);
+        }
+      }
     }
     const circContent = circLines.join("\n");
     sections.push({ id: "circular-deps", priority: 3, content: circContent, tokens: estimateTokens(circContent) });
@@ -514,7 +532,7 @@ function applySectionBoost(sections: ContextSection[], id: string, priority: num
 export function applyBudget(
   sections: ContextSection[],
   budget: number,
-): { included: ContextSection[]; omitted: string[] } {
+): { included: ContextSection[]; omitted: string[]; overflowWarning?: string } {
   // Priority 0 is always included
   const always = sections.filter((s) => s.priority === 0);
   const budgeted = sections.filter((s) => s.priority > 0);
@@ -547,7 +565,16 @@ export function applyBudget(
   const orderMap = new Map(sections.map((s, i) => [s.id, i]));
   included.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
 
-  return { included, omitted };
+  // Check for budget overflow: mandatory sections (p0-2) exceed the budget
+  const mandatoryTokens = included
+    .filter((s) => s.priority <= 2)
+    .reduce((sum, s) => sum + s.tokens, 0);
+  let overflowWarning: string | undefined;
+  if (mandatoryTokens > budget) {
+    overflowWarning = `Mandatory sections (priority 0-2) use ~${mandatoryTokens} tokens, exceeding the ${budget}-token budget. Consider increasing --budget or reducing project scope.`;
+  }
+
+  return { included, omitted, overflowWarning };
 }
 
 /**
