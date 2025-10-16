@@ -1537,7 +1537,9 @@ export async function generateSnapshot(
     const chunk = files.slice(i, i + chunkSize);
     onProgress?.(`Extracting signatures... ${Math.min(i + chunkSize, files.length)}/${files.length} files`);
     const results = await Promise.all(
-      chunk.map((file) => extractor(path.join(ctx.rootDir, file), file)),
+      chunk.map((file) =>
+        extractor(path.join(ctx.rootDir, file), file).catch(() => [] as SnapshotEntry[]),
+      ),
     );
     for (const entries of results) allEntries.push(...entries);
   }
@@ -1558,7 +1560,9 @@ export async function generateSnapshot(
       for (let si = 0; si < secFiles.length; si += chunkSize) {
         const secChunk = secFiles.slice(si, si + chunkSize);
         const secResults = await Promise.all(
-          secChunk.map((file) => secExtractor(path.join(ctx.rootDir, file), file)),
+          secChunk.map((file) =>
+            secExtractor(path.join(ctx.rootDir, file), file).catch(() => [] as SnapshotEntry[]),
+          ),
         );
         for (const entries of secResults) allEntries.push(...entries);
       }
