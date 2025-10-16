@@ -58,6 +58,31 @@ describe("computeChangeCoupling", () => {
     expect(result[0].fileA).toBe("a.ts");
   });
 
+  it("discounts conventional commit prefixes (chore, ci, docs, build, etc.)", () => {
+    const normalCommits = [
+      makeCommit(["a.ts", "b.ts"], { message: "feat: add feature" }),
+      makeCommit(["a.ts", "b.ts"], { message: "fix: fix bug" }),
+    ];
+    const noiseCommits = [
+      makeCommit(["c.ts", "d.ts"], { message: "ci: update workflow" }),
+      makeCommit(["c.ts", "d.ts"], { message: "docs: update readme" }),
+    ];
+
+    const result = computeChangeCoupling([...normalCommits, ...noiseCommits]);
+
+    // Normal pair should rank higher than noise pair
+    const normalPair = result.find(
+      (r) => r.fileA === "a.ts" && r.fileB === "b.ts",
+    );
+    const noisePair = result.find(
+      (r) => r.fileA === "c.ts" && r.fileB === "d.ts",
+    );
+
+    expect(normalPair).toBeDefined();
+    expect(noisePair).toBeDefined();
+    expect(result[0].fileA).toBe("a.ts");
+  });
+
   it("skips single-file commits", () => {
     const commits = [
       makeCommit(["a.ts"]),
@@ -138,9 +163,24 @@ describe("computeLagCoupling", () => {
     // Compute lag coupling
     const lagResults = computeLagCoupling(commits, coupling);
 
-    // Some pairs should have lag coupling (files that react within 1-3 commits)
-    // x.ts appears in every commit, so it should have lag coupling with nearly everything
-    expect(lagResults.length).toBeGreaterThanOrEqual(0);
+    // x.ts appears in every commit, so pairs involving x.ts should have high lag coupling
+    expect(lagResults.length).toBeGreaterThan(0);
+
+    // a.ts+x.ts and/or b.ts+x.ts should appear (x.ts reacts at lag 1 from both)
+    const hasLagPair = lagResults.some(
+      (r) =>
+        (r.fileA === "a.ts" && r.fileB === "x.ts") ||
+        (r.fileA === "x.ts" && r.fileB === "a.ts") ||
+        (r.fileA === "b.ts" && r.fileB === "x.ts") ||
+        (r.fileA === "x.ts" && r.fileB === "b.ts"),
+    );
+    expect(hasLagPair).toBe(true);
+
+    // Lag scores should be positive
+    for (const r of lagResults) {
+      expect(r.lagScore).toBeGreaterThan(0);
+      expect(r.sameCommitCount).toBeGreaterThan(0);
+    }
   });
 
   it("returns empty array when no lag patterns exist", () => {
@@ -154,11 +194,13 @@ describe("computeLagCoupling", () => {
     const coupling = computeChangeCoupling(commits);
     const lagResults = computeLagCoupling(commits, coupling);
 
-    // With only 3 commits all having both files, lag score may not exceed threshold
-    // since sameCommitCount=3 and lag score needs to exceed 3*0.5=1.5
-    // But lag score from adjacent commits: each of 3 commits checks lag 1-3
-    // This test verifies the function runs without error
-    expect(Array.isArray(lagResults)).toBe(true);
+    // All files always co-change, so lag coupling should either be empty
+    // or contain pairs where lag score exceeds the threshold.
+    // Regardless, the result must be an array with defined structure.
+    expect(lagResults).toBeInstanceOf(Array);
+    for (const r of lagResults) {
+      expect(r.lagScore).toBeGreaterThan(0);
+    }
   });
 
   it("weights lag=1 more than lag=3", () => {

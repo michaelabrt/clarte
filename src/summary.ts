@@ -188,6 +188,7 @@ export function printSummary(
   const savedBar = t.muted("\u2591".repeat(savedLen));
 
   console.log(`    ${t.text("Before")}  ${beforeBar}  ${t.muted(`~${formatNumber(explorationTokens)} tokens`)}`);
+  console.log("");
   console.log(`    ${t.text("After")}   ${afterBar}${savedBar}  ${t.muted(`~${formatNumber(afterTotal)} tokens`)}`);
 
   console.log("");

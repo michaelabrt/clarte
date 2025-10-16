@@ -645,9 +645,9 @@ export function formatBytes(bytes: number): string  // imported by 33 files
 
 export function computeTransitiveRisk( graph: ImportGraph, commitCounts: Map<string, number>, maxDepth = 5, topN = 15,  // imported by 26 files
 
-export function detectArchitecturalLayers( graph: ImportGraph, customLayers?: Array<{ name: string; pattern: string }>, ):  // imported by 26 files
-
 export function isDeltaEmpty(delta: ArchitectureDelta): boolean  // imported by 4 files
+
+export function detectArchitecturalLayers( graph: ImportGraph, customLayers?: Array<{ name: string; pattern: string }>, ):  // imported by 26 files
 
 export async function buildImportGraph( rootDir: string, language: Language, onProgress?: ProgressCallback, ): Promise<ImportGraph>  // imported by 26 files
 
@@ -689,15 +689,15 @@ export function getShimmerColors():  // imported by 7 files
 
 export function getGradientBarColors():  // imported by 7 files
 
+export function extractSnapshot(analysis: ContextAnalysis): AnalysisSnapshot  // imported by 4 files
+
 export async function computeSnapshotHash( rootDir: string, language: Language, ): Promise<string>  // imported by 6 files
 
-export function extractSnapshot(analysis: ContextAnalysis): AnalysisSnapshot  // imported by 4 files
+export function renderDeltaSection( delta: ArchitectureDelta, ): string | null  // imported by 4 files
 
 export async function saveColorScheme( rootDir: string, colorScheme: "dark" | "light", ): Promise<void>  // imported by 6 files
 
 export function annotateCrossPackageEdges( graph: ImportGraph, monorepo: MonorepoInfo, ): void  // imported by 3 files
-
-export function renderDeltaSection( delta: ArchitectureDelta, ): string | null  // imported by 4 files
 
 export function buildDeltaDirectives( delta: ArchitectureDelta, ): string[]  // imported by 4 files
 
@@ -709,15 +709,15 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
 
 export function migrateConfig( raw: Record<string, unknown>, fromVersion: number, toVersion: number, ): Record<string, unknown>  // imported by 6 files
 
-export function getMainContextFilename(ide: IDETarget): string  // imported by 7 files
-
 export async function loadPreviousSnapshot( rootDir: string, ): Promise<AnalysisSnapshot | null>  // imported by 4 files
 
 export function computeDelta( previous: AnalysisSnapshot, current: AnalysisSnapshot, ): ArchitectureDelta  // imported by 4 files
 
-export function startShimmer( text: string, options?:
+export function getMainContextFilename(ide: IDETarget): string  // imported by 7 files
 
 export async function saveSnapshot( rootDir: string, snapshot: AnalysisSnapshot, ): Promise<void>  // imported by 4 files
+
+export function startShimmer( text: string, options?:
 
 export async function generateSnapshot( ctx: DetectedContext, customPaths: string[], graph?: ImportGraph, maxTokens?: number,  // imported by 13 files
 
@@ -727,9 +727,9 @@ export function enrichFrameworksWithUsage( frameworks: DetectedFramework[], exte
 
 export function shouldRebuild(filePath: string): boolean
 
-export function applyBudget( sections: ContextSection[], budget: number, ):  // imported by 7 files
-
 export async function saveCache( rootDir: string, data: CacheData, ): Promise<void>  // imported by 5 files
+
+export function applyBudget( sections: ContextSection[], budget: number, ):  // imported by 7 files
 
 export async function uninstallHooks(): Promise<void>
 
@@ -743,9 +743,9 @@ export function extractFilePaths(content: string): string[]
 
 export function computePackageCentrality( graph: ImportGraph, packagePath: string, ):  // imported by 3 files
 
-export function extractUserSections(content: string): UserSection[]
-
 export function computeChangeCoupling(commits: ParsedCommit[], windowDays: number = 90): ChangeCoupling[]  // imported by 5 files
+
+export function extractUserSections(content: string): UserSection[]
 
 export function renderTestMappingSection( mapping: TestMapping, hubFiles?: Array<{ path: string }>, ): string | null  // imported by 7 files
 
@@ -888,6 +888,5 @@ npm run build
 <!-- clarte:user-start -->
 ## Style Rules
 
-- Never use em dashes (—). Use commas, periods, semicolons, colons, or parentheses instead.
 - Angular commit style
 <!-- clarte:user-end -->
