@@ -110,8 +110,9 @@ describe("predictChangeImpact", () => {
     expect(result.length).toBeGreaterThan(0);
     const bEntry = result.find((r) => r.file === "b.ts");
     expect(bEntry).toBeDefined();
-    // Score should be positive and reflect the RRF accumulation
-    expect(bEntry!.score).toBeGreaterThan(0);
+    // b.ts is rank 1 in structural ranking only (no shared path segments for directory proximity)
+    // RRF with k=60: 1/(60+1) = 1/61
+    expect(bEntry!.score).toBeCloseTo(1 / 61, 4);
   });
 
   it("returns empty array when file has no connections", () => {

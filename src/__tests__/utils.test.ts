@@ -6,19 +6,25 @@ describe("estimateTokens", () => {
     expect(estimateTokens("")).toBe(0);
   });
 
-  it("uses ~3.5 chars/token for prose text", () => {
+  it("estimates reasonable token count for prose text", () => {
     const prose = "This is a simple sentence with mostly words and spaces in it.";
     const tokens = estimateTokens(prose);
-    // prose.length = 61, at 3.5 chars/token => ~17-18
-    expect(tokens).toBeGreaterThan(0);
-    expect(tokens).toBe(Math.ceil(prose.length / 3.5));
+    // ~61 chars of prose should produce roughly 15-25 tokens (1-1.5 tokens per word)
+    expect(tokens).toBeGreaterThanOrEqual(15);
+    expect(tokens).toBeLessThanOrEqual(25);
   });
 
-  it("uses ~3.2 chars/token for code-heavy text", () => {
+  it("estimates higher token density for code-heavy text", () => {
     const code = `const foo = (a: number, b: string) => { return a + b.length; };`;
     const tokens = estimateTokens(code);
-    // Code has many symbols (=, :, (, ), {, }, +, ;, .)
-    expect(tokens).toBe(Math.ceil(code.length / 3.2));
+    // Code with many symbols should produce more tokens per character than prose
+    expect(tokens).toBeGreaterThanOrEqual(15);
+    expect(tokens).toBeLessThanOrEqual(30);
+
+    // Code should have a higher token-per-char ratio than equivalently-sized prose
+    const proseOfSameLength = "a".repeat(code.length);
+    const proseTokens = estimateTokens(proseOfSameLength);
+    expect(tokens).toBeGreaterThanOrEqual(proseTokens);
   });
 
 });

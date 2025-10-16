@@ -249,9 +249,8 @@ describe("buildMainContext with budget", () => {
 
   it("omitted sections list is correct", async () => {
     const result = await buildMainContext(mockCtx(), mockAnswers(), null, mockAnalysis(), 500);
-    // Should mention some omitted section IDs
-    if (result.includes("<!-- Sections omitted")) {
-      expect(result).toMatch(/Sections omitted to fit token budget:/);
-    }
+    // With a 500-token budget, some sections must be omitted
+    expect(result).toContain("<!-- Sections omitted");
+    expect(result).toMatch(/Sections omitted to fit token budget:/);
   });
 });
