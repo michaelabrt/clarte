@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { parse as parseToml } from "smol-toml";
 import { glob } from "tinyglobby";
 import type {
   DetectedContext,
@@ -110,6 +111,7 @@ const PYTHON_FRAMEWORK_MAP: Record<string, string> = {
  * Auto-detect the tech stack of a project at the given root directory.
  */
 export async function detectContext(rootDir: string, onProgress?: ProgressCallback): Promise<DetectedContext> {
+  const warnings: string[] = [];
   const ctx: DetectedContext = {
     rootDir,
     language: "other",
@@ -247,7 +249,7 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     }
 
     if (hasPyproject) {
-      const pyDeps = await parsePyprojectDeps(path.join(rootDir, "pyproject.toml"));
+      const pyDeps = await parsePyprojectDeps(path.join(rootDir, "pyproject.toml"), warnings);
       for (const dep of pyDeps) {
         if (!allPyDeps.includes(dep)) allPyDeps.push(dep);
       }
@@ -370,8 +372,8 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
       ),
     );
     ctx.totalSourceBytes = sizes.reduce((sum, s) => sum + s, 0);
-  } catch {
-    // Non-critical, leave at 0
+  } catch (err: unknown) {
+    warnings.push(`Source file counting failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // -- Detect testing framework --
@@ -385,6 +387,10 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
 
   // -- Detect secondary languages --
   await detectLanguageBreakdown(ctx, rootDir);
+
+  if (warnings.length > 0) {
+    ctx.warnings = warnings;
+  }
 
   return ctx;
 }
@@ -651,105 +657,63 @@ async function detectMonorepo(
 }
 
 /**
- * Minimal TOML parser for pyproject.toml dependency extraction.
- * Extracts package names from [project.dependencies], [tool.poetry.dependencies],
+ * Extract dependency names from a pyproject.toml file using smol-toml.
+ * Reads [project.dependencies], [tool.poetry.dependencies],
  * and [project.optional-dependencies.*] sections.
  */
-async function parsePyprojectDeps(filePath: string): Promise<string[]> {
+async function parsePyprojectDeps(filePath: string, warnings?: string[]): Promise<string[]> {
   const content = await readFileOr(filePath);
   if (!content) return [];
 
-  const deps: string[] = [];
-  const lines = content.split("\n");
+  try {
+    const doc = parseToml(content) as Record<string, unknown>;
+    const deps: string[] = [];
 
-  let inDepsSection = false;
-  let inPoetryDeps = false;
-  let inArrayValue = false;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    // Detect section headers
-    if (trimmed.startsWith("[")) {
-      inArrayValue = false;
-      if (
-        trimmed === "[project.dependencies]" ||
-        trimmed === "[project]" ||
-        /^\[project\.optional-dependencies\.\w+\]$/.test(trimmed)
-      ) {
-        inDepsSection = trimmed === "[project.dependencies]" || /optional-dependencies/.test(trimmed);
-        inPoetryDeps = false;
-        continue;
+    // PEP 621: [project.dependencies] array of requirement strings
+    const project = doc.project as Record<string, unknown> | undefined;
+    if (project) {
+      const projDeps = project.dependencies;
+      if (Array.isArray(projDeps)) {
+        for (const dep of projDeps) {
+          if (typeof dep === "string") {
+            const name = dep.split(/[=<>!~;\[]/)[0].trim().toLowerCase();
+            if (name) deps.push(name);
+          }
+        }
       }
-      if (trimmed === "[tool.poetry.dependencies]") {
-        inPoetryDeps = true;
-        inDepsSection = false;
-        continue;
-      }
-      // Any other section header ends current section
-      inDepsSection = false;
-      inPoetryDeps = false;
-      continue;
-    }
 
-    // Inside [project] section, look for dependencies = [...]
-    if (!inDepsSection && !inPoetryDeps) {
-      if (trimmed.startsWith("dependencies")) {
-        const eqIdx = trimmed.indexOf("=");
-        if (eqIdx > 0) {
-          const rest = trimmed.slice(eqIdx + 1).trim();
-          if (rest.startsWith("[")) {
-            // Inline or multiline array
-            const items = extractTomlArrayItems(rest);
-            deps.push(...items);
-            if (!rest.includes("]")) {
-              inArrayValue = true;
-              inDepsSection = true;
+      // PEP 621: [project.optional-dependencies.*]
+      const optDeps = project["optional-dependencies"] as Record<string, unknown> | undefined;
+      if (optDeps && typeof optDeps === "object") {
+        for (const group of Object.values(optDeps)) {
+          if (Array.isArray(group)) {
+            for (const dep of group) {
+              if (typeof dep === "string") {
+                const name = dep.split(/[=<>!~;\[]/)[0].trim().toLowerCase();
+                if (name) deps.push(name);
+              }
             }
           }
         }
       }
-      continue;
     }
 
-    // Inside [project.dependencies] array continuation
-    if (inDepsSection && inArrayValue) {
-      if (trimmed === "]" || trimmed.endsWith("]")) {
-        const items = extractTomlArrayItems(trimmed);
-        deps.push(...items);
-        inArrayValue = false;
-        inDepsSection = false;
-      } else {
-        const items = extractTomlArrayItems(trimmed);
-        deps.push(...items);
+    // Poetry: [tool.poetry.dependencies]
+    const tool = doc.tool as Record<string, unknown> | undefined;
+    const poetry = tool?.poetry as Record<string, unknown> | undefined;
+    const poetryDeps = poetry?.dependencies as Record<string, unknown> | undefined;
+    if (poetryDeps && typeof poetryDeps === "object") {
+      for (const key of Object.keys(poetryDeps)) {
+        const name = key.toLowerCase();
+        if (name !== "python") deps.push(name);
       }
-      continue;
     }
 
-    // Inside [project.dependencies] or similar list section
-    if (inDepsSection) {
-      // PEP 631 format: each line is a quoted dependency string
-      const match = trimmed.match(/^["']([^"']+)["']/);
-      if (match) {
-        const depName = match[1].split(/[=<>!~;\[]/)[0].trim().toLowerCase();
-        if (depName) deps.push(depName);
-      }
-      continue;
-    }
-
-    // Inside [tool.poetry.dependencies] section
-    if (inPoetryDeps) {
-      // Poetry format: package = "version" or package = {version = "..."}
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const match = trimmed.match(/^([\w-]+)\s*=/);
-      if (match) {
-        const depName = match[1].toLowerCase();
-        if (depName !== "python") deps.push(depName);
-      }
-    }
+    return deps;
+  } catch (err: unknown) {
+    warnings?.push(`Failed to parse ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+    return [];
   }
-
-  return deps;
 }
 
 /**
@@ -762,19 +726,6 @@ function extractMavenVersion(pomXml: string): string | undefined {
   return match?.[1] ?? undefined;
 }
 
-/**
- * Extract package names from TOML array items like '"flask>=2.0"' or '"django"'.
- */
-function extractTomlArrayItems(text: string): string[] {
-  const items: string[] = [];
-  const regex = /["']([^"']+)["']/g;
-  let m: RegExpExecArray | null;
-  while ((m = regex.exec(text)) !== null) {
-    const depName = m[1].split(/[=<>!~;\[]/)[0].trim().toLowerCase();
-    if (depName) items.push(depName);
-  }
-  return items;
-}
 
 /**
  * Build a reverse map: framework display name -> dependency names.
