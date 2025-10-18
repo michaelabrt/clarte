@@ -9,11 +9,9 @@ import { scanConfigConstraints } from "./config-scan.js";
 import { inferConventions } from "./conventions.js";
 import { buildTestMapping } from "./test-map.js";
 import { generateSnapshot } from "./snapshot.js";
-import { buildSections, applyBudget } from "./templates/main-context.js";
+import { buildSections, applyBudget, DEFAULT_BUDGET, type SectionFilterOptions } from "./templates/main-context.js";
 import { readFileOr } from "./utils.js";
 import type { ContextAnalysis, PackageHubFile, ProgressCallback } from "./types.js";
-
-const DEFAULT_BRIEF_BUDGET = 3000;
 
 /**
  * Run brief mode: compact, token-budgeted summary to stdout.
@@ -22,8 +20,9 @@ const DEFAULT_BRIEF_BUDGET = 3000;
  */
 export async function runBriefMode(
   rootDir: string,
-  budget: number = DEFAULT_BRIEF_BUDGET,
+  budget: number = DEFAULT_BUDGET,
   _verbose: boolean = false,
+  sectionFilter?: SectionFilterOptions,
 ): Promise<void> {
   // 1. Load config; if none exists, exit silently (no-op for global hooks)
   const config = await loadConfig(rootDir);
@@ -145,8 +144,20 @@ export async function runBriefMode(
     if (snapshot.entries.length === 0) snapshot = null;
   }
 
-  // 7. Build sections with budget
-  const sections = await buildSections(detected, answers, snapshot, analysis);
+  // 7. Build sections with budget (apply filters first)
+  let sections = await buildSections(detected, answers, snapshot, analysis);
+
+  if (sectionFilter?.exclude?.size) {
+    sections = sections.filter((s) => !sectionFilter.exclude!.has(s.id));
+  }
+  if (sectionFilter?.include?.size) {
+    for (const s of sections) {
+      if (sectionFilter.include.has(s.id)) {
+        s.priority = 0;
+      }
+    }
+  }
+
   const { included } = applyBudget(sections, budget);
 
   // 8. Write to stdout (plain text, no ANSI)
