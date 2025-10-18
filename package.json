@@ -1,7 +1,7 @@
 {
   "name": "clarte",
   "version": "1.0.0",
-  "description": "Bootstrap optimized AI context files for any project. Auto-detect stack, generate code snapshots, produce config for Claude Code, Cursor, Copilot, Windsurf, Cline, Continue, Aider, and more.",
+  "description": "Static analysis engine that generates context files for AI coding tools.",
   "type": "module",
   "bin": {
     "clarte": "dist/index.js",
@@ -17,20 +17,24 @@
     "prepublishOnly": "npm run build"
   },
   "keywords": [
-    "ai",
-    "context",
-    "claude",
+    "static-analysis",
+    "dependency-graph",
+    "developer-tools",
+    "cli",
+    "typescript",
+    "context-generation",
+    "code-analysis",
+    "claude-code",
     "cursor",
-    "opencode",
     "copilot",
     "windsurf",
     "cline",
-    "continue",
     "aider",
-    "bootstrap",
-    "cli"
+    "opencode",
+    "mcp",
+    "ai-tools"
   ],
-  "author": "Michael Abrt",
+  "author": "Michael Aboukrat",
   "license": "MIT",
   "repository": {
     "type": "git",
