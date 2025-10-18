@@ -1,7 +1,7 @@
 import path from "node:path";
 import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
-import { theme as t, initTheme } from "./theme.js";
+import { theme as t, initTheme, patchPicocolors, unpatchPicocolors, resetTerminalColors } from "./theme.js";
 import { fileExists, writeFileSafe } from "./utils.js";
 import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import { runPrompts } from "./prompts.js";
@@ -118,6 +118,7 @@ async function main() {
   if (args.includes("--help") || args.includes("-h")) {
     initTheme("dark");
     printHelp();
+    resetTerminalColors();
     process.exit(0);
   }
 
@@ -203,10 +204,12 @@ async function main() {
 
   if (!hasProjectMarker) {
     initTheme("dark");
+    patchPicocolors();
     console.log("");
     console.log(t.error(`No project found at ${rootDir}`));
     console.log(t.text(`Run ${t.accent("npx clarte")} from a project directory, or pass a path:`));
     console.log(t.muted("  npx clarte ./my-project"));
+    resetTerminalColors();
     process.exit(1);
   }
 
@@ -279,6 +282,7 @@ async function main() {
   if (jsonMode) {
     // JSON mode: skip theme selection, use default
     initTheme("dark");
+    patchPicocolors();
   } else {
     const envTheme = process.env.CLARTE_THEME;
     if (envTheme === "dark" || envTheme === "light") {
@@ -305,6 +309,7 @@ async function main() {
       }
     }
     initTheme(colorScheme);
+    patchPicocolors();
   }
 
   if (!jsonMode) {
@@ -316,7 +321,9 @@ async function main() {
   // --refresh-snapshot: fast path, update snapshot in existing context file
   if (refresh) {
     await refreshSnapshot(rootDir);
-    p.outro(t.text("Snapshot refreshed!"));
+    p.outro(t.success("Snapshot refreshed!"));
+    unpatchPicocolors();
+    resetTerminalColors();
     return;
   }
 
@@ -863,6 +870,8 @@ async function main() {
       t.text("DRY RUN complete. ") +
         t.muted(`no files were written. Remove --dry-run to generate. (${elapsed}s)`),
     );
+    unpatchPicocolors();
+    resetTerminalColors();
     return;
   }
 
@@ -873,6 +882,7 @@ async function main() {
         "Your context files are ready. They are living documents: keep them up to date as your project evolves.",
       ),
   );
+  unpatchPicocolors();
 }
 
 /**
@@ -1297,6 +1307,7 @@ async function runDiffMode(rootDir: string, ref?: string, verbose = false, outpu
     t.success("Diff context ready. ") +
       t.muted(`${allRelevant.length} files in scope.`),
   );
+  unpatchPicocolors();
 }
 
 function isDiffTestFile(filePath: string): boolean {

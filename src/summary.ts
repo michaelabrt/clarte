@@ -101,12 +101,12 @@ export function printSummary(
   // Print aligned rows
   for (const row of fileRows) {
     if (row.isHeader) {
-      console.log(`${row.indent}${t.accent(row.name)}`);
+      console.log(`${row.indent}${t.softBold(row.name)}`);
     } else {
       const status = row.isUpdated ? t.muted("(updated)") : t.success("(new)");
       const paddedName = row.name.padEnd(maxNameCol - row.indent.length);
       console.log(
-        `${row.indent}${t.accent(paddedName)}  ${row.size.padStart(maxSizeWidth)}  ${t.muted(row.tokens.padEnd(maxTokenWidth))}  ${status}`,
+        `${row.indent}${t.softBold(paddedName)}  ${row.size.padStart(maxSizeWidth)}  ${t.muted(row.tokens.padEnd(maxTokenWidth))}  ${status}`,
       );
     }
   }

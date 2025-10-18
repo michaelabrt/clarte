@@ -111,8 +111,8 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   shimmer.stop();
   p.log.step(
     snapshot.entries.length > 0
-      ? `Found ${snapshot.entries.length} type${snapshot.entries.length === 1 ? "" : "s"}/signature${snapshot.entries.length === 1 ? "" : "s"}.`
-      : "No extractable types found.",
+      ? t.text(`Found ${t.textBold(String(snapshot.entries.length))} type${snapshot.entries.length === 1 ? "" : "s"}/signature${snapshot.entries.length === 1 ? "" : "s"}.`)
+      : t.text("No extractable types found."),
   );
 
   if (snapshot.entries.length === 0) {

@@ -163,7 +163,7 @@ export async function generateFiles(
 
   if (preservedCount > 0) {
     p.log.info(
-      `Preserved ${preservedCount} custom section${preservedCount === 1 ? "" : "s"} (clarte:user markers)`,
+      t.text(`Preserved ${t.textBold(String(preservedCount))} custom section${preservedCount === 1 ? "" : "s"} (clarte:user markers)`),
     );
   }
 
@@ -176,8 +176,8 @@ export async function generateFiles(
   const existingFiles = files.filter((f) => f.existed);
   if (existingFiles.length > 0 && !force) {
     p.log.warn(
-      t.text("The following files already exist:") + "\n" +
-        existingFiles.map((f) => t.soft(`  - ${f.path}`)).join("\n"),
+      t.warn("The following files already exist:") + "\n" +
+        existingFiles.map((f) => t.text(`  - ${f.path}`)).join("\n"),
     );
 
     const overwrite = await p.confirm({
