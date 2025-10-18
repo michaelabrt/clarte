@@ -28,12 +28,12 @@ CLI tool that pre-generates context files for AI coding agents.
 - `src/utils.ts` is a structural chokepoint (separates 2 components). Refactor with extreme care.
 - `src/graph.ts` is a Foundation file with high complexity (46 exports, 2900+ lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
 - `src/index.ts` is a Orchestrator file with high complexity (3 exports, 1300+ lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
-- `src/brief.ts` is a Orchestrator file with medium complexity (1 exports, 176 lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
-- When modifying `src/graph.ts`, also check: `src/brief.ts`, `src/cache.ts`, `src/monorepo-analysis.ts`, `src/mcp-server.ts`.
-- When modifying `src/utils.ts`, also check: `src/brief.ts`, `src/cache.ts`, `src/config.ts`, `src/config-scan.ts`.
-- When modifying `src/cache.ts`, also check: `src/brief.ts`, `src/graph.ts`, `src/config.ts`, `src/detect.ts`.
-- When modifying `src/watch.ts`, also check: `src/config.ts`, `src/detect.ts`, `src/graph.ts`, `src/cache.ts`.
-- When modifying `src/brief.ts`, also check: `src/config.ts`, `src/detect.ts`, `src/graph.ts`, `src/cache.ts`.
+- `src/brief.ts` is a Orchestrator file with high complexity (1 exports, 187 lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
+- When modifying `src/graph.ts`, also check: `src/cache.ts`, `src/mcp-server.ts`, `src/monorepo-analysis.ts`, `src/utils.ts`.
+- When modifying `src/utils.ts`, also check: `src/cache.ts`, `src/check.ts`, `src/config-scan.ts`, `src/config.ts`.
+- When modifying `src/cache.ts`, also check: `src/graph.ts`, `src/utils.ts`, `src/types.ts`, `src/mcp-server.ts`.
+- When modifying `src/watch.ts`, also check: `src/cache.ts`, `src/graph.ts`, `src/config.ts`, `src/config-scan.ts`.
+- When modifying `src/brief.ts`, also check: `src/cache.ts`, `src/graph.ts`, `src/config.ts`, `src/detect.ts`.
 
 ## Key Files
 
@@ -251,6 +251,13 @@ export interface ContextSection {  // imported by 60 files
   content: string;
   /** Estimated token count */
   tokens: number;
+}
+
+export interface SectionFilterOptions {  // imported by 8 files
+  /** Promote these section IDs to priority 0 (always included). */
+  include?: Set<string>;
+  /** Remove these section IDs entirely. */
+  exclude?: Set<string>;
 }
 
 export interface MonorepoPackage {  // imported by 60 files
@@ -573,25 +580,6 @@ export interface ShimmerHandle {
   /** Update the shimmer text mid-animation */
   message: (text: string) => void;
 }
-
-export interface ImportGraph {  // imported by 60 files
-  /** All import edges */
-  edges: ImportEdge[];
-  /** Number of files that import each file */
-  inDegree: Map<string, number>;
-  /** Centrality scores (0-1) — set to HITS authority for backward compat */
-  centrality: Map<string, number>;
-  /** How many files import each external package */
-  externalImportCounts: Map<string, number>;
-  /** HITS authority scores (0-1): how much a file is depended upon */
-  authority: Map<string, number>;
-  /** HITS hub scores (0-1): how much a file depends on others */
-  hubScores: Map<string, number>;
-  /** Files detected as barrel/index files (>50% re-export statements) */
-  barrelFiles?: Set<string>;
-  /** Approximate betweenness centrality scores (0-1) from sampled Brandes */
-  betweennessScores?: Map<string, number>;
-}
 ```
 
 ### Key Functions
@@ -647,6 +635,8 @@ export async function detectBarrelFiles( rootDir: string, fileSet: Set<string>, 
 
 export function formatBytes(bytes: number): string  // imported by 33 files
 
+export function resetProjectNameCache(): void  // imported by 8 files
+
 export function computeTransitiveRisk( graph: ImportGraph, commitCounts: Map<string, number>, maxDepth = 5, topN = 15,  // imported by 27 files
 
 export function isDeltaEmpty(delta: ArchitectureDelta): boolean  // imported by 4 files
@@ -664,8 +654,6 @@ export function computeLayerConsistency( graph: ImportGraph, layers: Architectur
 export function checkArchitecturalFitness( graph: ImportGraph, layers: ArchitecturalLayer[], layerEdges: LayerEdge[], ): ArchViolation[]  // imported by 27 files
 
 export async function ensureDir(dirPath: string): Promise<void>  // imported by 33 files
-
-export function resetProjectNameCache(): void  // imported by 7 files
 
 export async function fileExists(filePath: string): Promise<boolean>  // imported by 33 files
 
@@ -707,11 +695,13 @@ export function extractSnapshot(analysis: ContextAnalysis): AnalysisSnapshot  //
 
 export async function computeSnapshotHash( rootDir: string, language: Language, ): Promise<string>  // imported by 6 files
 
+export function getMainContextFilename(ide: IDETarget): string  // imported by 8 files
+
 export function renderDeltaSection( delta: ArchitectureDelta, ): string | null  // imported by 4 files
 
-export async function saveColorScheme( rootDir: string, colorScheme: "dark" | "light", ): Promise<void>  // imported by 6 files
-
 export function annotateCrossPackageEdges( graph: ImportGraph, monorepo: MonorepoInfo, ): void  // imported by 3 files
+
+export async function saveColorScheme( rootDir: string, colorScheme: "dark" | "light", ): Promise<void>  // imported by 6 files
 
 export function buildDeltaDirectives( delta: ArchitectureDelta, ): string[]  // imported by 4 files
 
@@ -725,11 +715,11 @@ export async function loadPreviousSnapshot( rootDir: string, ): Promise<Analysis
 
 export function computeDelta( previous: AnalysisSnapshot, current: AnalysisSnapshot, ): ArchitectureDelta  // imported by 4 files
 
+export function applyBudget( sections: ContextSection[], budget: number, ):  // imported by 8 files
+
 export function startShimmer( text: string, options?:
 
 export async function saveSnapshot( rootDir: string, snapshot: AnalysisSnapshot, ): Promise<void>  // imported by 4 files
-
-export function getMainContextFilename(ide: IDETarget): string  // imported by 7 files
 
 export async function generateSnapshot( ctx: DetectedContext, customPaths: string[], graph?: ImportGraph, maxTokens?: number,  // imported by 13 files
 
@@ -745,8 +735,6 @@ export async function uninstallHooks(): Promise<void>
 
 export async function saveCache( rootDir: string, data: CacheData, ): Promise<void>  // imported by 5 files
 
-export function applyBudget( sections: ContextSection[], budget: number, ):  // imported by 7 files
-
 export function adaptiveDecayConstant(totalCommits: number, windowDays: number = 90): number  // imported by 5 files
 
 export function buildTestMapping( graph: ImportGraph, ctx: DetectedContext, ): TestMapping | null  // imported by 7 files
@@ -757,17 +745,21 @@ export function extractFilePaths(content: string): string[]
 
 export function computePackageCentrality( graph: ImportGraph, packagePath: string, ):  // imported by 3 files
 
+export async function buildSections( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,  // imported by 8 files
+
 export function extractUserSections(content: string): UserSection[]
 
 export function renderTestMappingSection( mapping: TestMapping, hubFiles?: Array<{ path: string }>, ): string | null  // imported by 7 files
+
+export async function buildMainContext( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,  // imported by 8 files
 
 export async function refreshSnapshot(rootDir: string): Promise<void>
 
 export function computeLagCoupling( commits: ParsedCommit[], couplingResults: ChangeCoupling[], ): LagCoupling[]  // imported by 5 files
 
-export async function initPreCommitHook(rootDir: string): Promise<void>
-
 export async function computeFileHashes( rootDir: string, language: Language, ): Promise<Map<string, string>>  // imported by 5 files
+
+export async function initPreCommitHook(rootDir: string): Promise<void>
 
 export function computeChangeCoupling(commits: ParsedCommit[], windowDays: number = 90, referenceMs?: number): ChangeCoupling[]  // imported by 5 files
 
@@ -776,10 +768,6 @@ export function analyzeGitActivity( rootDir: string, onProgress?: ProgressCallba
 export async function buildGraphWithCache( rootDir: string, language: Language, onProgress?: ProgressCallback, ): Promise<ImportGraph>  // imported by 5 files
 
 export async function inferConventions( rootDir: string, graph: ImportGraph, configConstraints?: ConfigConstraints, ): Promise<InferredConventions | null>  // imported by 7 files
-
-export async function buildSections( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,  // imported by 7 files
-
-export async function buildMainContext( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,  // imported by 7 files
 
 export async function analyzeMonorepoGraph( rootDir: string, graph: ImportGraph, monorepo: MonorepoInfo, ): Promise<MonorepoAnalysis>  // imported by 3 files
 
@@ -793,17 +781,17 @@ export async function computeFileComplexity( rootDir: string, hubFiles: HubFile[
 
 export function getFrameworkHintsSection(ctx: DetectedContext): string  // imported by 3 files
 
-export async function runBriefMode( rootDir: string, budget: number = DEFAULT_BRIEF_BUDGET, _verbose: boolean = false, ): Promise<void>
+export function renderClaudeSkill(skill: ClaudeSkill): string
+
+export async function runBriefMode( rootDir: string, budget: number = DEFAULT_BUDGET, _verbose: boolean = false, sectionFilter?: SectionFilterOptions,
 
 export function printSummary( files: GeneratedFile[], ctx: DetectedContext, snapshot?: CodeSnapshot | null, analysis?: ContextAnalysis,
 
 export async function runPrompts( detected: DetectedContext, defaults?: ProjectConfig | null, isReconfigure = false, ): Promise<UserAnswers>
 
-export function predictChangeImpact( file: string, graph: ImportGraph, gitActivity: GitAnalysis | null, ): Array<{ file: string; score: number }>
-
-export function renderClaudeSkill(skill: ClaudeSkill): string
-
 export function renderCursorRule(rule: CursorRule): string
+
+export function predictChangeImpact( file: string, graph: ImportGraph, gitActivity: GitAnalysis | null, ): Array<{ file: string; score: number }>
 
 export function buildDirectives( analysis: ContextAnalysis, ctx: DetectedContext, fileComplexity?: FileComplexityInfo[], graph?: ImportGraph,  // imported by 9 files
 
@@ -812,6 +800,18 @@ export async function renderDirectivesSection( analysis: ContextAnalysis, ctx: D
 export async function runWatchMode( rootDir: string, verbose: boolean, ): Promise<void>
 
 export function mergeUserSections(newContent: string, userSections: UserSection[]): string
+
+export async function validateContextPaths( rootDir: string, config: ProjectConfig, ): Promise<{ broken: string[]; file: string } | null>
+
+export async function generateFiles( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, force: boolean = false,
+
+export function getFrameworkHints(ctx: DetectedContext): string[]  // imported by 3 files
+
+export async function buildAiderContext( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,
+
+export function queryLayers( analysis: ContextAnalysis, ):
+
+export function shouldSplitContext( ctx: DetectedContext, estimatedTokens: number, ): boolean
 ```
 
 <!-- /CODE SNAPSHOT -->
@@ -847,11 +847,11 @@ Files whose removal would disconnect parts of the codebase. Refactor with extrem
 | `src/utils.ts` | 2 components | 33 files |
 | `src/git-analysis.ts` | 2 components | 5 files |
 | `src/cache.ts` | 2 components | 5 files |
-| `src/generate.ts` | 2 components | 2 files |
 | `src/watch.ts` | 2 components | 2 files |
+| `src/brief.ts` | 2 components | 2 files |
+| `src/generate.ts` | 2 components | 2 files |
 | `src/hooks.ts` | 2 components | 2 files |
 | `src/deep-analysis.ts` | 2 components | 2 files |
-| `src/brief.ts` | 2 components | 2 files |
 
 ## Tight Coupling
 
@@ -859,9 +859,9 @@ File pairs where one file imports many named exports from another, indicating st
 
 - `src/graph.ts` imports 20 names from `src/types.ts`
 - `src/index.ts` imports 14 names from `src/graph.ts`
-- `src/brief.ts` imports 13 names from `src/graph.ts`
 - `src/mcp-server.ts` imports 13 names from `src/graph.ts`
 - `src/watch.ts` imports 13 names from `src/graph.ts`
+- `src/brief.ts` imports 13 names from `src/graph.ts`
 - `src/__tests__/bench/pipeline.bench.ts` imports 12 names from `src/graph.ts`
 - `src/mcp-server.ts` imports 9 names from `src/types.ts`
 - `src/__tests__/graph-algorithms.test.ts` imports 9 names from `src/graph.ts`
