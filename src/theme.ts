@@ -7,7 +7,8 @@ export const noColor = !!process.env.NO_COLOR;
 
 /**
  * Detect 24-bit true color support.
- * Checks COLORTERM env (common in modern terminals) and falls back
+ * Checks COLORTERM env (common in modern terminals), WT_SESSION
+ * (Windows Terminal), known TERM_PROGRAM values, and falls back
  * to TERM containing "256color" as a proxy for likely truecolor support.
  */
 export const trueColor =
@@ -15,6 +16,8 @@ export const trueColor =
   isTTY &&
   (process.env.COLORTERM === "truecolor" ||
     process.env.COLORTERM === "24bit" ||
+    !!process.env.WT_SESSION ||
+    ["iTerm.app", "WezTerm", "Hyper", "vscode"].includes(process.env.TERM_PROGRAM ?? "") ||
     (process.env.TERM ?? "").includes("256color"));
 
 // ── 24-bit ANSI helpers ──────────────────────────────────────────────────────
@@ -46,7 +49,7 @@ const darkPalette: PaletteRGB = {
   brand: [255, 217, 171],
   warm: [222, 200, 175],
   muted: [190, 186, 178],
-  error: [134, 38, 51],
+  error: [196, 72, 96],
   ghostWhite: [158, 156, 150],
 };
 
@@ -63,13 +66,15 @@ const lightPalette: PaletteRGB = {
 // ── Mutable state ────────────────────────────────────────────────────────────
 
 let currentPalette: PaletteRGB = darkPalette;
-let offWhiteClose = "\x1b[38;2;200;200;204m";
+const RESET_FG = "\x1b[39m";
 
 function rgb(r: number, g: number, b: number): (text: string) => string {
   if (noColor || !isTTY) return (t) => t;
   if (!trueColor) return (t) => t;
   const open = `\x1b[38;2;${r};${g};${b}m`;
-  return (text: string) => `${open}${text}${offWhiteClose}`;
+  const [cr, cg, cb] = currentPalette.offWhite;
+  const close = `\x1b[38;2;${cr};${cg};${cb}m`;
+  return (text: string) => `${open}${text}${close}`;
 }
 
 /** Raw ANSI helper for clack patching (closes with terminal default). */
@@ -119,7 +124,9 @@ export function gradient(
 
   const len = text.length;
   if (len === 0) return text;
-  if (len === 1) return `\x1b[38;2;${from[0]};${from[1]};${from[2]}m${text}${offWhiteClose}`;
+  const [cr, cg, cb] = currentPalette.offWhite;
+  const close = `\x1b[38;2;${cr};${cg};${cb}m`;
+  if (len === 1) return `\x1b[38;2;${from[0]};${from[1]};${from[2]}m${text}${close}`;
 
   let result = "";
   for (let i = 0; i < len; i++) {
@@ -129,22 +136,42 @@ export function gradient(
     const b = Math.round(from[2] + (to[2] - from[2]) * ratio);
     result += `\x1b[38;2;${r};${g};${b}m${text[i]}`;
   }
-  return result + offWhiteClose;
+  return result + close;
 }
 
 // ── Theme init ───────────────────────────────────────────────────────────────
 
 /**
  * Initialize the theme for the given color mode.
- * Sets the active palette, updates the off-white close sequence,
- * and monkey-patches picocolors so @clack/prompts renders in our palette.
+ * Sets the active palette. Call patchPicocolors() separately
+ * to override picocolors for @clack/prompts rendering.
  */
 export function initTheme(mode: ColorMode): void {
   currentPalette = mode === "light" ? lightPalette : darkPalette;
-  const [r, g, b] = currentPalette.offWhite;
-  offWhiteClose = `\x1b[38;2;${r};${g};${b}m`;
+}
 
+// ── Picocolors patching ─────────────────────────────────────────────────────
+
+let savedPicocolors: Record<string, unknown> | null = null;
+
+const PATCH_KEYS = ["green", "cyan", "yellow", "red", "blue", "magenta", "white", "reset", "gray", "dim"] as const;
+
+/**
+ * Monkey-patch picocolors with the current palette so @clack/prompts
+ * renders in our theme. Must be called after initTheme().
+ */
+export function patchPicocolors(): void {
   if (noColor || !isTTY) return;
+
+  const obj = pc as unknown as Record<string, unknown>;
+
+  // Save originals (only once; nested patches keep the first save)
+  if (!savedPicocolors) {
+    savedPicocolors = {};
+    for (const key of PATCH_KEYS) {
+      savedPicocolors[key] = obj[key];
+    }
+  }
 
   const p = currentPalette;
   const copper = rgbAnsi(...p.brand);
@@ -152,7 +179,6 @@ export function initTheme(mode: ColorMode): void {
   const boneWhite = rgbAnsi(...p.boneWhite);
   const ghostWhite = rgbAnsi(...p.ghostWhite);
 
-  const obj = pc as unknown as Record<string, unknown>;
   obj.green = copper;
   obj.cyan = copper;
   obj.yellow = copper;
@@ -163,6 +189,28 @@ export function initTheme(mode: ColorMode): void {
   obj.reset = boneWhite;
   obj.gray = ghostWhite;
   obj.dim = boneWhite;
+}
+
+/**
+ * Restore picocolors to its original (unpatched) state.
+ */
+export function unpatchPicocolors(): void {
+  if (!savedPicocolors) return;
+  const obj = pc as unknown as Record<string, unknown>;
+  for (const key of PATCH_KEYS) {
+    obj[key] = savedPicocolors[key];
+  }
+  savedPicocolors = null;
+}
+
+/**
+ * Emit a standard foreground reset so the terminal returns to its
+ * default color after our output. Call once at process exit.
+ */
+export function resetTerminalColors(): void {
+  if (!noColor && isTTY) {
+    process.stdout.write(RESET_FG);
+  }
 }
 
 // ── Shimmer color accessor ───────────────────────────────────────────────────
@@ -217,6 +265,8 @@ export const theme = {
   warn: (text: string) => pick("warm")(text),
 
   accentBold: (text: string) => pick("accent")(noColor || !isTTY ? text : pc.bold(text)),
+  /** Off-white + bold -- file paths, secondary emphasis */
+  softBold: (text: string) => pick("offWhite")(noColor || !isTTY ? text : pc.bold(text)),
 
   /** Styled checkmark in warm gold */
   check: () => pick("brand")("\u2713"),

@@ -22,15 +22,15 @@ CLI tool that pre-generates context files for AI coding agents.
 
 > Analysis-derived guidelines. Follow these when making changes.
 
-- When modifying `src/graph.ts` (Foundation, imported by 26 files), check dependents for breaking changes.
+- When modifying `src/graph.ts` (Foundation, imported by 27 files), check dependents for breaking changes.
 - `src/types.ts` is a structural chokepoint (separates 4 components). Refactor with extreme care.
 - `src/graph.ts` is a structural chokepoint (separates 3 components). Refactor with extreme care.
 - `src/utils.ts` is a structural chokepoint (separates 2 components). Refactor with extreme care.
-- `src/graph.ts` is a Foundation file with high complexity (45 exports, 2800+ lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
+- `src/graph.ts` is a Foundation file with high complexity (46 exports, 2900+ lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
 - `src/index.ts` is a Orchestrator file with high complexity (3 exports, 1300+ lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
 - `src/brief.ts` is a Orchestrator file with medium complexity (1 exports, 176 lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
-- When modifying `src/graph.ts`, also check: `src/brief.ts`, `src/cache.ts`, `src/monorepo-analysis.ts`, `src/utils.ts`.
-- When modifying `src/utils.ts`, also check: `src/brief.ts`, `src/cache.ts`, `src/config.ts`, `src/detect.ts`.
+- When modifying `src/graph.ts`, also check: `src/brief.ts`, `src/cache.ts`, `src/monorepo-analysis.ts`, `src/mcp-server.ts`.
+- When modifying `src/utils.ts`, also check: `src/brief.ts`, `src/cache.ts`, `src/config.ts`, `src/config-scan.ts`.
 - When modifying `src/cache.ts`, also check: `src/brief.ts`, `src/graph.ts`, `src/config.ts`, `src/detect.ts`.
 - When modifying `src/watch.ts`, also check: `src/config.ts`, `src/detect.ts`, `src/graph.ts`, `src/cache.ts`.
 - When modifying `src/brief.ts`, also check: `src/config.ts`, `src/detect.ts`, `src/graph.ts`, `src/cache.ts`.
@@ -41,11 +41,11 @@ These are the most interconnected files. Read these first for architectural unde
 
 | File | Imported By | Stability |
 |------|-------------|-----------|
-| `src/graph.ts` (Foundation) | 26 files | stable |
+| `src/graph.ts` (Foundation) | 27 files | stable |
 | `src/index.ts` (Orchestrator) | 1 file | 96% unstable ⚠️ |
-| `src/brief.ts` (Orchestrator) | 2 files | 87% unstable ⚠️ |
-| `src/watch.ts` (Orchestrator) | 2 files | 83% unstable ⚠️ |
-| `src/mcp-server.ts` (Orchestrator) | 1 file | 91% unstable ⚠️ |
+| `src/brief.ts` (Orchestrator) | 2 files | 86% unstable ⚠️ |
+| `src/watch.ts` (Orchestrator) | 2 files | 82% unstable ⚠️ |
+| `src/mcp-server.ts` (Orchestrator) | 1 file | 90% unstable ⚠️ |
 | `src/utils.ts` (Utility) | 33 files | stable |
 | `src/cache.ts` | 5 files | stable |
 | `src/__tests__/bench/pipeline.bench.ts` | 0 files | stable |
@@ -78,7 +78,7 @@ export interface LayerEdge {  // imported by 60 files
   to: string;
 }
 
-export interface RawImport {  // imported by 26 files
+export interface RawImport {  // imported by 27 files
   specifier: string;
   importedNames: string[];
   /** Whether this is a type-only import (import type { ... }) */
@@ -137,18 +137,18 @@ export interface PackageHubFile {  // imported by 60 files
   authority: number;
 }
 
-export interface DetectedFramework {  // imported by 60 files
-  name: string;
-  version?: string;
-  /** Number of files that import this framework (from import graph) */
-  importCount?: number;
-}
-
 export interface FileComplexityInfo {  // imported by 9 files
   path: string;
   exports: number;
   lines: number;
   branchPoints: number;
+}
+
+export interface DetectedFramework {  // imported by 60 files
+  name: string;
+  version?: string;
+  /** Number of files that import this framework (from import graph) */
+  importCount?: number;
 }
 
 export interface MonorepoInfo {  // imported by 60 files
@@ -176,14 +176,6 @@ export interface Community {  // imported by 60 files
   label: string;
 }
 
-export interface ParsedCommit {  // imported by 5 files
-  hash: string;
-  date: string;
-  relativeDate: string;
-  message: string;
-  files: string[];
-}
-
 export interface LagCoupling {  // imported by 60 files
   fileA: string;
   fileB: string;
@@ -191,6 +183,14 @@ export interface LagCoupling {  // imported by 60 files
   sameCommitCount: number;
   /** Weighted lag coupling score (inverse-lag weighted) */
   lagScore: number;
+}
+
+export interface ParsedCommit {  // imported by 5 files
+  hash: string;
+  date: string;
+  relativeDate: string;
+  message: string;
+  files: string[];
 }
 
 export interface LayerConsistency {  // imported by 60 files
@@ -296,15 +296,6 @@ export interface TestMapping {  // imported by 60 files
   testTypes?: Map<string, TestType>;
 }
 
-export interface CacheData {  // imported by 5 files
-  version: number;
-  createdAt: string;
-  language: string;
-  fileHashes: Record<string, string>;
-  edges: SerializedEdge[];
-  barrelFiles: string[];
-}
-
 export interface CrossCuttingFile {  // imported by 60 files
   /** Relative file path */
   file: string;
@@ -316,6 +307,15 @@ export interface CrossCuttingFile {  // imported by 60 files
   layers: string[];
 }
 
+export interface CacheData {  // imported by 5 files
+  version: number;
+  createdAt: string;
+  language: string;
+  fileHashes: Record<string, string>;
+  edges: SerializedEdge[];
+  barrelFiles: string[];
+}
+
 export interface StructuralTemporalMismatch {  // imported by 60 files
   fileA: string;
   fileB: string;
@@ -325,17 +325,6 @@ export interface StructuralTemporalMismatch {  // imported by 60 files
   coChangeConfidence: number;
   /** Number of co-changes */
   coChangeCount: number;
-}
-
-export interface ChangeCoupling {  // imported by 60 files
-  fileA: string;
-  fileB: string;
-  /** Number of commits both files appeared in together */
-  coChangeCount: number;
-  /** Fraction of commits containing either file that contain both */
-  support: number;
-  /** Confidence: coChangeCount / max(commitsA, commitsB) */
-  confidence: number;
 }
 
 export interface ArchitectureDelta {  // imported by 4 files
@@ -455,6 +444,21 @@ export interface MonorepoAnalysis {  // imported by 60 files
   packageDependencies: Map<string, Set<string>>;
   /** Top hub files per package (package name -> top files by authority) */
   packageHubFiles?: Map<string, PackageHubFile[]>;
+}
+
+export interface ChangeCoupling {  // imported by 60 files
+  fileA: string;
+  fileB: string;
+  /** Number of commits both files appeared in together */
+  coChangeCount: number;
+  /** Fraction of commits containing either file that contain both */
+  support: number;
+  /** Confidence: coChangeCount / max(commitsA, commitsB) */
+  confidence: number;
+  /** Directional: P(fileB changes | fileA changes) = coChangeCount / commitsA */
+  confidenceAB?: number;
+  /** Directional: P(fileA changes | fileB changes) = coChangeCount / commitsB */
+  confidenceBA?: number;
 }
 
 export interface HubFile {  // imported by 60 files
@@ -593,69 +597,71 @@ export interface ImportGraph {  // imported by 60 files
 ### Key Functions
 
 ```ts
-export function findSCCs(graph: ImportGraph): string[][]  // imported by 26 files
+export function findSCCs(graph: ImportGraph): string[][]  // imported by 27 files
 
 export function estimateTokens(text: string): number  // imported by 33 files
 
-export function parseJsImports(content: string): RawImport[]  // imported by 26 files
+export function parseJsImports(content: string): RawImport[]  // imported by 27 files
 
-export function parseGoImports(content: string): RawImport[]  // imported by 26 files
+export function parseGoImports(content: string): RawImport[]  // imported by 27 files
 
-export function parsePythonImports(content: string): RawImport[]  // imported by 26 files
+export function parsePythonImports(content: string): RawImport[]  // imported by 27 files
 
-export function parseRustImports(content: string): RawImport[]  // imported by 26 files
+export function parseRustImports(content: string): RawImport[]  // imported by 27 files
 
-export function parseJavaImports(content: string): RawImport[]  // imported by 26 files
+export function parseJavaImports(content: string): RawImport[]  // imported by 27 files
 
-export function findUsedExports(edges: ImportEdge[]): Set<string>  // imported by 26 files
+export function findUsedExports(edges: ImportEdge[]): Set<string>  // imported by 27 files
 
-export function detectCommunities(graph: ImportGraph): Community[]  // imported by 26 files
+export function detectCommunities(graph: ImportGraph): Community[]  // imported by 27 files
 
-export function findChokepoints(graph: ImportGraph): Chokepoint[]  // imported by 26 files
+export function findChokepoints(graph: ImportGraph): Chokepoint[]  // imported by 27 files
 
-export function computeGraphTopology(graph: ImportGraph): GraphTopology  // imported by 26 files
+export function computeGraphTopology(graph: ImportGraph): GraphTopology  // imported by 27 files
 
-export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[]  // imported by 26 files
+export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[]  // imported by 27 files
 
-export function computeInstability(graph: ImportGraph): FileInstability[]  // imported by 26 files
+export function computeInstability(graph: ImportGraph): FileInstability[]  // imported by 27 files
 
-export function stripCommentsAndStrings(content: string, commentsOnly = false): string  // imported by 26 files
+export function stripCommentsAndStrings(content: string, commentsOnly = false): string  // imported by 27 files
 
-export function computeBetweenness( graph: ImportGraph, k = 50, ): Map<string, number>  // imported by 26 files
+export function computeBetweenness( graph: ImportGraph, k = 50, ): Map<string, number>  // imported by 27 files
 
-export function deriveRole(authority: number, hubScore: number, isBarrel = false): FileRole  // imported by 26 files
+export function deriveRole(authority: number, hubScore: number, isBarrel = false): FileRole  // imported by 27 files
 
-export function findDeadFiles( graph: ImportGraph, entryPoints: string[] = [], ): string[]  // imported by 26 files
+export function findDeadFiles( graph: ImportGraph, entryPoints: string[] = [], ): string[]  // imported by 27 files
 
-export function findCircularDeps( graph: ImportGraph, maxCycles = 10, ): CircularDependency[]  // imported by 26 files
+export function findCircularDeps( graph: ImportGraph, maxCycles = 10, ): CircularDependency[]  // imported by 27 files
 
 export function configToAnswers(config: ProjectConfig): UserAnswers  // imported by 6 files
 
-export function bfsShortestPath( graph: ImportGraph, from: string, to: string, ): string[] | null  // imported by 26 files
+export function bfsShortestPath( graph: ImportGraph, from: string, to: string, ): string[] | null  // imported by 27 files
 
-export function findTightCouplings( graph: ImportGraph, minNames = 5, topN = 10, ): TightCoupling[]  // imported by 26 files
+export function findTightCouplings( graph: ImportGraph, minNames = 5, topN = 10, ): TightCoupling[]  // imported by 27 files
 
-export function computeHITS( files: string[], edges: ImportEdge[], maxIterations = 30, epsilon = 1e-6,  // imported by 26 files
+export function computeHITS( files: string[], edges: ImportEdge[], maxIterations = 30, epsilon = 1e-6,  // imported by 27 files
 
 export function summarizeDetection(ctx: DetectedContext): string  // imported by 11 files
 
-export async function detectBarrelFiles( rootDir: string, fileSet: Set<string>, ): Promise<Set<string>>  // imported by 26 files
+export async function detectBarrelFiles( rootDir: string, fileSet: Set<string>, ): Promise<Set<string>>  // imported by 27 files
 
 export function formatBytes(bytes: number): string  // imported by 33 files
 
-export function computeTransitiveRisk( graph: ImportGraph, commitCounts: Map<string, number>, maxDepth = 5, topN = 15,  // imported by 26 files
+export function computeTransitiveRisk( graph: ImportGraph, commitCounts: Map<string, number>, maxDepth = 5, topN = 15,  // imported by 27 files
 
 export function isDeltaEmpty(delta: ArchitectureDelta): boolean  // imported by 4 files
 
-export function detectArchitecturalLayers( graph: ImportGraph, customLayers?: Array<{ name: string; pattern: string }>, ):  // imported by 26 files
+export function detectArchitecturalLayers( graph: ImportGraph, customLayers?: Array<{ name: string; pattern: string }>, ):  // imported by 27 files
 
-export async function buildImportGraph( rootDir: string, language: Language, onProgress?: ProgressCallback, ): Promise<ImportGraph>  // imported by 26 files
+export async function buildImportGraph( rootDir: string, language: Language, onProgress?: ProgressCallback, ): Promise<ImportGraph>  // imported by 27 files
 
-export function findCrossCuttingFiles( graph: ImportGraph, layers: ArchitecturalLayer[], minLayerSpread = 3, ): CrossCuttingFile[]  // imported by 26 files
+export function findCrossCuttingFiles( graph: ImportGraph, layers: ArchitecturalLayer[], minLayerSpread = 3, ): CrossCuttingFile[]  // imported by 27 files
 
-export function computeLayerConsistency( graph: ImportGraph, layers: ArchitecturalLayer[], layerEdges: LayerEdge[], ): LayerConsistency  // imported by 26 files
+export function findFeedbackEdges( cycles: CircularDependency[], topN = 3, ): Array<{ from: string; to: string; cyclesResolved: number }>  // imported by 27 files
 
-export function checkArchitecturalFitness( graph: ImportGraph, layers: ArchitecturalLayer[], layerEdges: LayerEdge[], ): ArchViolation[]  // imported by 26 files
+export function computeLayerConsistency( graph: ImportGraph, layers: ArchitecturalLayer[], layerEdges: LayerEdge[], ): LayerConsistency  // imported by 27 files
+
+export function checkArchitecturalFitness( graph: ImportGraph, layers: ArchitecturalLayer[], layerEdges: LayerEdge[], ): ArchViolation[]  // imported by 27 files
 
 export async function ensureDir(dirPath: string): Promise<void>  // imported by 33 files
 
@@ -667,11 +673,21 @@ export async function readDirSafe(dirPath: string): Promise<string[]>  // import
 
 export async function readFileOr(filePath: string): Promise<string | null>  // imported by 33 files
 
+export function getShimmerColors():  // imported by 7 files
+
 export async function writeFileSafe(filePath: string, content: string): Promise<void>  // imported by 33 files
 
-export function findStructuralTemporalMismatches( graph: ImportGraph, changeCoupling: Array<{ fileA: string; fileB: string; confidence: number; coChangeCount: number }>, minConfidence = 0.4, minDistance = 3,  // imported by 26 files
+export function patchPicocolors(): void  // imported by 7 files
+
+export function unpatchPicocolors(): void  // imported by 7 files
+
+export function getGradientBarColors():  // imported by 7 files
+
+export function findStructuralTemporalMismatches( graph: ImportGraph, changeCoupling: Array<{ fileA: string; fileB: string; confidence: number; coChangeCount: number }>, minConfidence = 0.4, minDistance = 3,  // imported by 27 files
 
 export async function readJsonFile(filePath: string): Promise<Record<string, unknown> | null>  // imported by 33 files
+
+export function resetTerminalColors(): void  // imported by 7 files
 
 export function renderConstraintsSection(constraints: ConfigConstraints): string | null  // imported by 7 files
 
@@ -683,11 +699,9 @@ export async function loadConfig( rootDir: string, ): Promise<ProjectConfig | nu
 
 export async function loadCache(rootDir: string): Promise<CacheData | null>  // imported by 5 files
 
+export function initTheme(mode: ColorMode): void  // imported by 7 files
+
 export async function installHooks(): Promise<void>
-
-export function getShimmerColors():  // imported by 7 files
-
-export function getGradientBarColors():  // imported by 7 files
 
 export function extractSnapshot(analysis: ContextAnalysis): AnalysisSnapshot  // imported by 4 files
 
@@ -703,8 +717,6 @@ export function buildDeltaDirectives( delta: ArchitectureDelta, ): string[]  // 
 
 export async function saveConfig( rootDir: string, answers: UserAnswers, snapshotHash?: string, language?: Language,  // imported by 6 files
 
-export function initTheme(mode: ColorMode): void  // imported by 7 files
-
 export async function detectContext(rootDir: string, onProgress?: ProgressCallback): Promise<DetectedContext>  // imported by 11 files
 
 export function migrateConfig( raw: Record<string, unknown>, fromVersion: number, toVersion: number, ): Record<string, unknown>  // imported by 6 files
@@ -713,11 +725,11 @@ export async function loadPreviousSnapshot( rootDir: string, ): Promise<Analysis
 
 export function computeDelta( previous: AnalysisSnapshot, current: AnalysisSnapshot, ): ArchitectureDelta  // imported by 4 files
 
-export function getMainContextFilename(ide: IDETarget): string  // imported by 7 files
+export function startShimmer( text: string, options?:
 
 export async function saveSnapshot( rootDir: string, snapshot: AnalysisSnapshot, ): Promise<void>  // imported by 4 files
 
-export function startShimmer( text: string, options?:
+export function getMainContextFilename(ide: IDETarget): string  // imported by 7 files
 
 export async function generateSnapshot( ctx: DetectedContext, customPaths: string[], graph?: ImportGraph, maxTokens?: number,  // imported by 13 files
 
@@ -727,11 +739,13 @@ export function enrichFrameworksWithUsage( frameworks: DetectedFramework[], exte
 
 export function shouldRebuild(filePath: string): boolean
 
+export function gradient( text: string, from: RGB, to: RGB, fallbackFn?: (text: string) => string,  // imported by 7 files
+
+export async function uninstallHooks(): Promise<void>
+
 export async function saveCache( rootDir: string, data: CacheData, ): Promise<void>  // imported by 5 files
 
 export function applyBudget( sections: ContextSection[], budget: number, ):  // imported by 7 files
-
-export async function uninstallHooks(): Promise<void>
 
 export function adaptiveDecayConstant(totalCommits: number, windowDays: number = 90): number  // imported by 5 files
 
@@ -743,29 +757,27 @@ export function extractFilePaths(content: string): string[]
 
 export function computePackageCentrality( graph: ImportGraph, packagePath: string, ):  // imported by 3 files
 
-export function computeChangeCoupling(commits: ParsedCommit[], windowDays: number = 90): ChangeCoupling[]  // imported by 5 files
-
 export function extractUserSections(content: string): UserSection[]
 
 export function renderTestMappingSection( mapping: TestMapping, hubFiles?: Array<{ path: string }>, ): string | null  // imported by 7 files
 
+export async function refreshSnapshot(rootDir: string): Promise<void>
+
 export function computeLagCoupling( commits: ParsedCommit[], couplingResults: ChangeCoupling[], ): LagCoupling[]  // imported by 5 files
 
-export async function refreshSnapshot(rootDir: string): Promise<void>
+export async function initPreCommitHook(rootDir: string): Promise<void>
 
 export async function computeFileHashes( rootDir: string, language: Language, ): Promise<Map<string, string>>  // imported by 5 files
 
-export function gradient( text: string, from: RGB, to: RGB, fallbackFn?: (text: string) => string,  // imported by 7 files
-
-export async function initPreCommitHook(rootDir: string): Promise<void>
+export function computeChangeCoupling(commits: ParsedCommit[], windowDays: number = 90, referenceMs?: number): ChangeCoupling[]  // imported by 5 files
 
 export function analyzeGitActivity( rootDir: string, onProgress?: ProgressCallback, analysisDays: number = 90, sinceRef?: string,  // imported by 5 files
 
 export async function buildGraphWithCache( rootDir: string, language: Language, onProgress?: ProgressCallback, ): Promise<ImportGraph>  // imported by 5 files
 
-export async function buildSections( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,  // imported by 7 files
-
 export async function inferConventions( rootDir: string, graph: ImportGraph, configConstraints?: ConfigConstraints, ): Promise<InferredConventions | null>  // imported by 7 files
+
+export async function buildSections( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,  // imported by 7 files
 
 export async function buildMainContext( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,  // imported by 7 files
 
@@ -778,6 +790,8 @@ export function createDebounce<T>( fn: (items: T[]) => void,
 export function serializeAnalysis( ctx: DetectedContext, analysis: ContextAnalysis, snapshot: CodeSnapshot | null, _graph: ImportGraph,
 
 export async function computeFileComplexity( rootDir: string, hubFiles: HubFile[], ): Promise<FileComplexityInfo[]>  // imported by 9 files
+
+export function getFrameworkHintsSection(ctx: DetectedContext): string  // imported by 3 files
 
 export async function runBriefMode( rootDir: string, budget: number = DEFAULT_BRIEF_BUDGET, _verbose: boolean = false, ): Promise<void>
 
@@ -795,21 +809,9 @@ export function buildDirectives( analysis: ContextAnalysis, ctx: DetectedContext
 
 export async function renderDirectivesSection( analysis: ContextAnalysis, ctx: DetectedContext, graph?: ImportGraph, ): Promise<string | null>  // imported by 9 files
 
-export function getFrameworkHintsSection(ctx: DetectedContext): string  // imported by 3 files
-
 export async function runWatchMode( rootDir: string, verbose: boolean, ): Promise<void>
 
 export function mergeUserSections(newContent: string, userSections: UserSection[]): string
-
-export async function validateContextPaths( rootDir: string, config: ProjectConfig, ): Promise<{ broken: string[]; file: string } | null>
-
-export async function generateFiles( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, force: boolean = false,
-
-export function getFrameworkHints(ctx: DetectedContext): string[]  // imported by 3 files
-
-export async function buildAiderContext( ctx: DetectedContext, answers: UserAnswers, snapshot: CodeSnapshot | null, analysis?: ContextAnalysis,
-
-export function queryLayers( analysis: ContextAnalysis, ):
 ```
 
 <!-- /CODE SNAPSHOT -->
@@ -841,13 +843,13 @@ Files whose removal would disconnect parts of the codebase. Refactor with extrem
 | File | Separates | Imported By |
 |------|-----------|-------------|
 | `src/types.ts` | 4 components | 60 files |
-| `src/graph.ts` | 3 components | 26 files |
+| `src/graph.ts` | 3 components | 27 files |
 | `src/utils.ts` | 2 components | 33 files |
 | `src/git-analysis.ts` | 2 components | 5 files |
 | `src/cache.ts` | 2 components | 5 files |
-| `src/hooks.ts` | 2 components | 2 files |
-| `src/watch.ts` | 2 components | 2 files |
 | `src/generate.ts` | 2 components | 2 files |
+| `src/watch.ts` | 2 components | 2 files |
+| `src/hooks.ts` | 2 components | 2 files |
 | `src/deep-analysis.ts` | 2 components | 2 files |
 | `src/brief.ts` | 2 components | 2 files |
 
