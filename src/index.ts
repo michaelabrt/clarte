@@ -7,6 +7,7 @@ import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import { runPrompts } from "./prompts.js";
 import { generateSnapshot } from "./snapshot.js";
 import { generateFiles } from "./generate.js";
+import type { SectionFilterOptions } from "./templates/main-context.js";
 import { printSummary } from "./summary.js";
 import {
   loadConfig,
@@ -94,6 +95,9 @@ function printHelp(): void {
   console.log(`    ${t.accent("--max-tokens=N")}          ${t.text("Set the token budget for the code snapshot")}`);
   console.log(`    ${t.accent("--format=json")}           ${t.text("Output full analysis as structured JSON to stdout")}`);
   console.log(`    ${t.accent("--budget=N")}              ${t.text("Set token budget for the context file (prioritized sections)")}`);
+  console.log(`    ${t.accent("--full")}                  ${t.text("Disable token budget (include all sections)")}`);
+  console.log(`    ${t.accent("--include=a,b")}           ${t.text("Always include these sections (comma-separated IDs)")}`);
+  console.log(`    ${t.accent("--exclude=a,b")}           ${t.text("Exclude these sections entirely")}`);
   console.log(`    ${t.accent("--generate-skills")}       ${t.text("Generate Claude Code skill files")}`);
   console.log(`    ${t.accent("--init-hook")}             ${t.text("Install git pre-commit hook for snapshot freshness")}`);
   console.log(`    ${t.accent("--watch")}                 ${t.text("Watch for file changes and re-analyze continuously")}`);
@@ -159,6 +163,16 @@ async function main() {
   const jsonMode = formatArg?.split("=")[1] === "json";
   const budgetArg = args.find((a) => a.startsWith("--budget="));
   const budget = budgetArg ? parseInt(budgetArg.split("=")[1], 10) : undefined;
+  const fullMode = args.includes("--full");
+  const includeArg = args.find((a) => a.startsWith("--include="));
+  const excludeArg = args.find((a) => a.startsWith("--exclude="));
+  const sectionFilter: SectionFilterOptions | undefined = (includeArg || excludeArg)
+    ? {
+        include: includeArg ? new Set(includeArg.split("=")[1].split(",")) : undefined,
+        exclude: excludeArg ? new Set(excludeArg.split("=")[1].split(",")) : undefined,
+      }
+    : undefined;
+  const effectiveBudget = fullMode ? 0 : budget;
   const initHook = args.includes("--init-hook");
   const briefMode = args[0] === "brief";
   const hooksMode = args[0] === "hooks";
@@ -171,7 +185,7 @@ async function main() {
   // brief: compact summary for session hooks (no ANSI, stdout only)
   // Must be before project marker check: brief is a silent no-op in non-project dirs.
   if (briefMode) {
-    await runBriefMode(rootDir, maxTokens ?? budget ?? 3000, verbose);
+    await runBriefMode(rootDir, maxTokens ?? effectiveBudget, verbose, sectionFilter);
     process.exit(0);
   }
 
@@ -846,7 +860,7 @@ async function main() {
     dryRun ? "Preparing context files..." : "Generating context files...",
   );
   const shouldGenerateSkills = generateSkills || answers.ides.includes("claude");
-  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills, verbose ? verboseLog : undefined, budget);
+  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills, verbose ? verboseLog : undefined, effectiveBudget, sectionFilter);
   shimmer.stop();
   p.log.step(
     dryRun

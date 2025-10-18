@@ -14,6 +14,7 @@ import { fileExists, readFileOr, readJsonFile, writeFileSafe } from "./utils.js"
 import {
   buildMainContext,
   getMainContextFilename,
+  type SectionFilterOptions,
 } from "./templates/main-context.js";
 import {
   buildCursorRules,
@@ -42,6 +43,7 @@ export async function generateFiles(
   generateSkills: boolean = false,
   onVerbose?: ProgressCallback,
   budget?: number,
+  sectionFilter?: SectionFilterOptions,
 ): Promise<GeneratedFile[]> {
   // Deduplicate files by path (e.g. claude + cursor both produce CLAUDE.md)
   const fileMap = new Map<string, GeneratedFile>();
@@ -64,7 +66,7 @@ export async function generateFiles(
     const mainContent =
       ide === "aider"
         ? await buildAiderContext(ctx, answers, snapshot, analysis)
-        : await buildMainContext(ctx, answers, snapshot, analysis, budget);
+        : await buildMainContext(ctx, answers, snapshot, analysis, budget, sectionFilter);
     await addFile(mainFilename, mainContent);
 
     // 2. Cursor-specific scoped rules

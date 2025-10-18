@@ -9,9 +9,46 @@ import { renderTestMappingSection } from "../test-map.js";
 import { renderDirectivesSection } from "./directives.js";
 import { findFeedbackEdges } from "../graph.js";
 
+/** Default token budget for context files. */
+export const DEFAULT_BUDGET = 5000;
+
+export interface SectionFilterOptions {
+  /** Promote these section IDs to priority 0 (always included). */
+  include?: Set<string>;
+  /** Remove these section IDs entirely. */
+  exclude?: Set<string>;
+}
+
+/**
+ * Apply include/exclude filters to sections.
+ * Exclude runs first (removes sections), then include promotes survivors to P0.
+ */
+function applyFilters(
+  sections: ContextSection[],
+  options?: SectionFilterOptions,
+): ContextSection[] {
+  let result = sections;
+
+  if (options?.exclude?.size) {
+    result = result.filter((s) => !options.exclude!.has(s.id));
+  }
+
+  if (options?.include?.size) {
+    for (const s of result) {
+      if (options.include.has(s.id)) {
+        s.priority = 0;
+      }
+    }
+  }
+
+  return result;
+}
+
 /**
  * Build the main context file content (CLAUDE.md, AGENTS.md, or CONTEXT.md).
  * When budget > 0, sections are prioritized and trimmed to fit within the token budget.
+ * Defaults to DEFAULT_BUDGET (5000 tokens) when budget is not specified.
+ * Pass budget=0 (--full) to disable budgeting and include all sections.
  */
 export async function buildMainContext(
   ctx: DetectedContext,
@@ -19,23 +56,26 @@ export async function buildMainContext(
   snapshot: CodeSnapshot | null,
   analysis?: ContextAnalysis,
   budget?: number,
+  options?: SectionFilterOptions,
 ): Promise<string> {
   const allSections = await buildSections(ctx, answers, snapshot, analysis);
-  const effectiveBudget = budget ?? 0;
+  const effectiveBudget = budget ?? DEFAULT_BUDGET;
 
   if (effectiveBudget <= 0) {
-    // No budget: include all sections (backward compatible)
-    return allSections.map((s) => s.content).join("\n\n").trimEnd() + "\n";
+    // --full mode: include all sections, still apply filters
+    const filtered = applyFilters(allSections, options);
+    return filtered.map((s) => s.content).join("\n\n").trimEnd() + "\n";
   }
 
-  const { included, omitted, overflowWarning } = applyBudget(allSections, effectiveBudget);
+  const filtered = applyFilters(allSections, options);
+  const { included, omitted, overflowWarning } = applyBudget(filtered, effectiveBudget);
   let result = included.map((s) => s.content).join("\n\n").trimEnd() + "\n";
 
   if (overflowWarning) {
     result += `\n<!-- WARNING: ${overflowWarning} -->\n`;
   }
   if (omitted.length > 0) {
-    result += `\n<!-- Sections omitted to fit token budget: ${omitted.join(", ")}. Run clarte --budget=0 for full output. -->\n`;
+    result += `\n<!-- Sections omitted to fit token budget: ${omitted.join(", ")}. Run clarte --full for full output. -->\n`;
   }
 
   return result;
