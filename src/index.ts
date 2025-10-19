@@ -17,7 +17,7 @@ import {
   computeSnapshotHash,
 } from "./config.js";
 import { refreshSnapshot } from "./refresh.js";
-import { runBriefMode } from "./brief.js";
+import { runPrintMode } from "./print.js";
 import { validateContextPaths } from "./check.js";
 import { installHooks, uninstallHooks, initPreCommitHook } from "./hooks.js";
 import { runWatchMode } from "./watch.js";
@@ -77,7 +77,7 @@ function printHelp(): void {
   console.log(`  ${t.textBold("Usage:")}  ${t.text(`npx ${NAME} [directory] [options]`)}`);
   console.log("");
   console.log(`  ${t.textBold("Commands:")}`);
-  console.log(`    ${t.accent("brief")}                   ${t.text("Compact summary for session hooks (stdout, no ANSI)")}`);
+  console.log(`    ${t.accent("print")}                   ${t.text("Print context to stdout (for hooks, pipes)")}`);
   console.log(`    ${t.accent("hooks install")}           ${t.text("Add clarte hooks to Claude Code settings")}`);
   console.log(`    ${t.accent("hooks uninstall")}         ${t.text("Remove clarte hooks from Claude Code settings")}`);
   console.log("");
@@ -174,18 +174,18 @@ async function main() {
     : undefined;
   const effectiveBudget = fullMode ? 0 : budget;
   const initHook = args.includes("--init-hook");
-  const briefMode = args[0] === "brief";
+  const printMode = args[0] === "print";
   const hooksMode = args[0] === "hooks";
   const diffFileArg = args.find((a) => a.startsWith("--diff-file="));
   const diffFile = diffFileArg?.split("=")[1];
   const diffFilterSet = new Set(diffFilterFiles);
-  const targetDir = args.find((a) => !a.startsWith("-") && a !== "brief" && a !== "hooks" && a !== "install" && a !== "uninstall" && a !== "-v" && !diffFilterSet.has(a)) ?? process.cwd();
+  const targetDir = args.find((a) => !a.startsWith("-") && a !== "print" && a !== "hooks" && a !== "install" && a !== "uninstall" && a !== "-v" && !diffFilterSet.has(a)) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
-  // brief: compact summary for session hooks (no ANSI, stdout only)
-  // Must be before project marker check: brief is a silent no-op in non-project dirs.
-  if (briefMode) {
-    await runBriefMode(rootDir, maxTokens ?? effectiveBudget, verbose, sectionFilter);
+  // print: compact summary for session hooks (no ANSI, stdout only)
+  // Must be before project marker check: print is a silent no-op in non-project dirs.
+  if (printMode) {
+    await runPrintMode(rootDir, maxTokens ?? effectiveBudget, verbose, sectionFilter);
     process.exit(0);
   }
 

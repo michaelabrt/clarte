@@ -1,16 +1,16 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { runBriefMode } from "../brief.js";
+import { runPrintMode } from "../print.js";
 import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 
-describe("runBriefMode", () => {
+describe("runPrintMode", () => {
   let tmpDir: string;
   let stdoutChunks: string[];
   let originalWrite: typeof process.stdout.write;
 
   beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-brief-"));
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-print-"));
     stdoutChunks = [];
     originalWrite = process.stdout.write;
     // Capture stdout
@@ -32,7 +32,7 @@ describe("runBriefMode", () => {
       JSON.stringify({ name: "test-project" }),
     );
 
-    await runBriefMode(tmpDir);
+    await runPrintMode(tmpDir);
 
     const output = stdoutChunks.join("");
     expect(output).toBe("");
@@ -68,7 +68,7 @@ describe("runBriefMode", () => {
       'export function hello() { return "world"; }\n',
     );
 
-    await runBriefMode(tmpDir, 3000, false);
+    await runPrintMode(tmpDir, 3000, false);
 
     const output = stdoutChunks.join("");
     // Should contain tech stack section
@@ -99,7 +99,7 @@ describe("runBriefMode", () => {
     await fs.mkdir(path.join(tmpDir, "src"), { recursive: true });
     await fs.writeFile(path.join(tmpDir, "src", "main.ts"), "export const x = 1;\n");
 
-    await runBriefMode(tmpDir, 3000, false);
+    await runPrintMode(tmpDir, 3000, false);
 
     const output = stdoutChunks.join("");
     // ANSI escape codes start with \x1b[
@@ -129,14 +129,14 @@ describe("runBriefMode", () => {
     await fs.writeFile(path.join(tmpDir, "src", "main.ts"), "export const x = 1;\n");
 
     // Run with very small budget
-    await runBriefMode(tmpDir, 500, false);
+    await runPrintMode(tmpDir, 500, false);
     const smallOutput = stdoutChunks.join("");
 
     // Reset capture
     stdoutChunks = [];
 
     // Run with large budget
-    await runBriefMode(tmpDir, 10000, false);
+    await runPrintMode(tmpDir, 10000, false);
     const largeOutput = stdoutChunks.join("");
 
     // Small budget output should be <= large budget output

@@ -83,7 +83,7 @@ export async function buildMainContext(
 
 /**
  * Build all context sections with priority and token estimates.
- * Exported for use by brief mode and testing.
+ * Exported for use by print mode and testing.
  */
 export async function buildSections(
   ctx: DetectedContext,

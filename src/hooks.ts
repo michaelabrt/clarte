@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { fileExists, readFileOr, writeFileSafe } from "./utils.js";
 
-const HOOK_COMMAND = "npx clarte brief";
+const HOOK_COMMAND = "npx clarte print";
 const HOOK_MARKER = "clarte";
 
 /** Legacy format (pre-2026) */
@@ -55,7 +55,7 @@ function getSettingsPath(): string {
 
 /**
  * Install clarte hooks into ~/.claude/settings.json.
- * Adds SessionStart and PreCompact hooks that run `clarte brief`.
+ * Adds SessionStart and PreCompact hooks that run `clarte print`.
  * Preserves existing hooks (appends, does not replace).
  */
 export async function installHooks(): Promise<void> {
@@ -102,8 +102,8 @@ export async function installHooks(): Promise<void> {
   } else {
     console.log(`Installed ${addedCount} hook${addedCount === 1 ? "" : "s"} in ${settingsPath}`);
     console.log("");
-    console.log("  SessionStart: runs 'clarte brief' when a new session starts");
-    console.log("  PreCompact:   runs 'clarte brief' before context compaction");
+    console.log("  SessionStart: runs 'clarte print' when a new session starts");
+    console.log("  PreCompact:   runs 'clarte print' before context compaction");
     console.log("");
     console.log("Run 'clarte hooks uninstall' to remove.");
   }
