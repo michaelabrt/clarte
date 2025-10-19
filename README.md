@@ -205,7 +205,6 @@ Clarté runs a pipeline of static analysis steps. Each one feeds into the next. 
 | Step | What it does | Result |
 |------|-------------|--------|
 | [Dependency graph](docs/how-it-works.md#dependency-graph) | Parses all `import`/`require`/`use` statements | Maps how files connect to each other |
-| [Deep analysis](docs/how-it-works.md#deep-analysis) | Loads TypeScript type checker (opt-in) | Inferred return types and function call graphs |
 | [HITS analysis](docs/how-it-works.md#hits-analysis) | Computes authority/hub scores, assigns roles | Surfaces foundations, orchestrators and bridges |
 | [Config constraints](docs/how-it-works.md#config-constraints) | Extracts rules from tsconfig, ESLint, Biome, Prettier | Prevents wrong code from strict mode, linter rules |
 | [Dead file detection](docs/how-it-works.md#dead-file-detection) | Finds files nothing imports | Highlights potential cleanup targets |
@@ -254,7 +253,7 @@ npx clarte [directory] [options]
 | `-V, --version` | Show version number |
 | `--force` | Overwrite existing files without asking |
 | `--dry-run` | Preview what would be generated |
-| `--diff[=base]` | Generate focused context for changed files only (default base: `main`) |
+| `--diff[=REF] [FILES]` | Generate focused context for changed files (vs HEAD or REF) |
 | `--diff-file=PATH` | Write diff output to a file instead of stdout |
 | `--refresh-snapshot` | Re-scan source files and update just the code snapshot |
 | `--reconfigure` | Re-prompt even if `.clarte.json` exists |
@@ -262,9 +261,11 @@ npx clarte [directory] [options]
 | `--check=timestamp` | Timestamp-only staleness check, no file hashing (for shell hooks) |
 | `--max-tokens=N` | Set the token budget for the code snapshot |
 | `--budget=N` | Set token budget for the context file (prioritized sections) |
+| `--full` | Disable token budget (include all sections) |
+| `--include=a,b` | Always include these sections (comma-separated IDs) |
+| `--exclude=a,b` | Exclude these sections entirely |
 | `--format=json` | Output full analysis as structured JSON to stdout |
 | `--generate-skills` | Generate Claude Code skill files |
-| `--deep` | Run TypeScript type checker for inferred return types and call graphs |
 | `--init-hook` | Install git pre-commit hook for automatic snapshot freshness validation |
 | `--watch` | Watch for file changes and re-analyze continuously |
 | `-v, --verbose` | Show detailed progress output |
@@ -274,8 +275,9 @@ npx clarte [directory] [options]
 Generate focused context for just the files you changed:
 
 ```bash
-npx clarte --diff         # diff against main
-npx clarte --diff=develop # diff against a specific branch
+npx clarte --diff              # diff against HEAD
+npx clarte --diff=main         # diff against a specific ref
+npx clarte --diff src/foo.ts   # diff context for specific files
 ```
 
 Outputs to stdout by default (use `--diff-file=PATH` for file output). For each changed file, the diff includes:
@@ -290,8 +292,8 @@ Outputs to stdout by default (use `--diff-file=PATH` for file output). For each 
 Output a compact, token-budgeted architectural summary to stdout. Designed for session hooks:
 
 ```bash
-npx clarte brief                    # Default 3000-token budget
-npx clarte brief --max-tokens=1500  # Constrained budget
+npx clarte brief                    # Default 5000-token budget
+npx clarte brief --max-tokens=2000  # Constrained budget
 ```
 
 Silent no-op when no `.clarte.json` exists, so it's safe to install globally. Automatically detects if a Clarté MCP server is running and emits minimal output to avoid redundancy.
@@ -317,21 +319,6 @@ npx clarte --watch -v       # Verbose output
 ```
 
 On each source file change (debounced 500ms), Clarté rebuilds the import graph incrementally and runs the full analysis pipeline. Architecture deltas (new hub files, resolved cycles, new dead files) are logged as they're detected.
-
-### Deep Analysis
-
-Run the TypeScript type checker for richer context:
-
-```bash
-npx clarte --deep
-```
-
-When your project has TypeScript as a dev dependency, `--deep` loads it from `node_modules` and adds:
-
-- **Inferred return types**: functions without explicit return type annotations get their inferred types added to the snapshot
-- **Function call graph**: shows which exported functions call which others, surfacing internal dependencies not visible in the import graph
-
-Falls back to parser-only output if TypeScript is not installed.
 
 ### Context Splitting
 
@@ -462,7 +449,7 @@ On first run, Clarté saves your answers to `.clarte.json`:
 
 ```json
 {
-  "_version": 1,
+  "_version": 2,
   "ides": ["cursor", "copilot"],
   "projectPurpose": "A mobile AI chat app...",
   "keyPatterns": "Zustand slices for state...",

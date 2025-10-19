@@ -18,15 +18,6 @@ src/pages/Login.tsx   ──imports──▶  src/hooks/useAuth.ts
 
 **tsconfig path aliases**: specifiers like `@/utils` are resolved via `tsconfig.json` `paths`/`baseUrl` instead of being counted as external packages.
 
-## Deep Analysis
-
-When `--deep` is passed and TypeScript is available as a dev dependency, Clarté loads the TypeScript type checker from `node_modules` to extract information that the parser alone can't provide:
-
-- **Inferred return types**: functions without explicit return type annotations get their compiler-inferred return types added to the snapshot. This is especially useful for factory functions and complex generics where the actual return type matters but isn't written out.
-- **Function call graph**: traces which exported functions call which other exported functions within the same project. This surfaces internal dependencies that don't show up in the import graph (function A in `utils.ts` calls function B in `utils.ts`).
-
-Falls back to parser-only output if TypeScript is not installed or the project is not TypeScript-based.
-
 ## HITS Analysis
 
 Runs [Kleinberg's HITS algorithm](https://en.wikipedia.org/wiki/HITS_algorithm) on the import graph to separate two kinds of important files:
