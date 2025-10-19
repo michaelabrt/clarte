@@ -144,31 +144,34 @@ Clarté will:
 
 Your answers are saved to `.clarte.json` so future runs skip the prompts.
 
-<!-- TODO: Add benchmarks section once the Haiku run is complete.
-     Model: Claude Haiku 4.5 (claude-haiku-4-5-20251001).
-     Conditions: with-context vs without-context.
-
 ## Benchmarks
 
-We run benchmarks on [clarte-benchmark](https://github.com/michaelabrt/clarte-benchmark)
-to measure how generated context affects AI agent performance. Same tasks run
-with and without context, compared with statistical testing (Wilcoxon signed-rank,
-bootstrap confidence intervals, Cliff's delta effect sizes).
+We benchmark how clarte context affects AI agent performance. Same tasks, same model, with and without context. Statistical testing with Mann-Whitney U, bootstrap CIs, and Cliff's delta effect sizes.
 
-Claude Haiku 4.5, [fixture projects], [N] repetitions per task:
+**Claude Haiku 4.5**, 3 TypeScript fixture tasks, 7 repetitions each (127 sessions total):
 
 | Metric | Without Context | With Context | Delta |
 |--------|----------------|--------------|-------|
-| Cost (median) |  |  |  |
-| Duration (median) |  |  |  |
-| Input tokens (median) |  |  |  |
-| Turns (median) |  |  |  |
-| Pass rate |  |  |  |
+| Pass rate | 86% | **95%** | +9pp |
+| Turns (median) | 19 | **14** | -26% (p<0.001) |
+| Cost (median) | $0.35 | **$0.29** | -15% |
 
-Methodology, fixture projects and full statistical analysis are in the
-[benchmark repo](https://github.com/michaelabrt/clarte-benchmark).
+### Section ablation
 
--->
+To identify which sections matter, we ran an exclude-based ablation: remove one section at a time and measure the drop in pass rate.
+
+| Removed Section | Pass Rate | Delta vs. Baseline |
+|----------------|-----------|-------------------|
+| _(none, full context)_ | 95% | -- |
+| Key Files | 76% | **-19pp** |
+| Conventions | 81% | **-14pp** |
+| Test Mapping | 90% | -5pp |
+| Working Guidelines | 91% | -4pp |
+| _(all context removed)_ | 86% | -9pp |
+
+**Key Files** and **Conventions** are the highest-value sections. Removing either one hurts more than removing all context entirely.
+
+Methodology, fixture projects, and full reports are in the [benchmark repo](https://github.com/michaelabrt/clarte-benchmark).
 
 ## Supported Languages
 
