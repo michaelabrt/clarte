@@ -153,6 +153,14 @@ We benchmark how clarte context affects AI agent performance. Same tasks, same m
 | Turns (median) | 19 | **14** | -26% (p<0.001) |
 | Cost (median) | $0.35 | **$0.29** | -15% |
 
+**How to read these numbers:**
+
+- **Pass rate** is the main metric. A failed task wastes the entire token budget for nothing. The 9pp improvement means fewer wasted runs.
+- **Turns** is the strongest statistical signal (p<0.001, medium effect size). With context, the agent explores less because it already knows where key files are and how the architecture is structured. 5 fewer median turns per task.
+- **Cost** shows a modest 15% reduction. Context itself adds ~2,500 tokens to every turn, which partially offsets the savings from fewer turns. The net cost benefit is small; the real value is in pass rate and efficiency.
+
+**Limitations:** This is one fixture (57 TypeScript files), one model (Haiku), and 3 tasks. The fix-order-tax task hit a ceiling (100% pass rate in all conditions), so the differentiation comes primarily from the two harder tasks. Larger codebases and harder tasks should show bigger gaps.
+
 ### Section ablation
 
 To identify which sections matter, we ran an exclude-based ablation: remove one section at a time and measure the drop in pass rate.
@@ -166,7 +174,7 @@ To identify which sections matter, we ran an exclude-based ablation: remove one 
 | Working Guidelines | 91% | -4pp |
 | _(all context removed)_ | 86% | -9pp |
 
-**Key Files** and **Conventions** are the highest-value sections. Removing either one hurts more than removing all context entirely.
+**Key Files** and **Conventions** are the highest-value sections. Removing either one hurts more than removing all context entirely, suggesting the agent relies on knowing which files are central and what patterns the codebase follows.
 
 Methodology, fixture projects, and full reports are in the [benchmark repo](https://github.com/michaelabrt/clarte-benchmark).
 
