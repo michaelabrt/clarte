@@ -16,9 +16,9 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
-Clarté is a static analysis engine. It parses your imports, builds a dependency graph, runs graph algorithms on it (HITS centrality, Tarjan's SCC, community detection, change coupling), analyzes your git history, and outputs a context file that AI coding tools can read.
+Clarté is a static analysis engine. It parses your imports, builds a dependency graph, runs graph algorithms on it (HITS centrality, Tarjan's SCC, community detection, change coupling), analyzes your git history and outputs a context file that AI coding tools can read.
 
-The problem it solves: when an AI coding agent opens a session on your project, it spends its first turns reading files, tracing imports, and piecing together your architecture. Clarté does that analysis once, ahead of time. One run produces a context file with your dependency graph, key files, architectural layers, and working guidelines.
+The problem it solves: when an AI coding agent opens a session on your project, it spends its first turns reading files, tracing imports and piecing together your architecture. Clarté does that analysis once, ahead of time. One run produces a context file with your dependency graph, key files, architectural layers and working guidelines.
 
 ```bash
 npx clarte
@@ -39,7 +39,7 @@ npx clarte
 | Hidden coupling | `schemas/user.ts` and `store/user.ts` co-change but have no import path |
 | Tight coupling | `index.ts` imports 14 names from `graph.ts`; consider an interface |
 | Dead files | Files with zero imports that may be safe to remove |
-| Code snapshot | Public types, interfaces, props, and function signatures |
+| Code snapshot | Public types, interfaces, props and function signatures |
 
 <details>
 <summary><strong>Example: generated CLAUDE.md</strong> (click to expand)</summary>
@@ -52,7 +52,7 @@ npx clarte
 
 ## What Is This
 
-A mobile AI chat app connecting to OpenAI, Anthropic, and Google APIs
+A mobile AI chat app connecting to OpenAI, Anthropic and Google APIs
 
 ## Tech Stack
 
@@ -144,21 +144,31 @@ Clarté will:
 
 Your answers are saved to `.clarte.json` so future runs skip the prompts.
 
+<!-- TODO: Add benchmarks section once the Haiku run is complete.
+     Model: Claude Haiku 4.5 (claude-haiku-4-5-20251001).
+     Conditions: with-context vs without-context.
+
 ## Benchmarks
 
-We run benchmarks on [clarte-benchmark](https://github.com/michaelabrt/clarte-benchmark) to measure how generated context affects AI agent performance. Same tasks run with and without context, compared via Mann-Whitney U test, bootstrap confidence intervals, and Cliff's delta effect sizes.
+We run benchmarks on [clarte-benchmark](https://github.com/michaelabrt/clarte-benchmark)
+to measure how generated context affects AI agent performance. Same tasks run
+with and without context, compared with statistical testing (Wilcoxon signed-rank,
+bootstrap confidence intervals, Cliff's delta effect sizes).
 
-Results on a small TypeScript utility library, Claude Sonnet 4.5:
+Claude Haiku 4.5, [fixture projects], [N] repetitions per task:
 
 | Metric | Without Context | With Context | Delta |
 |--------|----------------|--------------|-------|
-| Cost (median) | $0.1321 | $0.0706 | **-46.5%** |
-| Duration (median) | 36.0s | 27.9s | **-22.6%** |
-| Input tokens (median) | 35,298 | 16,138 | **-54.3%** |
-| Turns (median) | 8.5 | 6 | **-29.4%** |
-| Pass rate | 100% | 100% | 0.0pp |
+| Cost (median) |  |  |  |
+| Duration (median) |  |  |  |
+| Input tokens (median) |  |  |  |
+| Turns (median) |  |  |  |
+| Pass rate |  |  |  |
 
-Methodology, fixture projects, and full statistical analysis are in the [benchmark repo](https://github.com/michaelabrt/clarte-benchmark).
+Methodology, fixture projects and full statistical analysis are in the
+[benchmark repo](https://github.com/michaelabrt/clarte-benchmark).
+
+-->
 
 ## Supported Languages
 
@@ -196,7 +206,7 @@ Clarté runs a pipeline of static analysis steps. Each one feeds into the next. 
 |------|-------------|--------|
 | [Dependency graph](docs/how-it-works.md#dependency-graph) | Parses all `import`/`require`/`use` statements | Maps how files connect to each other |
 | [Deep analysis](docs/how-it-works.md#deep-analysis) | Loads TypeScript type checker (opt-in) | Inferred return types and function call graphs |
-| [HITS analysis](docs/how-it-works.md#hits-analysis) | Computes authority/hub scores, assigns roles | Surfaces foundations, orchestrators, and bridges |
+| [HITS analysis](docs/how-it-works.md#hits-analysis) | Computes authority/hub scores, assigns roles | Surfaces foundations, orchestrators and bridges |
 | [Config constraints](docs/how-it-works.md#config-constraints) | Extracts rules from tsconfig, ESLint, Biome, Prettier | Prevents wrong code from strict mode, linter rules |
 | [Dead file detection](docs/how-it-works.md#dead-file-detection) | Finds files nothing imports | Highlights potential cleanup targets |
 | [Dead export removal](docs/how-it-works.md#dead-export-removal) | Drops exports nothing imports | Saves tokens on unused code |
@@ -270,7 +280,7 @@ npx clarte --diff=develop # diff against a specific branch
 
 Outputs to stdout by default (use `--diff-file=PATH` for file output). For each changed file, the diff includes:
 
-- **Risk annotations**: file role, dependent count, and impact warnings
+- **Risk annotations**: file role, dependent count and impact warnings
 - **Temporal coupling**: files that frequently co-change but aren't in the current diff
 - **Cycle context**: circular dependencies involving changed files, with break hints
 - **Scoped directives**: architectural guidelines filtered to the changed files only
@@ -328,7 +338,7 @@ Falls back to parser-only output if TypeScript is not installed.
 For large projects (150+ source files or 8000+ estimated context tokens), Clarté automatically splits context into tiered files:
 
 - **Root context file**: project overview, tech stack, key files, architecture layers, development commands. Links to per-directory files.
-- **Per-directory context files**: placed in `.clarte/context/`. Each contains local hub files, dependency patterns, test coverage, and related directories.
+- **Per-directory context files**: placed in `.clarte/context/`. Each contains local hub files, dependency patterns, test coverage and related directories.
 
 Monorepo projects are excluded (they already get per-package context).
 
@@ -340,7 +350,7 @@ After a refactor, update just the code snapshot without re-generating the entire
 npx clarte --refresh-snapshot
 ```
 
-This finds the `<!-- CODE SNAPSHOT -->` markers in your context file, re-scans source files, and replaces just that section.
+This finds the `<!-- CODE SNAPSHOT -->` markers in your context file, re-scans source files and replaces just that section.
 
 ## Shell Integration
 
@@ -510,7 +520,7 @@ Clarté detects your framework and includes relevant conventions in the output:
 | Expo / React Native | Routing, native modules, platform-specific files |
 | Vue / Nuxt | Composition API, auto-imports, data fetching |
 
-Also supports: Fastify, Hono, Angular, Svelte, Prisma, Drizzle, Tailwind CSS, Electron, SQLAlchemy, Celery, and more.
+Also supports: Fastify, Hono, Angular, Svelte, Prisma, Drizzle, Tailwind CSS, Electron, SQLAlchemy, Celery and more.
 
 ## Monorepo Support
 
@@ -520,7 +530,7 @@ Clarté detects monorepo tooling and can generate per-package context files:
 - **Turborepo** (`turbo.json`)
 - **Nx** (`nx.json`)
 
-When detected, you'll be asked if you want per-package files. Each package gets its own scoped context with that package's dependencies, frameworks, and code snapshot.
+When detected, you'll be asked if you want per-package files. Each package gets its own scoped context with that package's dependencies, frameworks and code snapshot.
 
 Cross-package import analysis detects encapsulation violations (imports that bypass a package's public API) and computes per-package centrality to identify key files within each package.
 
