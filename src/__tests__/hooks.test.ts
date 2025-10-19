@@ -40,11 +40,11 @@ describe("installHooks", () => {
     const hooks = settings.hooks as Record<string, Array<{ matcher?: string; hooks: Array<{ type: string; command: string }> }>>;
     expect(hooks).toBeDefined();
     expect(hooks.SessionStart).toHaveLength(1);
-    expect(hooks.SessionStart[0].hooks[0].command).toContain("clarte brief");
+    expect(hooks.SessionStart[0].hooks[0].command).toContain("clarte print");
     expect(hooks.SessionStart[0].hooks[0].type).toBe("command");
     expect(hooks.SessionStart[0].matcher).toBeUndefined();
     expect(hooks.PreCompact).toHaveLength(1);
-    expect(hooks.PreCompact[0].hooks[0].command).toContain("clarte brief");
+    expect(hooks.PreCompact[0].hooks[0].command).toContain("clarte print");
   });
 
   it("preserves existing hooks when installing", async () => {
@@ -66,7 +66,7 @@ describe("installHooks", () => {
     // Existing SessionStart hook preserved, clarte appended
     expect(hooks.SessionStart).toHaveLength(2);
     expect((hooks.SessionStart[0] as any).command).toBe("echo hello");
-    expect((hooks.SessionStart[1] as any).hooks[0].command).toContain("clarte brief");
+    expect((hooks.SessionStart[1] as any).hooks[0].command).toContain("clarte print");
 
     // Existing PreToolUse hook untouched
     expect(hooks.PreToolUse).toHaveLength(1);
@@ -104,10 +104,10 @@ describe("uninstallHooks", () => {
       hooks: {
         SessionStart: [
           { type: "command", command: "echo hello" },
-          { type: "command", command: "npx clarte brief" },
+          { type: "command", command: "npx clarte print" },
         ],
         PreCompact: [
-          { type: "command", command: "npx clarte brief" },
+          { type: "command", command: "npx clarte print" },
         ],
       },
     });
@@ -138,7 +138,7 @@ describe("uninstallHooks", () => {
     await writeSettings({
       hooks: {
         SessionStart: [
-          { type: "command", command: "npx clarte brief" },
+          { type: "command", command: "npx clarte print" },
         ],
       },
     });

@@ -152,7 +152,7 @@ Counts named imports between file pairs and flags those with 5+ shared names. Th
 | From | To | Imported Names |
 |------|----|----------------|
 | `src/index.ts` | `src/graph.ts` | 14 names |
-| `src/brief.ts` | `src/graph.ts` | 13 names |
+| `src/print.ts` | `src/graph.ts` | 13 names |
 
 Agents are advised to consider introducing an intermediate interface if refactoring tightly coupled pairs.
 

@@ -14,11 +14,11 @@ import { readFileOr } from "./utils.js";
 import type { ContextAnalysis, PackageHubFile, ProgressCallback } from "./types.js";
 
 /**
- * Run brief mode: compact, token-budgeted summary to stdout.
+ * Run print mode: compact, token-budgeted summary to stdout.
  * Designed for session hooks (e.g. Claude Code hooks.json).
  * Silent no-op if no .clarte.json config exists.
  */
-export async function runBriefMode(
+export async function runPrintMode(
   rootDir: string,
   budget: number = DEFAULT_BUDGET,
   _verbose: boolean = false,

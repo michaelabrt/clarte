@@ -157,15 +157,15 @@ async function buildArchitectureSkill(analysis?: ContextAnalysis, ctx?: Detected
 function buildClarteSkills(): ClaudeSkill[] {
   return [
     {
-      name: "clarte-brief",
+      name: "clarte-print",
       description:
         "Get a compact architectural overview of this codebase including key files, layers, circular dependencies, and conventions.",
       disableModelInvocation: true,
       allowedTools: "Bash",
       body: [
-        "# Clarte Brief",
+        "# Clarte Print",
         "",
-        "Run `npx clarte brief` and present the output to the user.",
+        "Run `npx clarte print` and present the output to the user.",
         "",
         "Use this skill when the user asks about the overall architecture, project structure, or key files.",
       ].join("\n"),
