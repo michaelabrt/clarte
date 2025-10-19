@@ -6,7 +6,7 @@ For the summary table, see the [README](../README.md#how-it-works).
 
 ## Dependency Graph
 
-Parses all `import`, `require`, and `use` statements across your source files and builds a directed graph. This graph powers every other analysis step.
+Parses all `import`, `require` and `use` statements across your source files and builds a directed graph. This graph powers every other analysis step.
 
 ```
 src/hooks/useAuth.ts  ──imports──▶  src/store/auth.ts
@@ -14,7 +14,7 @@ src/hooks/useAuth.ts  ──imports──▶  src/types.ts
 src/pages/Login.tsx   ──imports──▶  src/hooks/useAuth.ts
 ```
 
-**Barrel file resolution**: imports through barrel files (detected by content analysis: >50% re-export ratio) are followed through re-exports to credit the actual source files, preventing barrels from inflating centrality scores. Works with `index.ts`, `mod.ts`, and any file that primarily re-exports.
+**Barrel file resolution**: imports through barrel files (detected by content analysis: >50% re-export ratio) are followed through re-exports to credit the actual source files, preventing barrels from inflating centrality scores. Works with `index.ts`, `mod.ts` and any file that primarily re-exports.
 
 **tsconfig path aliases**: specifiers like `@/utils` are resolved via `tsconfig.json` `paths`/`baseUrl` instead of being counted as external packages.
 
@@ -38,7 +38,7 @@ Each file is assigned a role based on its scores: **Foundation**, **Orchestrator
 
 ## Config Constraints
 
-Scans `tsconfig.json`, ESLint, Biome, and Prettier configs to extract rules that directly affect code generation:
+Scans `tsconfig.json`, ESLint, Biome and Prettier configs to extract rules that directly affect code generation:
 
 - TypeScript strict flags (`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`)
 - Linter rules (`prefer-const`, `consistent-type-imports`, `no-explicit-any`)
@@ -48,13 +48,13 @@ These are rendered as actionable directives: "**Must**: TypeScript strict mode, 
 
 ## Dead File Detection
 
-Identifies files with zero in-degree (nothing imports them), excluding known entry points like `index.ts`, `main.ts`, `app.ts`, `__init__.py`, and test files. These are potential cleanup targets or files that may only be used via side effects.
+Identifies files with zero in-degree (nothing imports them), excluding known entry points like `index.ts`, `main.ts`, `app.ts`, `__init__.py` and test files. These are potential cleanup targets or files that may only be used via side effects.
 
 ## Dead Export Removal
 
 Cross-references every named export against the import graph. If nothing in the project imports it, it's excluded from the snapshot. Library projects (detected via `main`/`exports`/`bin` fields in `package.json`) skip this filtering to preserve public API exports.
 
-This catches leftover refactors, over-exported utilities, and test-only helpers, keeping the context lean.
+This catches leftover refactors, over-exported utilities and test-only helpers, keeping the context lean.
 
 ## Token Budgeting
 
@@ -92,7 +92,7 @@ Uses [Tarjan's algorithm](https://en.wikipedia.org/wiki/Tarjan%27s_strongly_conn
 
 **Example:** `auth.ts -> user.ts -> permissions.ts -> auth.ts`. All three files are reported as a circular dependency cluster.
 
-Each cycle gets a **severity score** (0-1) based on the ratio of runtime to type-only imports, and a **break hint** suggesting how to resolve it (e.g., "Convert X -> Y to type-only import"). Cycles are sorted by severity so agents address the most impactful ones first.
+Each cycle gets a **severity score** (0-1) based on the ratio of runtime to type-only imports and a **break hint** suggesting how to resolve it (e.g., "Convert X -> Y to type-only import"). Cycles are sorted by severity so agents address the most impactful ones first.
 
 ## Instability Scoring
 
@@ -106,7 +106,7 @@ Files that are both highly unstable (many outgoing deps) **and** widely depended
 
 ## Cross-Cutting Analysis
 
-Identifies files imported across 3 or more architectural layers. A file imported by 10 files all in `components/` is a local utility. A file imported across `components/`, `services/`, `hooks/`, and `pages/` is a cross-cutting concern where changes ripple across architectural boundaries.
+Identifies files imported across 3 or more architectural layers. A file imported by 10 files all in `components/` is a local utility. A file imported across `components/`, `services/`, `hooks/` and `pages/` is a cross-cutting concern where changes ripple across architectural boundaries.
 
 **Example output:**
 
