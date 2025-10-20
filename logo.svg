@@ -4,10 +4,10 @@
 
   <!-- White logo: C shape + middle ring -->
   <g fill="none" stroke="#fff" stroke-linecap="butt" transform="translate(200,200) scale(0.88) translate(-200,-200)">
-    <!-- Inner ring: C shape, gap on right -->
-    <path d="M 246 238.6 A 60 60 0 1 1 246 161.4" stroke-width="20"/>
+    <!-- Inner ring: C shape, gap on right (r=50, smaller for more spacing) -->
+    <path d="M 238.3 232.2 A 50 50 0 1 1 238.3 167.8" stroke-width="20"/>
 
-    <!-- Middle ring: gap at upper-right, hook at start -->
+    <!-- Middle ring: gap at upper-right, hook at start (r=105) -->
     <path d="M 287 200 L 305 200 A 105 105 0 1 1 252.5 109.1" stroke-width="16"/>
   </g>
 </svg>
