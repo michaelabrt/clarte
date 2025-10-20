@@ -1,6 +1,5 @@
 <p align="center">
-  <a href="#"><img src="logo.svg#gh-light-mode-only" width="140" alt="Clarté logo" /></a>
-  <a href="#"><img src="logo-dark.svg#gh-dark-mode-only" width="140" alt="Clarté logo" /></a>
+  <img src="logo.svg" width="140" alt="Clarté logo" />
 </p>
 <h1 align="center">Clarté</h1>
 <p align="center"><em>/klaʁ.te/</em></p>
