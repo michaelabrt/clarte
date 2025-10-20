@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
-  <!-- Black circle background with subtle grey border -->
-  <circle cx="200" cy="200" r="160" fill="#000" stroke="#333" stroke-width="2.5"/>
+  <!-- Black circle background with grey border -->
+  <circle cx="200" cy="200" r="160" fill="#000" stroke="#333" stroke-width="3.5"/>
 
   <!-- White logo: C shape + middle ring -->
-  <g fill="none" stroke="#fff" stroke-linecap="butt" transform="translate(200,200) scale(0.95) translate(-200,-200)">
+  <g fill="none" stroke="#fff" stroke-linecap="butt" transform="translate(200,200) scale(0.88) translate(-200,-200)">
     <!-- Inner ring: C shape, gap on right -->
     <path d="M 246 238.6 A 60 60 0 1 1 246 161.4" stroke-width="20"/>
 
