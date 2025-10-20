@@ -51,7 +51,7 @@ describe("runPrintMode", () => {
       JSON.stringify({
         _version: 1,
         ides: ["claude"],
-        projectPurpose: "A test project for brief mode",
+        projectPurpose: "A test project for print mode",
         keyPatterns: "",
         gotchas: "",
         generateSnapshot: false,
@@ -74,7 +74,7 @@ describe("runPrintMode", () => {
     // Should contain tech stack section
     expect(output).toContain("## Tech Stack");
     // Should contain the project purpose
-    expect(output).toContain("A test project for brief mode");
+    expect(output).toContain("A test project for print mode");
   });
 
   it("produces output without ANSI escape codes", async () => {
