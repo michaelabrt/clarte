@@ -1,5 +1,4 @@
-<p align="center"><img src="logo.svg" width="110" alt="Clarté logo" /></p>
-<h1 align="center">Clarté</h1>
+<h1 align="center"><img src="logo.svg" width="110" alt="Clarté logo" /><br>Clarté</h1>
 <p align="center"><em>/klaʁ.te/</em></p>
 
 <p align="center">
