@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
   <!-- Black circle: radius matches outer ring's outer edge -->
-  <circle cx="200" cy="200" r="158" fill="#000" stroke="#333" stroke-width="2"/>
+  <circle cx="200" cy="200" r="174" fill="#000" stroke="#333" stroke-width="2"/>
 
   <!-- White logo rings -->
   <g fill="none" stroke="#fff" stroke-linecap="butt">
