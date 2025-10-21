@@ -1,6 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
-  <!-- Black circle: radius matches outer ring's outer edge -->
-  <circle cx="200" cy="200" r="158" fill="#000" stroke="#555" stroke-width="3"/>
+  <!-- Black circle background, no border -->
+  <circle cx="200" cy="200" r="158" fill="#000"/>
+
+  <!-- Outer ring grey border (wider stroke behind the white one) -->
+  <path d="M 85.7 266 L 70.1 275 A 150 150 0 1 1 200 350"
+        fill="none" stroke="#555" stroke-width="22" stroke-linecap="butt"/>
 
   <!-- White logo rings -->
   <g fill="none" stroke="#fff" stroke-linecap="butt">
