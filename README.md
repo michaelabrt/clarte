@@ -139,9 +139,21 @@ Your answers are saved to `.clarte.json` so future runs skip the prompts.
 
 ## Benchmarks
 
-We benchmark how clarte context affects AI agent performance. Same tasks, same model, with and without context. Statistical testing with Mann-Whitney U, bootstrap CIs, and Cliff's delta effect sizes.
+We benchmark how Clarté context affects AI agent performance. Same tasks, same model, with and without context. Statistical testing with Wilcoxon signed-rank, bootstrap CIs, Benjamini-Hochberg FDR correction and Cliff's delta effect sizes.
 
-**Claude Haiku 4.5**, 3 TypeScript fixture tasks, 7 repetitions each (127 sessions total):
+**Claude Sonnet 4.6** - 9 opaque tasks across 3 TypeScript fixtures, 5 repetitions (135 sessions):
+
+| Metric | Without Context | With Context | Delta | Significance |
+|--------|----------------|--------------|-------|--------------|
+| Cost (median) | $1.08 | **$0.45** | **-58.5%** | p<0.001, medium effect |
+| Input tokens (median) | 272K | **108K** | **-60.4%** | p<0.001, large effect |
+| Turns (median) | 16 | **11.5** | **-28.1%** | p<0.001, medium effect |
+| Duration (median) | 130s | **98s** | **-24.8%** | p<0.001, small effect |
+| Pass rate | 100% | 93% | -7pp | n.s. |
+
+A placebo condition (generic context with no structural analysis) showed -1.3% cost (not significant, negligible effect), confirming the improvement comes from Clarté's analysis, not from having any system prompt content.
+
+**Claude Haiku 4.5** - 3 tasks, 7 repetitions (127 sessions):
 
 | Metric | Without Context | With Context | Delta |
 |--------|----------------|--------------|-------|
@@ -149,20 +161,14 @@ We benchmark how clarte context affects AI agent performance. Same tasks, same m
 | Turns (median) | 19 | **14** | -26% (p<0.001) |
 | Cost (median) | $0.35 | **$0.29** | -15% |
 
-**How to read these numbers:**
-
-- **Pass rate** is the main metric. A failed task wastes the entire token budget for nothing. The 9pp improvement means fewer wasted runs.
-- **Turns** is the strongest statistical signal (p<0.001, medium effect size). With context, the agent explores less because it already knows where key files are and how the architecture is structured. 5 fewer median turns per task.
-- **Cost** shows a modest 15% reduction. Context itself adds ~2,500 tokens to every turn, which partially offsets the savings from fewer turns. The net cost benefit is small; the real value is in pass rate and efficiency.
-
-**Limitations:** This is one fixture (57 TypeScript files), one model (Haiku), and 3 tasks. The fix-order-tax task hit a ceiling (100% pass rate in all conditions), so the differentiation comes primarily from the two harder tasks. Larger codebases and harder tasks should show bigger gaps.
+The effect holds across model tiers. Sonnet shows larger absolute savings because its higher per-token cost ($3/$15 vs $1/$5) amplifies the token reduction.
 
 ### Section ablation
 
-To identify which sections matter, we ran an exclude-based ablation: remove one section at a time and measure the drop in pass rate.
+To identify which sections matter most, we ran an exclude-based ablation on Haiku: remove one section at a time and measure the drop in pass rate.
 
-| Removed Section | Pass Rate | Delta vs. Baseline |
-|----------------|-----------|-------------------|
+| Removed Section | Pass Rate | Delta vs. Full Context |
+|----------------|-----------|------------------------|
 | _(none, full context)_ | 95% | -- |
 | Key Files | 76% | **-19pp** |
 | Conventions | 81% | **-14pp** |
@@ -172,7 +178,7 @@ To identify which sections matter, we ran an exclude-based ablation: remove one 
 
 **Key Files** and **Conventions** are the highest-value sections. Removing either one hurts more than removing all context entirely, suggesting the agent relies on knowing which files are central and what patterns the codebase follows.
 
-Methodology, fixture projects, and full reports are in the [benchmark repo](https://github.com/michaelabrt/clarte-benchmark).
+Methodology, fixture projects and full reports are in the [benchmark repo](https://github.com/michaelabrt/clarte-benchmark).
 
 ## Supported Languages
 
