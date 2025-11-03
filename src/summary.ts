@@ -132,7 +132,7 @@ export function printSummary(
 
   console.log(
     t.muted(
-      `    In benchmarks, Clart\u00e9 reduced agent input tokens by 60% and cost by 58%: https://github.com/michaelabrt/clarte-benchmark`,
+      `    In benchmarks, Clart\u00e9 reduced agent input tokens by 60% and cost by 58%.\n    https://github.com/michaelabrt/clarte-benchmark`,
     ),
   );
 
