@@ -11,7 +11,7 @@
 
 Clarté is a static analysis engine. It parses your imports, builds a dependency graph, runs graph algorithms on it (HITS centrality, Tarjan's SCC, community detection, change coupling), analyzes your git history and outputs a context file that AI coding tools can read.
 
-The problem it solves: when an AI coding agent opens a session on your project, it spends its first turns reading files, tracing imports and piecing together your architecture. Clarté does that analysis once, ahead of time. One run produces a context file with your dependency graph, key files, architectural layers and working guidelines.
+The problem it solves: when an AI coding agent opens a session on your project, it spends its first turns reading files, tracing imports and piecing together your architecture. Clarté does that analysis once, ahead of time. One run produces a context file with your dependency graph, key files, architectural layers and working guidelines. In [benchmarks](https://github.com/michaelabrt/clarte-benchmark), Clarté reduced agent input tokens by 60% and cost by 58%.
 
 ```bash
 npx clarte
@@ -129,13 +129,12 @@ npx clarte
 
 Clarté will:
 
-1. **Detect** your tech stack (language, framework, package manager, linter)
-2. **Ask** a few questions (which AI tool(s), project purpose, key patterns)
-3. **Scan** source files for a code snapshot (types, store shapes, component props)
-4. **Generate** context files for your chosen tools
-5. **Show** a summary with token estimate
+1. **Detect** your tech stack, AI tools and project description automatically
+2. **Scan** source files for a code snapshot (types, store shapes, component props)
+3. **Generate** context files for your detected tools
+4. **Show** a summary with token estimate
 
-Your answers are saved to `.clarte.json` so future runs skip the prompts.
+Zero prompts on first run. Config is saved to `.clarte.json`; run with `--reconfigure` to customize.
 
 ## Benchmarks
 

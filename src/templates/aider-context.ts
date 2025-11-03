@@ -28,7 +28,9 @@ export async function buildAiderContext(
 
   // Conventions as a YAML list
   lines.push("conventions:");
-  lines.push(`  - "Project: ${escapeYaml(answers.projectPurpose)}"`);
+  if (answers.projectPurpose) {
+    lines.push(`  - "Project: ${escapeYaml(answers.projectPurpose)}"`);
+  }
   lines.push(`  - "Stack: ${escapeYaml(stackSummary)}"`);
   lines.push(`  - "INSTRUCTION: This file is your starting point. Only read additional files when the task requires details not captured here."`);
 

@@ -1,5 +1,5 @@
-import { theme as t, gradient, getGradientBarColors } from "./theme.js";
-import type { CodeSnapshot, ContextAnalysis, DetectedContext, GeneratedFile } from "./types.js";
+import { theme as t } from "./theme.js";
+import type { CodeSnapshot, ContextAnalysis, GeneratedFile } from "./types.js";
 import { estimateTokens, formatBytes } from "./utils.js";
 import { INSTABILITY_THRESHOLD } from "./graph.js";
 
@@ -8,7 +8,6 @@ import { INSTABILITY_THRESHOLD } from "./graph.js";
  */
 export function printSummary(
   files: GeneratedFile[],
-  ctx: DetectedContext,
   snapshot?: CodeSnapshot | null,
   analysis?: ContextAnalysis,
 ): void {
@@ -21,8 +20,6 @@ export function printSummary(
   // Track totals
   let totalBytes = 0;
   let totalTokens = 0;
-  let alwaysOnTokens = 0;
-  let scopedRuleTokens: number[] = [];
 
   // Group files: main context vs scoped rules
   const mainFiles = files.filter((f) => !f.path.includes(".cursor/rules/"));
@@ -43,7 +40,6 @@ export function printSummary(
     const tokens = estimateTokens(file.content);
     totalBytes += bytes;
     totalTokens += tokens;
-    alwaysOnTokens += tokens;
 
     fileRows.push({
       indent: "    ",
@@ -73,13 +69,6 @@ export function printSummary(
       totalTokens += tokens;
 
       const filename = file.path.split("/").pop() ?? file.path;
-      const isGlobal = filename === "global.md";
-
-      if (isGlobal) {
-        alwaysOnTokens += tokens;
-      } else {
-        scopedRuleTokens.push(tokens);
-      }
 
       fileRows.push({
         indent: "      ",
@@ -141,65 +130,11 @@ export function printSummary(
     }
   }
 
-  // -- Token estimate comparison (bar chart) --
-  console.log("");
-  console.log(t.brandBold("  Estimated context cost per conversation:"));
-  console.log("");
-
-  // Before: estimate exploration cost from source file count + size
-  const explorationTokens = estimateExplorationCost(ctx);
-
-  // After
-  const avgScopedTokens =
-    scopedRuleTokens.length > 0
-      ? Math.round(
-          scopedRuleTokens.reduce((a, b) => a + b, 0) /
-            scopedRuleTokens.length,
-        )
-      : 0;
-
-  const residualExploration = Math.round(explorationTokens * 0.05);
-  const afterTotal = alwaysOnTokens + avgScopedTokens + residualExploration;
-  const savings = Math.round(
-    ((explorationTokens - afterTotal) / explorationTokens) * 100,
+  console.log(
+    t.muted(
+      `    In benchmarks, Clart\u00e9 reduced agent input tokens by 60% and cost by 58%: https://github.com/michaelabrt/clarte-benchmark`,
+    ),
   );
-
-  // Bar chart: gradient bars with depth, max 40 chars wide
-  const BAR_MAX = 40;
-  const maxVal = Math.max(explorationTokens, afterTotal);
-  const beforeBarLen = Math.max(1, Math.round((explorationTokens / maxVal) * BAR_MAX));
-  const afterBarLen = Math.max(1, Math.round((afterTotal / maxVal) * BAR_MAX));
-  const savedLen = Math.max(0, beforeBarLen - afterBarLen);
-
-  // Palette-derived gradient colors
-  const barColors = getGradientBarColors();
-  const beforeBar = gradient(
-    "\u2588".repeat(beforeBarLen),
-    barColors.from,
-    barColors.to,
-    t.brand,
-  );
-  const afterBar = gradient(
-    "\u2588".repeat(afterBarLen),
-    barColors.from,
-    barColors.to,
-    t.accent,
-  );
-  const savedBar = t.muted("\u2591".repeat(savedLen));
-
-  console.log(`    ${t.text("Before")}  ${beforeBar}  ${t.muted(`~${formatNumber(explorationTokens)} tokens`)}`);
-  console.log("");
-  console.log(`    ${t.text("After")}   ${afterBar}${savedBar}  ${t.muted(`~${formatNumber(afterTotal)} tokens`)}`);
-
-  console.log("");
-
-  if (savings > 0) {
-    console.log(
-      t.success(
-        `    Estimated savings: ~${savings}% fewer tokens`,
-      ),
-    );
-  }
 
   // "What we analyzed" recap
   if (analysis) {
@@ -304,30 +239,6 @@ export function printSummary(
   console.log("");
 }
 
-/**
- * Estimate how many tokens an AI agent would spend exploring a codebase
- * without any context files.
- *
- * Heuristic: agents typically read 30-50% of source files to understand
- * architecture, plus overhead from search/grep operations.
- */
-function estimateExplorationCost(ctx: DetectedContext): number {
-  if (ctx.totalSourceBytes === 0 || ctx.sourceFileCount === 0) {
-    // Fallback for projects where we couldn't count
-    return 15000;
-  }
-
-  // Agents typically read ~40% of source files to understand a project
-  const bytesRead = ctx.totalSourceBytes * 0.4;
-  // Convert to tokens. Source code is typically symbol-heavy (~3.2 chars/token)
-  const readTokens = Math.ceil(bytesRead / 3.2);
-
-  // Add overhead for search commands, tool calls, etc (~30% overhead)
-  const overhead = Math.ceil(readTokens * 0.3);
-
-  // Minimum floor
-  return Math.max(5000, readTokens + overhead);
-}
 
 function formatNumber(n: number): string {
   if (n >= 1000) {

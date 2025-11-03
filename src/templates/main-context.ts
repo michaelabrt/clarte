@@ -119,9 +119,11 @@ export async function buildSections(
   const headerContent = headerLines.join("\n");
   sections.push({ id: "header", priority: 0, content: headerContent, tokens: estimateTokens(headerContent) });
 
-  // What Is This
-  const whatContent = `## What Is This\n\n${answers.projectPurpose}`;
-  sections.push({ id: "what-is-this", priority: 0, content: whatContent, tokens: estimateTokens(whatContent) });
+  // What Is This (skip when projectPurpose is empty, e.g. zero-config runs)
+  if (answers.projectPurpose) {
+    const whatContent = `## What Is This\n\n${answers.projectPurpose}`;
+    sections.push({ id: "what-is-this", priority: 0, content: whatContent, tokens: estimateTokens(whatContent) });
+  }
 
   // -- Priority 1: Tech Stack, Config Constraints --
 

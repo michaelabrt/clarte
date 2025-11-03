@@ -68,12 +68,12 @@ export async function loadConfig(
 
   // Validate required fields: support old `ide` (string) or new `ides` (array)
   const ides = cfg.ides ?? (cfg.ide ? [cfg.ide] : undefined);
-  if (!ides || ides.length === 0 || !cfg.projectPurpose) return null;
+  if (!ides || ides.length === 0) return null;
 
   return {
     ides,
     ide: cfg.ide,
-    projectPurpose: cfg.projectPurpose,
+    projectPurpose: cfg.projectPurpose ?? "",
     keyPatterns: cfg.keyPatterns ?? "",
     gotchas: cfg.gotchas ?? "",
     generateSnapshot: cfg.generateSnapshot ?? false,
