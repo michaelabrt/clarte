@@ -5,6 +5,7 @@ import { glob } from "tinyglobby";
 import type {
   DetectedContext,
   DetectedFramework,
+  IDETarget,
   Language,
   Linter,
   MonorepoInfo,
@@ -763,6 +764,104 @@ export function enrichFrameworksWithUsage(
 /**
  * Produce a short human-readable summary of the detected stack.
  */
+/**
+ * Auto-detect which AI coding tools are in use by checking for filesystem markers.
+ * Falls back to ["claude"] if nothing is detected.
+ */
+export async function detectIDEs(rootDir: string): Promise<IDETarget[]> {
+  const markers: Array<{ path: string; ide: IDETarget }> = [
+    { path: ".cursor", ide: "cursor" },
+    { path: path.join(".github", "copilot-instructions.md"), ide: "copilot" },
+    { path: ".windsurfrules", ide: "windsurf" },
+    { path: ".clinerules", ide: "cline" },
+    { path: ".continuerules", ide: "continue" },
+    { path: ".aider.conf.yml", ide: "aider" },
+    { path: "AGENTS.md", ide: "opencode" },
+  ];
+
+  const checks = await Promise.all(
+    markers.map((m) => fileExists(path.join(rootDir, m.path))),
+  );
+
+  const detected: IDETarget[] = markers
+    .filter((_, i) => checks[i])
+    .map((m) => m.ide);
+
+  return detected.length > 0 ? detected : ["claude"];
+}
+
+/**
+ * Extract a project description from manifest files or README.
+ * Checks package.json, Cargo.toml, pyproject.toml, then README.md.
+ * Returns null if no description is found.
+ */
+export async function detectProjectDescription(rootDir: string): Promise<string | null> {
+  // 1. package.json description
+  const pkg = await readJsonFile(path.join(rootDir, "package.json"));
+  if (pkg?.description && typeof pkg.description === "string" && pkg.description.trim()) {
+    return pkg.description.trim();
+  }
+
+  // 2. Cargo.toml [package].description
+  const cargoContent = await readFileOr(path.join(rootDir, "Cargo.toml"));
+  if (cargoContent) {
+    try {
+      const doc = parseToml(cargoContent) as Record<string, unknown>;
+      const pkgSection = doc.package as Record<string, unknown> | undefined;
+      if (pkgSection?.description && typeof pkgSection.description === "string") {
+        return pkgSection.description.trim();
+      }
+    } catch {
+      // Non-critical
+    }
+  }
+
+  // 3. pyproject.toml [project].description
+  const pyContent = await readFileOr(path.join(rootDir, "pyproject.toml"));
+  if (pyContent) {
+    try {
+      const doc = parseToml(pyContent) as Record<string, unknown>;
+      const project = doc.project as Record<string, unknown> | undefined;
+      if (project?.description && typeof project.description === "string") {
+        return project.description.trim();
+      }
+    } catch {
+      // Non-critical
+    }
+  }
+
+  // 4. README.md: first non-heading, non-badge paragraph
+  const readme = await readFileOr(path.join(rootDir, "README.md"));
+  if (readme) {
+    const lines = readme.split("\n");
+    const paragraphLines: string[] = [];
+    let inParagraph = false;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      if (trimmed.startsWith("#") || trimmed.startsWith("[![") || trimmed.startsWith("![")) {
+        if (inParagraph) break;
+        continue;
+      }
+
+      if (!trimmed) {
+        if (inParagraph) break;
+        continue;
+      }
+
+      paragraphLines.push(trimmed);
+      inParagraph = true;
+    }
+
+    if (paragraphLines.length > 0) {
+      return paragraphLines.join(" ");
+    }
+  }
+
+  return null;
+}
+
 export function summarizeDetection(ctx: DetectedContext): string {
   const parts: string[] = [];
 

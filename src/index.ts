@@ -3,7 +3,7 @@ import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
 import { theme as t, initTheme, patchPicocolors, unpatchPicocolors, resetTerminalColors } from "./theme.js";
 import { fileExists, writeFileSafe } from "./utils.js";
-import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
+import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "./detect.js";
 import { runPrompts } from "./prompts.js";
 import { generateSnapshot } from "./snapshot.js";
 import { generateFiles } from "./generate.js";
@@ -12,7 +12,6 @@ import { printSummary } from "./summary.js";
 import {
   loadConfig,
   saveConfig,
-  saveColorScheme,
   configToAnswers,
   computeSnapshotHash,
 } from "./config.js";
@@ -305,22 +304,8 @@ async function main() {
       const earlyConfig = await loadConfig(rootDir);
       if (earlyConfig?.colorScheme) {
         colorScheme = earlyConfig.colorScheme;
-      } else {
-        // First run: ask with unpatched clack (default ANSI colors)
-        const selected = await p.select({
-          message: "Which terminal background are you using?",
-          options: [
-            { value: "dark" as const, label: "Dark background", hint: "default" },
-            { value: "light" as const, label: "Light background" },
-          ],
-        });
-        if (p.isCancel(selected)) {
-          process.exit(0);
-        }
-        colorScheme = selected;
-        // Persist for future runs (into existing config if present)
-        await saveColorScheme(rootDir, colorScheme);
       }
+      // No saved config and no env var: default to dark
     }
     initTheme(colorScheme);
     patchPicocolors();
@@ -820,9 +805,42 @@ async function main() {
     ) {
       // Monorepo exists but wasn't configured, keep saved value
     }
+  } else if (reconfigure) {
+    // Step 2: Interactive prompts (with defaults from saved config)
+    answers = await runPrompts(detected, savedConfig, true);
+
+    // Save config for future runs
+    if (!dryRun) {
+      const hash = await computeSnapshotHash(rootDir, detected.language);
+      await saveConfig(rootDir, answers, hash, detected.language);
+      p.log.info(
+        t.muted("Saved config to .clarte.json for future runs."),
+      );
+    }
   } else {
-    // Step 2: Interactive prompts (with defaults from saved config if --reconfigure)
-    answers = await runPrompts(detected, reconfigure ? savedConfig : null, reconfigure);
+    // Zero-config: build answers from auto-detected values
+    const detectedIDEs = await detectIDEs(rootDir);
+    const detectedDescription = await detectProjectDescription(rootDir);
+
+    const snapshotLanguages = new Set(["typescript", "javascript", "python"]);
+    answers = {
+      ides: detectedIDEs,
+      projectPurpose: detectedDescription ?? "",
+      keyPatterns: "",
+      gotchas: "",
+      generateSnapshot: snapshotLanguages.has(detected.language),
+      snapshotPaths: [],
+      stackConfirmed: true,
+      stackCorrections: "",
+      generatePerPackage: false,
+    };
+
+    if (!jsonMode) {
+      p.log.info(
+        t.text(`Auto-detected IDEs: ${t.accent(detectedIDEs.join(", "))}`) + " " +
+          t.muted("(run with --reconfigure to change)"),
+      );
+    }
 
     // Save config for future runs
     if (!dryRun) {
@@ -874,7 +892,7 @@ async function main() {
   }
 
   // Step 5: Summary + token estimate
-  printSummary(files, detected, snapshot, analysis);
+  printSummary(files, snapshot, analysis);
 
   // Elapsed time
   const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
