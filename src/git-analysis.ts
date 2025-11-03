@@ -37,7 +37,7 @@ function parseGitLog(rootDir: string, window: TimeWindow = { days: 90 }): Parsed
   // - --diff-filter=ACDMRT: only Added/Copied/Deleted/Modified/Renamed/Type-changed (skip old paths from renames)
   // - --name-only: list changed files
   // - format: hash, ISO date, relative date, subject line (separated by ASCII unit separator \x1f to avoid pipe-in-message issues)
-  const US = "\\x1f"; // ASCII unit separator
+  const US = "%x1f"; // git format hex escape for ASCII unit separator
   const output = execSync(
     `git log --no-merges ${rangeArg} --diff-filter=ACDMRT --name-only --format="${SEP}%H${US}%aI${US}%ar${US}%s"`,
     { cwd: rootDir, encoding: "utf-8", timeout: 15000, maxBuffer: 10 * 1024 * 1024 },
