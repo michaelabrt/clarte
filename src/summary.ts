@@ -217,10 +217,14 @@ export function printSummary(
     // High-instability files
     const highInstabilityFiles = analysis.instabilities.filter((f) => f.instability > INSTABILITY_THRESHOLD);
     if (highInstabilityFiles.length > 0) {
-      const unstableList = highInstabilityFiles
-        .sort((a, b) => b.instability - a.instability)
-        .map((f) => `${f.path.split("/").pop() ?? f.path} I=${f.instability.toFixed(2)}`);
-      findings.push(`${highInstabilityFiles.length} high-instability file${highInstabilityFiles.length === 1 ? "" : "s"}: ${unstableList.join(", ")}`);
+      highInstabilityFiles.sort((a, b) => b.instability - a.instability);
+      const cap = 10;
+      const shown = highInstabilityFiles.slice(0, cap);
+      const subLines = shown.map((f) => `       ${f.path.split("/").pop() ?? f.path} I=${f.instability.toFixed(2)}`);
+      if (highInstabilityFiles.length > cap) {
+        subLines.push(`       ... and ${highInstabilityFiles.length - cap} more`);
+      }
+      findings.push(`${highInstabilityFiles.length} high-instability file${highInstabilityFiles.length === 1 ? "" : "s"}\n${subLines.join("\n")}`);
     }
 
     // Layer violations
