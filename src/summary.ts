@@ -217,7 +217,11 @@ export function printSummary(
     // High-instability files
     const highInstabilityFiles = analysis.instabilities.filter((f) => f.instability > INSTABILITY_THRESHOLD);
     if (highInstabilityFiles.length > 0) {
-      findings.push(`${highInstabilityFiles.length} high-instability file${highInstabilityFiles.length === 1 ? "" : "s"}`);
+      const topUnstable = highInstabilityFiles
+        .sort((a, b) => b.instability - a.instability)
+        .slice(0, 3)
+        .map((f) => f.path.split("/").pop()?.replace(/\.[jt]sx?$/, "") ?? f.path);
+      findings.push(`${highInstabilityFiles.length} high-instability file${highInstabilityFiles.length === 1 ? "" : "s"} (${topUnstable.join(", ")})`);
     }
 
     // Layer violations

@@ -484,8 +484,7 @@ async function main() {
     const highInstability = instabilities.filter((f) => f.instability > INSTABILITY_THRESHOLD);
     p.log.step(
       highInstability.length > 0
-        ? `${t.brand("Instability")}    ${t.textBold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"} ${t.warn("\u26A0")}` +
-          t.muted(` (${highInstability.slice(0, 2).map((f) => `${f.path.split("/").pop()} I=${f.instability.toFixed(2)}`).join(", ")}${highInstability.length > 2 ? ", ..." : ""})`)
+        ? `${t.brand("Instability")}    ${t.textBold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"} ${t.warn("\u26A0")}`
         : `${t.brand("Instability")}    ${t.muted("all files within healthy range")} ${t.check()}`,
     );
     if (verbose && highInstability.length > 0) {
