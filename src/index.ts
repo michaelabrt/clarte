@@ -484,7 +484,8 @@ async function main() {
     const highInstability = instabilities.filter((f) => f.instability > INSTABILITY_THRESHOLD);
     p.log.step(
       highInstability.length > 0
-        ? `${t.brand("Instability")}    ${t.textBold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"} ${t.warn("\u26A0")}`
+        ? `${t.brand("Instability")}    ${t.textBold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"} ${t.warn("\u26A0")}` +
+          t.muted(` (${highInstability.slice(0, 2).map((f) => `${f.path.split("/").pop()} I=${f.instability.toFixed(2)}`).join(", ")}${highInstability.length > 2 ? ", ..." : ""})`)
         : `${t.brand("Instability")}    ${t.muted("all files within healthy range")} ${t.check()}`,
     );
     if (verbose && highInstability.length > 0) {
@@ -578,7 +579,7 @@ async function main() {
   const chokepoints = findChokepoints(graph);
   if (!jsonMode && chokepoints.length > 0) {
     p.log.step(
-      `${t.brand("Chokepoints")}   ${t.textBold(String(chokepoints.length))} structural chokepoint${chokepoints.length === 1 ? "" : "s"}`,
+      `${t.brand("Chokepoints")}    ${t.textBold(String(chokepoints.length))} structural chokepoint${chokepoints.length === 1 ? "" : "s"}`,
     );
     if (verbose) {
       for (const cp of chokepoints.slice(0, 5)) {
@@ -608,7 +609,7 @@ async function main() {
     if (conventions.exportStyle.preferNamed) parts.push("exports");
     if (conventions.importOrdering) parts.push("imports");
     if (parts.length > 0) {
-      p.log.step(`${t.brand("Conventions")}   inferred ${parts.join(", ")} patterns`);
+      p.log.step(`${t.brand("Conventions")}    inferred ${parts.join(", ")} patterns`);
     }
   }
 
@@ -680,7 +681,7 @@ async function main() {
     const violationCount = monorepoAnalysis.encapsulationViolations.length;
     if (edgeCount > 0) {
       p.log.step(
-        `${t.brand("Packages")}      ${t.textBold(String(edgeCount))} cross-package edge${edgeCount === 1 ? "" : "s"}` +
+        `${t.brand("Packages")}       ${t.textBold(String(edgeCount))} cross-package edge${edgeCount === 1 ? "" : "s"}` +
           (violationCount > 0 ? `, ${t.warn(String(violationCount))} encapsulation violation${violationCount === 1 ? "" : "s"}` : ` ${t.check()}`),
       );
       if (verbose && violationCount > 0) {
