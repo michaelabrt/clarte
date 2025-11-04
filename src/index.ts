@@ -314,7 +314,7 @@ async function main() {
   if (!jsonMode) {
     console.log("");
     p.intro(t.brandBold(" Clart") + t.textBold("\u00e9 "));
-    p.log.info(t.muted("code analysis for AI context"));
+    p.log.info(t.muted("pre-built codebase context for AI agents"));
   }
 
   // --refresh-snapshot: fast path, update snapshot in existing context file
