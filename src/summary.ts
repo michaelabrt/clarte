@@ -102,9 +102,7 @@ export function printSummary(
 
   console.log("");
   console.log(
-    t.muted(
-      `    Total: ${formatBytes(totalBytes)}, ~${formatNumber(totalTokens)} tokens`,
-    ),
+    `    ${t.muted("Total:")} ${t.textBold(formatBytes(totalBytes))}${t.muted(",")} ${t.textBold(`~${formatNumber(totalTokens)}`)} ${t.muted("tokens")}`,
   );
 
   if (snapshot?.budgetExcluded && snapshot.budgetExcluded > 0) {
@@ -125,7 +123,7 @@ export function printSummary(
     if (analysis.gitActivity) parts.push(`${analysis.gitActivity.hotFiles.length} recently active files`);
     if (parts.length > 0) {
       console.log(
-        `    ${t.text("Includes:")} ${t.text(parts.join(", "))}`,
+        `    ${t.muted("Includes:")} ${t.text(parts.join(", "))}`,
       );
     }
   }
@@ -194,7 +192,7 @@ export function printSummary(
     const maxRecapLabel = Math.max(...recapRows.map((r) => r.label.length));
     for (const row of recapRows) {
       console.log(
-        `    ${t.text(row.label.padEnd(maxRecapLabel))} ${t.muted("→")} ${t.text(row.result)}`,
+        `    ${t.muted(row.label.padEnd(maxRecapLabel))} ${t.muted("→")} ${t.textBold(row.result)}`,
       );
     }
   }
