@@ -87,15 +87,15 @@ export function printSummary(
   const maxSizeWidth = Math.max(...dataFileRows.map((r) => r.size.length));
   const maxTokenWidth = Math.max(...dataFileRows.map((r) => r.tokens.length));
 
-  // Print aligned rows
+  // Print aligned rows (muted -- this is a receipt, not the main event)
   for (const row of fileRows) {
     if (row.isHeader) {
-      console.log(`${row.indent}${t.softBold(row.name)}`);
+      console.log(`${row.indent}${t.muted(row.name)}`);
     } else {
       const status = row.isUpdated ? t.muted("(updated)") : t.success("(new)");
       const paddedName = row.name.padEnd(maxNameCol - row.indent.length);
       console.log(
-        `${row.indent}${t.softBold(paddedName)}  ${row.size.padStart(maxSizeWidth)}  ${t.muted(row.tokens.padEnd(maxTokenWidth))}  ${status}`,
+        `${row.indent}${t.muted(paddedName)}  ${row.size.padStart(maxSizeWidth)}  ${t.muted(row.tokens.padEnd(maxTokenWidth))}  ${status}`,
       );
     }
   }
@@ -125,7 +125,7 @@ export function printSummary(
     if (analysis.gitActivity) parts.push(`${analysis.gitActivity.hotFiles.length} recently active files`);
     if (parts.length > 0) {
       console.log(
-        t.muted(`    Includes: ${parts.join(", ")}`),
+        `    ${t.text("Includes:")} ${t.text(parts.join(", "))}`,
       );
     }
   }
@@ -194,7 +194,7 @@ export function printSummary(
     const maxRecapLabel = Math.max(...recapRows.map((r) => r.label.length));
     for (const row of recapRows) {
       console.log(
-        t.muted(`    ${row.label.padEnd(maxRecapLabel)} → ${row.result}`),
+        `    ${t.text(row.label.padEnd(maxRecapLabel))} ${t.muted("→")} ${t.text(row.result)}`,
       );
     }
   }
@@ -237,7 +237,7 @@ export function printSummary(
       const findingsHeader = `  \u26A0  ${findings.length} finding${findings.length === 1 ? "" : "s"}`;
       console.log(t.warn(findingsHeader));
       for (const f of findings) {
-        console.log(t.muted(`     \u25CF ${f}`));
+        console.log(t.text(`     \u25CF ${f}`));
       }
     } else {
       console.log(t.success(`  \u2713  No structural issues detected`));
