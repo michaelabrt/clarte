@@ -78,17 +78,22 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   }
 
   // 2. Verify snapshot markers exist
+  const budgetOmitted = content.includes("Sections omitted") && content.includes("code-snapshot");
   if (found.isAider) {
     if (!AIDER_START.test(content) || !AIDER_END.test(content)) {
       p.log.error(
-        t.text(`No code snapshot markers found in ${found.path}. Re-generate the file with code snapshot enabled.`),
+        t.text(budgetOmitted
+          ? `Snapshot was omitted from ${found.path} to fit token budget. Run ${t.accent("clarte --full")} to include it.`
+          : `No code snapshot markers found in ${found.path}. Run ${t.accent("clarte")} to regenerate.`),
       );
       process.exit(1);
     }
   } else {
     if (!MD_START.test(content) || !MD_END.test(content)) {
       p.log.error(
-        t.text(`No code snapshot markers found in ${found.path}. Re-generate the file with code snapshot enabled.`),
+        t.text(budgetOmitted
+          ? `Snapshot was omitted from ${found.path} to fit token budget. Run ${t.accent("clarte --full")} to include it.`
+          : `No code snapshot markers found in ${found.path}. Run ${t.accent("clarte")} to regenerate.`),
       );
       process.exit(1);
     }

@@ -781,7 +781,7 @@ async function main() {
       p.log.warn(
         t.text(
           `Code snapshot may be stale (source files changed${daysSince > 0 ? `, last generated ${daysSince}d ago` : ""}). ` +
-            `Run with ${t.bold("--refresh-snapshot")} to update.`,
+            `Run ${t.bold("clarte")} to regenerate.`,
         ),
       );
     }
