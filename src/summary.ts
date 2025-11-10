@@ -10,6 +10,7 @@ export function printSummary(
   files: GeneratedFile[],
   snapshot?: CodeSnapshot | null,
   analysis?: ContextAnalysis,
+  firstRun?: boolean,
 ): void {
   if (files.length === 0) return;
 
@@ -113,90 +114,6 @@ export function printSummary(
     );
   }
 
-  // Analysis summary
-  if (analysis) {
-    const parts: string[] = [];
-    if (analysis.hubFiles.length > 0) parts.push(`${analysis.hubFiles.length} key files`);
-    if (analysis.layers.length > 0) parts.push(`${analysis.layers.length} architecture layers`);
-    if (analysis.circularDeps.length > 0) parts.push(`${analysis.circularDeps.length} circular deps`);
-    if (analysis.communities.length > 0) parts.push(`${analysis.communities.length} module clusters`);
-    if (analysis.gitActivity) parts.push(`${analysis.gitActivity.hotFiles.length} recently active files`);
-    if (parts.length > 0) {
-      console.log(
-        `    ${t.muted("Includes:")} ${t.text(parts.join(", "))}`,
-      );
-    }
-  }
-
-  console.log("");
-  console.log(
-    t.muted(
-      `    In benchmarks, Clart\u00e9 reduced agent input tokens by 60% and cost by 58%.\n    https://github.com/michaelabrt/clarte-benchmark`,
-    ),
-  );
-
-  // "What we analyzed" recap
-  if (analysis) {
-    console.log("");
-    console.log(t.brandBold("  What we analyzed:"));
-
-    const recapRows: Array<{ label: string; result: string }> = [];
-
-    if (analysis.hubFiles.length > 0) {
-      recapRows.push({ label: "HITS analysis", result: `found ${analysis.hubFiles.length} key architectural files` });
-    }
-
-    recapRows.push({
-      label: "Tarjan cycle detection",
-      result: analysis.circularDeps.length === 0
-        ? "no circular dependencies found"
-        : `${analysis.circularDeps.length} circular dep${analysis.circularDeps.length === 1 ? "" : "s"} found`,
-    });
-
-    if (analysis.layers.length > 0) {
-      const tierNames = analysis.layers.map((l) => l.name).join(" → ");
-      recapRows.push({ label: "Layer analysis", result: `${analysis.layers.length} tiers: ${tierNames}` });
-    }
-
-    if (analysis.gitActivity) {
-      const coupledPairs = analysis.gitActivity.changeCoupling.length;
-      recapRows.push({
-        label: "Git history (90 days)",
-        result: `${analysis.gitActivity.hotFiles.length} hot files, ${coupledPairs} change-coupled pair${coupledPairs === 1 ? "" : "s"}`,
-      });
-    }
-
-    if (analysis.communities.length > 0) {
-      recapRows.push({ label: "Community detection", result: `${analysis.communities.length} module cluster${analysis.communities.length === 1 ? "" : "s"}` });
-    }
-
-    if (analysis.crossCuttingFiles && analysis.crossCuttingFiles.length > 0) {
-      recapRows.push({ label: "Cross-cutting", result: `${analysis.crossCuttingFiles.length} file${analysis.crossCuttingFiles.length === 1 ? "" : "s"} span 3+ layers` });
-    }
-
-    if (analysis.layerConsistency) {
-      const pct = (analysis.layerConsistency.consistency * 100).toFixed(0);
-      const vCount = analysis.layerConsistency.violations.length;
-      recapRows.push({
-        label: "Layer consistency",
-        result: vCount === 0
-          ? `${pct}% consistent (no violations)`
-          : `${pct}% consistent, ${vCount} violation${vCount === 1 ? "" : "s"}`,
-      });
-    }
-
-    if (analysis.chokepoints && analysis.chokepoints.length > 0) {
-      recapRows.push({ label: "Chokepoints", result: `${analysis.chokepoints.length} articulation point${analysis.chokepoints.length === 1 ? "" : "s"}` });
-    }
-
-    const maxRecapLabel = Math.max(...recapRows.map((r) => r.label.length));
-    for (const row of recapRows) {
-      console.log(
-        `    ${t.muted(row.label.padEnd(maxRecapLabel))} ${t.muted("→")} ${t.textBold(row.result)}`,
-      );
-    }
-  }
-
   // Findings summary: actionable issues worth fixing
   if (analysis) {
     const findings: string[] = [];
@@ -205,10 +122,10 @@ export function printSummary(
     if (analysis.circularDeps.length > 0) {
       for (const c of analysis.circularDeps.slice(0, 3)) {
         const names = c.chain.map((f) => f.split("/").pop()?.replace(/\.[jt]sx?$/, "") ?? f);
-        findings.push(`${analysis.circularDeps.length > 1 ? "" : ""}1 circular dependency chain (${names.slice(0, 2).join(" \u2194 ")})`);
+        findings.push(`${analysis.circularDeps.length > 1 ? "" : ""}${t.textBold("1")} circular dependency chain (${names.slice(0, 2).join(" \u2194 ")})`);
       }
       if (analysis.circularDeps.length > 1) {
-        findings[0] = `${analysis.circularDeps.length} circular dependency chain${analysis.circularDeps.length === 1 ? "" : "s"}`;
+        findings[0] = `${t.textBold(String(analysis.circularDeps.length))} circular dependency chain${analysis.circularDeps.length === 1 ? "" : "s"}`;
       }
     }
 
@@ -218,16 +135,16 @@ export function printSummary(
       highInstabilityFiles.sort((a, b) => b.instability - a.instability);
       const cap = 10;
       const shown = highInstabilityFiles.slice(0, cap);
-      const subLines = shown.map((f) => `       ${f.path.split("/").pop() ?? f.path} I=${f.instability.toFixed(2)}`);
+      const subLines = shown.map((f) => `       ${f.path.split("/").pop() ?? f.path} I=${t.textBold(f.instability.toFixed(2))}`);
       if (highInstabilityFiles.length > cap) {
         subLines.push(`       ... and ${highInstabilityFiles.length - cap} more`);
       }
-      findings.push(`${highInstabilityFiles.length} high-instability file${highInstabilityFiles.length === 1 ? "" : "s"}\n${subLines.join("\n")}`);
+      findings.push(`${t.textBold(String(highInstabilityFiles.length))} high-instability file${highInstabilityFiles.length === 1 ? "" : "s"}\n${subLines.join("\n")}`);
     }
 
     // Layer violations
     if (analysis.layerConsistency && analysis.layerConsistency.violations.length > 0) {
-      findings.push(`${analysis.layerConsistency.violations.length} layer dependency violation${analysis.layerConsistency.violations.length === 1 ? "" : "s"}`);
+      findings.push(`${t.textBold(String(analysis.layerConsistency.violations.length))} layer dependency violation${analysis.layerConsistency.violations.length === 1 ? "" : "s"}`);
     }
 
     console.log("");
@@ -240,6 +157,15 @@ export function printSummary(
     } else {
       console.log(t.success(`  \u2713  No structural issues detected`));
     }
+  }
+
+  if (firstRun) {
+    console.log("");
+    console.log(
+      t.muted(
+        `    In benchmarks, Clart\u00e9 reduced agent input tokens by 60% and cost by 58%.\n    https://github.com/michaelabrt/clarte-benchmark`,
+      ),
+    );
   }
 
   console.log("");

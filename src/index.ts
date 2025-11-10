@@ -427,15 +427,15 @@ async function main() {
   // Step 1.7: Structural analysis (progressive reveal via shimmer)
   const fileCount = graph.centrality.size;
 
-  // HITS analysis
+  // Key files (HITS analysis)
   const hubFiles = getHubFiles(graph);
   if (!jsonMode) {
     const topHubName = hubFiles[0]?.path ?? "";
     p.log.step(
       hubFiles.length > 0
-        ? `${t.brand("HITS")}           found ${t.textBold(String(hubFiles.length))} key files` +
+        ? `${t.brand("Key files")}      found ${t.textBold(String(hubFiles.length))} key files` +
           (topHubName ? t.muted(` (top: ${topHubName})`) : "")
-        : `${t.brand("HITS")}           ${t.muted("no key files detected")}`,
+        : `${t.brand("Key files")}      ${t.muted("no key files detected")}`,
     );
     if (verbose && hubFiles.length > 0) {
       for (const h of hubFiles.slice(0, 5)) {
@@ -445,13 +445,13 @@ async function main() {
     var analysisHubFiles = hubFiles;
   }
 
-  // Tarjan SCC: cycle detection (single call with real data)
+  // Circular dependency detection (Tarjan SCC)
   const circularDeps = findCircularDeps(graph);
   if (!jsonMode) {
     p.log.step(
       circularDeps.length === 0
-        ? `${t.brand("Tarjan SCC")}     no cycles found ${t.check()}`
-        : `${t.brand("Tarjan SCC")}     ${t.textBold(String(circularDeps.length))} cycle${circularDeps.length === 1 ? "" : "s"} found ${t.warn("\u26A0")}`,
+        ? `${t.brand("Circular deps")}  no cycles found ${t.check()}`
+        : `${t.brand("Circular deps")}  ${t.textBold(String(circularDeps.length))} cycle${circularDeps.length === 1 ? "" : "s"} found ${t.warn("\u26A0")}`,
     );
     if (verbose && circularDeps.length > 0) {
       for (const c of circularDeps.slice(0, 3)) {
@@ -495,13 +495,13 @@ async function main() {
     var analysisInstabilities = instabilities;
   }
 
-  // Communities
+  // Module clusters (community detection)
   const communities = detectCommunities(graph);
   if (!jsonMode) {
     p.log.step(
       communities.length > 0
-        ? `${t.brand("Communities")}    ${t.textBold(String(communities.length))} module cluster${communities.length === 1 ? "" : "s"}`
-        : `${t.brand("Communities")}    ${t.muted("single cohesive module")}`,
+        ? `${t.brand("Clusters")}       ${t.textBold(String(communities.length))} module cluster${communities.length === 1 ? "" : "s"}`
+        : `${t.brand("Clusters")}       ${t.muted("single cohesive module")}`,
     );
     if (verbose && communities.length > 0) {
       for (const c of communities.slice(0, 5)) {
@@ -892,7 +892,7 @@ async function main() {
   }
 
   // Step 5: Summary + token estimate
-  printSummary(files, snapshot, analysis);
+  printSummary(files, snapshot, analysis, !savedConfig);
 
   // Elapsed time
   const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
