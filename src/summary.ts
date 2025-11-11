@@ -135,7 +135,7 @@ export function printSummary(
       highInstabilityFiles.sort((a, b) => b.instability - a.instability);
       const cap = 10;
       const shown = highInstabilityFiles.slice(0, cap);
-      const subLines = shown.map((f) => `       ${f.path.split("/").pop() ?? f.path} I=${t.textBold(f.instability.toFixed(2))}`);
+      const subLines = shown.map((f) => `       ${f.path.split("/").pop() ?? f.path} I = ${t.textBold(f.instability.toFixed(2))}`);
       if (highInstabilityFiles.length > cap) {
         subLines.push(`       ... and ${highInstabilityFiles.length - cap} more`);
       }
