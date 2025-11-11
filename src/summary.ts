@@ -1,3 +1,4 @@
+import * as p from "@clack/prompts";
 import { theme as t } from "./theme.js";
 import type { CodeSnapshot, ContextAnalysis, GeneratedFile } from "./types.js";
 import { estimateTokens, formatBytes } from "./utils.js";
@@ -14,9 +15,7 @@ export function printSummary(
 ): void {
   if (files.length === 0) return;
 
-  console.log("");
-  console.log(t.brandBold("  Files created:"));
-  console.log("");
+  p.log.info(t.brandBold("Files created:"));
 
   // Track totals
   let totalBytes = 0;
@@ -43,7 +42,7 @@ export function printSummary(
     totalTokens += tokens;
 
     fileRows.push({
-      indent: "    ",
+      indent: "  ",
       name: file.path,
       size: formatBytes(bytes),
       tokens: `(~${formatNumber(tokens)} tokens)`,
@@ -54,7 +53,7 @@ export function printSummary(
 
   if (ruleFiles.length > 0) {
     fileRows.push({
-      indent: "    ",
+      indent: "  ",
       name: ".cursor/rules/",
       size: "",
       tokens: "",
@@ -72,7 +71,7 @@ export function printSummary(
       const filename = file.path.split("/").pop() ?? file.path;
 
       fileRows.push({
-        indent: "      ",
+        indent: "    ",
         name: filename,
         size: formatBytes(bytes),
         tokens: `(~${formatNumber(tokens)} tokens)`,
@@ -89,30 +88,32 @@ export function printSummary(
   const maxTokenWidth = Math.max(...dataFileRows.map((r) => r.tokens.length));
 
   // Print aligned rows (muted -- this is a receipt, not the main event)
+  const lines: string[] = [];
   for (const row of fileRows) {
     if (row.isHeader) {
-      console.log(`${row.indent}${t.muted(row.name)}`);
+      lines.push(`${row.indent}${t.muted(row.name)}`);
     } else {
       const status = row.isUpdated ? t.muted("(updated)") : t.success("(new)");
       const paddedName = row.name.padEnd(maxNameCol - row.indent.length);
-      console.log(
+      lines.push(
         `${row.indent}${t.muted(paddedName)}  ${row.size.padStart(maxSizeWidth)}  ${t.muted(row.tokens.padEnd(maxTokenWidth))}  ${status}`,
       );
     }
   }
-
-  console.log("");
-  console.log(
-    `    ${t.muted("Total:")} ${t.textBold(formatBytes(totalBytes))}${t.muted(",")} ${t.textBold(`~${formatNumber(totalTokens)}`)} ${t.muted("tokens")}`,
+  lines.push("");
+  lines.push(
+    `  ${t.muted("Total:")} ${t.textBold(formatBytes(totalBytes))}${t.muted(",")} ${t.textBold(`~${formatNumber(totalTokens)}`)} ${t.muted("tokens")}`,
   );
 
   if (snapshot?.budgetExcluded && snapshot.budgetExcluded > 0) {
-    console.log(
+    lines.push(
       t.muted(
-        `    (${snapshot.budgetExcluded} snapshot entries excluded by token budget)`,
+        `  (${snapshot.budgetExcluded} snapshot entries excluded by token budget)`,
       ),
     );
   }
+
+  p.log.message(lines.join("\n"));
 
   // Findings summary: actionable issues worth fixing
   if (analysis) {
@@ -135,9 +136,9 @@ export function printSummary(
       highInstabilityFiles.sort((a, b) => b.instability - a.instability);
       const cap = 10;
       const shown = highInstabilityFiles.slice(0, cap);
-      const subLines = shown.map((f) => `       ${f.path.split("/").pop() ?? f.path} I=${t.textBold(f.instability.toFixed(2))}`);
+      const subLines = shown.map((f) => `     ${f.path.split("/").pop() ?? f.path} I=${t.textBold(f.instability.toFixed(2))}`);
       if (highInstabilityFiles.length > cap) {
-        subLines.push(`       ... and ${highInstabilityFiles.length - cap} more`);
+        subLines.push(`     ... and ${highInstabilityFiles.length - cap} more`);
       }
       findings.push(`${t.textBold(String(highInstabilityFiles.length))} high-instability file${highInstabilityFiles.length === 1 ? "" : "s"}\n${subLines.join("\n")}`);
     }
@@ -147,28 +148,25 @@ export function printSummary(
       findings.push(`${t.textBold(String(analysis.layerConsistency.violations.length))} layer dependency violation${analysis.layerConsistency.violations.length === 1 ? "" : "s"}`);
     }
 
-    console.log("");
     if (findings.length > 0) {
-      const findingsHeader = `  \u26A0  ${findings.length} finding${findings.length === 1 ? "" : "s"}`;
-      console.log(t.warn(findingsHeader));
+      const findingLines: string[] = [];
+      findingLines.push(t.warn(`\u26A0  ${findings.length} finding${findings.length === 1 ? "" : "s"}`));
       for (const f of findings) {
-        console.log(t.text(`     \u25CF ${f}`));
+        findingLines.push(t.text(`   \u25CF ${f}`));
       }
+      p.log.message(findingLines.join("\n"));
     } else {
-      console.log(t.success(`  \u2713  No structural issues detected`));
+      p.log.message(t.success(`\u2713  No structural issues detected`));
     }
   }
 
   if (firstRun) {
-    console.log("");
-    console.log(
+    p.log.message(
       t.muted(
-        ` In benchmarks, Clart\u00e9 reduced agent input tokens by 60% and cost by 58%.\n https://github.com/michaelabrt/clarte-benchmark`,
+        `In benchmarks, Clart\u00e9 reduced agent input tokens by 60% and cost by 58%.\nhttps://github.com/michaelabrt/clarte-benchmark`,
       ),
     );
   }
-
-  console.log("");
 }
 
 
