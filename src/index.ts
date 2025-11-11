@@ -70,7 +70,7 @@ patchClackColors();
 
 function printHelp(): void {
   console.log("");
-  console.log(t.brandBold("Clart") + t.textBold("\u00e9"));
+  console.log(t.textBold("Clart") + t.brandBold("\u00e9"));
   console.log(t.muted("  " + DESCRIPTION));
   console.log("");
   console.log(`  ${t.textBold("Usage:")}  ${t.text(`npx ${NAME} [directory] [options]`)}`);
@@ -313,7 +313,7 @@ async function main() {
 
   if (!jsonMode) {
     console.log("");
-    p.intro(t.brandBold("Clart") + t.textBold("\u00e9"));
+    p.intro(t.textBold("Clart") + t.brandBold("\u00e9"));
     p.log.info(t.muted("pre-built codebase context for AI agents"));
   }
 
