@@ -489,7 +489,7 @@ async function main() {
     );
     if (verbose && highInstability.length > 0) {
       for (const f of highInstability.slice(0, 5)) {
-        p.log.info(t.muted(`  ${f.path} (I = ${f.instability.toFixed(2)}, fan-in = ${f.fanIn}, fan-out = ${f.fanOut})`));
+        p.log.info(t.muted(`  ${f.path} (I=${f.instability.toFixed(2)}, fan-in=${f.fanIn}, fan-out=${f.fanOut})`));
       }
     }
     var analysisInstabilities = instabilities;
