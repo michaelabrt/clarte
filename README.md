@@ -183,7 +183,7 @@ Methodology, fixture projects and full reports are in the [benchmark repo](https
 
 | Language | Import parsing | Snapshot extraction |
 |----------|---------------|---------------------|
-| TypeScript / JavaScript | `import`, `require` | types, interfaces, functions, components, hooks, stores (AST-based via oxc-parser) |
+| TypeScript / JavaScript | `import`, `require` | types, interfaces, functions, components, hooks, stores |
 | Python | `import`, `from ... import` | classes (with public method signatures and docstrings), functions, type aliases |
 | Go | `import` | structs, interfaces, functions, methods (grouped by receiver type) |
 | Rust | `use` | structs, enums, traits, functions (with generic bounds and where clauses) |
