@@ -390,6 +390,87 @@ describe("detectContext", () => {
     const ctx = await detectContext(tmpDir);
     expect(ctx.frameworks.map((f) => f.name)).toContain("flake8");
   });
+
+  // ── npm workspaces detection ──────────────────────────────────────────
+
+  it("detects npm native workspaces monorepo", async () => {
+    tmpDir = await makeProject({
+      "package.json": JSON.stringify({
+        name: "my-monorepo",
+        workspaces: ["packages/*"],
+        dependencies: {},
+      }),
+      "packages/core/package.json": JSON.stringify({ name: "@mono/core", dependencies: {} }),
+      "packages/core/src/index.ts": "export const x = 1;\n",
+      "packages/ui/package.json": JSON.stringify({ name: "@mono/ui", dependencies: {} }),
+      "packages/ui/src/index.ts": "export const y = 2;\n",
+      "tsconfig.json": "{}",
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.monorepo).not.toBeNull();
+    expect(ctx.monorepo!.type).toBe("npm-workspaces");
+    expect(ctx.monorepo!.packages.length).toBe(2);
+  });
+
+  it("detects npm workspaces with packages object format", async () => {
+    tmpDir = await makeProject({
+      "package.json": JSON.stringify({
+        name: "my-monorepo",
+        workspaces: { packages: ["libs/*"] },
+        dependencies: {},
+      }),
+      "libs/shared/package.json": JSON.stringify({ name: "@mono/shared", dependencies: {} }),
+      "libs/shared/src/index.ts": "export const z = 3;\n",
+      "tsconfig.json": "{}",
+    });
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.monorepo).not.toBeNull();
+    expect(ctx.monorepo!.type).toBe("npm-workspaces");
+    expect(ctx.monorepo!.packages.length).toBe(1);
+  });
+
+  // ── Maven parent version extraction ───────────────────────────────────
+
+  it("extracts Maven version from parent when no project version", async () => {
+    tmpDir = await makeProject({
+      "pom.xml": `<?xml version="1.0"?>
+<project>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.2.1</version>
+  </parent>
+  <groupId>com.example</groupId>
+  <artifactId>my-app</artifactId>
+</project>`,
+      "src/main/java/App.java": "public class App {}",
+    });
+    const ctx = await detectContext(tmpDir);
+    const maven = ctx.frameworks.find((f) => f.name === "Maven");
+    expect(maven).toBeDefined();
+    expect(maven!.version).toBe("3.2.1");
+  });
+
+  it("prefers project version over parent version in Maven", async () => {
+    tmpDir = await makeProject({
+      "pom.xml": `<?xml version="1.0"?>
+<project>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.2.1</version>
+  </parent>
+  <groupId>com.example</groupId>
+  <artifactId>my-app</artifactId>
+  <version>1.0.0</version>
+</project>`,
+      "src/main/java/App.java": "public class App {}",
+    });
+    const ctx = await detectContext(tmpDir);
+    const maven = ctx.frameworks.find((f) => f.name === "Maven");
+    expect(maven).toBeDefined();
+    expect(maven!.version).toBe("1.0.0");
+  });
 });
 
 // ── enrichFrameworksWithUsage ───────────────────────────────────────────────

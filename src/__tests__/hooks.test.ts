@@ -291,6 +291,49 @@ describe("initPreCommitHook", () => {
     expect(output).toContain("already contains clarte");
   });
 
+  it("creates auto-refresh pre-commit hook with --auto-refresh", async () => {
+    await fs.mkdir(path.join(tmpDir, ".git", "hooks"), { recursive: true });
+
+    await initPreCommitHook(tmpDir, true);
+
+    const hookPath = path.join(tmpDir, ".git", "hooks", "pre-commit");
+    const content = await fs.readFile(hookPath, "utf-8");
+    expect(content).toContain("npx clarte --check");
+    expect(content).toContain("npx clarte --refresh-snapshot");
+    expect(content).toContain("git add CLAUDE.md");
+  });
+
+  it("prints auto-refresh Husky instructions when autoRefresh is true", async () => {
+    await fs.mkdir(path.join(tmpDir, ".git", "hooks"), { recursive: true });
+    await fs.mkdir(path.join(tmpDir, ".husky"), { recursive: true });
+
+    await initPreCommitHook(tmpDir, true);
+
+    const output = logSpy.mock.calls.map((c) => c[0]).join("\n");
+    expect(output).toContain("--refresh-snapshot");
+    expect(output).toContain("git add");
+  });
+
+  it("appends auto-refresh snippet to existing hook", async () => {
+    const hooksDir = path.join(tmpDir, ".git", "hooks");
+    await fs.mkdir(hooksDir, { recursive: true });
+    await fs.writeFile(
+      path.join(hooksDir, "pre-commit"),
+      "#!/bin/sh\nnpm run lint\n",
+      "utf-8",
+    );
+
+    await initPreCommitHook(tmpDir, true);
+
+    const content = await fs.readFile(
+      path.join(hooksDir, "pre-commit"),
+      "utf-8",
+    );
+    expect(content).toContain("npm run lint");
+    expect(content).toContain("--refresh-snapshot");
+    expect(content).toContain("git add");
+  });
+
   it("prefers Husky over direct hook when both could apply", async () => {
     await fs.mkdir(path.join(tmpDir, ".git", "hooks"), { recursive: true });
     await fs.mkdir(path.join(tmpDir, ".husky"), { recursive: true });

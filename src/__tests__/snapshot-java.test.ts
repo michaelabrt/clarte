@@ -191,6 +191,32 @@ public class RealService {
     expect(sigs.some((s) => s.includes("RealService"))).toBe(true);
   });
 
+  it("extracts methods with nested generic return types", async () => {
+    const javaContent = `package com.example;
+
+public class DataService {
+
+    public Map<String, List<Integer>> getMapping() {
+        return new HashMap<>();
+    }
+
+    public <T extends Comparable<T>> List<T> sorted(List<T> items) {
+        return items.stream().sorted().toList();
+    }
+}
+`;
+
+    mockGlob.mockResolvedValue(["src/main/java/com/example/DataService.java"] as any);
+    mockReadFileOr.mockResolvedValue(javaContent);
+
+    const result = await generateSnapshot(makeJavaCtx(), []);
+
+    const sigs = result.entries.map((e) => e.signature);
+    // Should extract both methods despite nested generics
+    expect(sigs.some((s) => s.includes("Map<String, List<Integer>> getMapping()"))).toBe(true);
+    expect(sigs.some((s) => s.includes("sorted(List<T> items)"))).toBe(true);
+  });
+
   it("renders java code blocks in markdown", async () => {
     const javaContent = `package com.example;
 

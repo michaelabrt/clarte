@@ -340,39 +340,29 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     }
   }
 
-  // -- Count source files and total size --
+  // -- Detect secondary languages and count source files in a single traversal --
+  // detectLanguageBreakdown scans all source extensions; we reuse its file list
+  // to derive the primary language count, avoiding a second glob.
+  const allSourceFiles = await detectLanguageBreakdown(ctx, rootDir);
 
   try {
-    const extensions = getExtensionsForLanguage(ctx.language);
-    const sourceFiles = await glob(
-      extensions.map((ext) => `**/*${ext}`),
-      {
-        cwd: rootDir,
-        ignore: [
-          "**/node_modules/**",
-          "**/dist/**",
-          "**/build/**",
-          "**/.next/**",
-          "**/target/**",
-          "**/vendor/**",
-          "**/__pycache__/**",
-          "**/venv/**",
-          "**/.venv/**",
-          "**/.Trash/**",
-          "**/Library/**",
-          "**/.git/**",
-        ],
-      },
-    );
+    if (allSourceFiles.length > 0) {
+      // Filter to primary language extensions for source file count
+      const extensions = new Set(getExtensionsForLanguage(ctx.language));
+      const sourceFiles = allSourceFiles.filter((f) => {
+        const ext = path.extname(f).toLowerCase();
+        return extensions.has(ext);
+      });
 
-    ctx.sourceFileCount = sourceFiles.length;
-    onProgress?.(`Counting ${sourceFiles.length} source files...`);
-    const sizes = await Promise.all(
-      sourceFiles.map((f) =>
-        fs.stat(path.join(rootDir, f)).then((s) => s.size).catch(() => 0),
-      ),
-    );
-    ctx.totalSourceBytes = sizes.reduce((sum, s) => sum + s, 0);
+      ctx.sourceFileCount = sourceFiles.length;
+      onProgress?.(`Counting ${sourceFiles.length} source files...`);
+      const sizes = await Promise.all(
+        sourceFiles.map((f) =>
+          fs.stat(path.join(rootDir, f)).then((s) => s.size).catch(() => 0),
+        ),
+      );
+      ctx.totalSourceBytes = sizes.reduce((sum, s) => sum + s, 0);
+    }
   } catch (err: unknown) {
     warnings.push(`Source file counting failed: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -385,9 +375,6 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
 
   // -- Detect monorepo --
   ctx.monorepo = await detectMonorepo(rootDir, topEntries);
-
-  // -- Detect secondary languages --
-  await detectLanguageBreakdown(ctx, rootDir);
 
   if (warnings.length > 0) {
     ctx.warnings = warnings;
@@ -474,10 +461,11 @@ const EXT_TO_LANGUAGE: Record<string, Language> = {
 /**
  * Detect secondary languages in the project.
  * Populates `ctx.languageBreakdown` and `ctx.secondaryLanguages`.
+ * Returns the full list of source files found (reusable for primary language counting).
  */
-async function detectLanguageBreakdown(ctx: DetectedContext, rootDir: string): Promise<void> {
+async function detectLanguageBreakdown(ctx: DetectedContext, rootDir: string): Promise<string[]> {
   // Only scan if we have a primary language that isn't "other"
-  if (ctx.language === "other") return;
+  if (ctx.language === "other") return [];
 
   try {
     const allSourceFiles = await glob(
@@ -494,7 +482,7 @@ async function detectLanguageBreakdown(ctx: DetectedContext, rootDir: string): P
       },
     );
 
-    if (allSourceFiles.length === 0) return;
+    if (allSourceFiles.length === 0) return [];
 
     // Count files per language
     const counts: Record<string, number> = {};
@@ -528,8 +516,11 @@ async function detectLanguageBreakdown(ctx: DetectedContext, rootDir: string): P
     if (secondary.length > 0) {
       ctx.secondaryLanguages = secondary;
     }
+
+    return allSourceFiles;
   } catch {
     // Non-critical
+    return [];
   }
 }
 
@@ -549,6 +540,18 @@ async function detectMonorepo(
   if (hasTurboJson) type = "turborepo";
   else if (hasNxJson) type = "nx";
   else if (hasPnpmWorkspace) type = "pnpm-workspaces";
+
+  // Check for npm native workspaces (no pnpm/turbo/nx)
+  if (!type) {
+    const pkg = await readJsonFile(path.join(rootDir, "package.json"));
+    if (pkg) {
+      const workspaces = pkg.workspaces;
+      const hasWorkspaces = Array.isArray(workspaces) ||
+        (workspaces && typeof workspaces === "object" &&
+         Array.isArray((workspaces as Record<string, unknown>).packages));
+      if (hasWorkspaces) type = "npm-workspaces";
+    }
+  }
 
   if (!type) return null;
 
@@ -719,12 +722,17 @@ async function parsePyprojectDeps(filePath: string, warnings?: string[]): Promis
 
 /**
  * Extract Maven version from pom.xml content.
- * Looks for a top-level <version> element (not inside <parent> or <dependency>).
+ * Tries project-level version first, falls back to parent version.
  */
 function extractMavenVersion(pomXml: string): string | undefined {
-  // Try to get the project version (first <version> outside <parent>)
-  const match = pomXml.match(/<version>([^<]+)<\/version>/);
-  return match?.[1] ?? undefined;
+  // Strip <parent>...</parent> to find the project's own <version>
+  const withoutParent = pomXml.replace(/<parent>[\s\S]*?<\/parent>/, "");
+  const projectMatch = withoutParent.match(/<version>([^<]+)<\/version>/);
+  if (projectMatch) return projectMatch[1];
+
+  // Fall back to parent version (common in multi-module Maven projects)
+  const parentMatch = pomXml.match(/<parent>[\s\S]*?<version>([^<]+)<\/version>[\s\S]*?<\/parent>/);
+  return parentMatch?.[1] ?? undefined;
 }
 
 

@@ -1,0 +1,103 @@
+{
+  "fileCount": 9,
+  "edgeCount": 12,
+  "hubFiles": [
+    {
+      "path": "packages/api/src/handler.ts",
+      "authority": 0.2411
+    },
+    {
+      "path": "packages/api/src/middleware.ts",
+      "authority": 0.2411
+    },
+    {
+      "path": "packages/api/src/router.ts",
+      "authority": 0
+    },
+    {
+      "path": "packages/core/src/events.ts",
+      "authority": 0.4874
+    },
+    {
+      "path": "packages/core/src/types.ts",
+      "authority": 0.2267
+    },
+    {
+      "path": "packages/core/src/utils.ts",
+      "authority": 1
+    },
+    {
+      "path": "packages/web/src/app.ts",
+      "authority": 0
+    },
+    {
+      "path": "packages/web/src/store.ts",
+      "authority": 0.2185
+    }
+  ],
+  "circularDeps": [],
+  "layers": [
+    {
+      "name": "services",
+      "files": [
+        "packages/api/src/handler.ts",
+        "packages/api/src/middleware.ts",
+        "packages/api/src/router.ts"
+      ],
+      "dependsOn": []
+    }
+  ],
+  "layerEdges": [],
+  "instabilities": [],
+  "communityCount": 1,
+  "communityFiles": [
+    [
+      "packages/api/src/handler.ts",
+      "packages/core/src/events.ts",
+      "packages/core/src/types.ts",
+      "packages/core/src/utils.ts",
+      "packages/web/src/app.ts",
+      "packages/web/src/store.ts"
+    ]
+  ],
+  "deadFiles": [
+    "packages/api/src/router.ts"
+  ],
+  "crossCuttingFiles": [],
+  "layerConsistency": {
+    "consistency": 1,
+    "violationCount": 0
+  },
+  "chokepoints": [],
+  "tightCouplings": [
+    {
+      "from": "packages/api/src/handler.ts",
+      "to": "packages/core/src/types.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "packages/api/src/handler.ts",
+      "to": "packages/core/src/utils.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "packages/api/src/router.ts",
+      "to": "packages/api/src/handler.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "packages/api/src/router.ts",
+      "to": "packages/api/src/middleware.ts",
+      "importedNames": 2
+    }
+  ],
+  "graphTopology": {
+    "componentCount": 1,
+    "componentSizes": [
+      8
+    ],
+    "approximateDiameter": 3,
+    "reachability": 1,
+    "isFragmented": false
+  }
+}

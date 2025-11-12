@@ -1,0 +1,139 @@
+{
+  "fileCount": 11,
+  "edgeCount": 11,
+  "hubFiles": [
+    {
+      "path": "app/__init__.py",
+      "authority": 0
+    },
+    {
+      "path": "app/models/product.py",
+      "authority": 0.0135
+    },
+    {
+      "path": "app/models/user.py",
+      "authority": 0.257
+    },
+    {
+      "path": "app/routes/products.py",
+      "authority": 0.2452
+    },
+    {
+      "path": "app/routes/users.py",
+      "authority": 0.2452
+    },
+    {
+      "path": "app/services/auth.py",
+      "authority": 1
+    },
+    {
+      "path": "app/services/product_service.py",
+      "authority": 0.4345
+    },
+    {
+      "path": "app/services/user_service.py",
+      "authority": 0.4345
+    }
+  ],
+  "circularDeps": [],
+  "layers": [
+    {
+      "name": "pages",
+      "files": [
+        "app/__init__.py",
+        "app/config.py",
+        "app/models/__init__.py",
+        "app/models/product.py",
+        "app/models/user.py",
+        "app/routes/__init__.py",
+        "app/routes/products.py",
+        "app/routes/users.py"
+      ],
+      "dependsOn": [
+        "services"
+      ]
+    },
+    {
+      "name": "services",
+      "files": [
+        "app/services/auth.py",
+        "app/services/product_service.py",
+        "app/services/user_service.py"
+      ],
+      "dependsOn": [
+        "pages"
+      ]
+    }
+  ],
+  "layerEdges": [
+    {
+      "from": "pages",
+      "to": "services"
+    },
+    {
+      "from": "services",
+      "to": "pages"
+    }
+  ],
+  "instabilities": [],
+  "communityCount": 1,
+  "communityFiles": [
+    [
+      "app/__init__.py",
+      "app/models/product.py",
+      "app/models/user.py",
+      "app/routes/products.py",
+      "app/routes/users.py",
+      "app/services/auth.py",
+      "app/services/product_service.py",
+      "app/services/user_service.py"
+    ]
+  ],
+  "deadFiles": [
+    "app/__init__.py",
+    "app/config.py",
+    "app/models/__init__.py",
+    "app/routes/__init__.py"
+  ],
+  "crossCuttingFiles": [
+    {
+      "file": "app/services/auth.py",
+      "layerSpread": 2
+    }
+  ],
+  "layerConsistency": {
+    "consistency": 0.375,
+    "violationCount": 5
+  },
+  "chokepoints": [
+    {
+      "file": "app/routes/products.py",
+      "separates": 2
+    },
+    {
+      "file": "app/services/product_service.py",
+      "separates": 2
+    }
+  ],
+  "tightCouplings": [
+    {
+      "from": "app/routes/products.py",
+      "to": "app/services/product_service.py",
+      "importedNames": 2
+    },
+    {
+      "from": "app/routes/users.py",
+      "to": "app/services/user_service.py",
+      "importedNames": 2
+    }
+  ],
+  "graphTopology": {
+    "componentCount": 1,
+    "componentSizes": [
+      8
+    ],
+    "approximateDiameter": 4,
+    "reachability": 1,
+    "isFragmented": false
+  }
+}

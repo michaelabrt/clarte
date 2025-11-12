@@ -1,0 +1,161 @@
+{
+  "fileCount": 10,
+  "edgeCount": 22,
+  "hubFiles": [
+    {
+      "path": "app.ts",
+      "authority": 0
+    },
+    {
+      "path": "controllers/product-controller.ts",
+      "authority": 0.3921
+    },
+    {
+      "path": "controllers/user-controller.ts",
+      "authority": 0.3921
+    },
+    {
+      "path": "services/product-service.ts",
+      "authority": 0.3318
+    },
+    {
+      "path": "services/user-service.ts",
+      "authority": 0.3318
+    },
+    {
+      "path": "types/errors.ts",
+      "authority": 0.3886
+    },
+    {
+      "path": "types/index.ts",
+      "authority": 0.2072
+    },
+    {
+      "path": "utils/format.ts",
+      "authority": 0.4187
+    },
+    {
+      "path": "utils/logger.ts",
+      "authority": 1
+    },
+    {
+      "path": "utils/validate.ts",
+      "authority": 0.1769
+    }
+  ],
+  "circularDeps": [],
+  "layers": [
+    {
+      "name": "services",
+      "files": [
+        "services/product-service.ts",
+        "services/user-service.ts"
+      ],
+      "dependsOn": [
+        "types",
+        "utils"
+      ]
+    },
+    {
+      "name": "types",
+      "files": [
+        "types/errors.ts",
+        "types/index.ts"
+      ],
+      "dependsOn": []
+    },
+    {
+      "name": "utils",
+      "files": [
+        "utils/format.ts",
+        "utils/logger.ts",
+        "utils/validate.ts"
+      ],
+      "dependsOn": [
+        "types"
+      ]
+    }
+  ],
+  "layerEdges": [
+    {
+      "from": "services",
+      "to": "types"
+    },
+    {
+      "from": "services",
+      "to": "utils"
+    },
+    {
+      "from": "utils",
+      "to": "types"
+    }
+  ],
+  "instabilities": [],
+  "communityCount": 1,
+  "communityFiles": [
+    [
+      "app.ts",
+      "controllers/product-controller.ts",
+      "controllers/user-controller.ts",
+      "services/product-service.ts",
+      "services/user-service.ts",
+      "types/errors.ts",
+      "types/index.ts",
+      "utils/format.ts",
+      "utils/logger.ts",
+      "utils/validate.ts"
+    ]
+  ],
+  "deadFiles": [],
+  "crossCuttingFiles": [
+    {
+      "file": "types/errors.ts",
+      "layerSpread": 2
+    },
+    {
+      "file": "types/index.ts",
+      "layerSpread": 3
+    }
+  ],
+  "layerConsistency": {
+    "consistency": 1,
+    "violationCount": 0
+  },
+  "chokepoints": [],
+  "tightCouplings": [
+    {
+      "from": "app.ts",
+      "to": "controllers/product-controller.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "app.ts",
+      "to": "controllers/user-controller.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "controllers/product-controller.ts",
+      "to": "services/product-service.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "controllers/user-controller.ts",
+      "to": "services/user-service.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "utils/format.ts",
+      "to": "types/index.ts",
+      "importedNames": 2
+    }
+  ],
+  "graphTopology": {
+    "componentCount": 1,
+    "componentSizes": [
+      10
+    ],
+    "approximateDiameter": 3,
+    "reachability": 1,
+    "isFragmented": false
+  }
+}

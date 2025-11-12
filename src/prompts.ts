@@ -9,7 +9,7 @@ import { theme as t } from "./theme.js";
 import { summarizeDetection } from "./detect.js";
 
 /** Languages that support code snapshot extraction */
-const SNAPSHOT_LANGUAGES = new Set(["typescript", "javascript", "python"]);
+const SNAPSHOT_LANGUAGES = new Set(["typescript", "javascript", "python", "go", "rust", "java"]);
 
 /**
  * Run the interactive prompt flow. Takes the auto-detected context
