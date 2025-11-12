@@ -161,15 +161,22 @@ export async function uninstallHooks(): Promise<void> {
   }
 }
 
-const PRE_COMMIT_HOOK_CONTENT = "#!/bin/sh\nnpx clarte --check\n";
+const PRE_COMMIT_CHECK_CONTENT = "#!/bin/sh\nnpx clarte --check\n";
+const PRE_COMMIT_AUTO_REFRESH_CONTENT = `#!/bin/sh
+npx clarte --check || {
+  npx clarte --refresh-snapshot
+  git add CLAUDE.md .cursor/rules/ 2>/dev/null
+}
+`;
 const PRE_COMMIT_MARKER = "clarte";
 
 /**
  * Install a git pre-commit hook that runs `clarte --check`.
+ * When autoRefresh is true, the hook auto-regenerates on stale and stages the result.
  * Detects Husky and Lefthook and prints integration instructions instead
  * of writing directly when those tools are present.
  */
-export async function initPreCommitHook(rootDir: string): Promise<void> {
+export async function initPreCommitHook(rootDir: string, autoRefresh = false): Promise<void> {
   const gitDir = path.join(rootDir, ".git");
   const gitHooksDir = path.join(gitDir, "hooks");
 
@@ -182,12 +189,18 @@ export async function initPreCommitHook(rootDir: string): Promise<void> {
   // Check for Husky
   const huskyDir = path.join(rootDir, ".husky");
   if (await fileExists(huskyDir)) {
-    console.log("Husky detected. Add clarte to your pre-commit hook:");
-    console.log("");
-    console.log('  npx husky add .husky/pre-commit "npx clarte --check"');
-    console.log("");
-    console.log("Or add to your existing .husky/pre-commit file:");
-    console.log("  npx clarte --check");
+    if (autoRefresh) {
+      console.log("Husky detected. Add to your .husky/pre-commit file:");
+      console.log("");
+      console.log('  npx clarte --check || { npx clarte --refresh-snapshot && git add CLAUDE.md .cursor/rules/ 2>/dev/null; }');
+    } else {
+      console.log("Husky detected. Add clarte to your pre-commit hook:");
+      console.log("");
+      console.log('  npx husky add .husky/pre-commit "npx clarte --check"');
+      console.log("");
+      console.log("Or add to your existing .husky/pre-commit file:");
+      console.log("  npx clarte --check");
+    }
     return;
   }
 
@@ -195,12 +208,21 @@ export async function initPreCommitHook(rootDir: string): Promise<void> {
   const lefthookFiles = ["lefthook.yml", ".lefthook.yml"];
   for (const lf of lefthookFiles) {
     if (await fileExists(path.join(rootDir, lf))) {
-      console.log("Lefthook detected. Add to your lefthook.yml:");
-      console.log("");
-      console.log("  pre-commit:");
-      console.log("    commands:");
-      console.log("      clarte-check:");
-      console.log("        run: npx clarte --check");
+      if (autoRefresh) {
+        console.log("Lefthook detected. Add to your lefthook.yml:");
+        console.log("");
+        console.log("  pre-commit:");
+        console.log("    commands:");
+        console.log("      clarte-refresh:");
+        console.log('        run: npx clarte --check || { npx clarte --refresh-snapshot && git add CLAUDE.md .cursor/rules/ 2>/dev/null; }');
+      } else {
+        console.log("Lefthook detected. Add to your lefthook.yml:");
+        console.log("");
+        console.log("  pre-commit:");
+        console.log("    commands:");
+        console.log("      clarte-check:");
+        console.log("        run: npx clarte --check");
+      }
       return;
     }
   }
@@ -216,10 +238,17 @@ export async function initPreCommitHook(rootDir: string): Promise<void> {
       return;
     }
     // Append to existing hook
-    const appended = existing.trimEnd() + "\nnpx clarte --check\n";
-    await writeFileSafe(hookPath, appended);
+    if (autoRefresh) {
+      const snippet = 'npx clarte --check || { npx clarte --refresh-snapshot && git add CLAUDE.md .cursor/rules/ 2>/dev/null; }';
+      const appended = existing.trimEnd() + "\n" + snippet + "\n";
+      await writeFileSafe(hookPath, appended);
+    } else {
+      const appended = existing.trimEnd() + "\nnpx clarte --check\n";
+      await writeFileSafe(hookPath, appended);
+    }
   } else {
-    await writeFileSafe(hookPath, PRE_COMMIT_HOOK_CONTENT);
+    const content = autoRefresh ? PRE_COMMIT_AUTO_REFRESH_CONTENT : PRE_COMMIT_CHECK_CONTENT;
+    await writeFileSafe(hookPath, content);
   }
 
   // Make executable

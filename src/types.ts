@@ -101,7 +101,7 @@ export interface MonorepoPackage {
 /** Monorepo detection result */
 export interface MonorepoInfo {
   /** Which monorepo tool was detected */
-  type: "pnpm-workspaces" | "turborepo" | "nx";
+  type: "pnpm-workspaces" | "turborepo" | "nx" | "npm-workspaces";
   /** Discovered packages */
   packages: MonorepoPackage[];
 }
@@ -202,6 +202,8 @@ export interface ProjectConfig {
   layers?: Array<{ name: string; pattern: string }>;
   /** Number of days to analyze in git history (default: 90) */
   analysisDays?: number;
+  /** Auto-refresh context on pre-commit if stale */
+  autoRefreshOnCommit?: boolean;
 }
 
 /** A generated file ready to be written */

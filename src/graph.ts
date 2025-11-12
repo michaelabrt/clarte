@@ -932,6 +932,8 @@ export function computeHITS(
  * Thresholds (0.6, 0.3, 0.4) are empirically tuned for typical project distributions
  * after min-max normalization of HITS scores. Boundary instability is expected in
  * small graphs (<10 files) where score ranges compress.
+ *
+ * @see docs/algorithm-tuning.md
  */
 export function deriveRole(authority: number, hubScore: number, isBarrel = false): FileRole {
   if (isBarrel) return "Barrel";
@@ -1478,45 +1480,82 @@ function findActualCycles(
   }
 
   // 2. BFS shortest cycle through each node
-  for (const start of sortedScc) {
+  // Sort by degree descending: high-degree nodes find diverse cycles faster
+  const byDegree = [...scc].sort((a, b) => {
+    const degA = (sccAdj.get(a)?.length ?? 0) + (sccAdj.get(b)?.length ?? 0);
+    const degB = (sccAdj.get(b)?.length ?? 0) + (sccAdj.get(a)?.length ?? 0);
+    return degB - degA;
+  });
+
+  for (const start of byDegree) {
     if (cycles.length >= maxCycles) break;
 
     // BFS from start, looking for path back to start
-    const visited = new Set<string>();
-    const queue: Array<{ node: string; path: string[] }> = [];
+    // Use parent-pointer map instead of copying path arrays (avoids O(V*E) allocations)
+    const parent = new Map<string, string>();
+    const depth = new Map<string, number>();
+    const queue: string[] = [];
 
     for (const neighbor of sccAdj.get(start) ?? []) {
-      queue.push({ node: neighbor, path: [start, neighbor] });
+      if (!parent.has(neighbor) && neighbor !== start) {
+        parent.set(neighbor, start);
+        depth.set(neighbor, 1);
+        queue.push(neighbor);
+      } else if (neighbor === start) {
+        // Self-loop; skip (would be a 1-cycle, not meaningful)
+      }
     }
 
-    while (queue.length > 0) {
-      const { node, path } = queue.shift()!;
+    let qi = 0;
+    while (qi < queue.length) {
+      if (cycles.length >= maxCycles) break;
 
-      if (node === start) {
-        // path already ends with start, forming a closed cycle
-        const chain = path;
-        // Skip 2-cycles (already found above)
-        if (chain.length > 3) {
-          const key = canonicalizeCycle(chain);
-          if (!seenCanonical.has(key)) {
-            seenCanonical.add(key);
-            cycles.push({ chain });
-            if (cycles.length >= maxCycles) return cycles;
-          }
-        }
-        continue;
-      }
+      const node = queue[qi++];
+      const nodeDepth = depth.get(node)!;
 
-      if (visited.has(node)) continue;
-      visited.add(node);
-
-      // Cap path length at SCC size to avoid explosion
-      // Use > (not >=) so full-SCC cycles can close (path + closing node = scc.length + 1)
-      if (path.length > scc.length) continue;
+      // Cap depth at SCC size to avoid explosion
+      if (nodeDepth >= scc.length) continue;
 
       for (const next of sccAdj.get(node) ?? []) {
-        if (!visited.has(next) || next === start) {
-          queue.push({ node: next, path: [...path, next] });
+        if (next === start) {
+          // Found a cycle back to start -- reconstruct path
+          const chain: string[] = [start];
+          let cur = node;
+          while (cur !== start) {
+            chain.push(cur);
+            cur = parent.get(cur)!;
+          }
+          chain.reverse();
+          // chain is now [start, ..., node] but we built it backwards; fix
+          // Reconstruct forward: walk parent pointers from node to start
+          const forward: string[] = [start];
+          let walk: string | undefined = undefined;
+          // Parent pointers go child->parent, so walk from node backward
+          const reversePath: string[] = [next === start ? node : node];
+          let rCur = node;
+          while (rCur !== start) {
+            rCur = parent.get(rCur)!;
+            if (rCur !== start) reversePath.push(rCur);
+          }
+          reversePath.reverse();
+          const fullChain = [start, ...reversePath, start];
+
+          // Skip 2-cycles (already found above)
+          if (fullChain.length > 3) {
+            const key = canonicalizeCycle(fullChain);
+            if (!seenCanonical.has(key)) {
+              seenCanonical.add(key);
+              cycles.push({ chain: fullChain });
+              if (cycles.length >= maxCycles) return cycles;
+            }
+          }
+          continue;
+        }
+
+        if (!parent.has(next)) {
+          parent.set(next, node);
+          depth.set(next, nodeDepth + 1);
+          queue.push(next);
         }
       }
     }
@@ -2678,7 +2717,16 @@ export function computeBetweenness(
   graph: ImportGraph,
   k = 50,
 ): Map<string, number> {
-  // Build undirected adjacency from internal edges
+  // Build undirected adjacency from internal edges.
+  // We convert the directed import graph to undirected because betweenness here
+  // measures structural centrality for chokepoint detection: a file that sits on
+  // many shortest paths is a bottleneck regardless of import direction. Directed
+  // betweenness would undercount files that are only imported (leaves in the
+  // directed graph rarely lie on directed shortest paths), missing chokepoints
+  // that are structurally central. Trade-off: undirected conversion slightly
+  // inflates scores for leaf files that gain reverse-direction paths. This is
+  // acceptable because the results are combined with articulation-point analysis,
+  // which is inherently undirected. See ROADMAP §3.46 (directed alternative, cut).
   const adj = new Map<string, Set<string>>();
   const allFiles = new Set<string>();
 

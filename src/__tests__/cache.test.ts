@@ -7,8 +7,13 @@ import {
   loadCache,
   saveCache,
   buildGraphWithCache,
+  loadAnalysisCache,
+  saveAnalysisCache,
+  computeAnalysisCacheKey,
   type CacheData,
+  type AnalysisCacheData,
 } from "../cache.js";
+import type { ImportGraph } from "../types.js";
 
 let tmpDir: string;
 
@@ -241,5 +246,140 @@ describe("buildGraphWithCache", () => {
 
     const internalEdges = graph.edges.filter((e) => !e.isExternal);
     expect(internalEdges.length).toBe(12);
+  });
+});
+
+// ── Analysis Cache ────────────────────────────────────────────────────
+
+describe("analysis cache I/O", () => {
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-acache-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true });
+  });
+
+  it("returns null when no analysis cache exists", async () => {
+    expect(await loadAnalysisCache(tmpDir)).toBeNull();
+  });
+
+  it("round-trips analysis cache data", async () => {
+    const data: AnalysisCacheData = {
+      version: 1,
+      cacheKey: "abc123",
+      hubFiles: [{ path: "src/a.ts", centrality: 0.8, authority: 0.8, hubScore: 0.2, role: "Foundation", importedBy: 5, imports: 1 }],
+      circularDeps: [],
+      layers: [],
+      layerEdges: [],
+      instabilities: [{ path: "src/a.ts", fanIn: 5, fanOut: 1, instability: 0.17 }],
+      communities: [],
+      deadFiles: [],
+      crossCuttingFiles: [],
+      chokepoints: [],
+      tightCouplings: [],
+      graphTopology: { componentCount: 1, componentSizes: [10], approximateDiameter: 3, reachability: 1, isFragmented: false },
+    };
+    await saveAnalysisCache(tmpDir, data);
+    const loaded = await loadAnalysisCache(tmpDir);
+    expect(loaded).toEqual(data);
+  });
+
+  it("returns null for version mismatch", async () => {
+    const data: AnalysisCacheData = {
+      version: 999,
+      cacheKey: "abc",
+      hubFiles: [],
+      circularDeps: [],
+      layers: [],
+      layerEdges: [],
+      instabilities: [],
+      communities: [],
+      deadFiles: [],
+      crossCuttingFiles: [],
+      chokepoints: [],
+      tightCouplings: [],
+      graphTopology: { componentCount: 1, componentSizes: [1], approximateDiameter: 0, reachability: 1, isFragmented: false },
+    };
+    await saveAnalysisCache(tmpDir, data);
+    expect(await loadAnalysisCache(tmpDir)).toBeNull();
+  });
+});
+
+describe("computeAnalysisCacheKey", () => {
+  it("produces deterministic keys", () => {
+    const graph: ImportGraph = {
+      edges: [
+        { from: "a.ts", to: "b.ts", isExternal: false, specifier: "./b", importedNames: [] },
+        { from: "b.ts", to: "c.ts", isExternal: false, specifier: "./c", importedNames: [] },
+      ],
+      inDegree: new Map(),
+      centrality: new Map(),
+      externalImportCounts: new Map(),
+      authority: new Map(),
+      hubScores: new Map(),
+    };
+    const key1 = computeAnalysisCacheKey(graph);
+    const key2 = computeAnalysisCacheKey(graph);
+    expect(key1).toBe(key2);
+  });
+
+  it("changes when edges change", () => {
+    const graph1: ImportGraph = {
+      edges: [{ from: "a.ts", to: "b.ts", isExternal: false, specifier: "./b", importedNames: [] }],
+      inDegree: new Map(),
+      centrality: new Map(),
+      externalImportCounts: new Map(),
+      authority: new Map(),
+      hubScores: new Map(),
+    };
+    const graph2: ImportGraph = {
+      edges: [{ from: "a.ts", to: "c.ts", isExternal: false, specifier: "./c", importedNames: [] }],
+      inDegree: new Map(),
+      centrality: new Map(),
+      externalImportCounts: new Map(),
+      authority: new Map(),
+      hubScores: new Map(),
+    };
+    expect(computeAnalysisCacheKey(graph1)).not.toBe(computeAnalysisCacheKey(graph2));
+  });
+
+  it("changes when layers config changes", () => {
+    const graph: ImportGraph = {
+      edges: [{ from: "a.ts", to: "b.ts", isExternal: false, specifier: "./b", importedNames: [] }],
+      inDegree: new Map(),
+      centrality: new Map(),
+      externalImportCounts: new Map(),
+      authority: new Map(),
+      hubScores: new Map(),
+    };
+    const key1 = computeAnalysisCacheKey(graph);
+    const key2 = computeAnalysisCacheKey(graph, [{ name: "types", pattern: "types/" }]);
+    expect(key1).not.toBe(key2);
+  });
+
+  it("ignores external edges", () => {
+    const graph1: ImportGraph = {
+      edges: [
+        { from: "a.ts", to: "b.ts", isExternal: false, specifier: "./b", importedNames: [] },
+        { from: "a.ts", to: "react", isExternal: true, specifier: "react", importedNames: [] },
+      ],
+      inDegree: new Map(),
+      centrality: new Map(),
+      externalImportCounts: new Map(),
+      authority: new Map(),
+      hubScores: new Map(),
+    };
+    const graph2: ImportGraph = {
+      edges: [
+        { from: "a.ts", to: "b.ts", isExternal: false, specifier: "./b", importedNames: [] },
+      ],
+      inDegree: new Map(),
+      centrality: new Map(),
+      externalImportCounts: new Map(),
+      authority: new Map(),
+      hubScores: new Map(),
+    };
+    expect(computeAnalysisCacheKey(graph1)).toBe(computeAnalysisCacheKey(graph2));
   });
 });

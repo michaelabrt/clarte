@@ -34,6 +34,12 @@ export interface EvalFixture {
     minCommunities?: number;
     /** Maximum number of communities expected */
     maxCommunities?: number;
+    /** Files that MUST be detected as architectural chokepoints */
+    knownChokepoints?: string[];
+    /** Files that must NOT have high instability */
+    stableFiles?: string[];
+    /** Expected file roles: path -> expected role */
+    expectedRoles?: Record<string, "Foundation" | "Orchestrator" | "Utility" | "Leaf">;
   };
 }
 

@@ -20,7 +20,13 @@ import { runPrintMode } from "./print.js";
 import { validateContextPaths } from "./check.js";
 import { installHooks, uninstallHooks, initPreCommitHook } from "./hooks.js";
 import { runWatchMode } from "./watch.js";
-import { buildGraphWithCache } from "./cache.js";
+import {
+  buildGraphWithCache,
+  computeAnalysisCacheKey,
+  loadAnalysisCache,
+  saveAnalysisCache,
+  type AnalysisCacheData,
+} from "./cache.js";
 import {
   buildImportGraph,
   getHubFiles,
@@ -91,6 +97,7 @@ function printHelp(): void {
   console.log(`    ${t.accent("--refresh-snapshot")}      ${t.text("Re-scan source files, update code snapshot only")}`);
   console.log(`    ${t.accent("--check")}                 ${t.text("Exit 0 if snapshot is fresh, 1 if stale (hash-based)")}`);
   console.log(`    ${t.accent("--check=timestamp")}       ${t.text("Exit 0/1 based on age only (no Node.js needed in shell hooks)")}`);
+  console.log(`    ${t.accent("--ci")}                    ${t.text("Machine-readable output (use with --check for CI pipelines)")}`);
   console.log(`    ${t.accent("--max-tokens=N")}          ${t.text("Set the token budget for the code snapshot")}`);
   console.log(`    ${t.accent("--format=json")}           ${t.text("Output full analysis as structured JSON to stdout")}`);
   console.log(`    ${t.accent("--budget=N")}              ${t.text("Set token budget for the context file (prioritized sections)")}`);
@@ -99,6 +106,7 @@ function printHelp(): void {
   console.log(`    ${t.accent("--exclude=a,b")}           ${t.text("Exclude these sections entirely")}`);
   console.log(`    ${t.accent("--generate-skills")}       ${t.text("Generate Claude Code skill files")}`);
   console.log(`    ${t.accent("--init-hook")}             ${t.text("Install git pre-commit hook for snapshot freshness")}`);
+  console.log(`    ${t.accent("--auto-refresh")}          ${t.text("With --init-hook: auto-regenerate on stale (not just warn)")}`);
   console.log(`    ${t.accent("--watch")}                 ${t.text("Watch for file changes and re-analyze continuously")}`);
   console.log(`    ${t.accent("-v, --verbose")}           ${t.text("Show detailed progress output")}`);
   console.log("");
@@ -150,6 +158,7 @@ async function main() {
   const checkArg = args.find((a) => a === "--check" || a.startsWith("--check="));
   const check = !!checkArg;
   const checkTimestamp = checkArg === "--check=timestamp";
+  const ciMode = args.includes("--ci");
   const verbose = args.includes("--verbose") || args.includes("-v");
   const watchMode = args.includes("--watch");
   const generateSkills = args.includes("--generate-skills");
@@ -173,12 +182,13 @@ async function main() {
     : undefined;
   const effectiveBudget = fullMode ? 0 : budget;
   const initHook = args.includes("--init-hook");
+  const autoRefresh = args.includes("--auto-refresh");
   const printMode = args[0] === "print";
   const hooksMode = args[0] === "hooks";
   const diffFileArg = args.find((a) => a.startsWith("--diff-file="));
   const diffFile = diffFileArg?.split("=")[1];
   const diffFilterSet = new Set(diffFilterFiles);
-  const targetDir = args.find((a) => !a.startsWith("-") && a !== "print" && a !== "hooks" && a !== "install" && a !== "uninstall" && a !== "-v" && !diffFilterSet.has(a)) ?? process.cwd();
+  const targetDir = args.find((a) => !a.startsWith("-") && a !== "print" && a !== "hooks" && a !== "install" && a !== "uninstall" && !diffFilterSet.has(a)) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
   // print: compact summary for session hooks (no ANSI, stdout only)
@@ -205,7 +215,7 @@ async function main() {
 
   // --init-hook: install git pre-commit hook
   if (initHook) {
-    await initPreCommitHook(rootDir);
+    await initPreCommitHook(rootDir, autoRefresh);
     process.exit(0);
   }
 
@@ -239,55 +249,84 @@ async function main() {
     : (msg) => { if (verbose) p.log.info(t.muted(msg)); };
 
   // --check: fast path for shell integration (silent, exit code only)
+  // With --ci: machine-readable output, exit codes: 0=fresh, 1=stale, 2=error
   if (check) {
-    const config = await loadConfig(rootDir);
+    try {
+      const config = await loadConfig(rootDir);
 
-    if (checkTimestamp) {
-      // Timestamp-only check: no file globbing or hashing
-      if (!config?.snapshotGeneratedAt) {
-        process.exit(0); // No config or no timestamp: nothing to check
-      }
-      const staleDays = config.staleDays ?? 7;
-      const daysSince = Math.floor(
-        (Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24),
-      );
-      if (daysSince > staleDays) {
-        console.log(`clarte: snapshot is ${daysSince}d old. Run: npx clarte --refresh-snapshot`);
-        process.exit(1);
-      }
-      // Path validation (also runs for timestamp checks)
-      if (config) {
-        const pathResult = await validateContextPaths(rootDir, config);
-        if (pathResult && pathResult.broken.length > 0) {
-          console.log(`clarte: ${pathResult.broken.length} broken file reference(s) in ${pathResult.file}: ${pathResult.broken.join(", ")}`);
+      if (checkTimestamp) {
+        // Timestamp-only check: no file globbing or hashing
+        if (!config?.snapshotGeneratedAt) {
+          if (ciMode) console.log("fresh");
+          process.exit(0); // No config or no timestamp: nothing to check
+        }
+        const staleDays = config.staleDays ?? 7;
+        const daysSince = Math.floor(
+          (Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24),
+        );
+        if (daysSince > staleDays) {
+          if (ciMode) {
+            console.log(`stale: snapshot is ${daysSince}d old`);
+          } else {
+            console.log(`clarte: snapshot is ${daysSince}d old. Run: npx clarte --refresh-snapshot`);
+          }
           process.exit(1);
         }
+        // Path validation (also runs for timestamp checks)
+        if (config) {
+          const pathResult = await validateContextPaths(rootDir, config);
+          if (pathResult && pathResult.broken.length > 0) {
+            if (ciMode) {
+              console.log(`stale: ${pathResult.broken.length} broken file reference(s)`);
+            } else {
+              console.log(`clarte: ${pathResult.broken.length} broken file reference(s) in ${pathResult.file}: ${pathResult.broken.join(", ")}`);
+            }
+            process.exit(1);
+          }
+        }
+        if (ciMode) console.log("fresh");
+        process.exit(0);
       }
+
+      // Hash-based check (original behavior)
+      if (!config?.snapshotHash) {
+        if (ciMode) console.log("fresh");
+        process.exit(0); // No config or no hash: nothing to check
+      }
+      const lang = config.language ?? "other";
+      const currentHash = await computeSnapshotHash(rootDir, lang);
+      if (currentHash !== config.snapshotHash) {
+        const daysSince = config.snapshotGeneratedAt
+          ? Math.floor((Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24))
+          : 0;
+        const staleMsg = daysSince > 0 ? ` (last generated ${daysSince}d ago)` : "";
+        if (ciMode) {
+          console.log(`stale: hash mismatch${staleMsg}`);
+        } else {
+          console.log(`clarte: snapshot is stale${staleMsg}. Run npx clarte --refresh-snapshot`);
+        }
+        process.exit(1);
+      }
+
+      // Path validation: check for broken file references in context file
+      const pathResult = await validateContextPaths(rootDir, config);
+      if (pathResult && pathResult.broken.length > 0) {
+        if (ciMode) {
+          console.log(`stale: ${pathResult.broken.length} broken file reference(s)`);
+        } else {
+          console.log(`clarte: ${pathResult.broken.length} broken file reference(s) in ${pathResult.file}: ${pathResult.broken.join(", ")}`);
+        }
+        process.exit(1);
+      }
+      if (ciMode) console.log("fresh");
       process.exit(0);
+    } catch (err: unknown) {
+      if (ciMode) {
+        console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(2);
+      }
+      throw err;
     }
-
-    // Hash-based check (original behavior)
-    if (!config?.snapshotHash) {
-      process.exit(0); // No config or no hash: nothing to check
-    }
-    const lang = config.language ?? "other";
-    const currentHash = await computeSnapshotHash(rootDir, lang);
-    if (currentHash !== config.snapshotHash) {
-      const daysSince = config.snapshotGeneratedAt
-        ? Math.floor((Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24))
-        : 0;
-      const staleMsg = daysSince > 0 ? ` (last generated ${daysSince}d ago)` : "";
-      console.log(`clarte: snapshot is stale${staleMsg}. Run npx clarte --refresh-snapshot`);
-      process.exit(1);
-    }
-
-    // Path validation: check for broken file references in context file
-    const pathResult = await validateContextPaths(rootDir, config);
-    if (pathResult && pathResult.broken.length > 0) {
-      console.log(`clarte: ${pathResult.broken.length} broken file reference(s) in ${pathResult.file}: ${pathResult.broken.join(", ")}`);
-      process.exit(1);
-    }
-    process.exit(0);
   }
 
   // Determine color scheme: env var > saved config > interactive prompt
@@ -427,8 +466,13 @@ async function main() {
   // Step 1.7: Structural analysis (progressive reveal via shimmer)
   const fileCount = graph.centrality.size;
 
+  // Check analysis cache for graph-derived results
+  const analysisCacheKey = computeAnalysisCacheKey(graph, savedConfig?.layers);
+  const analysisCache = await loadAnalysisCache(rootDir);
+  const useAnalysisCache = analysisCache !== null && analysisCache.cacheKey === analysisCacheKey;
+
   // Key files (HITS analysis)
-  const hubFiles = getHubFiles(graph);
+  const hubFiles = useAnalysisCache ? analysisCache.hubFiles : getHubFiles(graph);
   if (!jsonMode) {
     const topHubName = hubFiles[0]?.path ?? "";
     p.log.step(
@@ -446,7 +490,7 @@ async function main() {
   }
 
   // Circular dependency detection (Tarjan SCC)
-  const circularDeps = findCircularDeps(graph);
+  const circularDeps = useAnalysisCache ? analysisCache.circularDeps : findCircularDeps(graph);
   if (!jsonMode) {
     p.log.step(
       circularDeps.length === 0
@@ -462,7 +506,9 @@ async function main() {
   }
 
   // Architecture layers
-  const { layers, layerEdges } = detectArchitecturalLayers(graph, savedConfig?.layers);
+  const { layers, layerEdges } = useAnalysisCache
+    ? { layers: analysisCache.layers, layerEdges: analysisCache.layerEdges }
+    : detectArchitecturalLayers(graph, savedConfig?.layers);
   if (!jsonMode) {
     p.log.step(
       layers.length > 0
@@ -479,7 +525,7 @@ async function main() {
   }
 
   // Instability metrics (no dedicated animation, fast computation)
-  const instabilities = computeInstability(graph);
+  const instabilities = useAnalysisCache ? analysisCache.instabilities : computeInstability(graph);
   if (!jsonMode) {
     const highInstability = instabilities.filter((f) => f.instability > INSTABILITY_THRESHOLD);
     p.log.step(
@@ -496,7 +542,7 @@ async function main() {
   }
 
   // Module clusters (community detection)
-  const communities = detectCommunities(graph);
+  const communities = useAnalysisCache ? analysisCache.communities : detectCommunities(graph);
   if (!jsonMode) {
     p.log.step(
       communities.length > 0
@@ -530,7 +576,7 @@ async function main() {
   }
 
   // Dead files (zero in-degree, excluding entry points and tests)
-  const deadFiles = findDeadFiles(graph);
+  const deadFiles = useAnalysisCache ? analysisCache.deadFiles : findDeadFiles(graph);
   if (!jsonMode && deadFiles.length > 0) {
     p.log.step(
       `${t.brand("Dead files")}     ${t.textBold(String(deadFiles.length))} file${deadFiles.length === 1 ? "" : "s"} not imported by anything ${t.warn("\u26A0")}`,
@@ -543,7 +589,7 @@ async function main() {
   }
 
   // Cross-cutting files (imported across multiple layers)
-  const crossCuttingFiles = findCrossCuttingFiles(graph, layers);
+  const crossCuttingFiles = useAnalysisCache ? analysisCache.crossCuttingFiles : findCrossCuttingFiles(graph, layers);
   if (!jsonMode && crossCuttingFiles.length > 0) {
     p.log.step(
       `${t.brand("Cross-cutting")}  ${t.textBold(String(crossCuttingFiles.length))} file${crossCuttingFiles.length === 1 ? "" : "s"} span ${t.textBold("3+")} layers`,
@@ -556,9 +602,11 @@ async function main() {
   }
 
   // Layer consistency score
-  const layerConsistency = layers.length >= 2
-    ? computeLayerConsistency(graph, layers, layerEdges)
-    : undefined;
+  const layerConsistency = useAnalysisCache
+    ? analysisCache.layerConsistency
+    : layers.length >= 2
+      ? computeLayerConsistency(graph, layers, layerEdges)
+      : undefined;
   if (!jsonMode && layerConsistency) {
     const pct = (layerConsistency.consistency * 100).toFixed(0);
     const violationCount = layerConsistency.violations.length;
@@ -575,7 +623,7 @@ async function main() {
   }
 
   // Chokepoints (articulation points)
-  const chokepoints = findChokepoints(graph);
+  const chokepoints = useAnalysisCache ? analysisCache.chokepoints : findChokepoints(graph);
   if (!jsonMode && chokepoints.length > 0) {
     p.log.step(
       `${t.brand("Chokepoints")}    ${t.textBold(String(chokepoints.length))} structural chokepoint${chokepoints.length === 1 ? "" : "s"}`,
@@ -629,7 +677,7 @@ async function main() {
   }
 
   // Graph topology (connected components, diameter)
-  const graphTopology = computeGraphTopology(graph);
+  const graphTopology = useAnalysisCache ? analysisCache.graphTopology : computeGraphTopology(graph);
   if (!jsonMode) {
     if (graphTopology.isFragmented) {
       p.log.step(
@@ -653,7 +701,7 @@ async function main() {
     : undefined;
 
   // Tight coupling detection
-  const tightCouplings = findTightCouplings(graph);
+  const tightCouplings = useAnalysisCache ? analysisCache.tightCouplings : findTightCouplings(graph);
 
   // Monorepo graph analysis
   const monorepoAnalysis = detected.monorepo
@@ -709,6 +757,30 @@ async function main() {
   }
 
   const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined, graphTopology, structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined, tightCouplings: tightCouplings.length ? tightCouplings : undefined, monorepoAnalysis, changeImpact };
+
+  // Save analysis cache for graph-derived results
+  if (!useAnalysisCache) {
+    try {
+      await saveAnalysisCache(rootDir, {
+        version: 1,
+        cacheKey: analysisCacheKey,
+        hubFiles,
+        circularDeps,
+        layers,
+        layerEdges,
+        instabilities,
+        communities,
+        deadFiles,
+        crossCuttingFiles: crossCuttingFiles ?? [],
+        layerConsistency,
+        chokepoints,
+        tightCouplings,
+        graphTopology,
+      });
+    } catch {
+      // Cache save failed; non-critical
+    }
+  }
 
   // Architecture delta tracking
   const currentAnalysisSnapshot = extractSnapshot(analysis);
@@ -822,7 +894,7 @@ async function main() {
     const detectedIDEs = await detectIDEs(rootDir);
     const detectedDescription = await detectProjectDescription(rootDir);
 
-    const snapshotLanguages = new Set(["typescript", "javascript", "python"]);
+    const snapshotLanguages = new Set(["typescript", "javascript", "python", "go", "rust", "java"]);
     answers = {
       ides: detectedIDEs,
       projectPurpose: detectedDescription ?? "",

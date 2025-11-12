@@ -1,0 +1,321 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import fs from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+import type { DetectedContext, UserAnswers, CodeSnapshot, ContextAnalysis } from "../types.js";
+
+// Mock template builders
+vi.mock("../templates/main-context.js", () => ({
+  buildMainContext: vi.fn().mockResolvedValue("# Main Context\n\nGenerated content here."),
+  getMainContextFilename: vi.fn((ide: string) => {
+    switch (ide) {
+      case "claude": return "CLAUDE.md";
+      case "cursor": return "CLAUDE.md";
+      case "opencode": return "AGENTS.md";
+      case "copilot": return ".github/copilot-instructions.md";
+      case "windsurf": return ".windsurfrules";
+      case "cline": return ".clinerules";
+      case "continue": return ".continuerules";
+      case "aider": return ".aider.conf.yml";
+      case "generic": return "CONTEXT.md";
+      default: return "CLAUDE.md";
+    }
+  }),
+}));
+
+vi.mock("../templates/cursor-rules.js", () => ({
+  buildCursorRules: vi.fn().mockResolvedValue([
+    { filename: "global.md", scope: "global", body: "Global rule content" },
+    { filename: "testing.md", scope: "testing", body: "Testing rule content" },
+  ]),
+  renderCursorRule: vi.fn((rule: { body: string }) => `---\n${rule.body}`),
+}));
+
+vi.mock("../templates/claude-skills.js", () => ({
+  buildClaudeSkills: vi.fn().mockResolvedValue([]),
+  renderClaudeSkill: vi.fn(() => ""),
+}));
+
+vi.mock("../templates/aider-context.js", () => ({
+  buildAiderContext: vi.fn().mockResolvedValue("# Aider Context\nread:\n  - README.md\n"),
+}));
+
+vi.mock("../detect.js", () => ({
+  detectContext: vi.fn().mockResolvedValue({
+    rootDir: "/tmp/test",
+    language: "typescript",
+    hasTypeScript: true,
+    packageManager: "npm",
+    linter: "eslint",
+    frameworks: [],
+    directories: [],
+    dependencies: [],
+    isGitRepo: true,
+    totalSourceBytes: 0,
+    sourceFileCount: 0,
+    monorepo: null,
+  }),
+}));
+
+vi.mock("../snapshot.js", () => ({
+  generateSnapshot: vi.fn().mockResolvedValue({
+    entries: [],
+    markdown: "",
+    budgetExcluded: 0,
+  }),
+}));
+
+// Mock @clack/prompts
+vi.mock("@clack/prompts", () => ({
+  log: {
+    info: vi.fn(),
+    message: vi.fn(),
+    success: vi.fn(),
+    warn: vi.fn(),
+  },
+  confirm: vi.fn().mockResolvedValue(true),
+  isCancel: () => false,
+}));
+
+vi.mock("../theme.js", () => ({
+  theme: {
+    text: (s: string) => s,
+    textBold: (s: string) => s,
+    warn: (s: string) => s,
+    soft: (s: string) => s,
+    accent: (s: string) => s,
+    muted: (s: string) => s,
+    brand: (s: string) => s,
+  },
+}));
+
+import { generateFiles, extractUserSections, mergeUserSections } from "../generate.js";
+
+let tmpDir: string;
+
+function makeCtx(overrides: Partial<DetectedContext> = {}): DetectedContext {
+  return {
+    rootDir: tmpDir,
+    language: "typescript",
+    hasTypeScript: true,
+    packageManager: "npm",
+    linter: "eslint",
+    frameworks: [],
+    directories: ["src"],
+    dependencies: [],
+    isGitRepo: true,
+    totalSourceBytes: 50000,
+    sourceFileCount: 100,
+    monorepo: null,
+    ...overrides,
+  };
+}
+
+function makeAnswers(overrides: Partial<UserAnswers> = {}): UserAnswers {
+  return {
+    ides: ["claude"],
+    projectPurpose: "A test project",
+    keyPatterns: "",
+    gotchas: "",
+    generateSnapshot: false,
+    snapshotPaths: [],
+    stackConfirmed: true,
+    stackCorrections: "",
+    generatePerPackage: false,
+    ...overrides,
+  };
+}
+
+beforeEach(async () => {
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-gen-"));
+});
+
+afterEach(async () => {
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+describe("generateFiles", () => {
+  it("produces CLAUDE.md for claude target", async () => {
+    const files = await generateFiles(
+      makeCtx(),
+      makeAnswers({ ides: ["claude"] }),
+      null,
+      true, // force
+      true, // dryRun
+    );
+
+    expect(files.length).toBeGreaterThanOrEqual(1);
+    const claudeFile = files.find((f) => f.path === "CLAUDE.md");
+    expect(claudeFile).toBeDefined();
+    expect(claudeFile!.content).toContain("Main Context");
+  });
+
+  it("produces cursor rules for cursor target", async () => {
+    const files = await generateFiles(
+      makeCtx(),
+      makeAnswers({ ides: ["cursor"] }),
+      null,
+      true,
+      true,
+    );
+
+    // Should have the main file + rule files
+    const mainFile = files.find((f) => f.path === "CLAUDE.md");
+    expect(mainFile).toBeDefined();
+
+    const ruleFiles = files.filter((f) => f.path.startsWith(".cursor/rules/"));
+    expect(ruleFiles.length).toBe(2);
+    expect(ruleFiles.map((f) => f.path)).toContain(".cursor/rules/global.md");
+    expect(ruleFiles.map((f) => f.path)).toContain(".cursor/rules/testing.md");
+  });
+
+  it("produces aider config for aider target", async () => {
+    const files = await generateFiles(
+      makeCtx(),
+      makeAnswers({ ides: ["aider"] }),
+      null,
+      true,
+      true,
+    );
+
+    const aiderFile = files.find((f) => f.path === ".aider.conf.yml");
+    expect(aiderFile).toBeDefined();
+    expect(aiderFile!.content).toContain("Aider Context");
+  });
+
+  it("dry run returns files without writing to disk", async () => {
+    const files = await generateFiles(
+      makeCtx(),
+      makeAnswers(),
+      null,
+      true,
+      true, // dryRun
+    );
+
+    expect(files.length).toBeGreaterThan(0);
+
+    // Verify nothing was written
+    const claudePath = path.join(tmpDir, "CLAUDE.md");
+    await expect(fs.access(claudePath)).rejects.toThrow();
+  });
+
+  it("writes files to disk when not dry run", async () => {
+    const files = await generateFiles(
+      makeCtx(),
+      makeAnswers(),
+      null,
+      true, // force
+      false, // not dryRun
+    );
+
+    expect(files.length).toBeGreaterThan(0);
+
+    // Verify file was written
+    const claudePath = path.join(tmpDir, "CLAUDE.md");
+    const content = await fs.readFile(claudePath, "utf-8");
+    expect(content).toContain("Main Context");
+  });
+
+  it("deduplicates files by path", async () => {
+    // Both claude and cursor produce CLAUDE.md
+    const files = await generateFiles(
+      makeCtx(),
+      makeAnswers({ ides: ["claude", "cursor"] }),
+      null,
+      true,
+      true,
+    );
+
+    const claudeFiles = files.filter((f) => f.path === "CLAUDE.md");
+    expect(claudeFiles).toHaveLength(1);
+  });
+});
+
+describe("extractUserSections", () => {
+  it("extracts user section with markers", () => {
+    const content = [
+      "## Key Patterns",
+      "",
+      "<!-- clarte:user-start -->",
+      "## My Custom Section",
+      "Some custom content",
+      "<!-- clarte:user-end -->",
+      "",
+      "## Other",
+    ].join("\n");
+
+    const sections = extractUserSections(content);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].content).toContain("My Custom Section");
+    expect(sections[0].anchor).toBe("## Key Patterns");
+  });
+
+  it("returns empty array when no user sections", () => {
+    const content = "# Project\n\nJust regular content.";
+    expect(extractUserSections(content)).toHaveLength(0);
+  });
+
+  it("extracts multiple user sections", () => {
+    const content = [
+      "## Section A",
+      "<!-- clarte:user-start -->",
+      "Custom A",
+      "<!-- clarte:user-end -->",
+      "## Section B",
+      "<!-- clarte:user-start -->",
+      "Custom B",
+      "<!-- clarte:user-end -->",
+    ].join("\n");
+
+    const sections = extractUserSections(content);
+    expect(sections).toHaveLength(2);
+    expect(sections[0].content).toContain("Custom A");
+    expect(sections[1].content).toContain("Custom B");
+  });
+});
+
+describe("mergeUserSections", () => {
+  it("inserts section after its anchor header", () => {
+    const newContent = "## Key Patterns\n\nNew patterns\n\n## Other\n\nOther stuff";
+    const sections = [{
+      content: "<!-- clarte:user-start -->\nMy custom stuff\n<!-- clarte:user-end -->",
+      anchor: "## Key Patterns",
+    }];
+
+    const result = mergeUserSections(newContent, sections);
+    expect(result).toContain("My custom stuff");
+    // Custom section should appear before ## Other
+    const customIdx = result.indexOf("My custom stuff");
+    const otherIdx = result.indexOf("## Other");
+    expect(customIdx).toBeLessThan(otherIdx);
+  });
+
+  it("appends at end when anchor not found", () => {
+    const newContent = "## Different Header\n\nContent";
+    const sections = [{
+      content: "<!-- clarte:user-start -->\nOrphaned\n<!-- clarte:user-end -->",
+      anchor: "## Missing Header",
+    }];
+
+    const result = mergeUserSections(newContent, sections);
+    expect(result).toContain("Orphaned");
+    // Should be at the end
+    expect(result.indexOf("Orphaned")).toBeGreaterThan(result.indexOf("Content"));
+  });
+
+  it("skips sections already present in new content", () => {
+    const section = "<!-- clarte:user-start -->\nAlready here\n<!-- clarte:user-end -->";
+    const newContent = `## Header\n\n${section}\n\n## Other`;
+    const sections = [{ content: section, anchor: "## Header" }];
+
+    const result = mergeUserSections(newContent, sections);
+    // Should not be duplicated
+    const count = (result.match(/Already here/g) ?? []).length;
+    expect(count).toBe(1);
+  });
+
+  it("returns unchanged content for empty sections array", () => {
+    const content = "# Hello\n\nWorld";
+    expect(mergeUserSections(content, [])).toBe(content);
+  });
+});

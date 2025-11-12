@@ -1093,7 +1093,7 @@ const JAVA_PATTERNS = {
   /** public record Foo(...) */
   publicRecord: /^(?:@\w+\s+)*public\s+record\s+(\w+)/,
   /** public ... methodName(...) */
-  publicMethod: /^(?:@\w+\s+)*public\s+(?:static\s+|abstract\s+|final\s+|synchronized\s+)*(?:<[^>]+>\s+)?(\S+)\s+(\w+)\s*\(/,
+  publicMethod: /^(?:@\w+\s+)*public\s+(?:static\s+|abstract\s+|final\s+|synchronized\s+)*.+\s+(\w+)\s*\(/,
   /** @Generated annotation */
   generatedAnnotation: /^@Generated/,
   /** Common annotations to capture as part of signatures */
