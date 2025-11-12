@@ -397,24 +397,24 @@ async function main() {
   if (!jsonMode) {
     const lines: string[] = [];
     const lang = detected.hasTypeScript ? "TypeScript" : detected.language !== "other" ? detected.language.charAt(0).toUpperCase() + detected.language.slice(1) : "";
-    if (lang) lines.push(`  ${"Language"}   ${t.textBold(lang)}`);
+    if (lang) lines.push(`  ${"Language"}   ${t.text(lang)}`);
     if (detected.frameworks.length > 0) {
-      lines.push(`  ${"Frameworks"} ${t.textBold(detected.frameworks.map((f) => f.name).join(", "))}`);
+      lines.push(`  ${"Frameworks"} ${t.text(detected.frameworks.map((f) => f.name).join(", "))}`);
     }
     if (detected.linter !== "none") {
-      lines.push(`  ${"Linter"}     ${t.textBold(detected.linter.charAt(0).toUpperCase() + detected.linter.slice(1))}`);
+      lines.push(`  ${"Linter"}     ${t.text(detected.linter.charAt(0).toUpperCase() + detected.linter.slice(1))}`);
     }
     if (detected.packageManager !== "none") {
-      lines.push(`  ${"Pkg mgr"}    ${t.textBold(detected.packageManager)}`);
+      lines.push(`  ${"Pkg mgr"}    ${t.text(detected.packageManager)}`);
     }
     if (detected.testFramework) {
-      lines.push(`  ${"Testing"}    ${t.textBold(detected.testFramework)}`);
+      lines.push(`  ${"Testing"}    ${t.text(detected.testFramework)}`);
     }
     if (detected.ciProvider) {
-      lines.push(`  ${"CI"}         ${t.textBold(detected.ciProvider)}`);
+      lines.push(`  ${"CI"}         ${t.text(detected.ciProvider)}`);
     }
     if (detected.monorepo) {
-      lines.push(`  ${"Monorepo"}   ${t.textBold(`${detected.monorepo.type} (${detected.monorepo.packages.length} package${detected.monorepo.packages.length === 1 ? "" : "s"})`)}`);
+      lines.push(`  ${"Monorepo"}   ${t.text(`${detected.monorepo.type} (${detected.monorepo.packages.length} package${detected.monorepo.packages.length === 1 ? "" : "s"})`)}`);
     }
     if (detected.sourceFileCount > 0) {
       lines.push(`  ${"Files"}      ${t.textBold(`${detected.sourceFileCount}`)} ${t.muted(`(${formatBytes(detected.totalSourceBytes)})`)}`);
