@@ -29,9 +29,9 @@ CLI tool that pre-generates context files for AI coding agents.
 - `src/types.ts` is a structural chokepoint (separates 4 components). Refactor with extreme care.
 - `src/graph.ts` is a structural chokepoint (separates 3 components). Refactor with extreme care.
 - `src/utils.ts` is a structural chokepoint (separates 2 components). Refactor with extreme care.
-- `src/index.ts` is a high-churn file (38 commits in 90 days). Review recent changes before modifying to avoid conflicts.
+- `src/index.ts` is a high-churn file (47 commits in 90 days). Review recent changes before modifying to avoid conflicts.
 - `README.md` is a high-churn file (34 commits in 90 days). Review recent changes before modifying to avoid conflicts.
-- `src/summary.ts` is a high-churn file (23 commits in 90 days). Review recent changes before modifying to avoid conflicts.
+- `src/summary.ts` is a high-churn file (30 commits in 90 days). Review recent changes before modifying to avoid conflicts.
 - `src/graph.ts` is a Foundation file with high complexity (46 exports, 2900+ lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
 - `src/index.ts` is a Orchestrator file with high complexity (3 exports, 1400+ lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
 - `src/print.ts` is a Orchestrator file with high complexity (1 exports, 187 lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
@@ -39,9 +39,9 @@ CLI tool that pre-generates context files for AI coding agents.
 - `src/summary.ts` has multiple risk factors (high churn, no tests). Add tests and before making large changes.
 - `src/graph.ts` has multiple risk factors (high churn, tightly coupled). Consider extracting an interface and before making large changes.
 - `src/detect.ts` has multiple risk factors (high churn, tightly coupled). Consider extracting an interface and before making large changes.
-- When you modify `src/index.ts`, you'll likely need to also update `src/types.ts` within the next 1-2 commits (lagged co-change pattern).
 - When you modify `src/index.ts`, you'll likely need to also update `src/summary.ts` within the next 1-2 commits (lagged co-change pattern).
-- When you modify `src/index.ts`, you'll likely need to also update `src/snapshot.ts` within the next 1-2 commits (lagged co-change pattern).
+- When you modify `src/index.ts`, you'll likely need to also update `src/types.ts` within the next 1-2 commits (lagged co-change pattern).
+- When you modify `src/index.ts`, you'll likely need to also update `src/templates/main-context.ts` within the next 1-2 commits (lagged co-change pattern).
 - When modifying `src/graph.ts`, also check: `src/snapshot.ts`, `src/cache.ts`, `src/utils.ts`, `src/types.ts`.
 - When modifying `src/utils.ts`, also check: `src/cache.ts`, `src/check.ts`, `src/graph.ts`, `src/config-scan.ts`.
 - When modifying `src/cache.ts`, also check: `src/graph.ts`, `src/utils.ts`, `src/types.ts`, `src/mcp-server.ts`.
@@ -75,16 +75,16 @@ These are the most interconnected files. Read these first for architectural unde
 
 | File | Commits (90d) | Last Changed |
 |------|--------------|--------------|
-| `src/index.ts` | 38 | 21 minutes ago |
-| `README.md` | 34 | 31 minutes ago |
-| `src/summary.ts` | 23 | 14 minutes ago |
-| `src/templates/main-context.ts` | 22 | 31 minutes ago |
-| `package.json` | 22 | 13 hours ago |
+| `src/index.ts` | 47 | 17 minutes ago |
+| `README.md` | 34 | 67 minutes ago |
+| `src/summary.ts` | 30 | 19 minutes ago |
+| `src/templates/main-context.ts` | 22 | 67 minutes ago |
+| `package.json` | 22 | 14 hours ago |
 | `src/types.ts` | 21 | 2 days ago |
 | `package-lock.json` | 19 | 33 hours ago |
 | `src/snapshot.ts` | 19 | 2 days ago |
 | `src/graph.ts` | 17 | 2 days ago |
-| `CLAUDE.md` | 14 | 31 minutes ago |
+| `CLAUDE.md` | 15 | 36 minutes ago |
 
 ## Change Coupling
 
@@ -92,16 +92,16 @@ Files that frequently change together -- when modifying one, check if the other 
 
 | File A | File B | Co-changes | Confidence |
 |--------|--------|------------|------------|
-| `src/index.ts` | `src/summary.ts` | 14 | 39% |
-| `src/index.ts` | `src/templates/main-context.ts` | 17 | 44% |
-| `src/index.ts` | `src/types.ts` | 18 | 49% |
+| `src/index.ts` | `src/summary.ts` | 19 | 46% |
+| `src/index.ts` | `src/templates/main-context.ts` | 17 | 39% |
+| `src/index.ts` | `src/types.ts` | 18 | 43% |
 | `src/__tests__/hooks.test.ts` | `src/hooks.ts` | 4 | 100% |
-| `src/generate.ts` | `src/index.ts` | 13 | 37% |
+| `src/generate.ts` | `src/index.ts` | 13 | 33% |
 | `package-lock.json` | `package.json` | 17 | 74% |
 | `src/graph.ts` | `src/snapshot.ts` | 12 | 60% |
 | `src/templates/main-context.ts` | `src/types.ts` | 14 | 48% |
 | `src/__tests__/git-analysis.test.ts` | `src/git-analysis.ts` | 3 | 33% |
-| `src/index.ts` | `src/snapshot.ts` | 12 | 31% |
+| `src/templates/aider-context.ts` | `src/templates/main-context.ts` | 11 | 46% |
 
 ## Test Coverage Map
 
