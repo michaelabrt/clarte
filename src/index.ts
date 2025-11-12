@@ -909,7 +909,8 @@ async function main() {
 
   // Step 6: Done!
   p.outro(
-    t.brand(`Done in ${elapsed}s! `) +
+    t.success(`Done in ${elapsed}s!`) +
+      "\n" +
       t.muted(
         "Your context files are ready. They are living documents: keep them up to date as your project evolves.",
       ),
