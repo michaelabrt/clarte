@@ -16,9 +16,8 @@ import {
   computeSnapshotHash,
 } from "./config.js";
 import { refreshSnapshot } from "./refresh.js";
-import { runPrintMode } from "./print.js";
 import { validateContextPaths } from "./check.js";
-import { installHooks, uninstallHooks, initPreCommitHook } from "./hooks.js";
+import { initPreCommitHook } from "./hooks.js";
 import { runWatchMode } from "./watch.js";
 import {
   buildGraphWithCache,
@@ -81,11 +80,6 @@ function printHelp(): void {
   console.log("");
   console.log(`  ${t.textBold("Usage:")}  ${t.text(`npx ${NAME} [directory] [options]`)}`);
   console.log("");
-  console.log(`  ${t.textBold("Commands:")}`);
-  console.log(`    ${t.accent("print")}                   ${t.text("Print context to stdout (for hooks, pipes)")}`);
-  console.log(`    ${t.accent("hooks install")}           ${t.text("Add clarte hooks to Claude Code settings")}`);
-  console.log(`    ${t.accent("hooks uninstall")}         ${t.text("Remove clarte hooks from Claude Code settings")}`);
-  console.log("");
   console.log(`  ${t.textBold("Options:")}`);
   console.log(`    ${t.accent("-h, --help")}              ${t.text("Show this help message")}`);
   console.log(`    ${t.accent("-V, --version")}           ${t.text("Show version number")}`);
@@ -105,8 +99,7 @@ function printHelp(): void {
   console.log(`    ${t.accent("--include=a,b")}           ${t.text("Always include these sections (comma-separated IDs)")}`);
   console.log(`    ${t.accent("--exclude=a,b")}           ${t.text("Exclude these sections entirely")}`);
   console.log(`    ${t.accent("--generate-skills")}       ${t.text("Generate Claude Code skill files")}`);
-  console.log(`    ${t.accent("--init-hook")}             ${t.text("Install git pre-commit hook for snapshot freshness")}`);
-  console.log(`    ${t.accent("--auto-refresh")}          ${t.text("With --init-hook: auto-regenerate on stale (not just warn)")}`);
+  console.log(`    ${t.accent("--init-hook")}             ${t.text("Install git pre-commit hook for auto-refresh on commit")}`);
   console.log(`    ${t.accent("--watch")}                 ${t.text("Watch for file changes and re-analyze continuously")}`);
   console.log(`    ${t.accent("-v, --verbose")}           ${t.text("Show detailed progress output")}`);
   console.log("");
@@ -182,40 +175,15 @@ async function main() {
     : undefined;
   const effectiveBudget = fullMode ? 0 : budget;
   const initHook = args.includes("--init-hook");
-  const autoRefresh = args.includes("--auto-refresh");
-  const printMode = args[0] === "print";
-  const hooksMode = args[0] === "hooks";
   const diffFileArg = args.find((a) => a.startsWith("--diff-file="));
   const diffFile = diffFileArg?.split("=")[1];
   const diffFilterSet = new Set(diffFilterFiles);
-  const targetDir = args.find((a) => !a.startsWith("-") && a !== "print" && a !== "hooks" && a !== "install" && a !== "uninstall" && !diffFilterSet.has(a)) ?? process.cwd();
+  const targetDir = args.find((a) => !a.startsWith("-") && !diffFilterSet.has(a)) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
-
-  // print: compact summary for session hooks (no ANSI, stdout only)
-  // Must be before project marker check: print is a silent no-op in non-project dirs.
-  if (printMode) {
-    await runPrintMode(rootDir, maxTokens ?? effectiveBudget, verbose, sectionFilter);
-    process.exit(0);
-  }
-
-  // hooks: install/uninstall clarte hooks in Claude Code settings
-  if (hooksMode) {
-    const subcommand = args[1];
-    if (subcommand === "install") {
-      await installHooks();
-    } else if (subcommand === "uninstall") {
-      await uninstallHooks();
-    } else {
-      console.error(`Unknown hooks subcommand: ${subcommand ?? "(none)"}`);
-      console.error("Usage: clarte hooks install | uninstall");
-      process.exit(1);
-    }
-    process.exit(0);
-  }
 
   // --init-hook: install git pre-commit hook
   if (initHook) {
-    await initPreCommitHook(rootDir, autoRefresh);
+    await initPreCommitHook(rootDir);
     process.exit(0);
   }
 
@@ -965,6 +933,22 @@ async function main() {
 
   // Step 5: Summary + token estimate
   printSummary(files, snapshot, analysis, !savedConfig);
+
+  // Step 5.5: First-run hook prompt
+  if (!savedConfig && !dryRun) {
+    const gitDir = path.join(rootDir, ".git");
+    if (await fileExists(gitDir)) {
+      const installHook = await p.confirm({
+        message: t.text("Install a git hook to keep context fresh automatically?"),
+        active: t.soft("Yes"),
+        inactive: t.soft("No"),
+        initialValue: true,
+      });
+      if (!p.isCancel(installHook) && installHook) {
+        await initPreCommitHook(rootDir);
+      }
+    }
+  }
 
   // Elapsed time
   const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);

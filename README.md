@@ -276,8 +276,7 @@ npx clarte [directory] [options]
 | `--exclude=a,b` | Exclude these sections entirely |
 | `--format=json` | Output full analysis as structured JSON to stdout |
 | `--generate-skills` | Generate Claude Code skill files |
-| `--init-hook` | Install git pre-commit hook for automatic snapshot freshness validation |
-| `--auto-refresh` | With `--init-hook`: auto-regenerate on stale (not just warn) |
+| `--init-hook` | Install git pre-commit hook for auto-refresh on commit |
 | `--watch` | Watch for file changes and re-analyze continuously |
 | `-v, --verbose` | Show detailed progress output |
 
@@ -297,28 +296,6 @@ Outputs to stdout by default (use `--diff-file=PATH` for file output). For each 
 - **Temporal coupling**: files that frequently co-change but aren't in the current diff
 - **Cycle context**: circular dependencies involving changed files, with break hints
 - **Scoped directives**: architectural guidelines filtered to the changed files only
-
-### Print Mode
-
-Output a compact, token-budgeted architectural summary to stdout. Designed for session hooks:
-
-```bash
-npx clarte print                    # Default 5000-token budget
-npx clarte print --max-tokens=2000  # Constrained budget
-```
-
-Silent no-op when no `.clarte.json` exists, so it's safe to install globally. Automatically detects if a Clarté MCP server is running and emits minimal output to avoid redundancy.
-
-### Hook Installation
-
-One-command setup for Claude Code session hooks:
-
-```bash
-npx clarte hooks install    # Add SessionStart + PreCompact hooks
-npx clarte hooks uninstall  # Remove clarte hooks
-```
-
-This configures `~/.claude/settings.json` so that `clarte print` runs automatically at session start and before context compaction, keeping the agent's architectural context current.
 
 ### Watch Mode
 
@@ -415,44 +392,6 @@ end
 </details>
 
 > **Tip:** Set `"staleDays": 14` in `.clarte.json` to customize the threshold. For CI/pre-commit use the hash-based `--check` instead.
-
-## MCP Server
-
-Clarté includes an MCP server that exposes architectural analysis as live, queryable tools. Instead of reading a static context file, agents can query specific data mid-session.
-
-### Setup
-
-Add to your Claude Code settings (`~/.claude/settings.json`):
-
-```json
-{
-  "mcpServers": {
-    "clarte": {
-      "command": "npx",
-      "args": ["clarte-mcp"]
-    }
-  }
-}
-```
-
-The server runs the full analysis pipeline on startup, then serves queries via stdio transport.
-
-### Available Tools
-
-| Tool | Parameters | Description |
-|------|-----------|-------------|
-| `get_hub_files` | `limit?, min_centrality?` | Top files by HITS authority with role, centrality, import counts |
-| `get_file_info` | `path` | Full analysis for a single file: role, imports, importers, layer, tests, coupling partners |
-| `what_imports` | `path` | Files that import the given file (reverse dependency lookup) |
-| `what_does_import` | `path` | Files the given path imports (forward dependency lookup) |
-| `find_circular_deps` | `involving?` | Circular dependencies, optionally filtered to a specific file |
-| `get_layers` | (none) | Architectural layers with dependency flow and consistency score |
-| `get_layer_for` | `path` | Which architectural layer a file belongs to |
-| `get_related_tests` | `path` | Test files associated with a given source file |
-| `get_change_partners` | `path` | Files that frequently co-change with the given file |
-| `get_architecture_summary` | `max_tokens?` | Token-budgeted text summary of the project architecture |
-
-When the MCP server is active, `clarte print` automatically detects it and emits minimal output to avoid redundancy.
 
 ## Config File
 

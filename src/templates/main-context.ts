@@ -61,10 +61,13 @@ export async function buildMainContext(
   const allSections = await buildSections(ctx, answers, snapshot, analysis);
   const effectiveBudget = budget ?? DEFAULT_BUDGET;
 
+  const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  const generatedComment = `\n<!-- clarte: generated ${timestamp}. Run npx clarte to regenerate. -->\n`;
+
   if (effectiveBudget <= 0) {
     // --full mode: include all sections, still apply filters
     const filtered = applyFilters(allSections, options);
-    return filtered.map((s) => s.content).join("\n\n").trimEnd() + "\n";
+    return filtered.map((s) => s.content).join("\n\n").trimEnd() + "\n" + generatedComment;
   }
 
   const filtered = applyFilters(allSections, options);
@@ -77,6 +80,8 @@ export async function buildMainContext(
   if (omitted.length > 0) {
     result += `\n<!-- Sections omitted to fit token budget: ${omitted.join(", ")}. Run clarte --full for full output. -->\n`;
   }
+
+  result += generatedComment;
 
   return result;
 }
