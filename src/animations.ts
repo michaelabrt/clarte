@@ -157,24 +157,3 @@ export function startShimmer(
   };
 }
 
-/**
- * Run a shimmer animation while an async operation completes.
- * The shimmer stops automatically when the work resolves.
- */
-export async function withShimmer<T>(
-  text: string,
-  work: Promise<T>,
-  options?: {
-    base?: RGB;
-    highlight?: RGB;
-    width?: number;
-    indent?: string;
-  },
-): Promise<T> {
-  const shimmer = startShimmer(text, options);
-  try {
-    return await work;
-  } finally {
-    shimmer.stop();
-  }
-}

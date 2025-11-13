@@ -4,7 +4,7 @@ import pkg from "./package.json";
 export default defineConfig({
   entry: ["src/index.ts", "src/mcp-server.ts"],
   format: ["esm"],
-  target: "node18",
+  target: "node20",
   outDir: "dist",
   clean: true,
   splitting: false,

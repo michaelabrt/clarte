@@ -204,7 +204,7 @@ Clarté can generate context files for multiple tools at once.
 | Windsurf | `.windsurfrules` | [windsurf.com](https://docs.windsurf.com/windsurf/memories#rules) |
 | Cline | `.clinerules` | [cline.bot](https://docs.cline.bot/improving-your-workflow/cline-rules) |
 | Continue.dev | `.continuerules` | [continue.dev/docs](https://docs.continue.dev/customize/deep-dives/rules) |
-| Aider | `.aider.conf.yml` | [aider.chat](https://aider.chat/docs/config/adir_conf.html) |
+| Aider | `.aider.conf.yml` | [aider.chat](https://aider.chat/docs/config/aider_conf.html) |
 | Generic | `CONTEXT.md` | - |
 
 ## How It Works
@@ -268,6 +268,7 @@ npx clarte [directory] [options]
 | `--reconfigure` | Re-prompt even if `.clarte.json` exists |
 | `--check` | Check if the snapshot is stale via hash comparison (exit 0 = fresh, 1 = stale) |
 | `--check=timestamp` | Timestamp-only staleness check, no file hashing (for shell hooks) |
+| `--ci` | Machine-readable output (use with `--check` for CI pipelines) |
 | `--max-tokens=N` | Set the token budget for the code snapshot |
 | `--budget=N` | Set token budget for the context file (prioritized sections) |
 | `--full` | Disable token budget (include all sections) |
@@ -276,6 +277,7 @@ npx clarte [directory] [options]
 | `--format=json` | Output full analysis as structured JSON to stdout |
 | `--generate-skills` | Generate Claude Code skill files |
 | `--init-hook` | Install git pre-commit hook for automatic snapshot freshness validation |
+| `--auto-refresh` | With `--init-hook`: auto-regenerate on stale (not just warn) |
 | `--watch` | Watch for file changes and re-analyze continuously |
 | `-v, --verbose` | Show detailed progress output |
 

@@ -66,8 +66,9 @@ export async function installHooks(): Promise<void> {
   if (content) {
     try {
       settings = JSON.parse(content);
-    } catch {
-      console.error(`Could not parse ${settingsPath}. Fix the JSON and try again.`);
+    } catch (e) {
+      const detail = e instanceof SyntaxError ? `: ${e.message}` : "";
+      console.error(`Could not parse ${settingsPath}${detail}. Fix the JSON and try again.`);
       process.exit(1);
     }
   }
@@ -125,8 +126,9 @@ export async function uninstallHooks(): Promise<void> {
   let settings: ClaudeSettings;
   try {
     settings = JSON.parse(content);
-  } catch {
-    console.error(`Could not parse ${settingsPath}. Fix the JSON and try again.`);
+  } catch (e) {
+    const detail = e instanceof SyntaxError ? `: ${e.message}` : "";
+    console.error(`Could not parse ${settingsPath}${detail}. Fix the JSON and try again.`);
     process.exit(1);
   }
 
