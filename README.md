@@ -9,13 +9,13 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
-Clarté is a static analysis engine. It parses your imports, builds a dependency graph, runs graph algorithms on it (HITS centrality, Tarjan's SCC, community detection, change coupling), analyzes your git history and outputs a context file that AI coding tools can read.
-
-The problem it solves: when an AI coding agent opens a session on your project, it spends its first turns reading files, tracing imports and piecing together your architecture. Clarté does that analysis once, ahead of time. One run produces a context file with your dependency graph, key files, architectural layers and working guidelines. In [benchmarks](https://github.com/michaelabrt/clarte-benchmark), Clarté reduced agent input tokens by 60% and cost by 58%.
+Every time an AI coding agent opens a session on your project, it spends its first turns reading files, tracing imports and piecing together your architecture. Clarté does that analysis once, ahead of time. One command produces a context file with your dependency graph, key files, architectural layers and working guidelines. In [benchmarks](https://github.com/michaelabrt/clarte-benchmark), this reduced agent input tokens by 60% and cost by 58%.
 
 ```bash
 npx clarte
 ```
+
+Under the hood, Clarté parses your imports, builds a dependency graph, runs graph algorithms on it (HITS centrality, Tarjan's SCC, community detection, change coupling) and analyzes your git history.
 
 ## What the output contains
 
@@ -134,7 +134,7 @@ Clarté will:
 3. **Generate** context files for your detected tools
 4. **Show** a summary with token estimate
 
-Zero prompts on first run. Config is saved to `.clarte.json`; run with `--reconfigure` to customize.
+Zero prompts on first run. Requires Node.js 20+. Config is saved to `.clarte.json` (add it to `.gitignore`); run with `--reconfigure` to customize.
 
 ## Benchmarks
 
@@ -197,12 +197,12 @@ Clarté can generate context files for multiple tools at once.
 
 | Tool | Generated file | Docs |
 |------|---------------|------|
-| Claude Code | `CLAUDE.md` | [claude.ai/docs](https://docs.anthropic.com/en/docs/claude-code/memory#claudemd-files) |
-| Cursor | `CLAUDE.md` + `.cursor/rules/*.md` | [cursor.com/docs](https://docs.cursor.com/context/rules-for-ai) |
+| Claude Code | `CLAUDE.md` | [code.claude.com](https://code.claude.com/docs/en/memory) |
+| Cursor | `CLAUDE.md` + `.cursor/rules/*.md` | [cursor101.com](https://cursor101.com/cursor/rules) |
 | OpenCode | `AGENTS.md` | [opencode.ai](https://opencode.ai/) |
 | GitHub Copilot | `.github/copilot-instructions.md` | [docs.github.com](https://docs.github.com/en/copilot/customizing-copilot/adding-repository-custom-instructions-for-github-copilot) |
-| Windsurf | `.windsurfrules` | [windsurf.com](https://docs.windsurf.com/windsurf/memories#rules) |
-| Cline | `.clinerules` | [cline.bot](https://docs.cline.bot/improving-your-workflow/cline-rules) |
+| Windsurf | `.windsurfrules` | [docs.windsurf.com](https://docs.windsurf.com/windsurf/cascade/memories) |
+| Cline | `.clinerules` | [docs.cline.bot](https://docs.cline.bot/features/cline-rules/overview) |
 | Continue.dev | `.continuerules` | [continue.dev/docs](https://docs.continue.dev/customize/deep-dives/rules) |
 | Aider | `.aider.conf.yml` | [aider.chat](https://aider.chat/docs/config/aider_conf.html) |
 | Generic | `CONTEXT.md` | - |
