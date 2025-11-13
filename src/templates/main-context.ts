@@ -8,6 +8,7 @@ import { renderConventionsSection } from "../conventions.js";
 import { renderTestMappingSection } from "../test-map.js";
 import { renderDirectivesSection } from "./directives.js";
 import { findFeedbackEdges } from "../graph.js";
+import { typifyFiles, renderTypifiedKeyFiles } from "../typification.js";
 
 /** Default token budget for context files. */
 export const DEFAULT_BUDGET = 5000;
@@ -88,7 +89,7 @@ export async function buildMainContext(
 
 /**
  * Build all context sections with priority and token estimates.
- * Exported for use by print mode and testing.
+ * Exported for testing and programmatic use.
  */
 export async function buildSections(
   ctx: DetectedContext,

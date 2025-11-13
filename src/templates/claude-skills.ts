@@ -157,17 +157,17 @@ async function buildArchitectureSkill(analysis?: ContextAnalysis, ctx?: Detected
 function buildClarteSkills(): ClaudeSkill[] {
   return [
     {
-      name: "clarte-print",
+      name: "clarte-refresh",
       description:
-        "Get a compact architectural overview of this codebase including key files, layers, circular dependencies, and conventions.",
+        "Refresh the code snapshot in the context file to reflect recent source changes.",
       disableModelInvocation: true,
       allowedTools: "Bash",
       body: [
-        "# Clarte Print",
+        "# Clarte Refresh",
         "",
-        "Run `npx clarte print` and present the output to the user.",
+        "Run `npx clarte --refresh-snapshot` to update the code snapshot.",
         "",
-        "Use this skill when the user asks about the overall architecture, project structure, or key files.",
+        "Use this skill when the user asks to refresh, update, or regenerate the context file.",
       ].join("\n"),
     },
     {

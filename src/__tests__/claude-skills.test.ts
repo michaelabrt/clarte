@@ -97,12 +97,13 @@ describe("buildClaudeSkills", () => {
     expect(testSkill?.body).toContain("pnpm test");
   });
 
-  it("generates clarte-print skill with disableModelInvocation=true", async () => {
+  it("generates clarte-refresh skill with disableModelInvocation=true", async () => {
     const skills = await buildClaudeSkills(mockCtx(), mockAnswers());
-    const briefSkill = skills.find((s) => s.name === "clarte-print");
-    expect(briefSkill).toBeDefined();
-    expect(briefSkill!.disableModelInvocation).toBe(true);
-    expect(briefSkill!.allowedTools).toBe("Bash");
+    const refreshSkill = skills.find((s) => s.name === "clarte-refresh");
+    expect(refreshSkill).toBeDefined();
+    expect(refreshSkill!.disableModelInvocation).toBe(true);
+    expect(refreshSkill!.allowedTools).toBe("Bash");
+    expect(refreshSkill!.body).toContain("--refresh-snapshot");
   });
 
   it("generates clarte-file skill with --format=json reference", async () => {
@@ -126,7 +127,7 @@ describe("buildClaudeSkills", () => {
     const clarteSkills = skills.filter((s) => s.name.startsWith("clarte-"));
     expect(clarteSkills).toHaveLength(3);
     expect(clarteSkills.map((s) => s.name)).toEqual([
-      "clarte-print",
+      "clarte-refresh",
       "clarte-file",
       "clarte-impact",
     ]);

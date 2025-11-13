@@ -475,18 +475,6 @@ export interface InferredConventions {
   namingPrefixes?: Array<{ prefix: string; count: number; example: string }>;
 }
 
-/** Transitive dependency risk score for a file */
-export interface TransitiveDependencyRisk {
-  /** Relative file path */
-  path: string;
-  /** Direct volatility (own churn normalized 0-1) */
-  directVolatility: number;
-  /** Weighted transitive volatility from dependencies */
-  transitiveVolatility: number;
-  /** Composite risk score: directVolatility * 0.3 + transitiveVolatility * 0.7 */
-  riskScore: number;
-}
-
 /** File pair that co-changes frequently but is structurally distant */
 export interface StructuralTemporalMismatch {
   fileA: string;

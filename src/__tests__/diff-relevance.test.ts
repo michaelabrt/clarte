@@ -3,7 +3,7 @@ import {
   computeNeighborhood,
   scopeHubFiles,
   scopeCircularDeps,
-} from "../index.js";
+} from "../diff.js";
 
 // ── computeNeighborhood: 2-hop expansion ──────────────────────────────
 
