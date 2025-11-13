@@ -144,22 +144,6 @@ export function configToAnswers(config: ProjectConfig): UserAnswers {
   };
 }
 
-/**
- * Save just the colorScheme field into an existing .clarte.json.
- * If the config file doesn't exist yet, creates a minimal one.
- */
-export async function saveColorScheme(
-  rootDir: string,
-  colorScheme: "dark" | "light",
-): Promise<void> {
-  const configPath = path.join(rootDir, CONFIG_FILENAME);
-  const existing = await readJsonFile(configPath) as Record<string, unknown> | null;
-  if (existing) {
-    existing.colorScheme = colorScheme;
-    await writeFileSafe(configPath, JSON.stringify(existing, null, 2) + "\n");
-  }
-  // If no config yet, colorScheme will be saved when saveConfig() runs later
-}
 
 /** Map of language to the project manifest filename(s) to include in the hash */
 const MANIFEST_FILES: Record<string, string[]> = {

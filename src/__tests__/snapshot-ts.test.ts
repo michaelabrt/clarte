@@ -50,7 +50,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("oxc-parser JS/TS snapshot extraction", () => {
+describe("JS/TS snapshot extraction", () => {
   it("extracts exported interfaces", async () => {
     const content = `export interface User {
   id: string;
@@ -257,7 +257,7 @@ export function localFunc(): void {
 
   it("handles overloaded function declarations", async () => {
     // In TS, overloads are declared with multiple signatures followed by implementation.
-    // oxc-parser sees each ExportNamedDeclaration as a separate FunctionDeclaration.
+    // Each exported const is parsed as a separate declaration.
     const content = `export function process(input: string): string;
 export function process(input: number): number;
 export function process(input: string | number): string | number {
@@ -383,7 +383,7 @@ export default function Card({ title, body }: CardProps) {
     expect(propsEntry!.category).toBe("component");
   });
 
-  it("handles files that oxc-parser cannot parse (graceful fallback)", async () => {
+  it("handles files that cannot be parsed (graceful fallback)", async () => {
     // This content is not valid JS/TS but should not crash
     const content = `This is not valid JavaScript at all!!!
 }{}{}{

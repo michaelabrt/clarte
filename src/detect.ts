@@ -41,7 +41,7 @@ const KNOWN_DIRS = [
 ];
 
 /** Framework detection rules: dependency name -> framework info */
-export const FRAMEWORK_MAP: Record<string, string> = {
+const FRAMEWORK_MAP: Record<string, string> = {
   // JS/TS
   expo: "Expo",
   "react-native": "React Native",
