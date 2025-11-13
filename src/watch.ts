@@ -4,6 +4,7 @@ import { loadConfig, configToAnswers } from "./config.js";
 import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import {
   buildImportGraph,
+  mergeGraph,
   getHubFiles,
   findCircularDeps,
   detectArchitecturalLayers,
@@ -252,25 +253,7 @@ async function runAnalysis(
   if (detected.secondaryLanguages) {
     for (const secLang of detected.secondaryLanguages) {
       const secGraph = await buildImportGraph(rootDir, secLang, noopProgress);
-      graph.edges.push(...secGraph.edges);
-      for (const [k, v] of secGraph.inDegree) {
-        graph.inDegree.set(k, (graph.inDegree.get(k) ?? 0) + v);
-      }
-      for (const [k, v] of secGraph.centrality) {
-        if (!graph.centrality.has(k)) graph.centrality.set(k, v);
-      }
-      for (const [k, v] of secGraph.externalImportCounts) {
-        graph.externalImportCounts.set(
-          k,
-          (graph.externalImportCounts.get(k) ?? 0) + v,
-        );
-      }
-      for (const [k, v] of secGraph.authority) {
-        if (!graph.authority.has(k)) graph.authority.set(k, v);
-      }
-      for (const [k, v] of secGraph.hubScores) {
-        if (!graph.hubScores.has(k)) graph.hubScores.set(k, v);
-      }
+      mergeGraph(graph, secGraph);
     }
   }
 

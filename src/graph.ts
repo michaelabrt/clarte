@@ -21,7 +21,6 @@ import type {
   ProgressCallback,
   StructuralTemporalMismatch,
   TightCoupling,
-  TransitiveDependencyRisk,
 } from "./types.js";
 
 // ── Import regex patterns per language ────────────────────────────────
@@ -383,7 +382,7 @@ function getSourceGlob(lang: Language): string[] {
 
 // ── Parse imports from a single file ──────────────────────────────────
 
-export interface RawImport {
+interface RawImport {
   specifier: string;
   importedNames: string[];
   /** Whether this is a type-only import (import type { ... }) */
@@ -1167,6 +1166,29 @@ export async function buildImportGraph(
 
   // Use authority as centrality for backward compat (snapshot.ts etc.)
   return { edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles: detectedBarrels, betweennessScores };
+}
+
+/**
+ * Merge a secondary language graph into the primary graph (in-place).
+ * Used for multi-language projects where each language is parsed separately.
+ */
+export function mergeGraph(target: ImportGraph, source: ImportGraph): void {
+  target.edges.push(...source.edges);
+  for (const [k, v] of source.inDegree) {
+    target.inDegree.set(k, (target.inDegree.get(k) ?? 0) + v);
+  }
+  for (const [k, v] of source.centrality) {
+    if (!target.centrality.has(k)) target.centrality.set(k, v);
+  }
+  for (const [k, v] of source.externalImportCounts) {
+    target.externalImportCounts.set(k, (target.externalImportCounts.get(k) ?? 0) + v);
+  }
+  for (const [k, v] of source.authority) {
+    if (!target.authority.has(k)) target.authority.set(k, v);
+  }
+  for (const [k, v] of source.hubScores) {
+    if (!target.hubScores.has(k)) target.hubScores.set(k, v);
+  }
 }
 
 /**
@@ -2329,57 +2351,6 @@ function analyzeComponentsWithout(
   return { componentCount: componentMembers.length, disconnected };
 }
 
-// ── BFS Shortest Path ──────────────────────────────────────────────────
-
-/**
- * Find the shortest path between two files in the import graph using BFS.
- * Follows directed edges (from -> to). Returns the path as an array of
- * file paths including both endpoints, or null if no path exists.
- */
-export function bfsShortestPath(
-  graph: ImportGraph,
-  from: string,
-  to: string,
-): string[] | null {
-  if (from === to) return [from];
-
-  // Build directed adjacency from internal edges
-  const adj = new Map<string, string[]>();
-  for (const edge of graph.edges) {
-    if (edge.isExternal) continue;
-    const list = adj.get(edge.from) ?? [];
-    list.push(edge.to);
-    adj.set(edge.from, list);
-  }
-
-  const visited = new Set<string>();
-  const parent = new Map<string, string>();
-  const queue = [from];
-  visited.add(from);
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    for (const neighbor of adj.get(current) ?? []) {
-      if (visited.has(neighbor)) continue;
-      visited.add(neighbor);
-      parent.set(neighbor, current);
-      if (neighbor === to) {
-        // Reconstruct path
-        const path: string[] = [to];
-        let node = to;
-        while (node !== from) {
-          node = parent.get(node)!;
-          path.unshift(node);
-        }
-        return path;
-      }
-      queue.push(neighbor);
-    }
-  }
-
-  return null;
-}
-
 // ── Graph Topology Analysis ────────────────────────────────────────────
 
 /**
@@ -2476,82 +2447,6 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
   const isFragmented = components.length > 1 && components[1].length >= 5;
 
   return { componentCount: components.length, componentSizes, approximateDiameter, reachability, isFragmented };
-}
-
-// ── Transitive Dependency Risk ─────────────────────────────────────────
-
-/**
- * Compute transitive dependency risk for each file by weighting instability
- * with dependency volatility. Uses BFS with exponential decay.
- *
- * A file importing 5 stable utilities scores lower than a file importing
- * 1 volatile service, because the transitive risk from volatile dependencies
- * propagates through the graph.
- *
- * Requires git analysis data for churn information. Returns empty array
- * if git data is unavailable.
- */
-export function computeTransitiveRisk(
-  graph: ImportGraph,
-  commitCounts: Map<string, number>,
-  maxDepth = 5,
-  topN = 15,
-): TransitiveDependencyRisk[] {
-  if (commitCounts.size === 0) return [];
-
-  // Build directed adjacency from internal edges (outgoing deps)
-  const outgoing = new Map<string, Set<string>>();
-  for (const edge of graph.edges) {
-    if (edge.isExternal) continue;
-    if (!outgoing.has(edge.from)) outgoing.set(edge.from, new Set());
-    outgoing.get(edge.from)!.add(edge.to);
-  }
-
-  // Normalize churn across all files
-  let maxChurn = 0;
-  for (const count of commitCounts.values()) {
-    if (count > maxChurn) maxChurn = count;
-  }
-  if (maxChurn === 0) return [];
-
-  const results: TransitiveDependencyRisk[] = [];
-
-  for (const [file] of graph.inDegree) {
-    const visited = new Set<string>();
-    const queue: Array<{ node: string; depth: number }> = [{ node: file, depth: 0 }];
-    let transitiveRisk = 0;
-    let totalWeight = 0;
-
-    while (queue.length > 0) {
-      const { node, depth } = queue.shift()!;
-      if (depth > maxDepth || visited.has(node)) continue;
-      visited.add(node);
-
-      if (depth > 0) {
-        const decay = Math.pow(0.5, depth); // half-life per hop
-        const volatility = (commitCounts.get(node) ?? 0) / maxChurn;
-        transitiveRisk += volatility * decay;
-        totalWeight += decay;
-      }
-
-      for (const dep of outgoing.get(node) ?? []) {
-        if (!visited.has(dep)) {
-          queue.push({ node: dep, depth: depth + 1 });
-        }
-      }
-    }
-
-    const directVolatility = (commitCounts.get(file) ?? 0) / maxChurn;
-    const transitiveVolatility = totalWeight > 0 ? transitiveRisk / totalWeight : 0;
-    const riskScore = directVolatility * 0.3 + transitiveVolatility * 0.7;
-
-    if (riskScore > 0.1) { // Only include files with meaningful risk
-      results.push({ path: file, directVolatility, transitiveVolatility, riskScore });
-    }
-  }
-
-  results.sort((a, b) => b.riskScore - a.riskScore);
-  return results.slice(0, topN);
 }
 
 // ── Structural-Temporal Mismatch Detection ────────────────────────────
