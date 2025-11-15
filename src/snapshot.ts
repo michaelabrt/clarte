@@ -1356,37 +1356,66 @@ function renderSnapshot(entries: SnapshotEntry[], language: Language = "typescri
   const components = entries.filter((e) => e.category === "component");
   const functions = entries.filter((e) => e.category === "function");
 
-  if (types.length > 0) {
-    md += `### Core Types\n\n\`\`\`${lang}\n`;
-    md += types.map((e) => annotateSignature(e, comment)).join("\n\n");
-    md += "\n```\n\n";
-  }
+  const categoryGroups: Array<{ title: string; entries: SnapshotEntry[] }> = [];
+  if (types.length > 0) categoryGroups.push({ title: "Core Types", entries: types });
+  if (stores.length > 0) categoryGroups.push({ title: "Store Shape", entries: stores });
+  if (components.length > 0) categoryGroups.push({ title: "Component Props", entries: components });
+  if (hooks.length > 0) categoryGroups.push({ title: "Hooks", entries: hooks });
+  if (functions.length > 0) categoryGroups.push({ title: "Key Functions", entries: functions });
 
-  if (stores.length > 0) {
-    md += `### Store Shape\n\n\`\`\`${lang}\n`;
-    md += stores.map((e) => annotateSignature(e, comment)).join("\n\n");
-    md += "\n```\n\n";
-  }
-
-  if (components.length > 0) {
-    md += `### Component Props\n\n\`\`\`${lang}\n`;
-    md += components.map((e) => annotateSignature(e, comment)).join("\n\n");
-    md += "\n```\n\n";
-  }
-
-  if (hooks.length > 0) {
-    md += `### Hooks\n\n\`\`\`${lang}\n`;
-    md += hooks.map((e) => annotateSignature(e, comment)).join("\n\n");
-    md += "\n```\n\n";
-  }
-
-  if (functions.length > 0) {
-    md += `### Key Functions\n\n\`\`\`${lang}\n`;
-    md += functions.map((e) => annotateSignature(e, comment)).join("\n\n");
+  for (const { title, entries: catEntries } of categoryGroups) {
+    md += `### ${title}\n\n\`\`\`${lang}\n`;
+    md += renderCategoryTypified(catEntries, comment);
     md += "\n```\n\n";
   }
 
   return md.trimEnd();
+}
+
+/**
+ * Render entries within a category using typification (R.2).
+ *
+ * Files with 3+ entries in the same category are grouped under a file header
+ * with compact signature listing (one per line, no blank line separator).
+ * Files with 1-2 entries are rendered with full annotations as before.
+ *
+ * This reduces token cost by eliminating per-entry file annotations and
+ * blank-line separators for entries from the same file.
+ */
+function renderCategoryTypified(entries: SnapshotEntry[], commentPrefix: string): string {
+  // Group entries by source file
+  const byFile = new Map<string, SnapshotEntry[]>();
+  for (const e of entries) {
+    const existing = byFile.get(e.file) ?? [];
+    existing.push(e);
+    byFile.set(e.file, existing);
+  }
+
+  const parts: string[] = [];
+
+  // Sort files: files with more entries first (they benefit most from grouping)
+  const sortedFiles = [...byFile.entries()].sort((a, b) => b[1].length - a[1].length);
+
+  for (const [file, fileEntries] of sortedFiles) {
+    if (fileEntries.length >= 3) {
+      // Typified: file header + compact signatures
+      const importedBy = fileEntries[0].importedByCount ?? 0;
+      const annotation = importedBy > 2 ? ` ${commentPrefix} imported by ${importedBy} files` : "";
+      parts.push(`${commentPrefix} --- ${file} (${fileEntries.length} exports)${annotation}`);
+      for (const e of fileEntries) {
+        // Single-line signature, no blank line between
+        const firstLine = e.signature.split("\n")[0];
+        parts.push(firstLine);
+      }
+    } else {
+      // Individual: full annotation per entry
+      for (const e of fileEntries) {
+        parts.push(annotateSignature(e, commentPrefix));
+      }
+    }
+  }
+
+  return parts.join("\n");
 }
 
 /**
