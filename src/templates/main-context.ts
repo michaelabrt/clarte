@@ -8,6 +8,7 @@ import { renderConventionsSection } from "../conventions.js";
 import { renderTestMappingSection } from "../test-map.js";
 import { renderDirectivesSection } from "./directives.js";
 import { findFeedbackEdges } from "../graph.js";
+import { typifyFiles, renderTypifiedKeyFiles } from "../typification.js";
 
 /** Default token budget for context files. */
 export const DEFAULT_BUDGET = 5000;
@@ -158,25 +159,37 @@ export async function buildSections(
         instabilityMap.set(inst.path, { instability: inst.instability, fanIn: inst.fanIn, fanOut: inst.fanOut });
       }
     }
-    const keyLines: string[] = [];
-    keyLines.push("## Key Files");
-    keyLines.push("");
-    keyLines.push("These are the most interconnected files. Read these first for architectural understanding.");
-    keyLines.push("");
-    keyLines.push("| File | Imported By | Stability |");
-    keyLines.push("|------|-------------|-----------|");
-    for (const hub of analysis.hubFiles) {
-      const inst = instabilityMap.get(hub.path);
-      const stabilityCell = inst != null
-        ? `${(inst * 100).toFixed(0)}% unstable \u26A0\uFE0F`
-        : "stable";
-      const roleTag = hub.role !== "Leaf" ? ` (${hub.role})` : "";
-      keyLines.push(
-        `| \`${hub.path}\`${roleTag} | ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"} | ${stabilityCell} |`,
-      );
+    // Try typification: group similar hub files for compact rendering (R.2)
+    // Falls back to traditional table when no groups are found (e.g. <3 files per directory+role)
+    const typResult = typifyFiles(analysis.hubFiles, []);
+    let keyContent: string;
+
+    if (typResult.groups.length > 0) {
+      keyContent = renderTypifiedKeyFiles(typResult, instabilityMap) ?? "";
+    } else {
+      const keyLines: string[] = [];
+      keyLines.push("## Key Files");
+      keyLines.push("");
+      keyLines.push("These are the most interconnected files. Read these first for architectural understanding.");
+      keyLines.push("");
+      keyLines.push("| File | Imported By | Stability |");
+      keyLines.push("|------|-------------|-----------|");
+      for (const hub of analysis.hubFiles) {
+        const inst = instabilityMap.get(hub.path);
+        const stabilityCell = inst != null
+          ? `${(inst * 100).toFixed(0)}% unstable \u26A0\uFE0F`
+          : "stable";
+        const roleTag = hub.role !== "Leaf" ? ` (${hub.role})` : "";
+        keyLines.push(
+          `| \`${hub.path}\`${roleTag} | ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"} | ${stabilityCell} |`,
+        );
+      }
+      keyContent = keyLines.join("\n");
     }
-    const keyContent = keyLines.join("\n");
-    sections.push({ id: "key-files", priority: 2, content: keyContent, tokens: estimateTokens(keyContent) });
+
+    if (keyContent) {
+      sections.push({ id: "key-files", priority: 2, content: keyContent, tokens: estimateTokens(keyContent) });
+    }
   }
 
   // -- Priority 3: Circular Dependencies --
