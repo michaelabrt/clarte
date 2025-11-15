@@ -261,7 +261,13 @@ describe("golden-file analysis", () => {
         expect(analysis.layerConsistency).toEqual(golden.layerConsistency);
         expect(analysis.chokepoints).toEqual(golden.chokepoints);
         expect(analysis.tightCouplings).toEqual(golden.tightCouplings);
-        expect(analysis.graphTopology).toEqual(golden.graphTopology);
+        // approximateDiameter is sampled BFS, so allow ±1 tolerance
+        expect(analysis.graphTopology.componentCount).toBe(golden.graphTopology.componentCount);
+        expect(analysis.graphTopology.componentSizes).toEqual(golden.graphTopology.componentSizes);
+        expect(analysis.graphTopology.approximateDiameter).toBeGreaterThanOrEqual(golden.graphTopology.approximateDiameter - 1);
+        expect(analysis.graphTopology.approximateDiameter).toBeLessThanOrEqual(golden.graphTopology.approximateDiameter + 1);
+        expect(analysis.graphTopology.reachability).toBe(golden.graphTopology.reachability);
+        expect(analysis.graphTopology.isFragmented).toBe(golden.graphTopology.isFragmented);
       });
     });
   }
