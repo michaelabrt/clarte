@@ -763,7 +763,7 @@ async function main() {
     const savedCfg = await loadConfig(rootDir);
     let snapshot = null;
     if (savedCfg?.generateSnapshot !== false) {
-      snapshot = await generateSnapshot(detected, savedCfg?.snapshotPaths ?? [], graph, maxTokens, undefined, gitActivity, analysis);
+      snapshot = await generateSnapshot(detected, savedCfg?.snapshotPaths ?? [], graph, maxTokens, undefined, gitActivity);
       if (snapshot.entries.length === 0) snapshot = null;
     }
     const directives = buildDirectives(analysis, detected);
@@ -884,7 +884,7 @@ async function main() {
   let snapshot = null;
   if (answers.generateSnapshot) {
     shimmer = startShimmer("Scanning source files for code snapshot...");
-    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens, verbose ? verboseLog : (msg) => shimmer.message(msg), gitActivity, analysis);
+    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens, verbose ? verboseLog : (msg) => shimmer.message(msg), gitActivity);
     shimmer.stop();
     const count = snapshot.entries.length;
     const budgetNote = snapshot.budgetExcluded
