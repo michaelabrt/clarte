@@ -11,32 +11,7 @@ import {
   checkArchitecturalFitness,
 } from "../graph.js";
 import type { ArchitecturalLayer, ImportEdge, ImportGraph, LayerEdge } from "../types.js";
-
-function makeGraph(files: string[], edges: ImportEdge[]): ImportGraph {
-  const inDegree = new Map<string, number>();
-  const centrality = new Map<string, number>();
-  for (const f of files) {
-    inDegree.set(f, 0);
-    centrality.set(f, 1 / files.length);
-  }
-  for (const e of edges) {
-    if (!e.isExternal) {
-      inDegree.set(e.to, (inDegree.get(e.to) ?? 0) + 1);
-    }
-  }
-  return {
-    edges,
-    inDegree,
-    centrality,
-    externalImportCounts: new Map(),
-    authority: centrality,
-    hubScores: new Map(files.map((f) => [f, 1 / files.length])),
-  };
-}
-
-function edge(from: string, to: string, names: string[] = [], isTypeOnly = false, isDynamic = false): ImportEdge {
-  return { from, to, isExternal: false, specifier: `./${to}`, importedNames: names, isTypeOnly, isDynamic };
-}
+import { makeGraph, edge } from "./eval/helpers.js";
 
 function dynamicEdge(from: string, to: string, names: string[] = []): ImportEdge {
   return { from, to, isExternal: false, specifier: `./${to}`, importedNames: names, isDynamic: true };
@@ -52,6 +27,13 @@ describe("findSCCs", () => {
     const sccs = findSCCs(graph);
     expect(sccs).toHaveLength(1);
     expect(sccs[0].sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("ignores self-loops (single-node SCCs are excluded)", () => {
+    const graph = makeGraph(["a", "b"], [edge("a", "a"), edge("a", "b")]);
+    const sccs = findSCCs(graph);
+    // Self-loops produce a 1-node SCC, which findSCCs filters out (only reports size >= 2)
+    expect(sccs).toHaveLength(0);
   });
 
   it("returns empty for a chain with no cycles", () => {
@@ -711,6 +693,21 @@ describe("computeBetweenness", () => {
     // Two-node graph: neither lies on a path between other distinct nodes
     expect(scores.get("a")).toBe(0);
     expect(scores.get("b")).toBe(0);
+  });
+
+  it("ignores self-loops in betweenness computation", () => {
+    // Self-loops should not inflate betweenness scores
+    const graph = makeGraph(["a", "b", "c"], [
+      edge("a", "a"),
+      edge("a", "b"),
+      edge("b", "c"),
+    ]);
+    const scores = computeBetweenness(graph);
+    // b is the only bridge node; self-loop on a should not affect this
+    expect(scores.get("b")!).toBeGreaterThan(scores.get("a")!);
+    for (const [, score] of scores) {
+      expect(Number.isNaN(score)).toBe(false);
+    }
   });
 });
 
