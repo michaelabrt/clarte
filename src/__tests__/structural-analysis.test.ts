@@ -6,32 +6,7 @@ import {
   detectArchitecturalLayers,
 } from "../graph.js";
 import type { ArchitecturalLayer, ImportEdge, ImportGraph, LayerEdge } from "../types.js";
-
-function makeGraph(files: string[], edges: ImportEdge[]): ImportGraph {
-  const inDegree = new Map<string, number>();
-  const centrality = new Map<string, number>();
-  for (const f of files) {
-    inDegree.set(f, 0);
-    centrality.set(f, 1 / files.length);
-  }
-  for (const e of edges) {
-    if (!e.isExternal) {
-      inDegree.set(e.to, (inDegree.get(e.to) ?? 0) + 1);
-    }
-  }
-  return {
-    edges,
-    inDegree,
-    centrality,
-    externalImportCounts: new Map(),
-    authority: centrality,
-    hubScores: new Map(files.map((f) => [f, 1 / files.length])),
-  };
-}
-
-function edge(from: string, to: string, names: string[] = []): ImportEdge {
-  return { from, to, isExternal: false, specifier: `./${to}`, importedNames: names };
-}
+import { makeGraph, edge } from "./eval/helpers.js";
 
 function makeLayers(defs: Array<{ name: string; files: string[] }>): ArchitecturalLayer[] {
   return defs.map((d) => ({

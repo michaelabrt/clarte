@@ -17,6 +17,23 @@ npx clarte
 
 Under the hood, Clarté parses your imports, builds a dependency graph, runs graph algorithms on it (HITS centrality, Tarjan's SCC, community detection, change coupling) and analyzes your git history.
 
+## Quick Start
+
+Run in your project root:
+
+```bash
+npx clarte
+```
+
+Clarté will:
+
+1. **Detect** your tech stack, AI tools and project description automatically
+2. **Scan** source files for a code snapshot (types, store shapes, component props)
+3. **Generate** context files for your detected tools
+4. **Show** a summary with token estimate
+
+Zero prompts on first run. Requires Node.js 20+. Config is saved to `.clarte.json` (add it to `.gitignore`); run with `--reconfigure` to customize.
+
 ## What the output contains
 
 | Section | Example |
@@ -119,23 +136,6 @@ types -> stores -> hooks -> components -> pages
 
 </details>
 
-## Quick Start
-
-Run in your project root:
-
-```bash
-npx clarte
-```
-
-Clarté will:
-
-1. **Detect** your tech stack, AI tools and project description automatically
-2. **Scan** source files for a code snapshot (types, store shapes, component props)
-3. **Generate** context files for your detected tools
-4. **Show** a summary with token estimate
-
-Zero prompts on first run. Requires Node.js 20+. Config is saved to `.clarte.json` (add it to `.gitignore`); run with `--reconfigure` to customize.
-
 ## Benchmarks
 
 We benchmark how Clarté context affects AI agent performance. Same tasks, same model, with and without context. Statistical testing with Wilcoxon signed-rank, bootstrap CIs, Benjamini-Hochberg FDR correction and Cliff's delta effect sizes.
@@ -206,6 +206,24 @@ Clarté can generate context files for multiple tools at once.
 | Continue.dev | `.continuerules` | [continue.dev/docs](https://docs.continue.dev/customize/deep-dives/rules) |
 | Aider | `.aider.conf.yml` | [aider.chat](https://aider.chat/docs/config/aider_conf.html) |
 | Generic | `CONTEXT.md` | - |
+
+## Framework Conventions
+
+Clarté detects your framework and includes relevant conventions in the output:
+
+| Framework | What's included |
+|-----------|----------------|
+| Next.js | App Router vs Pages Router, server components, route handlers |
+| Express | Middleware chain, error handling, router organization |
+| FastAPI | Dependency injection, Pydantic models, async endpoints |
+| Django | Apps structure, models-views-templates, migrations |
+| Flask | Application factory, blueprints, extensions |
+| NestJS | Modules, controllers, providers, guards |
+| SvelteKit | Load functions, form actions, server routes |
+| Expo / React Native | Routing, native modules, platform-specific files |
+| Vue / Nuxt | Composition API, auto-imports, data fetching |
+
+Also supports: Fastify, Hono, Angular, Svelte, Prisma, Drizzle, Tailwind CSS, Electron, SQLAlchemy, Celery and more.
 
 ## How It Works
 
@@ -440,24 +458,6 @@ Projects using non-standard architectures (hexagonal, clean architecture, DDD) c
 Custom patterns are matched as regex and take priority over the built-in patterns (`types`, `stores`, `hooks`, `services`, `components`, `pages`, `utils`, `config`).
 
 Add `.clarte.json` to your `.gitignore`. It's local tool config, not project docs.
-
-## Framework Conventions
-
-Clarté detects your framework and includes relevant conventions in the output:
-
-| Framework | What's included |
-|-----------|----------------|
-| Next.js | App Router vs Pages Router, server components, route handlers |
-| Express | Middleware chain, error handling, router organization |
-| FastAPI | Dependency injection, Pydantic models, async endpoints |
-| Django | Apps structure, models-views-templates, migrations |
-| Flask | Application factory, blueprints, extensions |
-| NestJS | Modules, controllers, providers, guards |
-| SvelteKit | Load functions, form actions, server routes |
-| Expo / React Native | Routing, native modules, platform-specific files |
-| Vue / Nuxt | Composition API, auto-imports, data fetching |
-
-Also supports: Fastify, Hono, Angular, Svelte, Prisma, Drizzle, Tailwind CSS, Electron, SQLAlchemy, Celery and more.
 
 ## Monorepo Support
 

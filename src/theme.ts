@@ -6,6 +6,21 @@ export const isTTY = !!process.stdout.isTTY;
 export const noColor = !!process.env.NO_COLOR;
 
 /**
+ * Detect terminal background from the COLORFGBG env var.
+ * Format: "fg;bg" (some terminals include a middle value: "fg;extra;bg").
+ * Standard ANSI color indices 0-6 are dark, 7-15 are light.
+ * Returns null if the variable is absent or unparseable.
+ */
+export function detectTerminalBackground(): "dark" | "light" | null {
+  const raw = process.env.COLORFGBG;
+  if (!raw) return null;
+  const parts = raw.split(";");
+  const bg = parseInt(parts[parts.length - 1], 10);
+  if (Number.isNaN(bg)) return null;
+  return bg >= 7 ? "light" : "dark";
+}
+
+/**
  * Detect 24-bit true color support.
  * Checks COLORTERM env (common in modern terminals), WT_SESSION
  * (Windows Terminal), known TERM_PROGRAM values, and falls back

@@ -66,6 +66,32 @@ export function buildGraphFromFixture(
 }
 
 /**
+ * Build a minimal ImportGraph with uniform centrality (no HITS).
+ * Suitable for unit-testing graph algorithms in isolation.
+ */
+export function makeGraph(files: string[], edges: ImportEdge[]): ImportGraph {
+  const inDegree = new Map<string, number>();
+  const centrality = new Map<string, number>();
+  for (const f of files) {
+    inDegree.set(f, 0);
+    centrality.set(f, 1 / files.length);
+  }
+  for (const e of edges) {
+    if (!e.isExternal) {
+      inDegree.set(e.to, (inDegree.get(e.to) ?? 0) + 1);
+    }
+  }
+  return {
+    edges,
+    inDegree,
+    centrality,
+    externalImportCounts: new Map(),
+    authority: centrality,
+    hubScores: new Map(files.map((f) => [f, 1 / files.length])),
+  };
+}
+
+/**
  * Assert that all expected items appear in the actual array (order-independent).
  * Useful for cycle detection where we care about membership, not ordering.
  */

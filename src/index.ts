@@ -1,6 +1,6 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
-import { theme as t, initTheme, patchPicocolors, unpatchPicocolors, resetTerminalColors } from "./theme.js";
+import { theme as t, initTheme, patchPicocolors, unpatchPicocolors, resetTerminalColors, detectTerminalBackground } from "./theme.js";
 import { fileExists, writeFileSafe } from "./utils.js";
 import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "./detect.js";
 import { runPrompts } from "./prompts.js";
@@ -312,8 +312,11 @@ async function main() {
       const earlyConfig = await loadConfig(rootDir);
       if (earlyConfig?.colorScheme) {
         colorScheme = earlyConfig.colorScheme;
+      } else {
+        // Detect terminal background from COLORFGBG before defaulting to dark
+        const detected = detectTerminalBackground();
+        if (detected) colorScheme = detected;
       }
-      // No saved config and no env var: default to dark
     }
     initTheme(colorScheme);
     patchPicocolors();
@@ -760,7 +763,7 @@ async function main() {
     const savedCfg = await loadConfig(rootDir);
     let snapshot = null;
     if (savedCfg?.generateSnapshot !== false) {
-      snapshot = await generateSnapshot(detected, savedCfg?.snapshotPaths ?? [], graph, maxTokens);
+      snapshot = await generateSnapshot(detected, savedCfg?.snapshotPaths ?? [], graph, maxTokens, undefined, gitActivity, analysis);
       if (snapshot.entries.length === 0) snapshot = null;
     }
     const directives = buildDirectives(analysis, detected);
@@ -881,7 +884,7 @@ async function main() {
   let snapshot = null;
   if (answers.generateSnapshot) {
     shimmer = startShimmer("Scanning source files for code snapshot...");
-    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens, verbose ? verboseLog : (msg) => shimmer.message(msg), gitActivity);
+    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens, verbose ? verboseLog : (msg) => shimmer.message(msg), gitActivity, analysis);
     shimmer.stop();
     const count = snapshot.entries.length;
     const budgetNote = snapshot.budgetExcluded

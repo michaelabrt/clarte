@@ -110,6 +110,13 @@ describe("cache I/O", () => {
     await saveCache(tmpDir, data);
     expect(await loadCache(tmpDir)).toBeNull();
   });
+
+  it("returns null for corrupted JSON", async () => {
+    const cacheDir = path.join(tmpDir, ".clarte");
+    await fs.mkdir(cacheDir, { recursive: true });
+    await fs.writeFile(path.join(cacheDir, "cache.json"), "{broken json!!!");
+    expect(await loadCache(tmpDir)).toBeNull();
+  });
 });
 
 describe("buildGraphWithCache", () => {
@@ -302,6 +309,13 @@ describe("analysis cache I/O", () => {
       graphTopology: { componentCount: 1, componentSizes: [1], approximateDiameter: 0, reachability: 1, isFragmented: false },
     };
     await saveAnalysisCache(tmpDir, data);
+    expect(await loadAnalysisCache(tmpDir)).toBeNull();
+  });
+
+  it("returns null for corrupted JSON", async () => {
+    const cacheDir = path.join(tmpDir, ".clarte");
+    await fs.mkdir(cacheDir, { recursive: true });
+    await fs.writeFile(path.join(cacheDir, "analysis-cache.json"), "not valid json{{{");
     expect(await loadAnalysisCache(tmpDir)).toBeNull();
   });
 });

@@ -86,7 +86,7 @@ function mockDetectedContext(fixture: EvalFixture): DetectedContext {
   const isPython = fixture.name.includes("python");
   return {
     rootDir: `/mock/${fixture.name}`,
-    language: isPython ? "Python" : "TypeScript",
+    language: isPython ? "python" : "typescript",
     hasTypeScript: !isPython,
     packageManager: isPython ? "pip" : "npm",
     linter: isPython ? "ruff" : "eslint",
@@ -207,9 +207,9 @@ export async function captureMetrics(
     communityCount: ctx.communities.length,
     deadFiles: ctx.deadFiles ?? [],
     tightCouplings: (ctx.tightCouplings ?? []).map((tc) => ({
-      fileA: tc.fileA,
-      fileB: tc.fileB,
-      importedNames: tc.importedNames.length,
+      fileA: tc.from,
+      fileB: tc.to,
+      importedNames: tc.importedNames,
     })),
     directiveCount,
   };

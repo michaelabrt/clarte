@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 // Cache original env values
 const origNoColor = process.env.NO_COLOR;
 const origColorTerm = process.env.COLORTERM;
+const origColorFGBG = process.env.COLORFGBG;
 
 function cleanEnv() {
   delete process.env.NO_COLOR;
@@ -19,6 +20,8 @@ describe("theme", () => {
     else delete process.env.NO_COLOR;
     if (origColorTerm !== undefined) process.env.COLORTERM = origColorTerm;
     else delete process.env.COLORTERM;
+    if (origColorFGBG !== undefined) process.env.COLORFGBG = origColorFGBG;
+    else delete process.env.COLORFGBG;
   });
 
   describe("noColor mode", () => {
@@ -145,6 +148,38 @@ describe("theme", () => {
     it("does not throw", async () => {
       const { resetTerminalColors } = await import("../theme.js");
       expect(() => resetTerminalColors()).not.toThrow();
+    });
+  });
+
+  describe("detectTerminalBackground", () => {
+    it("returns null when COLORFGBG is not set", async () => {
+      delete process.env.COLORFGBG;
+      const { detectTerminalBackground } = await import("../theme.js");
+      expect(detectTerminalBackground()).toBeNull();
+    });
+
+    it("returns 'light' for bg index >= 7", async () => {
+      process.env.COLORFGBG = "0;15";
+      const { detectTerminalBackground } = await import("../theme.js");
+      expect(detectTerminalBackground()).toBe("light");
+    });
+
+    it("returns 'dark' for bg index < 7", async () => {
+      process.env.COLORFGBG = "15;0";
+      const { detectTerminalBackground } = await import("../theme.js");
+      expect(detectTerminalBackground()).toBe("dark");
+    });
+
+    it("handles 3-part format (fg;extra;bg)", async () => {
+      process.env.COLORFGBG = "15;0;8";
+      const { detectTerminalBackground } = await import("../theme.js");
+      expect(detectTerminalBackground()).toBe("light");
+    });
+
+    it("returns null for non-numeric values", async () => {
+      process.env.COLORFGBG = "invalid";
+      const { detectTerminalBackground } = await import("../theme.js");
+      expect(detectTerminalBackground()).toBeNull();
     });
   });
 
