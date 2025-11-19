@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildMainContext, buildSections, applyBudget } from "../templates/main-context.js";
-import type { ContextAnalysis, ContextSection, DetectedContext, UserAnswers } from "../types.js";
+import { buildMainContext, buildSections, applyBudget, applyCharBudget, DEFAULT_MAX_CHARS } from "../templates/main-context.js";
+import { trimSnapshotToChars, renderSnapshot } from "../snapshot.js";
+import type { CodeSnapshot, ContextAnalysis, ContextSection, DetectedContext, SnapshotEntry, UserAnswers } from "../types.js";
 
 function mockCtx(overrides?: Partial<DetectedContext>): DetectedContext {
   return {
@@ -252,5 +253,175 @@ describe("buildMainContext with budget", () => {
     // With a 500-token budget, some sections must be omitted
     expect(result).toContain("<!-- Sections omitted");
     expect(result).toMatch(/Sections omitted to fit token budget:/);
+  });
+});
+
+// ── Character budget tests ─────────────────────────────────────────────────
+
+function makeSection(id: string, priority: number, chars: number): ContextSection {
+  const header = `## ${id}\n\n`;
+  const body = "x".repeat(Math.max(0, chars - header.length));
+  return { id, priority, content: header + body, tokens: Math.ceil(chars / 4) };
+}
+
+function makeSnapshotEntries(count: number): SnapshotEntry[] {
+  const entries: SnapshotEntry[] = [];
+  for (let i = 0; i < count; i++) {
+    entries.push({
+      file: `src/file${i}.ts`,
+      category: i < count / 2 ? "type" : "function",
+      signature: `export ${i < count / 2 ? "interface" : "function"} Item${i} { field${i}: string; anotherField${i}: number; }`,
+      importedByCount: count - i,
+    });
+  }
+  return entries;
+}
+
+describe("applyCharBudget", () => {
+  const comment = "\n<!-- clarte: generated test -->\n";
+
+  it("includes all sections when under budget", () => {
+    const sections = [
+      makeSection("header", 0, 100),
+      makeSection("tech-stack", 1, 200),
+      makeSection("snapshot", 6, 300),
+    ];
+
+    const { included, dropped } = applyCharBudget(sections, 10000, comment);
+    expect(included).toHaveLength(3);
+    expect(dropped).toHaveLength(0);
+  });
+
+  it("drops lowest-priority sections (highest number) first", () => {
+    const sections = [
+      makeSection("header", 0, 100),
+      makeSection("tech-stack", 1, 200),
+      makeSection("snapshot", 6, 300),
+      makeSection("tight-coupling", 10, 300),
+    ];
+
+    // Budget tight enough to require dropping the P10 section
+    const total = sections.reduce((s, sec) => s + sec.content.length, 0);
+    const { included, dropped } = applyCharBudget(sections, total - 100, comment);
+    expect(dropped).toContain("tight-coupling");
+    expect(included.map((s) => s.id)).not.toContain("tight-coupling");
+  });
+
+  it("never drops P0-P2 sections", () => {
+    const sections = [
+      makeSection("header", 0, 5000),
+      makeSection("guidelines", 2, 5000),
+      makeSection("snapshot", 6, 100),
+    ];
+
+    const { included, dropped } = applyCharBudget(sections, 1000, comment);
+    expect(included.find((s) => s.id === "header")).toBeDefined();
+    expect(included.find((s) => s.id === "guidelines")).toBeDefined();
+    expect(dropped).toContain("snapshot");
+  });
+
+  it("preserves original section order", () => {
+    const sections = [
+      makeSection("header", 0, 100),
+      makeSection("snapshot", 6, 200),
+      makeSection("tech-stack", 1, 100),
+    ];
+
+    const { included } = applyCharBudget(sections, 10000, comment);
+    expect(included.map((s) => s.id)).toEqual(["header", "snapshot", "tech-stack"]);
+  });
+});
+
+describe("trimSnapshotToChars", () => {
+  it("returns full markdown when under budget", () => {
+    const entries = makeSnapshotEntries(5);
+    const fullMarkdown = renderSnapshot(entries, "typescript");
+    const snapshot: CodeSnapshot = { entries, markdown: fullMarkdown };
+
+    const { markdown, trimmedCount } = trimSnapshotToChars(snapshot, 100000);
+    expect(trimmedCount).toBe(0);
+    expect(markdown).toBe(fullMarkdown);
+  });
+
+  it("trims entries to fit within character budget", () => {
+    const entries = makeSnapshotEntries(20);
+    const fullMarkdown = renderSnapshot(entries, "typescript");
+    const snapshot: CodeSnapshot = { entries, markdown: fullMarkdown };
+
+    const targetChars = Math.floor(fullMarkdown.length / 2);
+    const { markdown, trimmedCount } = trimSnapshotToChars(snapshot, targetChars);
+
+    expect(markdown.length).toBeLessThanOrEqual(targetChars);
+    expect(trimmedCount).toBeGreaterThan(0);
+    expect(trimmedCount).toBeLessThan(entries.length);
+  });
+
+  it("preserves highest-value entries (from the front)", () => {
+    const entries = makeSnapshotEntries(10);
+    const fullMarkdown = renderSnapshot(entries, "typescript");
+    const snapshot: CodeSnapshot = { entries, markdown: fullMarkdown };
+
+    const targetChars = Math.floor(fullMarkdown.length / 3);
+    const { markdown } = trimSnapshotToChars(snapshot, targetChars);
+
+    // First entry should be present
+    expect(markdown).toContain("Item0");
+  });
+
+  it("always keeps at least 1 entry", () => {
+    const entries = makeSnapshotEntries(5);
+    const snapshot: CodeSnapshot = {
+      entries,
+      markdown: renderSnapshot(entries, "typescript"),
+    };
+
+    const { markdown, trimmedCount } = trimSnapshotToChars(snapshot, 10);
+    expect(trimmedCount).toBe(4);
+    expect(markdown.length).toBeGreaterThan(0);
+  });
+});
+
+describe("buildMainContext character budget integration", () => {
+  it("maxChars=0 disables character budget", async () => {
+    const result = await buildMainContext(
+      mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, 0,
+    );
+    expect(result.length).toBeGreaterThan(0);
+    // Should contain all sections with no char trimming
+    expect(result).toContain("## Tech Stack");
+    expect(result).toContain("## Dead Files");
+  });
+
+  it("tight maxChars drops P3+ sections but keeps P0-P2", async () => {
+    // With analysis and --full (budget=0), all sections are included
+    const fullResult = await buildMainContext(
+      mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, 0,
+    );
+    // Now apply a tight char budget that's smaller than the full output
+    // but still larger than P0-P2 mandatory sections
+    const tightBudget = 2000;
+    const result = await buildMainContext(
+      mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, tightBudget,
+    );
+    // Should be shorter than unrestricted full output
+    expect(result.length).toBeLessThan(fullResult.length);
+    // Should still contain mandatory sections
+    expect(result).toContain("## Tech Stack");
+    // P3+ sections should be dropped
+    expect(result).not.toContain("## Dead Files");
+  });
+
+  it("reservedChars reduces the effective character budget", async () => {
+    const maxChars = 5000;
+    const reservedChars = 500;
+
+    const withoutReserved = await buildMainContext(
+      mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, maxChars, 0,
+    );
+    const withReserved = await buildMainContext(
+      mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, maxChars, reservedChars,
+    );
+    // With reserved chars, the output should be equal or shorter
+    expect(withReserved.length).toBeLessThanOrEqual(withoutReserved.length);
   });
 });
