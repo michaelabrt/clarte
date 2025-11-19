@@ -111,6 +111,28 @@
       "importedNames": 3
     }
   ],
+  "betweennessTopFiles": [
+    {
+      "file": "packages/api/src/handler.ts",
+      "score": 1
+    },
+    {
+      "file": "packages/api/src/middleware.ts",
+      "score": 0.2
+    },
+    {
+      "file": "packages/api/src/router.ts",
+      "score": 0
+    },
+    {
+      "file": "packages/core/src/utils.ts",
+      "score": 0.6
+    },
+    {
+      "file": "packages/web/src/store.ts",
+      "score": 0.6
+    }
+  ],
   "graphTopology": {
     "componentCount": 1,
     "componentSizes": [

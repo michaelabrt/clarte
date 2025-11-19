@@ -25,6 +25,7 @@ import {
   findChokepoints,
   findTightCouplings,
   computeGraphTopology,
+  computeBetweenness,
 } from "../../graph.js";
 import type { ImportGraph } from "../../types.js";
 
@@ -49,6 +50,7 @@ interface GoldenAnalysis {
   layerConsistency: { consistency: number; violationCount: number } | null;
   chokepoints: Array<{ file: string; separates: number }>;
   tightCouplings: Array<{ from: string; to: string; importedNames: number }>;
+  betweennessTopFiles: Array<{ file: string; score: number }>;
   graphTopology: {
     componentCount: number;
     componentSizes: number[];
@@ -81,6 +83,7 @@ async function analyzeFixture(
       : null;
   const chokepoints = findChokepoints(graph);
   const tightCouplings = findTightCouplings(graph, 2, 20);
+  const betweenness = computeBetweenness(graph, graph.inDegree.size);
   const topology = computeGraphTopology(graph);
 
   // Normalize for stable JSON output: sort arrays by primary key
@@ -126,6 +129,11 @@ async function analyzeFixture(
     tightCouplings: tightCouplings
       .map((t) => ({ from: t.from, to: t.to, importedNames: t.importedNames }))
       .sort((a, b) => `${a.from}>${a.to}`.localeCompare(`${b.from}>${b.to}`)),
+    betweennessTopFiles: [...betweenness.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([file, score]) => ({ file, score: round(score) }))
+      .sort((a, b) => a.file.localeCompare(b.file)),
     graphTopology: {
       componentCount: topology.componentCount,
       componentSizes: topology.componentSizes,
@@ -212,6 +220,27 @@ const fixtures: FixtureDef[] = [
       expect(a.tightCouplings.length).toBeGreaterThan(0);
     },
   },
+  {
+    name: "ts-bottleneck",
+    language: "typescript",
+    sanity: (a) => {
+      // 9 files: features/a, features/b, features/c, features/d,
+      //          core/router, core/handler, lib/utils, lib/db, lib/cache
+      expect(a.fileCount).toBe(9);
+      expect(a.edgeCount).toBeGreaterThanOrEqual(9);
+      // router.ts should have high betweenness (4 features funnel through it)
+      const router = a.betweennessTopFiles.find((f) => f.file.includes("router"));
+      expect(router, "router.ts should be in top 5 betweenness").toBeDefined();
+      expect(router!.score).toBeGreaterThan(0.3);
+      // Pure sinks (db.ts, cache.ts) should have zero betweenness
+      const db = a.betweennessTopFiles.find((f) => f.file.includes("db"));
+      const cache = a.betweennessTopFiles.find((f) => f.file.includes("cache"));
+      // Sinks may not be in top 5 (since scores are sorted desc), check via full data
+      // if they appear, their score must be 0
+      if (db) expect(db.score).toBe(0);
+      if (cache) expect(cache.score).toBe(0);
+    },
+  },
 ];
 
 // ── Tests ─────────────────────────────────────────────────────────────
@@ -261,6 +290,7 @@ describe("golden-file analysis", () => {
         expect(analysis.layerConsistency).toEqual(golden.layerConsistency);
         expect(analysis.chokepoints).toEqual(golden.chokepoints);
         expect(analysis.tightCouplings).toEqual(golden.tightCouplings);
+        expect(analysis.betweennessTopFiles).toEqual(golden.betweennessTopFiles);
         // approximateDiameter is sampled BFS, so allow ±1 tolerance
         expect(analysis.graphTopology.componentCount).toBe(golden.graphTopology.componentCount);
         expect(analysis.graphTopology.componentSizes).toEqual(golden.graphTopology.componentSizes);

@@ -127,6 +127,28 @@
       "importedNames": 2
     }
   ],
+  "betweennessTopFiles": [
+    {
+      "file": "app/routes/products.py",
+      "score": 0.8
+    },
+    {
+      "file": "app/routes/users.py",
+      "score": 0.4
+    },
+    {
+      "file": "app/services/auth.py",
+      "score": 1
+    },
+    {
+      "file": "app/services/product_service.py",
+      "score": 0.8
+    },
+    {
+      "file": "app/services/user_service.py",
+      "score": 0.2
+    }
+  ],
   "graphTopology": {
     "componentCount": 1,
     "componentSizes": [

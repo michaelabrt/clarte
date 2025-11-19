@@ -149,6 +149,28 @@
       "importedNames": 2
     }
   ],
+  "betweennessTopFiles": [
+    {
+      "file": "controllers/product-controller.ts",
+      "score": 0.5217
+    },
+    {
+      "file": "controllers/user-controller.ts",
+      "score": 0.7826
+    },
+    {
+      "file": "services/product-service.ts",
+      "score": 0.4783
+    },
+    {
+      "file": "services/user-service.ts",
+      "score": 1
+    },
+    {
+      "file": "utils/format.ts",
+      "score": 0.1739
+    }
+  ],
   "graphTopology": {
     "componentCount": 1,
     "componentSizes": [

@@ -9,6 +9,7 @@ import {
   parseRustImports,
   parseJavaImports,
   computeHITS,
+  computeBetweenness,
   detectBarrelFiles,
   buildImportGraph,
 } from "./graph.js";
@@ -500,6 +501,8 @@ function rebuildGraph(
     barrelFiles,
   );
 
+  const betweennessScores = computeBetweenness({ edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles });
+
   return {
     edges,
     inDegree,
@@ -508,6 +511,7 @@ function rebuildGraph(
     authority,
     hubScores,
     barrelFiles,
+    betweennessScores,
   };
 }
 
