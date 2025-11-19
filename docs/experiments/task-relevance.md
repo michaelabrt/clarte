@@ -1,7 +1,8 @@
 # R.3 Information Bottleneck (Task-Aware Budget Weighting) Experiment
 
-**Branch**: `experimental/ongoing/context-selection-research`
-**Status**: GO
+**Branch**: `experimental/go/release-1.1.0` (deleted)
+**Status**: NO GO (passed E.2 isolated eval with +6%, failed E.3 combo benchmark)
+**Date**: 2026-02-21
 
 ## Theory
 
@@ -135,9 +136,18 @@ No category regressed. Code-generation improved (+1). The type-understanding fai
 - `tr-sc-2` (listing graph.ts exports from the snapshot) fails consistently in both conditions. The stigmergic snapshot only shows compressed one-line signatures for functions, so the LLM can't enumerate individual export names. This is a task design issue, not an R.3 issue.
 - `tr-gen-1` and `tr-gen-3` fail intermittently because the LLM uses wrong field names on `GitAnalysis` and `ImportGraph`. Again, both conditions fail equally; this is about the snapshot format, not R.3.
 
+## E.3 Combo Benchmark (NO GO)
+
+R.3 passed E.2 in isolation with a +6% mean delta. However, when combined with R.2 (typification) and R.4 (stigmergic) in the E.3 combinatorial benchmark (N=2 smoke test, temp=0.3, 30 tasks, all 8 feature combinations), the combined release showed a slightly negative delta vs baseline. No individual combination or the full triple produced a statistically significant improvement.
+
+**Key lesson**: R.3's +6% isolated gain at temp=0 did not survive the combo benchmark at temp=0.3 with real variance. The conservative multiplier range (0.9x-1.2x) may be too narrow to produce measurable signal, or the signal may be masked by interaction effects with R.2/R.4.
+
+The task-relevance code remains on the deleted branch for reference.
+
 ## Possible future directions
 
-- Combine with R.1 surprise scores when R.1 is revisited: `tokens(file) = surprise(file) * relevance(file) * base_importance(file)`
+- Revisit with wider multiplier range or different propagation strategy
+- Combine with R.1 surprise scores: `tokens(file) = surprise(file) * relevance(file) * base_importance(file)`
 - Adaptive hot zone sizing based on git activity distribution (e.g., Pareto detection)
 - Temporal decay: weight more recent commits exponentially higher than older ones (currently uses raw counts)
 - Per-community task relevance: if the hot zone is concentrated in one community, boost that community's internal files more aggressively
