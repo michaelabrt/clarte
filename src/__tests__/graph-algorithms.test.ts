@@ -731,6 +731,73 @@ describe("computeBetweenness", () => {
       expect(Number.isNaN(score)).toBe(false);
     }
   });
+
+  // ── Reference correctness: hand-computed exact values (k = n) ────
+
+  it("5-node directed chain: exact betweenness scores", () => {
+    // a -> b -> c -> d -> e
+    // Raw betweenness (counting shortest paths through each node):
+    //   Source a: b on 3 paths (a->c, a->d, a->e); c on 2 (a->d, a->e); d on 1 (a->e)
+    //   Source b: c on 2 (b->d, b->e); d on 1 (b->e)
+    //   Source c: d on 1 (c->e)
+    // Raw: a=0, b=3, c=4, d=3, e=0. Normalized (max=4): a=0, b=0.75, c=1.0, d=0.75, e=0
+    const graph = makeGraph(["a", "b", "c", "d", "e"], [
+      edge("a", "b"),
+      edge("b", "c"),
+      edge("c", "d"),
+      edge("d", "e"),
+    ]);
+
+    const scores = computeBetweenness(graph, 5); // k = n for exhaustive
+
+    expect(scores.get("a")).toBe(0);
+    expect(scores.get("b")).toBeCloseTo(0.75, 10);
+    expect(scores.get("c")).toBeCloseTo(1.0, 10);
+    expect(scores.get("d")).toBeCloseTo(0.75, 10);
+    expect(scores.get("e")).toBe(0);
+  });
+
+  it("diamond DAG (single bridge): exact betweenness scores", () => {
+    // a -> m, b -> m, m -> x, m -> y
+    // m is on all 4 paths (a->x, a->y, b->x, b->y). No other node is on any path.
+    // Raw: a=0, b=0, m=4, x=0, y=0. Normalized: m=1.0, all others=0
+    const graph = makeGraph(["a", "b", "m", "x", "y"], [
+      edge("a", "m"),
+      edge("b", "m"),
+      edge("m", "x"),
+      edge("m", "y"),
+    ]);
+
+    const scores = computeBetweenness(graph, 5);
+
+    expect(scores.get("m")).toBeCloseTo(1.0, 10);
+    expect(scores.get("a")).toBe(0);
+    expect(scores.get("b")).toBe(0);
+    expect(scores.get("x")).toBe(0);
+    expect(scores.get("y")).toBe(0);
+  });
+
+  it("parallel bridges (path splitting): exact betweenness scores", () => {
+    // a -> p -> x, a -> q -> x
+    // BFS from a: sigma(x) = 2 (two shortest paths through p and q).
+    // Back-prop: delta(p) = sigma(p)/sigma(x) * (1 + delta(x)) = 1/2 * 1 = 0.5
+    //            delta(q) = sigma(q)/sigma(x) * (1 + delta(x)) = 1/2 * 1 = 0.5
+    // No other source produces paths through p or q.
+    // Raw: a=0, p=0.5, q=0.5, x=0. Normalized (max=0.5): p=1.0, q=1.0
+    const graph = makeGraph(["a", "p", "q", "x"], [
+      edge("a", "p"),
+      edge("a", "q"),
+      edge("p", "x"),
+      edge("q", "x"),
+    ]);
+
+    const scores = computeBetweenness(graph, 4);
+
+    expect(scores.get("p")).toBeCloseTo(1.0, 10);
+    expect(scores.get("q")).toBeCloseTo(1.0, 10);
+    expect(scores.get("a")).toBe(0);
+    expect(scores.get("x")).toBe(0);
+  });
 });
 
 // ── §3.11 Architectural Fitness Functions ────────────────────────────

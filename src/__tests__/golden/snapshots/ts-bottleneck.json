@@ -1,0 +1,161 @@
+{
+  "fileCount": 9,
+  "edgeCount": 9,
+  "hubFiles": [
+    {
+      "path": "src/core/handler.ts",
+      "authority": 0.007
+    },
+    {
+      "path": "src/core/router.ts",
+      "authority": 1
+    },
+    {
+      "path": "src/features/a.ts",
+      "authority": 0
+    },
+    {
+      "path": "src/features/b.ts",
+      "authority": 0
+    },
+    {
+      "path": "src/features/c.ts",
+      "authority": 0
+    },
+    {
+      "path": "src/features/d.ts",
+      "authority": 0
+    },
+    {
+      "path": "src/lib/cache.ts",
+      "authority": 0.0402
+    },
+    {
+      "path": "src/lib/db.ts",
+      "authority": 0.0673
+    },
+    {
+      "path": "src/lib/utils.ts",
+      "authority": 0.1707
+    }
+  ],
+  "circularDeps": [],
+  "layers": [
+    {
+      "name": "utils",
+      "files": [
+        "src/lib/cache.ts",
+        "src/lib/db.ts",
+        "src/lib/utils.ts"
+      ],
+      "dependsOn": []
+    }
+  ],
+  "layerEdges": [],
+  "instabilities": [],
+  "communityCount": 2,
+  "communityFiles": [
+    [
+      "src/core/handler.ts",
+      "src/lib/cache.ts",
+      "src/lib/db.ts",
+      "src/lib/utils.ts"
+    ],
+    [
+      "src/core/router.ts",
+      "src/features/a.ts",
+      "src/features/b.ts",
+      "src/features/c.ts",
+      "src/features/d.ts"
+    ]
+  ],
+  "deadFiles": [
+    "src/features/a.ts",
+    "src/features/b.ts",
+    "src/features/c.ts",
+    "src/features/d.ts"
+  ],
+  "crossCuttingFiles": [],
+  "layerConsistency": {
+    "consistency": 1,
+    "violationCount": 0
+  },
+  "chokepoints": [
+    {
+      "file": "src/core/handler.ts",
+      "separates": 2
+    },
+    {
+      "file": "src/core/router.ts",
+      "separates": 4
+    }
+  ],
+  "tightCouplings": [
+    {
+      "from": "src/core/handler.ts",
+      "to": "src/lib/cache.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "src/core/handler.ts",
+      "to": "src/lib/db.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "src/features/a.ts",
+      "to": "src/core/router.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "src/features/b.ts",
+      "to": "src/core/router.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "src/features/c.ts",
+      "to": "src/core/router.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "src/features/d.ts",
+      "to": "src/core/router.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "src/lib/utils.ts",
+      "to": "src/lib/db.ts",
+      "importedNames": 2
+    }
+  ],
+  "betweennessTopFiles": [
+    {
+      "file": "src/core/handler.ts",
+      "score": 0.8182
+    },
+    {
+      "file": "src/core/router.ts",
+      "score": 1
+    },
+    {
+      "file": "src/features/a.ts",
+      "score": 0
+    },
+    {
+      "file": "src/features/b.ts",
+      "score": 0
+    },
+    {
+      "file": "src/lib/utils.ts",
+      "score": 0.0909
+    }
+  ],
+  "graphTopology": {
+    "componentCount": 1,
+    "componentSizes": [
+      9
+    ],
+    "approximateDiameter": 3,
+    "reachability": 1,
+    "isFragmented": false
+  }
+}
