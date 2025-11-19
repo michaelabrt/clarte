@@ -1,10 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeAll } from "vitest";
 import {
   parseJsImports,
   parsePythonImports,
   parseGoImports,
   parseRustImports,
 } from "../graph.js";
+import { initTreeSitter } from "../ast-parse.js";
+
+beforeAll(async () => {
+  await initTreeSitter();
+});
 
 describe("parseJsImports", () => {
   it("parses named imports", () => {
@@ -49,7 +54,7 @@ describe("parseJsImports", () => {
   it("parses side-effect imports", () => {
     const result = parseJsImports(`import './polyfills'`);
     expect(result).toEqual([
-      { specifier: "./polyfills", importedNames: [] },
+      { specifier: "./polyfills", importedNames: [], isTypeOnly: false },
     ]);
   });
 

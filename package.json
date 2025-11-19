@@ -50,11 +50,14 @@
   ],
   "dependencies": {
     "@clack/prompts": "^1.0.1",
+    "@vscode/tree-sitter-wasm": "^0.3.0",
     "picocolors": "^1.1.1",
     "smol-toml": "^1.6.0",
-    "tinyglobby": "^0.2.12"
+    "tinyglobby": "^0.2.12",
+    "web-tree-sitter": "^0.26.5"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@commitlint/cli": "^19.0.0",
     "@commitlint/config-conventional": "^19.0.0",
     "@semantic-release/changelog": "^6.0.0",
