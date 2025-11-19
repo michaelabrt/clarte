@@ -1341,7 +1341,7 @@ function inferLanguageFromPath(filePath: string): Language {
   return "other";
 }
 
-function renderSnapshot(entries: SnapshotEntry[], language: Language = "typescript"): string {
+export function renderSnapshot(entries: SnapshotEntry[], language: Language = "typescript"): string {
   if (entries.length === 0) return "";
 
   const lang = LANG_FENCE_MAP[language] ?? "ts";
@@ -1421,6 +1421,41 @@ function renderMultiLangSnapshot(entries: SnapshotEntry[], primaryLang: Language
   }
 
   return parts.join("\n\n");
+}
+
+/**
+ * Re-render a snapshot with fewer entries to fit within a character budget.
+ * Entries are already sorted by value (submodular greedy selection), so
+ * trimming from the end removes the least valuable entries first.
+ *
+ * Returns the trimmed markdown and the number of entries removed.
+ */
+export function trimSnapshotToChars(
+  snapshot: CodeSnapshot,
+  maxChars: number,
+  language: Language = "typescript",
+): { markdown: string; trimmedCount: number } {
+  const entries = snapshot.entries;
+  if (entries.length === 0) return { markdown: "", trimmedCount: 0 };
+
+  // Binary search: find the largest subset of entries (from the front)
+  // whose rendered markdown fits within maxChars
+  let lo = 0;
+  let hi = entries.length;
+
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    const rendered = renderSnapshot(entries.slice(0, mid), language);
+    if (rendered.length <= maxChars) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  const kept = Math.max(1, lo); // Always keep at least 1 entry
+  const markdown = renderSnapshot(entries.slice(0, kept), language);
+  return { markdown, trimmedCount: entries.length - kept };
 }
 
 /**

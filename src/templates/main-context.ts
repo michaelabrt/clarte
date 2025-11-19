@@ -12,6 +12,9 @@ import { findFeedbackEdges } from "../graph.js";
 /** Default token budget for context files. */
 export const DEFAULT_BUDGET = 5000;
 
+/** Default character budget for context files (Claude Code warns above 40k). */
+export const DEFAULT_MAX_CHARS = 39_500;
+
 export interface SectionFilterOptions {
   /** Promote these section IDs to priority 0 (always included). */
   include?: Set<string>;
@@ -49,6 +52,12 @@ function applyFilters(
  * When budget > 0, sections are prioritized and trimmed to fit within the token budget.
  * Defaults to DEFAULT_BUDGET (5000 tokens) when budget is not specified.
  * Pass budget=0 (--full) to disable budgeting and include all sections.
+ *
+ * maxChars enforces a character ceiling (default: 39,500). Two-level strategy:
+ *   1. Shrink the Code Snapshot section (trim lowest-value entries)
+ *   2. Drop lowest-priority sections (P3+)
+ * Pass maxChars=0 to disable character budgeting.
+ * reservedChars accounts for user sections that will be merged after generation.
  */
 export async function buildMainContext(
   ctx: DetectedContext,
@@ -57,9 +66,12 @@ export async function buildMainContext(
   analysis?: ContextAnalysis,
   budget?: number,
   options?: SectionFilterOptions,
+  maxChars?: number,
+  reservedChars: number = 0,
 ): Promise<string> {
   const allSections = await buildSections(ctx, answers, snapshot, analysis);
   const effectiveBudget = budget ?? DEFAULT_BUDGET;
+  const effectiveMaxChars = maxChars ?? DEFAULT_MAX_CHARS;
 
   const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const generatedComment = `\n<!-- clarte: generated ${timestamp}. Run npx clarte to regenerate. -->\n`;
@@ -67,7 +79,14 @@ export async function buildMainContext(
   if (effectiveBudget <= 0) {
     // --full mode: include all sections, still apply filters
     const filtered = applyFilters(allSections, options);
-    return filtered.map((s) => s.content).join("\n\n").trimEnd() + "\n" + generatedComment;
+    let result = filtered.map((s) => s.content).join("\n\n").trimEnd() + "\n" + generatedComment;
+
+    // Apply character budget even in --full mode
+    if (effectiveMaxChars > 0) {
+      result = enforceCharBudget(filtered, result, effectiveMaxChars, reservedChars, generatedComment);
+    }
+
+    return result;
   }
 
   const filtered = applyFilters(allSections, options);
@@ -82,6 +101,11 @@ export async function buildMainContext(
   }
 
   result += generatedComment;
+
+  // Apply character budget after token budget
+  if (effectiveMaxChars > 0) {
+    result = enforceCharBudget(included, result, effectiveMaxChars, reservedChars, generatedComment);
+  }
 
   return result;
 }
@@ -622,6 +646,167 @@ export function applyBudget(
   }
 
   return { included, omitted, overflowWarning };
+}
+
+/**
+ * Enforce a character budget on the fully-assembled output.
+ * Two-level strategy:
+ *   1. Shrink the Code Snapshot (trim lowest-value entries via binary search)
+ *   2. Drop lowest-priority sections (P3+), highest priority number first
+ *
+ * Returns the (possibly trimmed) result string.
+ */
+function enforceCharBudget(
+  sections: ContextSection[],
+  result: string,
+  maxChars: number,
+  reservedChars: number,
+  generatedComment: string,
+): string {
+  const available = maxChars - reservedChars;
+  if (result.length <= available) return result;
+
+  // Level 1: Try shrinking the code-snapshot section
+  const snapSection = sections.find((s) => s.id === "code-snapshot");
+  if (snapSection) {
+    const overshoot = result.length - available;
+    const targetSnapChars = Math.max(0, snapSection.content.length - overshoot);
+
+    // Parse snapshot entries from the section content
+    // The section wraps the markdown between CODE SNAPSHOT markers
+    const snapshotStart = "<!-- CODE SNAPSHOT (auto-generated, update when types/stores/services change) -->";
+    const snapshotEnd = "<!-- /CODE SNAPSHOT -->";
+    const startIdx = snapSection.content.indexOf(snapshotStart);
+    const endIdx = snapSection.content.indexOf(snapshotEnd);
+
+    if (startIdx >= 0 && endIdx >= 0) {
+      const prefix = snapSection.content.slice(0, startIdx + snapshotStart.length + 1);
+      const suffix = "\n" + snapSection.content.slice(endIdx);
+      const wrapperChars = prefix.length + suffix.length;
+      const targetMarkdownChars = Math.max(100, targetSnapChars - wrapperChars);
+
+      // We need access to the snapshot entries. Re-import is not possible here,
+      // so we use a simpler approach: progressively remove lines from the end
+      // of the markdown block until it fits.
+      const snapshotMarkdown = snapSection.content.slice(startIdx + snapshotStart.length + 1, endIdx).trim();
+      const trimmedMarkdown = trimMarkdownToChars(snapshotMarkdown, targetMarkdownChars);
+
+      if (trimmedMarkdown.length < snapshotMarkdown.length) {
+        const newSnapContent = prefix + trimmedMarkdown + "\n" + suffix.trimStart();
+        const newResult = result.replace(snapSection.content, newSnapContent);
+
+        if (newResult.length <= available) {
+          return newResult;
+        }
+        // Partially helped; continue with section dropping
+        result = newResult;
+        snapSection.content = newSnapContent;
+      }
+    }
+  }
+
+  // Level 2: Drop lowest-priority sections (highest priority number first, P3+)
+  const { included: charIncluded } = applyCharBudget(sections, available, generatedComment);
+  return charIncluded.map((s) => s.content).join("\n\n").trimEnd() + "\n" + generatedComment;
+}
+
+/**
+ * Trim a markdown code snapshot by removing entries from the end.
+ * Entries are separated by blank lines within code blocks.
+ * This is a character-level trim, not entry-level.
+ */
+function trimMarkdownToChars(markdown: string, maxChars: number): string {
+  if (markdown.length <= maxChars) return markdown;
+
+  // Split into sections (### headers)
+  const sectionPattern = /^### /m;
+  const parts = markdown.split(sectionPattern);
+
+  // Rebuild from the end, removing content within sections
+  let result = markdown;
+  // Work backwards through sections, trimming entries from each
+  const sectionStarts: number[] = [];
+  let searchFrom = 0;
+  while (true) {
+    const idx = markdown.indexOf("### ", searchFrom);
+    if (idx < 0) break;
+    sectionStarts.push(idx);
+    searchFrom = idx + 4;
+  }
+
+  // Remove entries from the last section first, working backwards
+  for (let si = sectionStarts.length - 1; si >= 0 && result.length > maxChars; si--) {
+    const secStart = sectionStarts[si];
+    const secEnd = si + 1 < sectionStarts.length ? sectionStarts[si + 1] : result.length;
+    const secContent = result.slice(secStart, secEnd);
+
+    // Find the code block within this section
+    const codeStart = secContent.indexOf("```");
+    if (codeStart < 0) continue;
+    const codeEnd = secContent.indexOf("\n```", codeStart + 3);
+    if (codeEnd < 0) continue;
+
+    const codeBlock = secContent.slice(codeStart, codeEnd + 4);
+    // Split code block entries by double newlines
+    const firstNewline = codeBlock.indexOf("\n");
+    const fence = codeBlock.slice(0, firstNewline + 1);
+    const closeFence = "\n```";
+    const codeBody = codeBlock.slice(firstNewline + 1, codeBlock.length - 4);
+    const entries = codeBody.split("\n\n");
+
+    // Remove entries from the end until we fit
+    while (entries.length > 1 && result.length > maxChars) {
+      entries.pop();
+      const newCodeBlock = fence + entries.join("\n\n") + closeFence;
+      const newSecContent = secContent.slice(0, codeStart) + newCodeBlock + secContent.slice(codeEnd + 4);
+      result = result.slice(0, secStart) + newSecContent + result.slice(secEnd);
+      // Recalculate secEnd for next iteration
+      break; // Recheck from outer loop
+    }
+
+    // If section is now empty (only fence), remove the entire section
+    if (entries.length <= 1 && entries[0]?.trim() === "") {
+      result = result.slice(0, secStart) + result.slice(secEnd);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Drop lowest-priority sections to fit within a character budget.
+ * Never drops P0-2 sections. Drops highest priority number first.
+ */
+export function applyCharBudget(
+  sections: ContextSection[],
+  maxChars: number,
+  generatedComment: string,
+): { included: ContextSection[]; dropped: string[] } {
+  // Start with all sections
+  const sorted = [...sections].sort((a, b) => a.priority - b.priority);
+  const mandatory = sorted.filter((s) => s.priority <= 2);
+  const droppable = sorted.filter((s) => s.priority > 2).reverse(); // highest priority number first
+
+  const included = [...sorted];
+  const dropped: string[] = [];
+
+  const measure = () =>
+    included.map((s) => s.content).join("\n\n").trimEnd().length + 1 + generatedComment.length;
+
+  while (measure() > maxChars && droppable.length > 0) {
+    const toDrop = droppable.shift()!;
+    const idx = included.findIndex((s) => s.id === toDrop.id);
+    if (idx >= 0) {
+      included.splice(idx, 1);
+      dropped.push(toDrop.id);
+    }
+  }
+
+  // Restore original order
+  const orderMap = new Map(sections.map((s, i) => [s.id, i]));
+  included.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+
+  return { included, dropped };
 }
 
 /**

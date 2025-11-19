@@ -97,6 +97,7 @@ function printHelp(): void {
   console.log(`    ${t.accent("--format=json")}           ${t.text("Output full analysis as structured JSON to stdout")}`);
   console.log(`    ${t.accent("--budget=N")}              ${t.text("Set token budget for the context file (prioritized sections)")}`);
   console.log(`    ${t.accent("--full")}                  ${t.text("Disable token budget (include all sections)")}`);
+  console.log(`    ${t.accent("--max-chars=N")}           ${t.text("Set character budget (default: 39500, 0 to disable)")}`);
   console.log(`    ${t.accent("--include=a,b")}           ${t.text("Always include these sections (comma-separated IDs)")}`);
   console.log(`    ${t.accent("--exclude=a,b")}           ${t.text("Exclude these sections entirely")}`);
   console.log(`    ${t.accent("--generate-skills")}       ${t.text("Generate Claude Code skill files")}`);
@@ -175,6 +176,8 @@ async function main() {
       }
     : undefined;
   const effectiveBudget = fullMode ? 0 : budget;
+  const maxCharsArg = args.find((a) => a.startsWith("--max-chars="));
+  const maxChars = maxCharsArg ? parseInt(maxCharsArg.split("=")[1], 10) : undefined;
   const initHook = args.includes("--init-hook");
   const diffFileArg = args.find((a) => a.startsWith("--diff-file="));
   const diffFile = diffFileArg?.split("=")[1];
@@ -906,7 +909,7 @@ async function main() {
     dryRun ? "Preparing context files..." : "Generating context files...",
   );
   const shouldGenerateSkills = generateSkills || answers.ides.includes("claude");
-  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills, verbose ? verboseLog : undefined, effectiveBudget, sectionFilter);
+  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills, verbose ? verboseLog : undefined, effectiveBudget, sectionFilter, maxChars);
   shimmer.stop();
   p.log.step(
     dryRun

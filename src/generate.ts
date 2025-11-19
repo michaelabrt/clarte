@@ -44,6 +44,7 @@ export async function generateFiles(
   onVerbose?: ProgressCallback,
   budget?: number,
   sectionFilter?: SectionFilterOptions,
+  maxChars?: number,
 ): Promise<GeneratedFile[]> {
   // Deduplicate files by path (e.g. claude + cursor both produce CLAUDE.md)
   const fileMap = new Map<string, GeneratedFile>();
@@ -59,6 +60,24 @@ export async function generateFiles(
     onVerbose?.(`Prepared ${filePath} (${content.length} bytes)`);
   }
 
+  // Pre-measure user sections for character budget reservation
+  let reservedChars = 0;
+  if (maxChars !== 0) {
+    for (const ide of answers.ides) {
+      const mainFilename = getMainContextFilename(ide);
+      if (!mainFilename.endsWith(".md") && !mainFilename.startsWith(".windsurfrules") &&
+          !mainFilename.startsWith(".clinerules") && !mainFilename.startsWith(".continuerules")) continue;
+      const absPath = path.join(ctx.rootDir, mainFilename);
+      const existing = await readFileOr(absPath);
+      if (existing) {
+        const userSections = extractUserSections(existing);
+        for (const s of userSections) {
+          reservedChars = Math.max(reservedChars, s.content.length + 2); // +2 for \n\n
+        }
+      }
+    }
+  }
+
   // Generate files for each selected IDE
   for (const ide of answers.ides) {
     // 1. Main context file
@@ -66,7 +85,7 @@ export async function generateFiles(
     const mainContent =
       ide === "aider"
         ? await buildAiderContext(ctx, answers, snapshot, analysis)
-        : await buildMainContext(ctx, answers, snapshot, analysis, budget, sectionFilter);
+        : await buildMainContext(ctx, answers, snapshot, analysis, budget, sectionFilter, maxChars, reservedChars);
     await addFile(mainFilename, mainContent);
 
     // 2. Cursor-specific scoped rules
