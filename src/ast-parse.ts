@@ -2,12 +2,11 @@
  * AST-based parsing for imports and snapshot extraction using web-tree-sitter.
  *
  * Replaces regex-based parsers in graph.ts and snapshot.ts with tree-sitter AST parsing.
- * Uses @vscode/tree-sitter-wasm for precompiled WASM grammars (JS, TS, TSX, Python, Go, Rust, Java).
+ * Bundles precompiled WASM grammars in dist/wasm/ (JS, TS, TSX, Python, Go, Rust, Java).
  */
 
 import { Parser, Language } from "web-tree-sitter";
 import type { Node } from "web-tree-sitter";
-import { createRequire } from "node:module";
 import path from "node:path";
 import type { Language as ClarteLanguage, SnapshotEntry } from "./types.js";
 
@@ -38,12 +37,12 @@ export function initTreeSitter(): Promise<void> {
     await Parser.init();
     parser = new Parser();
 
-    // Resolve WASM paths relative to @vscode/tree-sitter-wasm package
-    const require = createRequire(import.meta.url);
-    const wasmDir = path.join(
-      path.dirname(require.resolve("@vscode/tree-sitter-wasm/package.json")),
-      "wasm",
-    );
+    // Resolve WASM grammars bundled in dist/wasm/ (copied at build time).
+    // From src/ (dev): ../dist/wasm/, from dist/ (prod/binary): ./wasm/
+    const selfDir = path.dirname(new URL(import.meta.url).pathname);
+    const wasmDir = selfDir.endsWith("src")
+      ? path.join(selfDir, "..", "dist", "wasm")
+      : path.join(selfDir, "wasm");
 
     const langFiles: [string, string][] = [
       ["typescript", "tree-sitter-typescript.wasm"],
