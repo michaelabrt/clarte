@@ -769,7 +769,7 @@ async function main() {
       snapshot = await generateSnapshot(detected, savedCfg?.snapshotPaths ?? [], graph, maxTokens, undefined, gitActivity);
       if (snapshot.entries.length === 0) snapshot = null;
     }
-    const directives = buildDirectives(analysis, detected);
+    const directives = buildDirectives(analysis, detected, undefined, graph);
     const output = serializeAnalysis(detected, analysis, snapshot, graph, directives);
     process.stdout.write(JSON.stringify(output, null, 2) + "\n");
     process.exit(0);
@@ -909,7 +909,7 @@ async function main() {
     dryRun ? "Preparing context files..." : "Generating context files...",
   );
   const shouldGenerateSkills = generateSkills || answers.ides.includes("claude");
-  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills, verbose ? verboseLog : undefined, effectiveBudget, sectionFilter, maxChars);
+  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills, verbose ? verboseLog : undefined, effectiveBudget, sectionFilter, maxChars, graph);
   shimmer.stop();
   p.log.step(
     dryRun

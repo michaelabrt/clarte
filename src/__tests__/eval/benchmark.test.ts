@@ -19,6 +19,7 @@ import {
   detectArchitecturalLayers,
   findDeadFiles,
   findChokepoints,
+  computeBetweenness,
 } from "../../graph.js";
 import { buildGraphFromFixture, missingFromTopN } from "./helpers.js";
 import {
@@ -169,6 +170,18 @@ describe("benchmark: react-fullstack", () => {
       }
     });
   });
+
+  describe("betweenness centrality (directed)", () => {
+    it("pure sink config/env.ts should have zero betweenness", () => {
+      expect(graph.betweennessScores).toBeDefined();
+      for (const file of fixture.expectations.zeroBetweennessFiles!) {
+        expect(
+          graph.betweennessScores!.get(file) ?? 0,
+          `${file} should have zero betweenness (pure sink)`,
+        ).toBe(0);
+      }
+    });
+  });
 });
 
 // ── Fixture: python-backend ─────────────────────────────────────────
@@ -283,6 +296,18 @@ describe("benchmark: python-backend", () => {
       );
     });
   });
+
+  describe("betweenness centrality (directed)", () => {
+    it("pure sink core/config.py should have zero betweenness", () => {
+      expect(graph.betweennessScores).toBeDefined();
+      for (const file of fixture.expectations.zeroBetweennessFiles!) {
+        expect(
+          graph.betweennessScores!.get(file) ?? 0,
+          `${file} should have zero betweenness (pure sink)`,
+        ).toBe(0);
+      }
+    });
+  });
 });
 
 // ── Cross-benchmark consistency checks ──────────────────────────────
@@ -326,6 +351,27 @@ describe("benchmark: cross-fixture consistency", () => {
           inDeg,
           `dead file ${dead} should have zero importers`,
         ).toBe(0);
+      }
+    }
+  });
+
+  it("betweennessScores should be defined with values in [0,1] for all benchmark fixtures", () => {
+    for (const fixture of BENCHMARK_FIXTURES) {
+      const graph = buildGraphFromFixture(fixture.graph.files, fixture.graph.edges);
+      expect(
+        graph.betweennessScores,
+        `betweennessScores should be defined for ${fixture.name}`,
+      ).toBeDefined();
+
+      for (const [file, score] of graph.betweennessScores!) {
+        expect(
+          score,
+          `betweenness for ${file} in ${fixture.name} should be >= 0`,
+        ).toBeGreaterThanOrEqual(0);
+        expect(
+          score,
+          `betweenness for ${file} in ${fixture.name} should be <= 1`,
+        ).toBeLessThanOrEqual(1);
       }
     }
   });

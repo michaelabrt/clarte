@@ -18,6 +18,7 @@ import {
   detectCommunities,
   detectArchitecturalLayers,
   findDeadFiles,
+  computeBetweenness,
 } from "../../graph.js";
 import { buildGraphFromFixture, missingFromTopN } from "./helpers.js";
 import {
@@ -111,6 +112,18 @@ describe("eval: layered-app", () => {
       expect(cycles).toHaveLength(0);
     });
   });
+
+  describe("betweenness centrality (directed)", () => {
+    it("pure sink types/index.ts should have zero betweenness", () => {
+      expect(graph.betweennessScores).toBeDefined();
+      for (const file of fixture.expectations.zeroBetweennessFiles!) {
+        expect(
+          graph.betweennessScores!.get(file) ?? 0,
+          `${file} should have zero betweenness (pure sink, no outgoing edges)`,
+        ).toBe(0);
+      }
+    });
+  });
 });
 
 // ── Fixture: hub-and-spoke ────────────────────────────────────────────
@@ -182,6 +195,32 @@ describe("eval: hub-and-spoke", () => {
         (f) => f.hubScore > apiClient!.hubScore,
       );
       expect(featureWithHigherHub.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("betweenness centrality (directed)", () => {
+    it("pure sink config.ts should have zero betweenness", () => {
+      expect(graph.betweennessScores).toBeDefined();
+      for (const file of fixture.expectations.zeroBetweennessFiles!) {
+        expect(
+          graph.betweennessScores!.get(file) ?? 0,
+          `${file} should have zero betweenness (pure sink)`,
+        ).toBe(0);
+      }
+    });
+
+    it("api-client.ts should rank in top-3 betweenness (bridge to config)", () => {
+      expect(graph.betweennessScores).toBeDefined();
+      const ranked = [...graph.betweennessScores!.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([file]) => file);
+
+      const missing = missingFromTopN(
+        ranked,
+        fixture.expectations.topBetweennessFiles!,
+        3,
+      );
+      expect(missing).toEqual([]);
     });
   });
 });
@@ -271,6 +310,18 @@ describe("eval: circular-mess", () => {
         expect(cycle.severity).toBeDefined();
         expect(cycle.severity).toBeGreaterThanOrEqual(0);
         expect(cycle.severity).toBeLessThanOrEqual(1);
+      }
+    });
+  });
+
+  describe("betweenness centrality (directed)", () => {
+    it("pure sink clean-z.ts should have zero betweenness", () => {
+      expect(graph.betweennessScores).toBeDefined();
+      for (const file of fixture.expectations.zeroBetweennessFiles!) {
+        expect(
+          graph.betweennessScores!.get(file) ?? 0,
+          `${file} should have zero betweenness (pure sink)`,
+        ).toBe(0);
       }
     });
   });
@@ -383,6 +434,18 @@ describe("eval: monolith", () => {
     });
   });
 
+  describe("betweenness centrality (directed)", () => {
+    it("pure sink shared/config.ts should have zero betweenness", () => {
+      expect(graph.betweennessScores).toBeDefined();
+      for (const file of fixture.expectations.zeroBetweennessFiles!) {
+        expect(
+          graph.betweennessScores!.get(file) ?? 0,
+          `${file} should have zero betweenness (pure sink)`,
+        ).toBe(0);
+      }
+    });
+  });
+
   describe("graph scale", () => {
     it("should handle 40+ files without errors", () => {
       expect(fixture.graph.files.length).toBeGreaterThanOrEqual(40);
@@ -443,6 +506,27 @@ describe("eval: cross-fixture consistency", () => {
       for (const cycle of cycles) {
         // Chain is [A, ..., A] so length must be at least 3 (A -> B -> A)
         expect(cycle.chain.length).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  it("betweennessScores should be defined with values in [0,1] for all fixtures", () => {
+    for (const fixture of EVAL_FIXTURES) {
+      const graph = buildGraphFromFixture(fixture.graph.files, fixture.graph.edges);
+      expect(
+        graph.betweennessScores,
+        `betweennessScores should be defined for ${fixture.name}`,
+      ).toBeDefined();
+
+      for (const [file, score] of graph.betweennessScores!) {
+        expect(
+          score,
+          `betweenness for ${file} in ${fixture.name} should be >= 0`,
+        ).toBeGreaterThanOrEqual(0);
+        expect(
+          score,
+          `betweenness for ${file} in ${fixture.name} should be <= 1`,
+        ).toBeLessThanOrEqual(1);
       }
     }
   });

@@ -7,6 +7,7 @@ import type {
   DetectedContext,
   GeneratedFile,
   IDETarget,
+  ImportGraph,
   ProgressCallback,
   UserAnswers,
 } from "./types.js";
@@ -45,6 +46,7 @@ export async function generateFiles(
   budget?: number,
   sectionFilter?: SectionFilterOptions,
   maxChars?: number,
+  graph?: ImportGraph,
 ): Promise<GeneratedFile[]> {
   // Deduplicate files by path (e.g. claude + cursor both produce CLAUDE.md)
   const fileMap = new Map<string, GeneratedFile>();
@@ -85,7 +87,7 @@ export async function generateFiles(
     const mainContent =
       ide === "aider"
         ? await buildAiderContext(ctx, answers, snapshot, analysis)
-        : await buildMainContext(ctx, answers, snapshot, analysis, budget, sectionFilter, maxChars, reservedChars);
+        : await buildMainContext(ctx, answers, snapshot, analysis, budget, sectionFilter, maxChars, reservedChars, graph);
     await addFile(mainFilename, mainContent);
 
     // 2. Cursor-specific scoped rules

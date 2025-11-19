@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { ArchitecturalLayer, CodeSnapshot, ContextAnalysis, ContextSection, DetectedContext, IDETarget, LayerEdge, UserAnswers } from "../types.js";
+import type { ArchitecturalLayer, CodeSnapshot, ContextAnalysis, ContextSection, DetectedContext, IDETarget, ImportGraph, LayerEdge, UserAnswers } from "../types.js";
 import { summarizeDetection } from "../detect.js";
 import { estimateTokens, readJsonFile, readFileOr } from "../utils.js";
 import { getFrameworkHintsSection } from "./framework-hints.js";
@@ -68,8 +68,9 @@ export async function buildMainContext(
   options?: SectionFilterOptions,
   maxChars?: number,
   reservedChars: number = 0,
+  graph?: ImportGraph,
 ): Promise<string> {
-  const allSections = await buildSections(ctx, answers, snapshot, analysis);
+  const allSections = await buildSections(ctx, answers, snapshot, analysis, graph);
   const effectiveBudget = budget ?? DEFAULT_BUDGET;
   const effectiveMaxChars = maxChars ?? DEFAULT_MAX_CHARS;
 
@@ -119,6 +120,7 @@ export async function buildSections(
   answers: UserAnswers,
   snapshot: CodeSnapshot | null,
   analysis?: ContextAnalysis,
+  graph?: ImportGraph,
 ): Promise<ContextSection[]> {
   resetProjectNameCache();
   const projectName = await getProjectName(ctx);
@@ -169,7 +171,7 @@ export async function buildSections(
   // -- Priority 2: Working Guidelines, Key Files --
 
   if (analysis) {
-    const directivesSection = await renderDirectivesSection(analysis, ctx);
+    const directivesSection = await renderDirectivesSection(analysis, ctx, graph);
     if (directivesSection) {
       sections.push({ id: "working-guidelines", priority: 2, content: directivesSection, tokens: estimateTokens(directivesSection) });
     }

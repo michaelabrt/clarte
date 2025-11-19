@@ -523,4 +523,32 @@ describe("renderDirectivesSection", () => {
     expect(result).toContain("- When modifying");
     expect(result).toContain("src/types.ts");
   });
+
+  it("includes flow bottleneck directive when graph has high betweenness non-chokepoints", async () => {
+    const analysis = emptyAnalysis({
+      chokepoints: [
+        { file: "src/bridge.ts", separates: 2, importedBy: 5 },
+      ],
+    });
+    const graph: ImportGraph = {
+      edges: [],
+      inDegree: new Map(),
+      centrality: new Map(),
+      externalImportCounts: new Map(),
+      authority: new Map(),
+      hubScores: new Map(),
+      betweennessScores: new Map([
+        ["src/hot-path.ts", 0.75],
+        ["src/bridge.ts", 0.9],
+      ]),
+    };
+
+    const result = await renderDirectivesSection(analysis, mockCtx(), graph);
+    expect(result).not.toBeNull();
+    expect(result).toContain("## Working Guidelines");
+    expect(result).toContain("flow bottleneck");
+    expect(result).toContain("src/hot-path.ts");
+    // bridge.ts is a chokepoint, should not appear as a flow bottleneck
+    expect(result).not.toMatch(/src\/bridge\.ts.*flow bottleneck/);
+  });
 });
