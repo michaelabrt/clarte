@@ -15,7 +15,7 @@ Every time an AI coding agent opens a session on your project, it spends its fir
 npx clarte
 ```
 
-Under the hood, Clarté parses your imports, builds a dependency graph, runs graph algorithms on it (HITS centrality, Tarjan's SCC, community detection, change coupling) and analyzes your git history.
+Under the hood, Clarté uses tree-sitter to parse your imports, builds a dependency graph, runs graph algorithms on it (HITS centrality, Tarjan's SCC, community detection, change coupling) and analyzes your git history.
 
 ## Quick Start
 
@@ -231,7 +231,7 @@ Clarté runs a pipeline of static analysis steps. Each one feeds into the next. 
 
 | Step | What it does | Result |
 |------|-------------|--------|
-| [Dependency graph](docs/how-it-works.md#dependency-graph) | Parses all `import`/`require`/`use` statements | Maps how files connect to each other |
+| [Dependency graph](docs/how-it-works.md#dependency-graph) | Parses all `import`/`require`/`use` statements via tree-sitter AST | Maps how files connect to each other |
 | [HITS analysis](docs/how-it-works.md#hits-analysis) | Computes authority/hub scores, assigns roles | Surfaces foundations, orchestrators and bridges |
 | [Config constraints](docs/how-it-works.md#config-constraints) | Extracts rules from tsconfig, ESLint, Biome, Prettier | Prevents wrong code from strict mode, linter rules |
 | [Dead file detection](docs/how-it-works.md#dead-file-detection) | Finds files nothing imports | Highlights potential cleanup targets |
