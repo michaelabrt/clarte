@@ -2184,16 +2184,11 @@ export function computeBetweenness(
   graph: ImportGraph,
   k = 50,
 ): Map<string, number> {
-  // Build undirected adjacency from internal edges.
-  // We convert the directed import graph to undirected because betweenness here
-  // measures structural centrality for chokepoint detection: a file that sits on
-  // many shortest paths is a bottleneck regardless of import direction. Directed
-  // betweenness would undercount files that are only imported (leaves in the
-  // directed graph rarely lie on directed shortest paths), missing chokepoints
-  // that are structurally central. Trade-off: undirected conversion slightly
-  // inflates scores for leaf files that gain reverse-direction paths. This is
-  // acceptable because the results are combined with articulation-point analysis,
-  // which is inherently undirected. See ROADMAP §3.46 (directed alternative, cut).
+  // Build directed adjacency from internal edges.
+  // We follow the actual import direction (importer -> imported) so betweenness
+  // measures how many directed dependency chains pass through a file. A true
+  // bottleneck sits on many transitive import paths; undirected conversion inflates
+  // scores for leaf files that gain reverse-direction paths they don't actually have.
   const adj = new Map<string, Set<string>>();
   const allFiles = new Set<string>();
 
@@ -2203,9 +2198,7 @@ export function computeBetweenness(
     allFiles.add(edge.to);
 
     if (!adj.has(edge.from)) adj.set(edge.from, new Set());
-    if (!adj.has(edge.to)) adj.set(edge.to, new Set());
     adj.get(edge.from)!.add(edge.to);
-    adj.get(edge.to)!.add(edge.from);
   }
 
   const files = [...allFiles].sort();

@@ -585,8 +585,8 @@ describe("findCircularDeps with dynamic imports", () => {
 // ── §3.2 Approximate Betweenness Centrality ──────────────────────────
 
 describe("computeBetweenness", () => {
-  it("assigns highest score to star center", () => {
-    // Star graph: center connected to a, b, c, d (no leaf-to-leaf edges)
+  it("assigns zero to a pure dependency sink in a star", () => {
+    // Star graph: a, b, c, d all import center (center is a sink with no outgoing edges)
     const graph = makeGraph(["center", "a", "b", "c", "d"], [
       edge("a", "center"),
       edge("b", "center"),
@@ -596,13 +596,35 @@ describe("computeBetweenness", () => {
 
     const scores = computeBetweenness(graph);
 
-    // Center is on all shortest paths between leaves
+    // In directed betweenness, center has no outgoing edges so no directed path
+    // passes through it. A pure dependency sink is not a flow bottleneck.
+    for (const [, score] of scores) {
+      expect(score).toBe(0);
+    }
+  });
+
+  it("assigns highest score to a directed hub that bridges importers to dependencies", () => {
+    // center imports lib1 and lib2; a, b, c all import center.
+    // Directed paths: a -> center -> lib1, b -> center -> lib2, etc.
+    // center is the only node on paths between importers and their transitive deps.
+    const graph = makeGraph(["a", "b", "c", "center", "lib1", "lib2"], [
+      edge("a", "center"),
+      edge("b", "center"),
+      edge("c", "center"),
+      edge("center", "lib1"),
+      edge("center", "lib2"),
+    ]);
+
+    const scores = computeBetweenness(graph);
+
+    // center sits on all directed paths from {a,b,c} to {lib1,lib2}
     expect(scores.get("center")).toBe(1);
-    // Leaves have no paths passing through them (they are endpoints)
+    // Leaves (importers and dependencies) are endpoints, not intermediaries
     expect(scores.get("a")).toBe(0);
     expect(scores.get("b")).toBe(0);
     expect(scores.get("c")).toBe(0);
-    expect(scores.get("d")).toBe(0);
+    expect(scores.get("lib1")).toBe(0);
+    expect(scores.get("lib2")).toBe(0);
   });
 
   it("assigns highest scores to middle nodes in a chain", () => {
