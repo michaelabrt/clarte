@@ -8,7 +8,7 @@ export default defineConfig({
   outDir: "dist",
   clean: true,
   splitting: false,
-  external: ["web-tree-sitter", "@vscode/tree-sitter-wasm"],
+  external: ["web-tree-sitter"],
   sourcemap: false,
   dts: false,
   banner: {
