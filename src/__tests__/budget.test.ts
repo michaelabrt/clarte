@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildMainContext, buildSections, applyBudget, applyCharBudget, DEFAULT_MAX_CHARS } from "../templates/main-context.js";
 import { trimSnapshotToChars, renderSnapshot } from "../snapshot.js";
-import type { CodeSnapshot, ContextAnalysis, ContextSection, DetectedContext, SnapshotEntry, UserAnswers } from "../types.js";
+import type { CodeSnapshot, ContextAnalysis, ContextSection, DetectedContext, ImportGraph, SnapshotEntry, UserAnswers } from "../types.js";
 
 function mockCtx(overrides?: Partial<DetectedContext>): DetectedContext {
   return {
@@ -423,5 +423,50 @@ describe("buildMainContext character budget integration", () => {
     );
     // With reserved chars, the output should be equal or shorter
     expect(withReserved.length).toBeLessThanOrEqual(withoutReserved.length);
+  });
+});
+
+describe("buildSections with graph parameter (betweenness pipeline)", () => {
+  function graphWithBetweenness(): ImportGraph {
+    return {
+      edges: [],
+      inDegree: new Map(),
+      centrality: new Map(),
+      externalImportCounts: new Map(),
+      authority: new Map(),
+      hubScores: new Map(),
+      betweennessScores: new Map([
+        ["src/hot-path.ts", 0.75],    // high betweenness, NOT a chokepoint
+        ["src/utils.ts", 0.9],        // high betweenness, IS a chokepoint (excluded)
+        ["src/leaf.ts", 0.1],         // low betweenness (excluded)
+      ]),
+    };
+  }
+
+  it("buildSections includes flow bottleneck directive when graph is passed", async () => {
+    const graph = graphWithBetweenness();
+    const sections = await buildSections(mockCtx(), mockAnswers(), null, mockAnalysis(), graph);
+    const guidelines = sections.find((s) => s.id === "working-guidelines");
+    expect(guidelines).toBeDefined();
+    expect(guidelines!.content).toContain("flow bottleneck");
+    expect(guidelines!.content).toContain("src/hot-path.ts");
+  });
+
+  it("buildSections excludes flow bottleneck when graph is not passed", async () => {
+    const sections = await buildSections(mockCtx(), mockAnswers(), null, mockAnalysis());
+    const guidelines = sections.find((s) => s.id === "working-guidelines");
+    expect(guidelines).toBeDefined();
+    expect(guidelines!.content).not.toContain("flow bottleneck");
+  });
+
+  it("buildMainContext renders flow bottleneck directive end-to-end", async () => {
+    const graph = graphWithBetweenness();
+    const result = await buildMainContext(
+      mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, 0, 0, graph,
+    );
+    expect(result).toContain("flow bottleneck");
+    expect(result).toContain("src/hot-path.ts");
+    // src/utils.ts is a chokepoint in mockAnalysis, should not appear as flow bottleneck
+    expect(result).not.toMatch(/src\/utils\.ts.*flow bottleneck/);
   });
 });

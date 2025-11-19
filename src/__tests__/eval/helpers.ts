@@ -5,7 +5,7 @@
  * with computed inDegree, centrality (HITS authority), hub scores, etc.
  */
 
-import { computeHITS } from "../../graph.js";
+import { computeHITS, computeBetweenness } from "../../graph.js";
 import type { ImportEdge, ImportGraph } from "../../types.js";
 
 /**
@@ -55,7 +55,7 @@ export function buildGraphFromFixture(
   // Run HITS to get real authority and hub scores
   const { authority, hub: hubScores } = computeHITS(files, edges);
 
-  return {
+  const graph: ImportGraph = {
     edges,
     inDegree,
     centrality: authority,
@@ -63,6 +63,11 @@ export function buildGraphFromFixture(
     authority,
     hubScores,
   };
+
+  // Compute directed betweenness centrality
+  graph.betweennessScores = computeBetweenness(graph, files.length);
+
+  return graph;
 }
 
 /**

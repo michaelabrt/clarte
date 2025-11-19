@@ -40,6 +40,10 @@ export interface EvalFixture {
     stableFiles?: string[];
     /** Expected file roles: path -> expected role */
     expectedRoles?: Record<string, "Foundation" | "Orchestrator" | "Utility" | "Leaf">;
+    /** Files that MUST rank in top-N betweenness centrality */
+    topBetweennessFiles?: string[];
+    /** Files that MUST have zero betweenness (pure dependency sinks) */
+    zeroBetweennessFiles?: string[];
   };
 }
 
@@ -155,6 +159,8 @@ const layeredApp: EvalFixture = {
       "routes/product-routes.ts",
       "routes/auth-routes.ts",
     ],
+    // types/index.ts is a pure sink (no outgoing edges) so directed betweenness = 0
+    zeroBetweennessFiles: ["types/index.ts"],
   },
 };
 
@@ -215,6 +221,9 @@ const hubAndSpoke: EvalFixture = {
       "features/notifications.ts",
       "features/search.ts",
     ],
+    // config.ts is a pure sink (no outgoing edges); api-client.ts is the only bridge to config for 6/8 features
+    zeroBetweennessFiles: ["lib/config.ts"],
+    topBetweennessFiles: ["lib/api-client.ts"],
   },
 };
 
@@ -282,6 +291,8 @@ const circularMess: EvalFixture = {
       ["modules/c.ts", "modules/d.ts", "modules/e.ts"],
       ["modules/f.ts", "modules/g.ts", "modules/h.ts", "modules/i.ts"],
     ],
+    // clean-z.ts has no outgoing edges (pure sink)
+    zeroBetweennessFiles: ["modules/clean-z.ts"],
   },
 };
 
@@ -495,6 +506,10 @@ const monolith: EvalFixture = {
     // should produce at least 3 communities after merging small ones.
     minCommunities: 3,
     maxCommunities: 12,
+    // config.ts is a pure sink (no outgoing edges); directed betweenness = 0
+    // Notably shared/api-client.ts (highest authority) also has zero betweenness
+    // because it only imports config.ts -- demonstrates directed vs undirected difference
+    zeroBetweennessFiles: ["shared/config.ts"],
   },
 };
 

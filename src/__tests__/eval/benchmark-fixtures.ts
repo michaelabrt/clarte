@@ -189,6 +189,8 @@ export const reactFullstack: EvalFixture = {
     knownChokepoints: [],
     minCommunities: 2,
     maxCommunities: 10,
+    // config/env.ts is a pure sink (no outgoing edges); directed betweenness = 0
+    zeroBetweennessFiles: ["config/env.ts"],
   },
 };
 
@@ -343,6 +345,8 @@ export const pythonBackend: EvalFixture = {
     knownChokepoints: ["core/database.py"],
     minCommunities: 2,
     maxCommunities: 8,
+    // core/config.py is a pure sink (no outgoing edges); directed betweenness = 0
+    zeroBetweennessFiles: ["core/config.py"],
   },
 };
 
