@@ -1,14 +1,14 @@
 {
   "fileCount": 9,
-  "edgeCount": 12,
+  "edgeCount": 15,
   "hubFiles": [
     {
       "path": "packages/api/src/handler.ts",
-      "authority": 0.2411
+      "authority": 0.0241
     },
     {
       "path": "packages/api/src/middleware.ts",
-      "authority": 0.2411
+      "authority": 0.0241
     },
     {
       "path": "packages/api/src/router.ts",
@@ -16,11 +16,15 @@
     },
     {
       "path": "packages/core/src/events.ts",
-      "authority": 0.4874
+      "authority": 0.6687
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "authority": 0
     },
     {
       "path": "packages/core/src/types.ts",
-      "authority": 0.2267
+      "authority": 0.2738
     },
     {
       "path": "packages/core/src/utils.ts",
@@ -32,7 +36,7 @@
     },
     {
       "path": "packages/web/src/store.ts",
-      "authority": 0.2185
+      "authority": 0.0919
     }
   ],
   "circularDeps": [],
@@ -54,6 +58,7 @@
     [
       "packages/api/src/handler.ts",
       "packages/core/src/events.ts",
+      "packages/core/src/index.ts",
       "packages/core/src/types.ts",
       "packages/core/src/utils.ts",
       "packages/web/src/app.ts",
@@ -89,12 +94,27 @@
       "from": "packages/api/src/router.ts",
       "to": "packages/api/src/middleware.ts",
       "importedNames": 2
+    },
+    {
+      "from": "packages/core/src/index.ts",
+      "to": "packages/core/src/events.ts",
+      "importedNames": 2
+    },
+    {
+      "from": "packages/core/src/index.ts",
+      "to": "packages/core/src/types.ts",
+      "importedNames": 3
+    },
+    {
+      "from": "packages/core/src/index.ts",
+      "to": "packages/core/src/utils.ts",
+      "importedNames": 3
     }
   ],
   "graphTopology": {
     "componentCount": 1,
     "componentSizes": [
-      8
+      9
     ],
     "approximateDiameter": 3,
     "reachability": 1,

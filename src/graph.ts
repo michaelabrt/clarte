@@ -1,6 +1,7 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
 import { readFileOr, readJsonFile } from "./utils.js";
+import { initTreeSitter, parseImportsAst, detectBarrelAst, resolveBarrelExportsAst } from "./ast-parse.js";
 import type {
   ArchitecturalLayer,
   ArchViolation,
@@ -23,241 +24,7 @@ import type {
   TightCoupling,
 } from "./types.js";
 
-// ── Import regex patterns per language ────────────────────────────────
-
-/** JS/TS: import ... from '...' (including type-only and namespace imports) */
-const JS_IMPORT_FROM = /import\s+(type\s+)?(?:\{([^}]*)\}|(\*\s+as\s+\w+|\w+)(?:\s*,\s*\{([^}]*)\})?)\s+from\s+['"]([^'"]+)['"]/g;
-/** JS/TS: import '...' (side-effect) */
-const JS_IMPORT_SIDE = /import\s+['"]([^'"]+)['"]/g;
-/** JS/TS: require('...') */
-const JS_REQUIRE = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
-/** JS/TS: dynamic import('...') */
-const JS_DYNAMIC = /import\(\s*['"]([^'"]+)['"]\s*\)/g;
-
-/** Python: from foo.bar import baz, qux (including relative imports like from . import x) */
-const PY_FROM_IMPORT = /^from\s+(\.+[\w.]*|[\w][\w.]*)\s+import\s+(.+)/gm;
-/** Python: import foo, bar */
-const PY_IMPORT = /^import\s+([\w., ]+)/gm;
-
-/** Go: import "pkg" or import ( "pkg" ) */
-const GO_IMPORT_SINGLE = /import\s+"([^"]+)"/g;
-const GO_IMPORT_BLOCK = /import\s*\(([^)]+)\)/gs;
-
-/** Rust: use crate::foo::bar (including pub use and glob imports) */
-const RUST_USE = /(?:pub\s+)?use\s+((?:crate|super|self)(?:::\w+)*(?:::\{[^}]*\})?)/g;
-/** Rust: mod foo; */
-const RUST_MOD = /mod\s+(\w+)\s*;/g;
-
-/** Java: import com.foo.Bar; or import static com.foo.Bar.method; */
-const JAVA_IMPORT = /^import\s+(?:static\s+)?([\w.]+(?:\.\*)?)\s*;/gm;
-
-// ── Comment/string stripping for accurate import parsing ──────────────
-
-/**
- * Strip comments and string literals from JS/TS source code.
- * Replaces stripped content with whitespace to preserve line structure.
- *
- * When `commentsOnly` is true, only strips comments (preserves strings).
- * This is used for import parsing where specifiers live inside strings.
- *
- * When `commentsOnly` is false, strips both comments and strings.
- * This is used for brace counting where string content is noise.
- */
-export function stripCommentsAndStrings(content: string, commentsOnly = false): string {
-  let result = "";
-  let i = 0;
-  const len = content.length;
-
-  while (i < len) {
-    const ch = content[i];
-    const next = i + 1 < len ? content[i + 1] : "";
-
-    // Single-line comment: // ...
-    if (ch === "/" && next === "/") {
-      result += "  ";
-      i += 2;
-      while (i < len && content[i] !== "\n") {
-        result += " ";
-        i++;
-      }
-      continue;
-    }
-
-    // Block comment: /* ... */
-    if (ch === "/" && next === "*") {
-      result += "  ";
-      i += 2;
-      while (i < len) {
-        if (content[i] === "*" && i + 1 < len && content[i + 1] === "/") {
-          result += "  ";
-          i += 2;
-          break;
-        }
-        result += content[i] === "\n" ? "\n" : " ";
-        i++;
-      }
-      continue;
-    }
-
-    if (!commentsOnly) {
-      // Template literal: `...` (handles nested ${} by tracking depth)
-      if (ch === "`") {
-        result += " ";
-        i++;
-        let braceDepth = 0;
-        while (i < len) {
-          if (content[i] === "\\" && i + 1 < len) {
-            result += "  ";
-            i += 2;
-            continue;
-          }
-          if (content[i] === "$" && i + 1 < len && content[i + 1] === "{") {
-            result += "  ";
-            i += 2;
-            braceDepth++;
-            continue;
-          }
-          if (braceDepth > 0 && content[i] === "}") {
-            result += " ";
-            i++;
-            braceDepth--;
-            continue;
-          }
-          if (braceDepth === 0 && content[i] === "`") {
-            result += " ";
-            i++;
-            break;
-          }
-          result += content[i] === "\n" ? "\n" : " ";
-          i++;
-        }
-        continue;
-      }
-
-      // String literal: "..." or '...'
-      if (ch === '"' || ch === "'") {
-        const quote = ch;
-        result += " ";
-        i++;
-        while (i < len) {
-          if (content[i] === "\\" && i + 1 < len) {
-            result += "  ";
-            i += 2;
-            continue;
-          }
-          if (content[i] === quote) {
-            result += " ";
-            i++;
-            break;
-          }
-          if (content[i] === "\n") break; // unterminated string
-          result += " ";
-          i++;
-        }
-        continue;
-      }
-    } else {
-      // In commentsOnly mode, skip past strings without stripping them
-      // so the parser doesn't confuse string contents with comment starts
-      if (ch === "`") {
-        result += ch;
-        i++;
-        let braceDepth = 0;
-        while (i < len) {
-          result += content[i];
-          if (content[i] === "\\" && i + 1 < len) { i++; result += content[i]; i++; continue; }
-          if (content[i] === "$" && i + 1 < len && content[i + 1] === "{") { i++; result += content[i]; i++; braceDepth++; continue; }
-          if (braceDepth > 0 && content[i] === "}") { i++; braceDepth--; continue; }
-          if (braceDepth === 0 && content[i] === "`") { i++; break; }
-          i++;
-        }
-        continue;
-      }
-      if (ch === '"' || ch === "'") {
-        const quote = ch;
-        result += ch;
-        i++;
-        while (i < len) {
-          result += content[i];
-          if (content[i] === "\\" && i + 1 < len) { i++; result += content[i]; i++; continue; }
-          if (content[i] === quote) { i++; break; }
-          if (content[i] === "\n") break;
-          i++;
-        }
-        continue;
-      }
-    }
-
-    result += ch;
-    i++;
-  }
-
-  return result;
-}
-
-/**
- * Strip comments from Python source code.
- * Only strips `#` comments (preserves strings for import parsing).
- */
-function stripPythonComments(content: string): string {
-  let result = "";
-  let i = 0;
-  const len = content.length;
-
-  while (i < len) {
-    const ch = content[i];
-
-    // Triple-quoted strings: skip past them (don't strip, but don't match # inside)
-    if (i + 2 < len) {
-      const triple = content.slice(i, i + 3);
-      if (triple === '"""' || triple === "'''") {
-        result += triple;
-        i += 3;
-        while (i < len) {
-          if (i + 2 < len && content.slice(i, i + 3) === triple) {
-            result += triple;
-            i += 3;
-            break;
-          }
-          result += content[i];
-          i++;
-        }
-        continue;
-      }
-    }
-
-    // Single-line strings: skip past them
-    if (ch === '"' || ch === "'") {
-      const quote = ch;
-      result += ch;
-      i++;
-      while (i < len) {
-        result += content[i];
-        if (content[i] === "\\" && i + 1 < len) { i++; result += content[i]; i++; continue; }
-        if (content[i] === quote) { i++; break; }
-        if (content[i] === "\n") break;
-        i++;
-      }
-      continue;
-    }
-
-    // Comment: # ...
-    if (ch === "#") {
-      result += " ";
-      i++;
-      while (i < len && content[i] !== "\n") {
-        result += " ";
-        i++;
-      }
-      continue;
-    }
-
-    result += ch;
-    i++;
-  }
-
-  return result;
-}
+// ── Import parsing (delegated to ast-parse.ts) ───────────────────────
 
 // ── File extensions to try when resolving relative imports ────────────
 
@@ -380,198 +147,35 @@ function getSourceGlob(lang: Language): string[] {
   }
 }
 
-// ── Parse imports from a single file ──────────────────────────────────
+// ── Parse imports from a single file (delegated to ast-parse.ts) ─────
 
-interface RawImport {
-  specifier: string;
-  importedNames: string[];
-  /** Whether this is a type-only import (import type { ... }) */
-  isTypeOnly?: boolean;
-  /** Whether this is a dynamic import (import('...')) */
-  isDynamic?: boolean;
-}
+// Re-export RawImport from ast-parse for backward compatibility
+export type { RawImport } from "./ast-parse.js";
+type RawImport = import("./ast-parse.js").RawImport;
 
+/** Re-export individual language parsers for backward compatibility with tests */
 export function parseJsImports(content: string): RawImport[] {
-  const cleaned = stripCommentsAndStrings(content, true);
-  const imports: RawImport[] = [];
-
-  // import { a, b } from '...' / import Foo from '...' / import Foo, { a } from '...' / import * as Foo from '...'
-  const fromSpecifiers = new Set<string>();
-  for (const m of cleaned.matchAll(JS_IMPORT_FROM)) {
-    const isTypeOnly = !!m[1]; // group 1: "type " keyword
-    const names: string[] = [];
-    if (m[2]) names.push(...m[2].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
-    if (m[3]) {
-      const group3 = m[3].trim();
-      // Namespace import (* as foo): edge is valid but no named import to extract
-      if (!group3.startsWith("*")) {
-        names.push(group3);
-      }
-    }
-    if (m[4]) names.push(...m[4].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
-    fromSpecifiers.add(m[5]);
-    imports.push({ specifier: m[5], importedNames: names, isTypeOnly });
-  }
-
-  // import '...' (side-effect)
-  for (const m of cleaned.matchAll(JS_IMPORT_SIDE)) {
-    // Skip if already captured by JS_IMPORT_FROM
-    if (!fromSpecifiers.has(m[1])) {
-      imports.push({ specifier: m[1], importedNames: [] });
-    }
-  }
-
-  // require('...')
-  for (const m of cleaned.matchAll(JS_REQUIRE)) {
-    imports.push({ specifier: m[1], importedNames: [] });
-  }
-
-  // dynamic import('...')
-  for (const m of cleaned.matchAll(JS_DYNAMIC)) {
-    imports.push({ specifier: m[1], importedNames: [], isDynamic: true });
-  }
-
-  return imports;
+  return parseImportsAst(content, "typescript");
 }
 
 export function parsePythonImports(content: string): RawImport[] {
-  const cleaned = stripPythonComments(content);
-  const imports: RawImport[] = [];
-
-  // Parse normal (non-indented) imports
-  for (const m of cleaned.matchAll(PY_FROM_IMPORT)) {
-    const module = m[1];
-    const names = m[2].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
-    imports.push({ specifier: module, importedNames: names });
-  }
-
-  for (const m of cleaned.matchAll(PY_IMPORT)) {
-    const modules = m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
-    for (const mod of modules) {
-      imports.push({ specifier: mod, importedNames: [] });
-    }
-  }
-
-  // Detect TYPE_CHECKING guard blocks and parse indented imports as type-only.
-  // The normal regexes use ^from/^import anchors, so indented imports inside
-  // TYPE_CHECKING blocks are not matched above; we parse them separately here.
-  const lines = cleaned.split("\n");
-  const typeCheckingBlockRegex = /^(\s*)if\s+TYPE_CHECKING\s*:/;
-
-  for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(typeCheckingBlockRegex);
-    if (!match) continue;
-
-    const guardIndent = match[1].length;
-
-    // Collect block lines, stripping leading indentation so regexes match
-    const blockLines: string[] = [];
-    for (let j = i + 1; j < lines.length; j++) {
-      const line = lines[j];
-      const trimmed = line.trimStart();
-      if (!trimmed) { blockLines.push(""); continue; }
-      const lineIndent = line.length - trimmed.length;
-      if (lineIndent <= guardIndent) break;
-      blockLines.push(trimmed);
-    }
-
-    if (blockLines.length === 0) continue;
-
-    const blockContent = blockLines.join("\n");
-
-    for (const m of blockContent.matchAll(PY_FROM_IMPORT)) {
-      const module = m[1];
-      const names = m[2].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
-      imports.push({ specifier: module, importedNames: names, isTypeOnly: true });
-    }
-
-    for (const m of blockContent.matchAll(PY_IMPORT)) {
-      const modules = m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
-      for (const mod of modules) {
-        imports.push({ specifier: mod, importedNames: [], isTypeOnly: true });
-      }
-    }
-  }
-
-  return imports;
+  return parseImportsAst(content, "python");
 }
 
 export function parseGoImports(content: string): RawImport[] {
-  const imports: RawImport[] = [];
-
-  for (const m of content.matchAll(GO_IMPORT_SINGLE)) {
-    imports.push({ specifier: m[1], importedNames: [] });
-  }
-
-  for (const m of content.matchAll(GO_IMPORT_BLOCK)) {
-    const block = m[1];
-    for (const line of block.split("\n")) {
-      // Skip comment lines
-      if (line.trim().startsWith("//")) continue;
-      const match = line.match(/["']([^"']+)["']/);
-      if (match) {
-        imports.push({ specifier: match[1], importedNames: [] });
-      }
-    }
-  }
-
-  return imports;
+  return parseImportsAst(content, "go");
 }
 
 export function parseRustImports(content: string): RawImport[] {
-  const imports: RawImport[] = [];
-
-  for (const m of content.matchAll(RUST_USE)) {
-    const usePath = m[1];
-    // Check for glob imports like crate::foo::{Bar, Baz}
-    const globMatch = usePath.match(/::\{([^}]*)\}$/);
-    if (globMatch) {
-      const names = globMatch[1].split(",").map((n) => n.trim()).filter(Boolean);
-      imports.push({ specifier: usePath, importedNames: names });
-    } else {
-      const parts = usePath.split("::");
-      const name = parts[parts.length - 1];
-      imports.push({ specifier: usePath, importedNames: name ? [name] : [] });
-    }
-  }
-
-  for (const m of content.matchAll(RUST_MOD)) {
-    imports.push({ specifier: m[1], importedNames: [] });
-  }
-
-  return imports;
+  return parseImportsAst(content, "rust");
 }
 
 export function parseJavaImports(content: string): RawImport[] {
-  const imports: RawImport[] = [];
-
-  for (const m of content.matchAll(JAVA_IMPORT)) {
-    const fullPath = m[1]; // e.g. "com.example.Foo" or "com.example.*"
-    const parts = fullPath.split(".");
-    const lastName = parts[parts.length - 1];
-    const names = lastName === "*" ? [] : [lastName];
-    imports.push({ specifier: fullPath, importedNames: names });
-  }
-
-  return imports;
+  return parseImportsAst(content, "java");
 }
 
-function parseImports(content: string, lang: Language): RawImport[] {
-  switch (lang) {
-    case "typescript":
-    case "javascript":
-      return parseJsImports(content);
-    case "python":
-      return parsePythonImports(content);
-    case "go":
-      return parseGoImports(content);
-    case "rust":
-      return parseRustImports(content);
-    case "java":
-      return parseJavaImports(content);
-    default:
-      return parseJsImports(content);
-  }
+function parseImports(content: string, lang: Language, filePath?: string): RawImport[] {
+  return parseImportsAst(content, lang, filePath);
 }
 
 // ── Resolve relative imports to file paths ────────────────────────────
@@ -675,10 +279,6 @@ function resolveImport(
 
 // ── Barrel file (re-export) resolution ────────────────────────────────
 
-/** Regex to match re-export statements: export { ... } from '...' / export * from '...' */
-const RE_EXPORT_NAMED = /export\s+\{([^}]*)\}\s+from\s+['"]([^'"]+)['"]/g;
-const RE_EXPORT_STAR = /export\s+\*\s+from\s+['"]([^'"]+)['"]/g;
-
 /** Barrel file export mapping: tracks which names come from which source files */
 interface BarrelExportMap {
   /** barrel file -> { exportedName -> source file } */
@@ -699,7 +299,6 @@ async function resolveBarrelFiles(
   const starExports = new Map<string, Set<string>>();
 
   for (const file of fileSet) {
-    // Only scan index files as potential barrels
     const basename = path.basename(file).replace(/\.[^.]+$/, "");
     if (basename !== "index") continue;
 
@@ -707,34 +306,18 @@ async function resolveBarrelFiles(
     const content = await readFileOr(absPath);
     if (!content) continue;
 
-    const cleaned = stripCommentsAndStrings(content, true);
+    const { namedExports: barrelNamed, starExports: barrelStars } = resolveBarrelExportsAst(content, file);
     const nameMap = new Map<string, string>();
     const starSet = new Set<string>();
 
-    // export { Foo, Bar as Baz } from './source'
-    for (const m of cleaned.matchAll(RE_EXPORT_NAMED)) {
-      const namesBlock = m[1];
-      const specifier = m[2];
+    for (const [exportedName, specifier] of barrelNamed) {
       if (!specifier.startsWith("./") && !specifier.startsWith("../")) continue;
-
       const resolved = resolveJsImport(specifier, file, fileSet);
-      if (!resolved) continue;
-
-      for (const nameStr of namesBlock.split(",")) {
-        const trimmed = nameStr.trim();
-        if (!trimmed) continue;
-        // Handle "Foo as Bar" -> exported as Bar, from resolved file
-        const parts = trimmed.split(/\s+as\s+/);
-        const exportedName = parts.length > 1 ? parts[1].trim() : parts[0].trim();
-        nameMap.set(exportedName, resolved);
-      }
+      if (resolved) nameMap.set(exportedName, resolved);
     }
 
-    // export * from './source'
-    for (const m of cleaned.matchAll(RE_EXPORT_STAR)) {
-      const specifier = m[1];
+    for (const specifier of barrelStars) {
       if (!specifier.startsWith("./") && !specifier.startsWith("../")) continue;
-
       const resolved = resolveJsImport(specifier, file, fileSet);
       if (resolved) starSet.add(resolved);
     }
@@ -745,11 +328,6 @@ async function resolveBarrelFiles(
 
   return { namedExports, starExports };
 }
-
-/** Regex to count re-export statements (non-global, for countReExportStatements) */
-const RE_EXPORT_FROM = /export\s+(?:\{[^}]*\}|\*)\s+from\s+['"][^'"]+['"]/g;
-/** Regex to count all top-level statements (simple heuristic: lines starting at column 0 with a keyword) */
-const TOP_LEVEL_STMT = /^(?:import|export|const|let|var|function|class|type|interface|enum|declare|async\s+function)\b/gm;
 
 /**
  * Detect barrel files: files where >50% of top-level statements are re-exports.
@@ -766,15 +344,8 @@ export async function detectBarrelFiles(
     const content = await readFileOr(absPath);
     if (!content) continue;
 
-    const cleaned = stripCommentsAndStrings(content, true);
-
-    const reExportCount = [...cleaned.matchAll(RE_EXPORT_FROM)].length;
-    if (reExportCount === 0) continue;
-
-    const totalStatements = [...cleaned.matchAll(TOP_LEVEL_STMT)].length;
-    if (totalStatements === 0) continue;
-
-    if (reExportCount / totalStatements > 0.5) {
+    const result = detectBarrelAst(content, file);
+    if (result.isBarrel) {
       barrels.add(file);
     }
   }
@@ -953,6 +524,7 @@ export async function buildImportGraph(
   language: Language,
   onProgress?: ProgressCallback,
 ): Promise<ImportGraph> {
+  await initTreeSitter();
   const globs = getSourceGlob(language);
   let files: string[];
   try {

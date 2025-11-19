@@ -12,6 +12,7 @@ import {
   detectBarrelFiles,
   buildImportGraph,
 } from "./graph.js";
+import { initTreeSitter } from "./ast-parse.js";
 import { readFileOr, readJsonFile } from "./utils.js";
 import type {
   ArchitecturalLayer,
@@ -529,6 +530,9 @@ export async function buildGraphWithCache(
   language: Language,
   onProgress?: ProgressCallback,
 ): Promise<ImportGraph> {
+  // Ensure tree-sitter is ready for AST-based parsing
+  await initTreeSitter();
+
   // 1. Compute current file hashes
   onProgress?.("Computing file hashes...");
   const currentHashes = await computeFileHashes(rootDir, language);
