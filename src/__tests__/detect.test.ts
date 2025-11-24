@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, afterEach } from "vitest";
-import { detectContext, enrichFrameworksWithUsage, summarizeDetection } from "../detect.js";
+import { detectContext, enrichFrameworksWithUsage, summarizeDetection, SECONDARY_LANGUAGE_THRESHOLD } from "../detect.js";
 import type { DetectedContext, DetectedFramework } from "../types.js";
 
 /** Create a temporary project directory with the given file tree. */
@@ -470,6 +470,53 @@ describe("detectContext", () => {
     const maven = ctx.frameworks.find((f) => f.name === "Maven");
     expect(maven).toBeDefined();
     expect(maven!.version).toBe("1.0.0");
+  });
+});
+
+// ── SECONDARY_LANGUAGE_THRESHOLD ─────────────────────────────────────────────
+
+describe("SECONDARY_LANGUAGE_THRESHOLD", () => {
+  it("exports the threshold as 0.15", () => {
+    expect(SECONDARY_LANGUAGE_THRESHOLD).toBe(0.15);
+  });
+
+  let tmpDir: string;
+  afterEach(async () => {
+    if (tmpDir) await cleanup(tmpDir);
+  });
+
+  it("includes language at exactly 15% as secondary", async () => {
+    // 20 total files: 17 TS + 3 Python = 15% Python
+    const files: Record<string, string> = {
+      "package.json": JSON.stringify({ name: "test" }),
+      "tsconfig.json": "{}",
+    };
+    for (let i = 0; i < 17; i++) {
+      files[`src/mod${i}.ts`] = `export const x${i} = ${i};`;
+    }
+    for (let i = 0; i < 3; i++) {
+      files[`scripts/s${i}.py`] = `x = ${i}`;
+    }
+    tmpDir = await makeProject(files);
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.secondaryLanguages).toContain("python");
+  });
+
+  it("excludes language below 15% from secondary", async () => {
+    // 21 total files: 18 TS + 3 Python = 14.3% Python (< 15%)
+    const files: Record<string, string> = {
+      "package.json": JSON.stringify({ name: "test" }),
+      "tsconfig.json": "{}",
+    };
+    for (let i = 0; i < 18; i++) {
+      files[`src/mod${i}.ts`] = `export const x${i} = ${i};`;
+    }
+    for (let i = 0; i < 3; i++) {
+      files[`scripts/s${i}.py`] = `x = ${i}`;
+    }
+    tmpDir = await makeProject(files);
+    const ctx = await detectContext(tmpDir);
+    expect(ctx.secondaryLanguages ?? []).not.toContain("python");
   });
 });
 

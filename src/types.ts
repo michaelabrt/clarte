@@ -229,6 +229,8 @@ export interface SnapshotEntry {
   signature: string;
   /** Number of files that import this file (from import graph) */
   importedByCount?: number;
+  /** Number of direct (non-barrel-routed) importers */
+  directImportedByCount?: number;
 }
 
 /** Full code snapshot result */
@@ -258,6 +260,8 @@ export interface ImportEdge {
   isTypeOnly?: boolean;
   /** Whether this is a dynamic import (import('...')) */
   isDynamic?: boolean;
+  /** Whether this edge was created by barrel resolution (re-routed from a barrel file to the source) */
+  isBarrelRouted?: boolean;
   /** Whether this edge crosses monorepo package boundaries */
   crossPackage?: boolean;
 }
@@ -268,6 +272,8 @@ export interface ImportGraph {
   edges: ImportEdge[];
   /** Number of files that import each file */
   inDegree: Map<string, number>;
+  /** Number of direct (non-barrel-routed) importers per file */
+  directInDegree?: Map<string, number>;
   /** Centrality scores (0-1) — set to HITS authority for backward compat */
   centrality: Map<string, number>;
   /** How many files import each external package */
