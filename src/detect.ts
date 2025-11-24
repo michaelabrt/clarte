@@ -15,6 +15,9 @@ import type {
 } from "./types.js";
 import { fileExists, readFileOr, readJsonFile, readDirSafe } from "./utils.js";
 
+/** Minimum fraction of source files for a language to qualify as secondary (15%) */
+export const SECONDARY_LANGUAGE_THRESHOLD = 0.15;
+
 /** Well-known directories to look for */
 const KNOWN_DIRS = [
   "src",
@@ -502,9 +505,9 @@ async function detectLanguageBreakdown(ctx: DetectedContext, rootDir: string): P
 
     ctx.languageBreakdown = counts;
 
-    // Find secondary languages (>15% of total source files)
+    // Find secondary languages above the threshold
     const totalFiles = allSourceFiles.length;
-    const threshold = totalFiles * 0.15;
+    const threshold = totalFiles * SECONDARY_LANGUAGE_THRESHOLD;
     const secondary: Language[] = [];
 
     for (const [lang, count] of Object.entries(counts)) {

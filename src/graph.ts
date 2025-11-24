@@ -551,7 +551,7 @@ export async function buildImportGraph(
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EPERM" || code === "EACCES") {
       onProgress?.("Warning: permission error scanning files, returning empty graph");
-      return { edges: [], inDegree: new Map(), centrality: new Map(), externalImportCounts: new Map(), authority: new Map(), hubScores: new Map() };
+      return { edges: [], inDegree: new Map(), directInDegree: new Map(), centrality: new Map(), externalImportCounts: new Map(), authority: new Map(), hubScores: new Map() };
     }
     throw err;
   }
@@ -561,6 +561,7 @@ export async function buildImportGraph(
   const fileSet = new Set(files);
   const edges: ImportEdge[] = [];
   const inDegree = new Map<string, number>();
+  const directInDegree = new Map<string, number>();
   const externalImportCounts = new Map<string, number>();
 
   // Load path aliases for TS/JS projects
@@ -582,7 +583,10 @@ export async function buildImportGraph(
   }
 
   // Init in-degree
-  for (const file of files) inDegree.set(file, 0);
+  for (const file of files) {
+    inDegree.set(file, 0);
+    directInDegree.set(file, 0);
+  }
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -622,7 +626,7 @@ export async function buildImportGraph(
               }
             }
 
-            // Create edges to resolved source files
+            // Create edges to resolved source files (barrel-routed)
             for (const [source, names] of routedNames) {
               edges.push({
                 from: file,
@@ -632,6 +636,7 @@ export async function buildImportGraph(
                 importedNames: names,
                 isTypeOnly: raw.isTypeOnly,
                 isDynamic: raw.isDynamic,
+                isBarrelRouted: true,
               });
               inDegree.set(source, (inDegree.get(source) ?? 0) + 1);
             }
@@ -647,6 +652,7 @@ export async function buildImportGraph(
                   importedNames: unresolved,
                   isTypeOnly: raw.isTypeOnly,
                   isDynamic: raw.isDynamic,
+                  isBarrelRouted: true,
                 });
                 inDegree.set(starSource, (inDegree.get(starSource) ?? 0) + 1);
               }
@@ -677,6 +683,7 @@ export async function buildImportGraph(
               isDynamic: raw.isDynamic,
             });
             inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
+            directInDegree.set(resolved, (directInDegree.get(resolved) ?? 0) + 1);
           }
         }
       } else {
@@ -696,6 +703,7 @@ export async function buildImportGraph(
             isDynamic: raw.isDynamic,
           });
           inDegree.set(aliasResolved, (inDegree.get(aliasResolved) ?? 0) + 1);
+          directInDegree.set(aliasResolved, (directInDegree.get(aliasResolved) ?? 0) + 1);
         } else {
           // External package
           // Normalize specifier to package name (e.g. @scope/pkg/path -> @scope/pkg)
@@ -732,12 +740,12 @@ export async function buildImportGraph(
 
   onProgress?.("Computing betweenness centrality...");
   const graphForBetweenness: ImportGraph = {
-    edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles: detectedBarrels,
+    edges, inDegree, directInDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles: detectedBarrels,
   };
   const betweennessScores = computeBetweenness(graphForBetweenness);
 
   // Use authority as centrality for backward compat (snapshot.ts etc.)
-  return { edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles: detectedBarrels, betweennessScores };
+  return { edges, inDegree, directInDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles: detectedBarrels, betweennessScores };
 }
 
 /**
@@ -748,6 +756,12 @@ export function mergeGraph(target: ImportGraph, source: ImportGraph): void {
   target.edges.push(...source.edges);
   for (const [k, v] of source.inDegree) {
     target.inDegree.set(k, (target.inDegree.get(k) ?? 0) + v);
+  }
+  if (source.directInDegree) {
+    if (!target.directInDegree) target.directInDegree = new Map();
+    for (const [k, v] of source.directInDegree) {
+      target.directInDegree.set(k, (target.directInDegree.get(k) ?? 0) + v);
+    }
   }
   for (const [k, v] of source.centrality) {
     if (!target.centrality.has(k)) target.centrality.set(k, v);

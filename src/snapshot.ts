@@ -228,10 +228,15 @@ function makeExtractor(lang: Language) {
  */
 function annotateSignature(entry: SnapshotEntry, commentPrefix = "//"): string {
   if (entry.importedByCount && entry.importedByCount > 2) {
+    const total = entry.importedByCount;
+    const direct = entry.directImportedByCount ?? total;
+    const annotation = direct < total
+      ? `${commentPrefix} imported by ${direct} files (${total} via barrels)`
+      : `${commentPrefix} imported by ${total} files`;
     // Add comment to first line of the signature
     const firstLine = entry.signature.split("\n")[0];
     const rest = entry.signature.split("\n").slice(1);
-    const annotated = `${firstLine}  ${commentPrefix} imported by ${entry.importedByCount} files`;
+    const annotated = `${firstLine}  ${annotation}`;
     return rest.length > 0 ? [annotated, ...rest].join("\n") : annotated;
   }
   return entry.signature;
@@ -535,6 +540,10 @@ export async function generateSnapshot(
       const count = graph.inDegree.get(entry.file) ?? 0;
       if (count > 0) {
         entry.importedByCount = count;
+        const directCount = graph.directInDegree?.get(entry.file) ?? count;
+        if (directCount < count) {
+          entry.directImportedByCount = directCount;
+        }
       }
     }
   }

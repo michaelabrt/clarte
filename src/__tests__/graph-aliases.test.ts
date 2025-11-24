@@ -207,4 +207,39 @@ describe("buildImportGraph barrel file resolution", () => {
     expect(toBarrel).toBeDefined();
     expect(toBarrel!.importedNames).toEqual([]);
   });
+
+  it("tracks directInDegree vs inDegree for barrel-routed imports", async () => {
+    tmpDir = await makeProject({
+      "src/utils/helpers.ts": "export function helperA() {}",
+      "src/utils/format.ts": "export function formatDate() {}",
+      "src/utils/index.ts": [
+        "export { helperA } from './helpers';",
+        "export { formatDate } from './format';",
+      ].join("\n"),
+      // Two consumers go through the barrel
+      "src/app.ts": "import { helperA } from './utils';",
+      "src/page.ts": "import { helperA } from './utils';",
+      // One consumer imports directly
+      "src/direct.ts": "import { helperA } from './utils/helpers';",
+    });
+
+    const graph = await buildImportGraph(tmpDir, "typescript");
+
+    // helpers.ts: 4 total importers (barrel's own re-export + 2 barrel-routed + 1 direct)
+    expect(graph.inDegree.get("src/utils/helpers.ts")).toBe(4);
+    // helpers.ts: 2 direct importers (barrel's own re-export + direct.ts)
+    expect(graph.directInDegree?.get("src/utils/helpers.ts")).toBe(2);
+
+    // Barrel-routed edges should be flagged (app.ts + page.ts)
+    const barrelEdges = graph.edges.filter(
+      (e) => e.to === "src/utils/helpers.ts" && e.isBarrelRouted,
+    );
+    expect(barrelEdges).toHaveLength(2);
+
+    // Direct edges: barrel's own re-export (index.ts) + direct.ts
+    const directEdges = graph.edges.filter(
+      (e) => e.to === "src/utils/helpers.ts" && !e.isBarrelRouted,
+    );
+    expect(directEdges).toHaveLength(2);
+  });
 });
