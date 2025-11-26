@@ -9,7 +9,7 @@ CLI tool that pre-generates context files for AI coding agents.
 
 ## Tech Stack
 
-- **Vitest** 4.0.18 (used in 53 files)
+- **Vitest** 4.0.18 (used in 55 files)
 - **TypeScript**
 - **npm** (package manager)
 
@@ -83,16 +83,16 @@ Cross-layer edges: services -> types, services -> utils, utils -> types
 
 | File | Commits (90d) | Last Changed |
 |------|--------------|--------------|
-| `src/index.ts` | 54 | 25 minutes ago |
-| `README.md` | 40 | 22 hours ago |
+| `src/index.ts` | 54 | 13 hours ago |
+| `README.md` | 40 | 35 hours ago |
 | `src/summary.ts` | 30 | 4 days ago |
-| `src/templates/main-context.ts` | 29 | 25 minutes ago |
-| `package.json` | 26 | 22 hours ago |
-| `src/snapshot.ts` | 25 | 9 minutes ago |
-| `src/types.ts` | 24 | 9 minutes ago |
-| `src/graph.ts` | 22 | 9 minutes ago |
-| `package-lock.json` | 21 | 23 hours ago |
-| `CLAUDE.md` | 19 | 25 minutes ago |
+| `src/templates/main-context.ts` | 29 | 13 hours ago |
+| `package.json` | 26 | 35 hours ago |
+| `src/snapshot.ts` | 25 | 13 hours ago |
+| `src/types.ts` | 24 | 13 hours ago |
+| `src/graph.ts` | 22 | 13 hours ago |
+| `package-lock.json` | 21 | 35 hours ago |
+| `CLAUDE.md` | 20 | 12 hours ago |
 
 ## Change Coupling
 
@@ -204,7 +204,7 @@ npm run build
 
 <!-- Sections omitted to fit token budget: code-snapshot. Run clarte --full for full output. -->
 
-<!-- clarte: generated 2026-02-23T18:29:07Z. Run npx clarte to regenerate. -->
+<!-- clarte: generated 2026-02-24T06:59:44Z. Run npx clarte to regenerate. -->
 
 <!-- clarte:user-start -->
 ## Style Rules
