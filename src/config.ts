@@ -14,6 +14,37 @@ interface ConfigFile extends ProjectConfig {
 }
 
 /**
+ * Validate layer entries: each must have a string `name` and a valid RegExp `pattern`.
+ * Invalid entries are silently dropped with a warning to stderr.
+ */
+function validateLayers(
+  layers: Array<{ name: string; pattern: string }> | undefined,
+): Array<{ name: string; pattern: string }> | undefined {
+  if (!layers || !Array.isArray(layers)) return undefined;
+
+  const valid: Array<{ name: string; pattern: string }> = [];
+  for (const layer of layers) {
+    if (typeof layer.name !== "string" || !layer.name) {
+      console.error(`[clarte] Ignoring layer with missing or invalid name.`);
+      continue;
+    }
+    if (typeof layer.pattern !== "string" || !layer.pattern) {
+      console.error(`[clarte] Ignoring layer "${layer.name}" with missing or invalid pattern.`);
+      continue;
+    }
+    try {
+      new RegExp(layer.pattern);
+    } catch {
+      console.error(`[clarte] Ignoring layer "${layer.name}": invalid RegExp pattern "${layer.pattern}".`);
+      continue;
+    }
+    valid.push(layer);
+  }
+
+  return valid.length > 0 ? valid : undefined;
+}
+
+/**
  * Migrate a raw config object from one version to another.
  * Each step handles one version increment (e.g. 1->2).
  *
@@ -60,6 +91,16 @@ export async function loadConfig(
 
   // Run migrations if the config version is behind the current version
   const fileVersion = typeof raw._version === "number" ? raw._version : 1;
+
+  // Forward-compatibility guard: config from a newer version of clarte
+  if (fileVersion > CONFIG_VERSION) {
+    console.error(
+      `[clarte] Config version ${fileVersion} is newer than supported version ${CONFIG_VERSION}. ` +
+      `Ignoring config and using defaults. Consider upgrading clarte.`,
+    );
+    return null;
+  }
+
   const migrated = fileVersion < CONFIG_VERSION
     ? migrateConfig(raw, fileVersion, CONFIG_VERSION)
     : raw;
@@ -84,8 +125,10 @@ export async function loadConfig(
     snapshotGeneratedAt: cfg.snapshotGeneratedAt,
     language: cfg.language,
     staleDays: cfg.staleDays,
-    colorScheme: cfg.colorScheme,
-    layers: cfg.layers,
+    colorScheme: cfg.colorScheme === "dark" || cfg.colorScheme === "light"
+      ? cfg.colorScheme
+      : undefined,
+    layers: validateLayers(cfg.layers),
     analysisDays: cfg.analysisDays,
   };
 }
@@ -121,6 +164,7 @@ export async function saveConfig(
     ...(existing?.colorScheme ? { colorScheme: existing.colorScheme } : {}),
     ...(answers.layers?.length ? { layers: answers.layers } : {}),
     ...(existing?.analysisDays != null ? { analysisDays: existing.analysisDays } : {}),
+    ...(existing?.autoRefreshOnCommit != null ? { autoRefreshOnCommit: existing.autoRefreshOnCommit } : {}),
   };
   await writeFileSafe(configPath, JSON.stringify(cfg, null, 2) + "\n");
 }

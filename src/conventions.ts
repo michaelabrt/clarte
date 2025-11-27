@@ -305,15 +305,17 @@ interface DirectoryIdentifiers {
 }
 
 /**
- * Get the top-level directory for a file path.
+ * Get the top-level directory for a file path (up to 2 directory segments).
  * e.g., "src/components/Button.tsx" -> "src/components"
+ *       "src/theme.ts" -> "src"
  */
 function getTopLevelDir(filePath: string): string {
   const parts = filePath.split("/");
-  if (parts.length >= 2) {
-    return parts.slice(0, 2).join("/");
-  }
-  return parts[0];
+  // Strip the filename (last segment), keep only directory segments
+  const dirParts = parts.slice(0, -1);
+  if (dirParts.length === 0) return ".";
+  // Return up to 2 directory levels
+  return dirParts.slice(0, 2).join("/");
 }
 
 function detectDirectoryOverrides(

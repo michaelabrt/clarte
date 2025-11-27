@@ -78,7 +78,7 @@ describe("cache I/O", () => {
 
   it("round-trips cache data", async () => {
     const data: CacheData = {
-      version: 1,
+      version: 2,
       createdAt: "2025-01-01T00:00:00.000Z",
       language: "typescript",
       fileHashes: { "a.ts": "abc123" },
@@ -273,7 +273,7 @@ describe("analysis cache I/O", () => {
 
   it("round-trips analysis cache data", async () => {
     const data: AnalysisCacheData = {
-      version: 1,
+      version: 2,
       cacheKey: "abc123",
       hubFiles: [{ path: "src/a.ts", centrality: 0.8, authority: 0.8, hubScore: 0.2, role: "Foundation", importedBy: 5, imports: 1 }],
       circularDeps: [],
@@ -372,7 +372,7 @@ describe("computeAnalysisCacheKey", () => {
     expect(key1).not.toBe(key2);
   });
 
-  it("ignores external edges", () => {
+  it("changes when external edges change", () => {
     const graph1: ImportGraph = {
       edges: [
         { from: "a.ts", to: "b.ts", isExternal: false, specifier: "./b", importedNames: [] },
@@ -394,6 +394,6 @@ describe("computeAnalysisCacheKey", () => {
       authority: new Map(),
       hubScores: new Map(),
     };
-    expect(computeAnalysisCacheKey(graph1)).toBe(computeAnalysisCacheKey(graph2));
+    expect(computeAnalysisCacheKey(graph1)).not.toBe(computeAnalysisCacheKey(graph2));
   });
 });

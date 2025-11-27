@@ -337,6 +337,7 @@ export async function buildSections(
     const hotLines: string[] = [];
     hotLines.push("## Recently Active Files");
     hotLines.push("");
+    // TODO: "90d" is hardcoded; should use the actual analysisDays value from ProjectConfig
     hotLines.push("| File | Commits (90d) | Last Changed |");
     hotLines.push("|------|--------------|--------------|");
     for (const hot of analysis.gitActivity.hotFiles.slice(0, 10)) {
@@ -352,8 +353,8 @@ export async function buildSections(
     ccLines.push("");
     ccLines.push("Files that frequently change together -- when modifying one, check if the other needs updates too.");
     ccLines.push("");
-    ccLines.push("| File A | File B | Co-changes | Confidence |");
-    ccLines.push("|--------|--------|------------|------------|");
+    ccLines.push("| File A | File B | Co-changes | Jaccard |");
+    ccLines.push("|--------|--------|------------|---------|");
     for (const pair of analysis.gitActivity.changeCoupling) {
       ccLines.push(`| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${(pair.confidence * 100).toFixed(0)}% |`);
     }
@@ -505,7 +506,7 @@ export async function buildSections(
     patLines.push("## Key Patterns");
     patLines.push("");
     const patterns = answers.keyPatterns
-      .split(/[.\n]/)
+      .split(/\n/)
       .map((s) => s.trim())
       .filter(Boolean);
     for (const p of patterns) {
@@ -520,7 +521,7 @@ export async function buildSections(
     gotLines.push("## Gotchas");
     gotLines.push("");
     const gotchas = answers.gotchas
-      .split(/[.\n]/)
+      .split(/\n/)
       .map((s) => s.trim())
       .filter(Boolean);
     for (const g of gotchas) {
@@ -708,8 +709,13 @@ function enforceCharBudget(
   }
 
   // Level 2: Drop lowest-priority sections (highest priority number first, P3+)
-  const { included: charIncluded } = applyCharBudget(sections, available, generatedComment);
-  return charIncluded.map((s) => s.content).join("\n\n").trimEnd() + "\n" + generatedComment;
+  const { included: charIncluded, dropped } = applyCharBudget(sections, available, generatedComment);
+  let charResult = charIncluded.map((s) => s.content).join("\n\n").trimEnd() + "\n";
+  if (dropped.length > 0) {
+    charResult += `\n<!-- Sections omitted to fit char budget: ${dropped.join(", ")}. Run clarte --full for full output. -->\n`;
+  }
+  charResult += generatedComment;
+  return charResult;
 }
 
 /**
@@ -720,55 +726,62 @@ function enforceCharBudget(
 function trimMarkdownToChars(markdown: string, maxChars: number): string {
   if (markdown.length <= maxChars) return markdown;
 
-  // Split into sections (### headers)
-  const sectionPattern = /^### /m;
-  const parts = markdown.split(sectionPattern);
-
-  // Rebuild from the end, removing content within sections
   let result = markdown;
-  // Work backwards through sections, trimming entries from each
-  const sectionStarts: number[] = [];
-  let searchFrom = 0;
-  while (true) {
-    const idx = markdown.indexOf("### ", searchFrom);
-    if (idx < 0) break;
-    sectionStarts.push(idx);
-    searchFrom = idx + 4;
-  }
+
+  // Recompute section starts from current result on each pass
+  const findSectionStarts = (text: string): number[] => {
+    const starts: number[] = [];
+    let from = 0;
+    while (true) {
+      const idx = text.indexOf("### ", from);
+      if (idx < 0) break;
+      starts.push(idx);
+      from = idx + 4;
+    }
+    return starts;
+  };
 
   // Remove entries from the last section first, working backwards
-  for (let si = sectionStarts.length - 1; si >= 0 && result.length > maxChars; si--) {
-    const secStart = sectionStarts[si];
-    const secEnd = si + 1 < sectionStarts.length ? sectionStarts[si + 1] : result.length;
-    const secContent = result.slice(secStart, secEnd);
+  let changed = true;
+  while (changed && result.length > maxChars) {
+    changed = false;
+    const sectionStarts = findSectionStarts(result);
 
-    // Find the code block within this section
-    const codeStart = secContent.indexOf("```");
-    if (codeStart < 0) continue;
-    const codeEnd = secContent.indexOf("\n```", codeStart + 3);
-    if (codeEnd < 0) continue;
+    for (let si = sectionStarts.length - 1; si >= 0 && result.length > maxChars; si--) {
+      const secStart = sectionStarts[si];
+      const secEnd = si + 1 < sectionStarts.length ? sectionStarts[si + 1] : result.length;
+      const secContent = result.slice(secStart, secEnd);
 
-    const codeBlock = secContent.slice(codeStart, codeEnd + 4);
-    // Split code block entries by double newlines
-    const firstNewline = codeBlock.indexOf("\n");
-    const fence = codeBlock.slice(0, firstNewline + 1);
-    const closeFence = "\n```";
-    const codeBody = codeBlock.slice(firstNewline + 1, codeBlock.length - 4);
-    const entries = codeBody.split("\n\n");
+      // Find the code block within this section
+      const codeStart = secContent.indexOf("```");
+      if (codeStart < 0) continue;
+      const codeEnd = secContent.indexOf("\n```", codeStart + 3);
+      if (codeEnd < 0) continue;
 
-    // Remove entries from the end until we fit
-    while (entries.length > 1 && result.length > maxChars) {
-      entries.pop();
-      const newCodeBlock = fence + entries.join("\n\n") + closeFence;
-      const newSecContent = secContent.slice(0, codeStart) + newCodeBlock + secContent.slice(codeEnd + 4);
-      result = result.slice(0, secStart) + newSecContent + result.slice(secEnd);
-      // Recalculate secEnd for next iteration
-      break; // Recheck from outer loop
-    }
+      const codeBlock = secContent.slice(codeStart, codeEnd + 4);
+      // Split code block entries by double newlines
+      const firstNewline = codeBlock.indexOf("\n");
+      const fence = codeBlock.slice(0, firstNewline + 1);
+      const closeFence = "\n```";
+      const codeBody = codeBlock.slice(firstNewline + 1, codeBlock.length - 4);
+      const entries = codeBody.split("\n\n");
 
-    // If section is now empty (only fence), remove the entire section
-    if (entries.length <= 1 && entries[0]?.trim() === "") {
-      result = result.slice(0, secStart) + result.slice(secEnd);
+      if (entries.length > 1) {
+        // Remove one entry and restart (section offsets change after mutation)
+        entries.pop();
+        const newCodeBlock = fence + entries.join("\n\n") + closeFence;
+        const newSecContent = secContent.slice(0, codeStart) + newCodeBlock + secContent.slice(codeEnd + 4);
+        result = result.slice(0, secStart) + newSecContent + result.slice(secEnd);
+        changed = true;
+        break; // Restart with fresh section offsets
+      }
+
+      // If section is now empty (only fence), remove the entire section
+      if (entries.length <= 1 && entries[0]?.trim() === "") {
+        result = result.slice(0, secStart) + result.slice(secEnd);
+        changed = true;
+        break; // Restart with fresh section offsets
+      }
     }
   }
 
