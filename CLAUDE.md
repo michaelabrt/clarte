@@ -28,12 +28,12 @@ CLI tool that pre-generates context files for AI coding agents.
 - `src/__tests__/golden/fixtures/ts-bottleneck/src/core/router.ts` is a structural chokepoint (separates 7 components). Refactor with extreme care.
 - `src/utils.ts` is a structural chokepoint (separates 5 components). Refactor with extreme care.
 - `src/graph.ts` is a structural chokepoint (separates 5 components). Refactor with extreme care.
-- `src/index.ts` is a high-churn file (54 commits in 90 days). Review recent changes before modifying to avoid conflicts.
+- `src/index.ts` is a high-churn file (55 commits in 90 days). Review recent changes before modifying to avoid conflicts.
 - `README.md` is a high-churn file (40 commits in 90 days). Review recent changes before modifying to avoid conflicts.
-- `src/summary.ts` is a high-churn file (30 commits in 90 days). Review recent changes before modifying to avoid conflicts.
+- `src/templates/main-context.ts` is a high-churn file (30 commits in 90 days). Review recent changes before modifying to avoid conflicts.
 - `src/graph.ts` is a Foundation file with high complexity (36 exports, 2400+ lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
-- `src/index.ts` is a Orchestrator file with high complexity (0 exports, 971 lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
-- `src/watch.ts` is a Orchestrator file with medium complexity (3 exports, 359 lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
+- `src/index.ts` is a Orchestrator file with high complexity (0 exports, 1000+ lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
+- `src/watch.ts` is a Orchestrator file with high complexity (3 exports, 375 lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
 - `src/index.ts` has multiple risk factors (high churn, tightly coupled). Consider extracting an interface and before making large changes.
 - `src/graph.ts` has multiple risk factors (high churn, tightly coupled). Consider extracting an interface and before making large changes.
 - `src/detect.ts` has multiple risk factors (high churn, tightly coupled). Consider extracting an interface and before making large changes.
@@ -73,7 +73,6 @@ Cross-layer edges: services -> types, services -> utils, utils -> types
 ## Inferred Conventions
 
 - **Prefer**: camelCase for functions, PascalCase for types, camelCase for files
-- **Prefer**: In `src/theme.ts/`, use camelCase for constants (overrides project-wide camelCase)
 - **Prefer**: In `src/templates/`, use kebab-case for files (overrides project-wide camelCase)
 - **Prefer**: Follow the `get` prefix convention for accessor functions (e.g., `getHubFiles`)
 - **Prefer**: Named exports (no default exports)
@@ -83,33 +82,33 @@ Cross-layer edges: services -> types, services -> utils, utils -> types
 
 | File | Commits (90d) | Last Changed |
 |------|--------------|--------------|
-| `src/index.ts` | 54 | 13 hours ago |
-| `README.md` | 40 | 35 hours ago |
+| `src/index.ts` | 55 | 3 minutes ago |
+| `README.md` | 40 | 2 days ago |
+| `src/templates/main-context.ts` | 30 | 3 minutes ago |
 | `src/summary.ts` | 30 | 4 days ago |
-| `src/templates/main-context.ts` | 29 | 13 hours ago |
-| `package.json` | 26 | 35 hours ago |
-| `src/snapshot.ts` | 25 | 13 hours ago |
-| `src/types.ts` | 24 | 13 hours ago |
-| `src/graph.ts` | 22 | 13 hours ago |
-| `package-lock.json` | 21 | 35 hours ago |
-| `CLAUDE.md` | 20 | 12 hours ago |
+| `package.json` | 26 | 2 days ago |
+| `src/snapshot.ts` | 25 | 15 hours ago |
+| `src/types.ts` | 24 | 15 hours ago |
+| `src/graph.ts` | 23 | 3 minutes ago |
+| `CLAUDE.md` | 21 | 2 hours ago |
+| `package-lock.json` | 21 | 2 days ago |
 
 ## Change Coupling
 
 Files that frequently change together -- when modifying one, check if the other needs updates too.
 
-| File A | File B | Co-changes | Confidence |
-|--------|--------|------------|------------|
-| `src/index.ts` | `src/summary.ts` | 19 | 41% |
-| `src/index.ts` | `src/templates/main-context.ts` | 21 | 42% |
+| File A | File B | Co-changes | Jaccard |
+|--------|--------|------------|---------|
+| `src/index.ts` | `src/summary.ts` | 19 | 40% |
+| `src/index.ts` | `src/templates/main-context.ts` | 22 | 43% |
 | `src/generate.ts` | `src/index.ts` | 15 | 33% |
-| `src/graph.ts` | `src/snapshot.ts` | 14 | 52% |
-| `src/index.ts` | `src/types.ts` | 19 | 40% |
+| `src/graph.ts` | `src/snapshot.ts` | 14 | 50% |
+| `src/index.ts` | `src/types.ts` | 19 | 39% |
 | `package-lock.json` | `package.json` | 19 | 70% |
 | `src/__tests__/hooks.test.ts` | `src/hooks.ts` | 5 | 83% |
-| `src/graph.ts` | `src/types.ts` | 12 | 40% |
-| `src/templates/main-context.ts` | `src/types.ts` | 15 | 43% |
-| `src/generate.ts` | `src/templates/main-context.ts` | 11 | 34% |
+| `src/graph.ts` | `src/types.ts` | 12 | 39% |
+| `src/templates/main-context.ts` | `src/types.ts` | 15 | 42% |
+| `src/generate.ts` | `src/templates/main-context.ts` | 11 | 33% |
 
 ## Test Coverage Map
 
@@ -204,7 +203,7 @@ npm run build
 
 <!-- Sections omitted to fit token budget: code-snapshot. Run clarte --full for full output. -->
 
-<!-- clarte: generated 2026-02-24T06:59:44Z. Run npx clarte to regenerate. -->
+<!-- clarte: generated 2026-02-24T09:24:58Z. Run npx clarte to regenerate. -->
 
 <!-- clarte:user-start -->
 ## Style Rules
