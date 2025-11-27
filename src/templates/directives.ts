@@ -180,6 +180,7 @@ export function buildDirectives(
       .filter((h) => h.commits >= 10)
       .slice(0, 3);
     for (const hot of highChurn) {
+      // TODO: "90 days" is hardcoded; should use the actual analysisDays value from ProjectConfig
       directives.push(
         `\`${hot.path}\` is a high-churn file (${hot.commits} commits in 90 days). Review recent changes before modifying to avoid conflicts.`,
       );

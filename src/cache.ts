@@ -35,7 +35,7 @@ import type {
 
 // ── Constants ─────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 const CACHE_DIR = ".clarte";
 const CACHE_FILE = "cache.json";
 
@@ -69,6 +69,7 @@ interface SerializedEdge {
   importedNames: string[];
   isTypeOnly?: boolean;
   isDynamic?: boolean;
+  isBarrelRouted?: boolean;
 }
 
 export interface CacheData {
@@ -307,7 +308,7 @@ export async function saveCache(
 
 // ── Analysis Cache ────────────────────────────────────────────────────
 
-const ANALYSIS_CACHE_VERSION = 1;
+const ANALYSIS_CACHE_VERSION = 2;
 const ANALYSIS_CACHE_FILE = "analysis-cache.json";
 
 /** Cached graph-derived analysis results (deterministic given edges + config) */
@@ -334,19 +335,25 @@ export function computeAnalysisCacheKey(
   graph: ImportGraph,
   layersConfig?: Array<{ name: string; pattern: string }>,
 ): string {
-  // Sort edges deterministically
+  // Sort edges deterministically, including properties that affect analysis
   const sortedEdges = graph.edges
     .filter((e) => !e.isExternal)
-    .map((e) => `${e.from}>${e.to}`)
+    .map((e) => {
+      const flags = `${e.importedNames.length}:${e.isTypeOnly ? 1 : 0}:${e.isDynamic ? 1 : 0}`;
+      return `${e.from}>${e.to}:${flags}`;
+    })
     .sort()
     .join("|");
+
+  // Count external edges so adding a new npm dependency invalidates the cache
+  const externalCount = graph.edges.filter((e) => e.isExternal).length;
 
   const layersPart = layersConfig
     ? JSON.stringify(layersConfig)
     : "";
 
   return createHash("sha256")
-    .update(sortedEdges + layersPart)
+    .update(sortedEdges + `|ext:${externalCount}` + layersPart)
     .digest("hex");
 }
 
@@ -392,15 +399,26 @@ export async function computeFileHashes(
     return new Map();
   }
 
+  const HASH_CONCURRENCY = 32;
   const hashes = new Map<string, string>();
-  for (const file of files) {
-    const absPath = path.join(rootDir, file);
-    try {
-      const content = await fs.readFile(absPath);
-      const hash = createHash("sha256").update(content).digest("hex");
-      hashes.set(file, hash);
-    } catch {
-      // File disappeared between glob and read
+
+  // Process in chunks of HASH_CONCURRENCY
+  for (let i = 0; i < files.length; i += HASH_CONCURRENCY) {
+    const chunk = files.slice(i, i + HASH_CONCURRENCY);
+    const results = await Promise.all(
+      chunk.map(async (file) => {
+        const absPath = path.join(rootDir, file);
+        try {
+          const content = await fs.readFile(absPath);
+          const hash = createHash("sha256").update(content).digest("hex");
+          return { file, hash } as const;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const r of results) {
+      if (r) hashes.set(r.file, r.hash);
     }
   }
   return hashes;
@@ -478,13 +496,20 @@ function rebuildGraph(
   barrelFiles: Set<string>,
 ): ImportGraph {
   const inDegree = new Map<string, number>();
+  const directInDegree = new Map<string, number>();
   const externalImportCounts = new Map<string, number>();
 
-  for (const file of allFiles) inDegree.set(file, 0);
+  for (const file of allFiles) {
+    inDegree.set(file, 0);
+    directInDegree.set(file, 0);
+  }
 
   for (const edge of edges) {
     if (!edge.isExternal) {
       inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1);
+      if (!edge.isBarrelRouted) {
+        directInDegree.set(edge.to, (directInDegree.get(edge.to) ?? 0) + 1);
+      }
     } else {
       externalImportCounts.set(
         edge.to,
@@ -501,11 +526,12 @@ function rebuildGraph(
     barrelFiles,
   );
 
-  const betweennessScores = computeBetweenness({ edges, inDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles });
+  const betweennessScores = computeBetweenness({ edges, inDegree, directInDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles });
 
   return {
     edges,
     inDegree,
+    directInDegree,
     centrality: authority,
     externalImportCounts,
     authority,
@@ -524,6 +550,7 @@ function serializeEdges(edges: ImportEdge[]): SerializedEdge[] {
     importedNames: [...e.importedNames],
     isTypeOnly: e.isTypeOnly,
     isDynamic: e.isDynamic,
+    isBarrelRouted: e.isBarrelRouted || undefined,
   }));
 }
 

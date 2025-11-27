@@ -872,39 +872,64 @@ export function findSCCs(graph: ImportGraph): string[][] {
   const stack: string[] = [];
   const sccs: string[][] = [];
 
-  function strongconnect(v: string): void {
-    indices.set(v, index);
-    lowlinks.set(v, index);
-    index++;
-    stack.push(v);
-    onStack.add(v);
-
-    for (const w of adj.get(v) ?? []) {
-      if (!indices.has(w)) {
-        strongconnect(w);
-        lowlinks.set(v, Math.min(lowlinks.get(v)!, lowlinks.get(w)!));
-      } else if (onStack.has(w)) {
-        lowlinks.set(v, Math.min(lowlinks.get(v)!, indices.get(w)!));
-      }
-    }
-
-    if (lowlinks.get(v) === indices.get(v)) {
-      const scc: string[] = [];
-      let w: string;
-      do {
-        w = stack.pop()!;
-        onStack.delete(w);
-        scc.push(w);
-      } while (w !== v);
-      if (scc.length > 1) {
-        sccs.push(scc);
-      }
-    }
-  }
+  // Iterative Tarjan's using an explicit call stack.
+  // Each frame stores the current node and the index into its neighbor list.
+  const callStack: Array<{ v: string; neighborIdx: number }> = [];
 
   for (const file of allFiles) {
-    if (!indices.has(file)) {
-      strongconnect(file);
+    if (indices.has(file)) continue;
+
+    callStack.push({ v: file, neighborIdx: 0 });
+    indices.set(file, index);
+    lowlinks.set(file, index);
+    index++;
+    stack.push(file);
+    onStack.add(file);
+
+    while (callStack.length > 0) {
+      const frame = callStack[callStack.length - 1]!;
+      const neighbors = adj.get(frame.v) ?? [];
+
+      if (frame.neighborIdx < neighbors.length) {
+        const w = neighbors[frame.neighborIdx]!;
+        frame.neighborIdx++;
+
+        if (!indices.has(w)) {
+          // "Recurse" into w: push a new frame
+          callStack.push({ v: w, neighborIdx: 0 });
+          indices.set(w, index);
+          lowlinks.set(w, index);
+          index++;
+          stack.push(w);
+          onStack.add(w);
+        } else if (onStack.has(w)) {
+          lowlinks.set(frame.v, Math.min(lowlinks.get(frame.v)!, indices.get(w)!));
+        }
+      } else {
+        // All neighbors processed: check for SCC root
+        if (lowlinks.get(frame.v) === indices.get(frame.v)) {
+          const scc: string[] = [];
+          let w: string;
+          do {
+            w = stack.pop()!;
+            onStack.delete(w);
+            scc.push(w);
+          } while (w !== frame.v);
+          if (scc.length > 1) {
+            sccs.push(scc);
+          }
+        }
+
+        // Pop this frame and update parent's lowlink
+        callStack.pop();
+        if (callStack.length > 0) {
+          const parentFrame = callStack[callStack.length - 1]!;
+          lowlinks.set(
+            parentFrame.v,
+            Math.min(lowlinks.get(parentFrame.v)!, lowlinks.get(frame.v)!),
+          );
+        }
+      }
     }
   }
 
@@ -1058,13 +1083,17 @@ function findActualCycles(
   const sccSet = new Set(scc);
 
   // Build SCC-restricted adjacency
-  const sccAdj = new Map<string, string[]>();
+  const sccAdj = new Map<string, Set<string>>();
   for (const node of scc) {
     const neighbors = adj.get(node);
     if (neighbors) {
-      sccAdj.set(node, [...neighbors].filter((n) => sccSet.has(n)));
+      const filtered = new Set<string>();
+      for (const n of neighbors) {
+        if (sccSet.has(n)) filtered.add(n);
+      }
+      sccAdj.set(node, filtered);
     } else {
-      sccAdj.set(node, []);
+      sccAdj.set(node, new Set());
     }
   }
 
@@ -1075,7 +1104,7 @@ function findActualCycles(
   const sortedScc = [...scc].sort();
   for (const a of sortedScc) {
     for (const b of sccAdj.get(a) ?? []) {
-      if (a < b && (sccAdj.get(b) ?? []).includes(a)) {
+      if (a < b && (sccAdj.get(b)?.has(a) ?? false)) {
         const chain = [a, b, a];
         const key = canonicalizeCycle(chain);
         if (!seenCanonical.has(key)) {
@@ -1090,8 +1119,8 @@ function findActualCycles(
   // 2. BFS shortest cycle through each node
   // Sort by degree descending: high-degree nodes find diverse cycles faster
   const byDegree = [...scc].sort((a, b) => {
-    const degA = (sccAdj.get(a)?.length ?? 0) + (sccAdj.get(b)?.length ?? 0);
-    const degB = (sccAdj.get(b)?.length ?? 0) + (sccAdj.get(a)?.length ?? 0);
+    const degA = (sccAdj.get(a)?.size ?? 0) + (sccAdj.get(b)?.size ?? 0);
+    const degB = (sccAdj.get(b)?.size ?? 0) + (sccAdj.get(a)?.size ?? 0);
     return degB - degA;
   });
 
@@ -1126,23 +1155,13 @@ function findActualCycles(
 
       for (const next of sccAdj.get(node) ?? []) {
         if (next === start) {
-          // Found a cycle back to start -- reconstruct path
-          const chain: string[] = [start];
-          let cur = node;
-          while (cur !== start) {
-            chain.push(cur);
-            cur = parent.get(cur)!;
-          }
-          chain.reverse();
-          // chain is now [start, ..., node] but we built it backwards; fix
-          // Reconstruct forward: walk parent pointers from node to start
-          const forward: string[] = [start];
-          let walk: string | undefined = undefined;
-          // Parent pointers go child->parent, so walk from node backward
-          const reversePath: string[] = [next === start ? node : node];
+          // Found a cycle back to start -- reconstruct via parent pointers
+          const reversePath: string[] = [node];
           let rCur = node;
           while (rCur !== start) {
-            rCur = parent.get(rCur)!;
+            const p = parent.get(rCur);
+            if (p === undefined) break;
+            rCur = p;
             if (rCur !== start) reversePath.push(rCur);
           }
           reversePath.reverse();
@@ -1842,39 +1861,72 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
   const articulationPoints = new Set<string>();
   let timer = 0;
 
-  function dfs(u: string): void {
-    disc.set(u, timer);
-    low.set(u, timer);
-    timer++;
-    let childCount = 0;
-
-    for (const v of adj.get(u) ?? []) {
-      if (!disc.has(v)) {
-        childCount++;
-        parent.set(v, u);
-        dfs(v);
-        low.set(u, Math.min(low.get(u)!, low.get(v)!));
-
-        // Root with 2+ children
-        if (parent.get(u) == null && childCount > 1) {
-          articulationPoints.add(u);
-        }
-        // Non-root where no back edge from subtree reaches above u
-        if (parent.get(u) != null && low.get(v)! >= disc.get(u)!) {
-          articulationPoints.add(u);
-        }
-      } else if (v !== parent.get(u)) {
-        low.set(u, Math.min(low.get(u)!, disc.get(v)!));
-      }
-    }
-  }
+  // Iterative articulation point detection using an explicit call stack.
+  // Each frame stores the current node, its neighbor list as an array,
+  // the iteration index into that list, and the tree-child count.
+  const callStack: Array<{
+    u: string;
+    neighbors: string[];
+    neighborIdx: number;
+    childCount: number;
+  }> = [];
 
   // Run DFS from each unvisited node (handles disconnected components)
   const sortedFiles = [...allFiles].sort();
   for (const file of sortedFiles) {
-    if (!disc.has(file)) {
-      parent.set(file, null);
-      dfs(file);
+    if (disc.has(file)) continue;
+
+    parent.set(file, null);
+    disc.set(file, timer);
+    low.set(file, timer);
+    timer++;
+    callStack.push({
+      u: file,
+      neighbors: [...(adj.get(file) ?? [])],
+      neighborIdx: 0,
+      childCount: 0,
+    });
+
+    while (callStack.length > 0) {
+      const frame = callStack[callStack.length - 1]!;
+
+      if (frame.neighborIdx < frame.neighbors.length) {
+        const v = frame.neighbors[frame.neighborIdx]!;
+        frame.neighborIdx++;
+
+        if (!disc.has(v)) {
+          frame.childCount++;
+          parent.set(v, frame.u);
+          disc.set(v, timer);
+          low.set(v, timer);
+          timer++;
+          // "Recurse" into v: push a new frame
+          callStack.push({
+            u: v,
+            neighbors: [...(adj.get(v) ?? [])],
+            neighborIdx: 0,
+            childCount: 0,
+          });
+        } else if (v !== parent.get(frame.u)) {
+          low.set(frame.u, Math.min(low.get(frame.u)!, disc.get(v)!));
+        }
+      } else {
+        // All neighbors processed: pop frame and update parent
+        callStack.pop();
+        if (callStack.length > 0) {
+          const parentFrame = callStack[callStack.length - 1]!;
+          low.set(parentFrame.u, Math.min(low.get(parentFrame.u)!, low.get(frame.u)!));
+
+          // Root with 2+ children
+          if (parent.get(parentFrame.u) == null && parentFrame.childCount > 1) {
+            articulationPoints.add(parentFrame.u);
+          }
+          // Non-root where no back edge from subtree reaches above u
+          if (parent.get(parentFrame.u) != null && low.get(frame.u)! >= disc.get(parentFrame.u)!) {
+            articulationPoints.add(parentFrame.u);
+          }
+        }
+      }
     }
   }
 
@@ -1912,9 +1964,10 @@ function analyzeComponentsWithout(
     if (visited.has(file)) continue;
     const component: string[] = [];
     const queue = [file];
+    let qHead = 0;
     visited.add(file);
-    while (queue.length > 0) {
-      const current = queue.shift()!;
+    while (qHead < queue.length) {
+      const current = queue[qHead++];
       component.push(current);
       for (const neighbor of adj.get(current) ?? []) {
         if (!visited.has(neighbor)) {
@@ -1973,9 +2026,10 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
     if (visited.has(file)) continue;
     const component: string[] = [];
     const queue = [file];
+    let qHead = 0;
     visited.add(file);
-    while (queue.length > 0) {
-      const current = queue.shift()!;
+    while (qHead < queue.length) {
+      const current = queue[qHead++];
       component.push(current);
       for (const neighbor of adj.get(current) ?? []) {
         if (!visited.has(neighbor)) {
@@ -2071,9 +2125,10 @@ export function findStructuralTemporalMismatches(
     if (!adj.has(from) || !adj.has(to)) return -1;
     const visited = new Set<string>();
     const queue: Array<{ node: string; dist: number }> = [{ node: from, dist: 0 }];
+    let qHead = 0;
     visited.add(from);
-    while (queue.length > 0) {
-      const { node, dist } = queue.shift()!;
+    while (qHead < queue.length) {
+      const { node, dist } = queue[qHead++];
       for (const neighbor of adj.get(node) ?? []) {
         if (neighbor === to) return dist + 1;
         if (!visited.has(neighbor)) {

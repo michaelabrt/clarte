@@ -51,7 +51,7 @@ import { buildTestMapping } from "./test-map.js";
 import { predictChangeImpact } from "./change-impact.js";
 import { formatBytes } from "./utils.js";
 import { startShimmer } from "./animations.js";
-import type { ContextAnalysis, PackageHubFile, ProgressCallback } from "./types.js";
+import type { ContextAnalysis, DetectedContext, GeneratedFile, HubFile, ImportGraph, PackageHubFile, ProgressCallback } from "./types.js";
 import { serializeAnalysis } from "./serialize.js";
 import { buildDirectives } from "./templates/directives.js";
 import {
@@ -161,29 +161,49 @@ async function main() {
   const diffMode = !!diffArg;
   const diffRef = diffArg?.startsWith("--diff=") ? diffArg.split("=")[1] : undefined;
   const maxTokensArg = args.find((a) => a.startsWith("--max-tokens="));
-  const maxTokens = maxTokensArg ? parseInt(maxTokensArg.split("=")[1], 10) : undefined;
+  const maxTokensRaw = maxTokensArg ? parseInt(maxTokensArg.split("=").slice(1).join("="), 10) : undefined;
+  if (maxTokensRaw !== undefined && Number.isNaN(maxTokensRaw)) {
+    console.error(`Invalid --max-tokens value: ${maxTokensArg?.split("=").slice(1).join("=")}`);
+    process.exit(1);
+  }
+  const maxTokens = maxTokensRaw;
   const formatArg = args.find((a) => a.startsWith("--format="));
   const jsonMode = formatArg?.split("=")[1] === "json";
   const budgetArg = args.find((a) => a.startsWith("--budget="));
-  const budget = budgetArg ? parseInt(budgetArg.split("=")[1], 10) : undefined;
+  const budgetRaw = budgetArg ? parseInt(budgetArg.split("=").slice(1).join("="), 10) : undefined;
+  if (budgetRaw !== undefined && Number.isNaN(budgetRaw)) {
+    console.error(`Invalid --budget value: ${budgetArg?.split("=").slice(1).join("=")}`);
+    process.exit(1);
+  }
+  const budget = budgetRaw;
   const fullMode = args.includes("--full");
   const includeArg = args.find((a) => a.startsWith("--include="));
   const excludeArg = args.find((a) => a.startsWith("--exclude="));
   const sectionFilter: SectionFilterOptions | undefined = (includeArg || excludeArg)
     ? {
-        include: includeArg ? new Set(includeArg.split("=")[1].split(",")) : undefined,
-        exclude: excludeArg ? new Set(excludeArg.split("=")[1].split(",")) : undefined,
+        include: includeArg ? new Set(includeArg.split("=").slice(1).join("=").split(",")) : undefined,
+        exclude: excludeArg ? new Set(excludeArg.split("=").slice(1).join("=").split(",")) : undefined,
       }
     : undefined;
   const effectiveBudget = fullMode ? 0 : budget;
   const maxCharsArg = args.find((a) => a.startsWith("--max-chars="));
-  const maxChars = maxCharsArg ? parseInt(maxCharsArg.split("=")[1], 10) : undefined;
+  const maxCharsRaw = maxCharsArg ? parseInt(maxCharsArg.split("=").slice(1).join("="), 10) : undefined;
+  if (maxCharsRaw !== undefined && Number.isNaN(maxCharsRaw)) {
+    console.error(`Invalid --max-chars value: ${maxCharsArg?.split("=").slice(1).join("=")}`);
+    process.exit(1);
+  }
+  const maxChars = maxCharsRaw;
   const initHook = args.includes("--init-hook");
   const diffFileArg = args.find((a) => a.startsWith("--diff-file="));
-  const diffFile = diffFileArg?.split("=")[1];
+  const diffFile = diffFileArg?.split("=").slice(1).join("=");
   const diffFilterSet = new Set(diffFilterFiles);
   const targetDir = args.find((a) => !a.startsWith("-") && !diffFilterSet.has(a)) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
+
+  // Warn if --diff-file is used without --diff
+  if (diffFile && !diffMode) {
+    console.error("[clarte] --diff-file requires --diff mode; ignoring.");
+  }
 
   // --init-hook: install git pre-commit hook
   if (initHook) {
@@ -192,7 +212,7 @@ async function main() {
   }
 
   // Early validation: ensure this looks like a project directory
-  const PROJECT_MARKERS = ["package.json", "go.mod", "Cargo.toml", "pyproject.toml", "requirements.txt"];
+  const PROJECT_MARKERS = ["package.json", "go.mod", "Cargo.toml", "pyproject.toml", "requirements.txt", "pom.xml", "build.gradle", "build.gradle.kts", "Makefile", "CMakeLists.txt", "Gemfile", "composer.json"];
   const hasProjectMarker = (await Promise.all(
     PROJECT_MARKERS.map(f => fileExists(path.join(rootDir, f)))
   )).some(Boolean);
@@ -228,9 +248,17 @@ async function main() {
 
       if (checkTimestamp) {
         // Timestamp-only check: no file globbing or hashing
-        if (!config?.snapshotGeneratedAt) {
+        if (!config) {
+          if (ciMode) {
+            console.log("none");
+          } else {
+            console.log("clarte: no context file found. Run npx clarte to generate.");
+          }
+          process.exit(2);
+        }
+        if (!config.snapshotGeneratedAt) {
           if (ciMode) console.log("fresh");
-          process.exit(0); // No config or no timestamp: nothing to check
+          process.exit(0); // Config exists but no timestamp: nothing to check
         }
         const staleDays = config.staleDays ?? 7;
         const daysSince = Math.floor(
@@ -261,9 +289,17 @@ async function main() {
       }
 
       // Hash-based check (original behavior)
-      if (!config?.snapshotHash) {
+      if (!config) {
+        if (ciMode) {
+          console.log("none");
+        } else {
+          console.log("clarte: no context file found. Run npx clarte to generate.");
+        }
+        process.exit(2);
+      }
+      if (!config.snapshotHash) {
         if (ciMode) console.log("fresh");
-        process.exit(0); // No config or no hash: nothing to check
+        process.exit(0); // Config exists but no hash: nothing to check
       }
       const lang = config.language ?? "other";
       const currentHash = await computeSnapshotHash(rootDir, lang);
@@ -301,6 +337,9 @@ async function main() {
     }
   }
 
+  // Load saved config once for theme detection + later analysis steps
+  const savedConfig = await loadConfig(rootDir);
+
   // Determine color scheme: env var > saved config > interactive prompt
   let colorScheme: "dark" | "light" = "dark";
   if (jsonMode) {
@@ -312,9 +351,8 @@ async function main() {
     if (envTheme === "dark" || envTheme === "light") {
       colorScheme = envTheme;
     } else {
-      const earlyConfig = await loadConfig(rootDir);
-      if (earlyConfig?.colorScheme) {
-        colorScheme = earlyConfig.colorScheme;
+      if (savedConfig?.colorScheme) {
+        colorScheme = savedConfig.colorScheme;
       } else {
         // Detect terminal background from COLORFGBG before defaulting to dark
         const detected = detectTerminalBackground();
@@ -356,28 +394,34 @@ async function main() {
   // Step 1: Auto-detect
   const noopShimmer = { message: (_: string) => {}, stop: () => {} };
   let shimmer = jsonMode ? noopShimmer : startShimmer("Detecting stack...");
-  const detected = await detectContext(rootDir, verbose ? verboseLog : (msg) => shimmer.message(msg));
-  shimmer.stop();
+  let detected: DetectedContext;
+  try {
+    detected = await detectContext(rootDir, verbose ? verboseLog : (msg) => shimmer.message(msg));
+  } finally {
+    shimmer.stop();
+  }
   if (!jsonMode) p.log.step(t.text("Detection complete."));
-
-  // Load saved config early (needed for custom layers during analysis)
-  const savedConfig = await loadConfig(rootDir);
 
   // Step 1.5: Build import graph (including secondary languages)
   shimmer = jsonMode ? noopShimmer : startShimmer(`Building import graph (${detected.sourceFileCount} files)...`);
-  const graph = await buildGraphWithCache(rootDir, detected.language, verbose ? verboseLog : (msg) => shimmer.message(msg));
+  let graph: ImportGraph;
+  let topHub: HubFile | undefined;
+  try {
+    graph = await buildGraphWithCache(rootDir, detected.language, verbose ? verboseLog : (msg) => shimmer.message(msg));
 
-  // Merge secondary language graphs if present
-  if (detected.secondaryLanguages) {
-    for (const secLang of detected.secondaryLanguages) {
-      shimmer.message(`Building ${secLang} import graph...`);
-      const secGraph = await buildImportGraph(rootDir, secLang, verbose ? verboseLog : undefined);
-      mergeGraph(graph, secGraph);
+    // Merge secondary language graphs if present
+    if (detected.secondaryLanguages) {
+      for (const secLang of detected.secondaryLanguages) {
+        shimmer.message(`Building ${secLang} import graph...`);
+        const secGraph = await buildImportGraph(rootDir, secLang, verbose ? verboseLog : undefined);
+        mergeGraph(graph, secGraph);
+      }
     }
-  }
 
-  const topHub = getHubFiles(graph, 1)[0];
-  shimmer.stop();
+    topHub = getHubFiles(graph, 1)[0];
+  } finally {
+    shimmer.stop();
+  }
   if (!jsonMode) {
     p.log.step(
       `${t.text("Import graph:")} ${t.textBold(String(graph.edges.length))} ${t.text("edges,")} ${t.textBold(String(graph.externalImportCounts.size))} ${t.text("packages.")}` +
@@ -759,7 +803,11 @@ async function main() {
       }
     }
   }
-  await saveSnapshot(rootDir, currentAnalysisSnapshot);
+  try {
+    await saveSnapshot(rootDir, currentAnalysisSnapshot);
+  } catch {
+    // Snapshot save failed; non-critical
+  }
 
   // --format=json: output full analysis as structured JSON and exit
   if (jsonMode) {
@@ -771,7 +819,9 @@ async function main() {
     }
     const directives = buildDirectives(analysis, detected, undefined, graph);
     const output = serializeAnalysis(detected, analysis, snapshot, graph, directives);
-    process.stdout.write(JSON.stringify(output, null, 2) + "\n");
+    await new Promise<void>((resolve, reject) => {
+      process.stdout.write(JSON.stringify(output, null, 2) + "\n", (err) => err ? reject(err) : resolve());
+    });
     process.exit(0);
   }
 
@@ -887,8 +937,11 @@ async function main() {
   let snapshot = null;
   if (answers.generateSnapshot) {
     shimmer = startShimmer("Scanning source files for code snapshot...");
-    snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens, verbose ? verboseLog : (msg) => shimmer.message(msg), gitActivity);
-    shimmer.stop();
+    try {
+      snapshot = await generateSnapshot(detected, answers.snapshotPaths, graph, maxTokens, verbose ? verboseLog : (msg) => shimmer.message(msg), gitActivity);
+    } finally {
+      shimmer.stop();
+    }
     const count = snapshot.entries.length;
     const budgetNote = snapshot.budgetExcluded
       ? ` (${snapshot.budgetExcluded} excluded by token budget)`
@@ -909,8 +962,12 @@ async function main() {
     dryRun ? "Preparing context files..." : "Generating context files...",
   );
   const shouldGenerateSkills = generateSkills || answers.ides.includes("claude");
-  const files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills, verbose ? verboseLog : undefined, effectiveBudget, sectionFilter, maxChars, graph);
-  shimmer.stop();
+  let files: GeneratedFile[];
+  try {
+    files = await generateFiles(detected, answers, snapshot, force, dryRun, analysis, shouldGenerateSkills, verbose ? verboseLog : undefined, effectiveBudget, sectionFilter, maxChars, graph);
+  } finally {
+    shimmer.stop();
+  }
   p.log.step(
     dryRun
       ? `${t.text("Would generate")} ${t.textBold(String(files.length))} ${t.text(`file${files.length === 1 ? "" : "s"}.`)}`
@@ -978,5 +1035,7 @@ main().catch((err) => {
     console.error(t.error("Fatal error:"), err);
   }
 
+  unpatchPicocolors();
+  resetTerminalColors();
   process.exit(1);
 });

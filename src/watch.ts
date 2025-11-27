@@ -81,7 +81,10 @@ const IGNORE_FILES = new Set([
  * Exported for testing.
  */
 export function shouldRebuild(filePath: string): boolean {
-  const parts = filePath.split(path.sep);
+  // Normalize backslashes to forward slashes for cross-platform compatibility
+  // (fs.watch may return forward-slash paths on Windows)
+  const normalized = filePath.replace(/\\/g, "/");
+  const parts = normalized.split("/");
 
   // Check if any path segment is an ignored directory
   for (const part of parts) {
@@ -175,9 +178,13 @@ export async function runWatchMode(
   console.log(`[clarte] ${timeStamp()} - watching for changes... (Ctrl+C to stop)`);
 
   let isRunning = false;
+  let pendingFiles: string[] = [];
 
   const debounced = createDebounce<string>(async (changedFiles) => {
-    if (isRunning) return;
+    if (isRunning) {
+      pendingFiles.push(...changedFiles);
+      return;
+    }
     isRunning = true;
 
     const uniqueFiles = [...new Set(changedFiles)];
@@ -194,6 +201,15 @@ export async function runWatchMode(
     }
 
     isRunning = false;
+
+    // Re-trigger for any files that arrived during the rebuild
+    if (pendingFiles.length > 0) {
+      const deferred = pendingFiles;
+      pendingFiles = [];
+      for (const file of deferred) {
+        debounced.add(file);
+      }
+    }
   }, 500);
 
   // Use fs.watch with recursive option
