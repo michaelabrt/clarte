@@ -347,7 +347,8 @@ function parseRustImportsAst(root: Node): RawImport[] {
       const name = node.childForFieldName("name");
       if (name && !node.namedChildren.some(c => c.type === "declaration_list")) {
         // Only external mod declarations (mod foo;), not inline mod blocks
-        imports.push({ specifier: name.text, importedNames: [] });
+        // Prefix with "mod::" so resolveImport can distinguish from use declarations
+        imports.push({ specifier: `mod::${name.text}`, importedNames: [] });
       }
     }
   }
