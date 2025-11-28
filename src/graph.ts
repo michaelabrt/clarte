@@ -187,8 +187,16 @@ function isRelativeSpecifier(spec: string, lang: Language): boolean {
   if (lang === "python") {
     return spec.startsWith(".");
   }
+  if (lang === "go") {
+    // All Go imports attempt resolution first; stdlib/third-party fall through
+    return true;
+  }
   if (lang === "rust") {
-    return spec.startsWith("crate::") || spec.startsWith("super::") || spec.startsWith("self::");
+    return spec.startsWith("crate::") || spec.startsWith("super::") || spec.startsWith("self::") || spec.startsWith("mod::");
+  }
+  if (lang === "java") {
+    // All Java imports attempt resolution first; unresolved fall through to external
+    return true;
   }
   return spec.startsWith("./") || spec.startsWith("../");
 }
@@ -224,6 +232,49 @@ function resolveJsImport(
 }
 
 /**
+ * Load the Go module path from go.mod.
+ * Returns the module path (e.g. "myapp" or "github.com/user/repo") or null.
+ */
+async function loadGoModule(rootDir: string): Promise<string | null> {
+  const content = await readFileOr(path.join(rootDir, "go.mod"));
+  if (!content) return null;
+  const match = content.match(/^module\s+(\S+)/m);
+  return match ? match[1] : null;
+}
+
+/**
+ * Try to resolve a Go import to a file path.
+ * Go imports are package-level: "myapp/internal/handler" resolves to any .go file
+ * in that directory. We return the first match (stable via sort).
+ */
+function resolveGoImport(
+  specifier: string,
+  goModulePath: string,
+  allFiles: Set<string>,
+): string | null {
+  // Only resolve imports that start with the module path
+  if (specifier !== goModulePath && !specifier.startsWith(goModulePath + "/")) {
+    return null;
+  }
+  // Strip module path prefix to get the relative package directory
+  const relDir = specifier === goModulePath ? "" : specifier.slice(goModulePath.length + 1);
+
+  // Find all .go files in that directory (not subdirectories)
+  const candidates: string[] = [];
+  for (const file of allFiles) {
+    const dir = path.dirname(file).replace(/\\/g, "/");
+    if (dir === relDir && file.endsWith(".go")) {
+      candidates.push(file);
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  // Return first alphabetically for determinism
+  candidates.sort();
+  return candidates[0];
+}
+
+/**
  * Try to resolve a Python relative import to a file path.
  */
 function resolvePythonImport(
@@ -251,12 +302,176 @@ function resolvePythonImport(
   return null;
 }
 
+/**
+ * Detect Java source root prefixes from the file list.
+ * Looks for common patterns like "src/main/java/" or "src/".
+ */
+function detectJavaSourceRoots(allFiles: string[]): string[] {
+  const roots = new Set<string>();
+  for (const file of allFiles) {
+    if (!file.endsWith(".java")) continue;
+    // Maven/Gradle convention
+    const mavenIdx = file.indexOf("src/main/java/");
+    if (mavenIdx >= 0) {
+      roots.add(file.slice(0, mavenIdx + "src/main/java/".length));
+      continue;
+    }
+    const testIdx = file.indexOf("src/test/java/");
+    if (testIdx >= 0) {
+      roots.add(file.slice(0, testIdx + "src/test/java/".length));
+      continue;
+    }
+    // Simple "src/" convention
+    const srcIdx = file.indexOf("src/");
+    if (srcIdx >= 0) {
+      roots.add(file.slice(0, srcIdx + "src/".length));
+      continue;
+    }
+  }
+  // Fallback: try root directory
+  if (roots.size === 0) roots.add("");
+  return [...roots];
+}
+
+/**
+ * Try to resolve a Java import (e.g. "com.example.model.User") to a file path.
+ * Converts dots to path separators and tries each source root.
+ */
+function resolveJavaImport(
+  specifier: string,
+  allFiles: Set<string>,
+  sourceRoots: string[],
+): string | null {
+  // Wildcard import: com.example.model.* -- skip, too ambiguous for single edge
+  if (specifier.endsWith(".*")) {
+    const dirPath = specifier.slice(0, -2).replace(/\./g, "/");
+    // Find the first .java file in the package directory
+    for (const root of sourceRoots) {
+      for (const file of allFiles) {
+        if (file.startsWith(root + dirPath + "/") && file.endsWith(".java")) {
+          const afterDir = file.slice((root + dirPath + "/").length);
+          if (!afterDir.includes("/")) return file;
+        }
+      }
+    }
+    return null;
+  }
+
+  // Regular import: com.example.model.User -> com/example/model/User.java
+  const filePath = specifier.replace(/\./g, "/") + ".java";
+  for (const root of sourceRoots) {
+    const candidate = root + filePath;
+    if (allFiles.has(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Try to resolve a Rust use path or mod declaration to a file path.
+ * Handles crate::, super::, self::, and mod:: (synthetic prefix for mod declarations).
+ */
+function resolveRustImport(
+  specifier: string,
+  fromFile: string,
+  allFiles: Set<string>,
+): string | null {
+  // Detect crate root (directory containing lib.rs or main.rs)
+  let crateRoot = "src";
+  for (const f of allFiles) {
+    if (f.endsWith("/lib.rs") || f === "src/lib.rs" || f.endsWith("/main.rs") || f === "src/main.rs") {
+      crateRoot = path.dirname(f).replace(/\\/g, "/");
+      break;
+    }
+  }
+
+  // mod:: prefix: synthetic for `mod foo;` declarations
+  if (specifier.startsWith("mod::")) {
+    const modName = specifier.slice("mod::".length);
+    return resolveRustModDecl(modName, fromFile, allFiles);
+  }
+
+  // Strip scoped import list: "crate::types::{A, B}" -> "crate::types"
+  let cleanSpec = specifier;
+  const braceIdx = cleanSpec.indexOf("::{");
+  if (braceIdx >= 0) {
+    cleanSpec = cleanSpec.slice(0, braceIdx);
+  }
+
+  if (cleanSpec.startsWith("crate::")) {
+    // crate::models::user::User -> strip "crate::", strip trailing item, map :: to /
+    const segments = cleanSpec.slice("crate::".length).split("::");
+    return resolveRustModulePath(crateRoot, segments, allFiles);
+  }
+
+  if (cleanSpec.startsWith("super::")) {
+    const fromDir = path.dirname(fromFile).replace(/\\/g, "/");
+    const parent = path.dirname(fromDir).replace(/\\/g, "/");
+    const segments = cleanSpec.slice("super::".length).split("::");
+    return resolveRustModulePath(parent, segments, allFiles);
+  }
+
+  if (cleanSpec.startsWith("self::")) {
+    const fromDir = path.dirname(fromFile).replace(/\\/g, "/");
+    const segments = cleanSpec.slice("self::".length).split("::");
+    return resolveRustModulePath(fromDir, segments, allFiles);
+  }
+
+  return null;
+}
+
+/**
+ * Resolve a Rust mod declaration: `mod foo;` -> find foo.rs or foo/mod.rs
+ * relative to the declaring file's directory.
+ */
+function resolveRustModDecl(
+  modName: string,
+  fromFile: string,
+  allFiles: Set<string>,
+): string | null {
+  const fromDir = path.dirname(fromFile).replace(/\\/g, "/");
+  // Try sibling file: src/models.rs
+  const asFile = `${fromDir}/${modName}.rs`;
+  if (allFiles.has(asFile)) return asFile;
+  // Try directory module: src/models/mod.rs
+  const asMod = `${fromDir}/${modName}/mod.rs`;
+  if (allFiles.has(asMod)) return asMod;
+  return null;
+}
+
+/**
+ * Resolve a Rust module path (segments after crate::/super::/self::) to a file.
+ * Tries progressively shorter segment lists to find the module file,
+ * since the last segment(s) may be item names rather than module paths.
+ */
+function resolveRustModulePath(
+  baseDir: string,
+  segments: string[],
+  allFiles: Set<string>,
+): string | null {
+  // Try full path first, then progressively drop trailing segments (item names)
+  for (let len = segments.length; len >= 1; len--) {
+    const modPath = segments.slice(0, len).join("/");
+    // Try as file: base/models/user.rs
+    const asFile = `${baseDir}/${modPath}.rs`;
+    if (allFiles.has(asFile)) return asFile;
+    // Try as directory module: base/models/user/mod.rs
+    const asMod = `${baseDir}/${modPath}/mod.rs`;
+    if (allFiles.has(asMod)) return asMod;
+  }
+  return null;
+}
+
+interface ResolveContext {
+  goModulePath?: string | null;
+  javaSourceRoots?: string[];
+}
+
 function resolveImport(
   specifier: string,
   fromFile: string,
   lang: Language,
   allFiles: Set<string>,
-  pathAliases?: PathAlias[],
+  ctx: ResolveContext = {},
 ): string | null {
   switch (lang) {
     case "typescript":
@@ -270,9 +485,15 @@ function resolveImport(
     }
     case "python":
       return resolvePythonImport(specifier, fromFile, allFiles);
+    case "go":
+      return ctx.goModulePath
+        ? resolveGoImport(specifier, ctx.goModulePath, allFiles)
+        : null;
+    case "java":
+      return resolveJavaImport(specifier, allFiles, ctx.javaSourceRoots ?? []);
+    case "rust":
+      return resolveRustImport(specifier, fromFile, allFiles);
     default:
-      // Go and Rust: module paths are harder to resolve reliably
-      // without a full build system. Skip resolution for now.
       return null;
   }
 }
@@ -572,6 +793,21 @@ export async function buildImportGraph(
     onProgress?.(`Loaded ${pathAliases.length} path alias(es) from tsconfig`);
   }
 
+  // Load language-specific resolution context
+  const resolveCtx: ResolveContext = {};
+  if (language === "go") {
+    resolveCtx.goModulePath = await loadGoModule(rootDir);
+    if (resolveCtx.goModulePath) {
+      onProgress?.(`Go module: ${resolveCtx.goModulePath}`);
+    }
+  }
+  if (language === "java") {
+    resolveCtx.javaSourceRoots = detectJavaSourceRoots(files);
+    if (resolveCtx.javaSourceRoots.length > 0) {
+      onProgress?.(`Java source root${resolveCtx.javaSourceRoots.length === 1 ? "" : "s"}: ${resolveCtx.javaSourceRoots.join(", ")}`);
+    }
+  }
+
   // Resolve barrel file re-exports for JS/TS projects
   let barrelMap: BarrelExportMap = { namedExports: new Map(), starExports: new Map() };
   if (isJsTs) {
@@ -604,8 +840,8 @@ export async function buildImportGraph(
     for (const raw of rawImports) {
       const isRelative = isRelativeSpecifier(raw.specifier, language);
 
-      if (isRelative || (pathAliases.length > 0 && !isRelative)) {
-        const resolved = resolveImport(raw.specifier, file, language, fileSet, pathAliases);
+      if (isRelative) {
+        const resolved = resolveImport(raw.specifier, file, language, fileSet, resolveCtx);
         if (resolved) {
           const barrelNamed = barrelMap.namedExports.get(resolved);
           const barrelStars = barrelMap.starExports.get(resolved);
@@ -685,6 +921,25 @@ export async function buildImportGraph(
             inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
             directInDegree.set(resolved, (directInDegree.get(resolved) ?? 0) + 1);
           }
+        } else if (language === "go" || language === "java" || language === "rust") {
+          // For Go/Java/Rust, unresolved "relative" imports are actually external
+          // (stdlib, third-party). Fall through to external edge creation.
+          // Skip unresolved mod declarations (mod::) -- these are Rust compile errors, not packages.
+          if (raw.specifier.startsWith("mod::")) continue;
+          const pkgName = getPackageName(raw.specifier, language);
+          edges.push({
+            from: file,
+            to: pkgName,
+            isExternal: true,
+            specifier: raw.specifier,
+            importedNames: raw.importedNames,
+            isTypeOnly: raw.isTypeOnly,
+            isDynamic: raw.isDynamic,
+          });
+          externalImportCounts.set(
+            pkgName,
+            (externalImportCounts.get(pkgName) ?? 0) + 1,
+          );
         }
       } else {
         // Try path alias resolution before treating as external
@@ -707,7 +962,7 @@ export async function buildImportGraph(
         } else {
           // External package
           // Normalize specifier to package name (e.g. @scope/pkg/path -> @scope/pkg)
-          const pkgName = getPackageName(raw.specifier);
+          const pkgName = getPackageName(raw.specifier, language);
           edges.push({
             from: file,
             to: pkgName,
@@ -779,11 +1034,42 @@ export function mergeGraph(target: ImportGraph, source: ImportGraph): void {
 
 /**
  * Extract the package name from an import specifier.
- * e.g. "@tanstack/react-query" -> "@tanstack/react-query"
- *      "react/jsx-runtime" -> "react"
- *      "zustand" -> "zustand"
+ * JS/TS: "@tanstack/react-query" -> "@tanstack/react-query", "react/jsx-runtime" -> "react"
+ * Go: "github.com/gin-gonic/gin/middleware" -> "github.com/gin-gonic/gin" (3 segments for domain-style)
+ *     "fmt" -> "fmt", "net/http" -> "net"
+ * Java: "java.util.HashMap" -> "java.util", "com.example.lib.Foo" -> "com.example.lib"
+ * Rust: "std::collections::HashMap" -> "std", "serde::Deserialize" -> "serde"
  */
-function getPackageName(specifier: string): string {
+function getPackageName(specifier: string, lang?: Language): string {
+  if (lang === "go") {
+    const parts = specifier.split("/");
+    // Domain-style imports (github.com/user/repo/...) -> first 3 segments
+    if (parts.length >= 3 && parts[0].includes(".")) {
+      return parts.slice(0, 3).join("/");
+    }
+    // Stdlib: "fmt" -> "fmt", "net/http" -> "net"
+    return parts[0];
+  }
+  if (lang === "java") {
+    const parts = specifier.split(".");
+    // Strip trailing class name(s): keep package prefix
+    // "java.util.HashMap" -> "java.util"
+    // "com.example.service.UserService" -> "com.example.service"
+    if (parts.length <= 2) return specifier;
+    // Known stdlib: take first 2 segments
+    const prefix = parts[0];
+    if (prefix === "java" || prefix === "javax") {
+      return parts.slice(0, 2).join(".");
+    }
+    // Third-party: take first 3 segments (com.example.library)
+    return parts.slice(0, Math.min(3, parts.length)).join(".");
+  }
+  if (lang === "rust") {
+    // "std::collections::HashMap" -> "std", "serde::Deserialize" -> "serde"
+    const idx = specifier.indexOf("::");
+    return idx >= 0 ? specifier.slice(0, idx) : specifier;
+  }
+  // JS/TS default
   if (specifier.startsWith("@")) {
     const parts = specifier.split("/");
     return parts.slice(0, 2).join("/");

@@ -226,7 +226,7 @@ describe("parseImportsAst - Rust", () => {
       "rust",
     );
     expect(result).toHaveLength(1);
-    expect(result[0].specifier).toBe("config");
+    expect(result[0].specifier).toBe("mod::config");
   });
 });
 

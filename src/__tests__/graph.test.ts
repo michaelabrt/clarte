@@ -160,7 +160,7 @@ describe("parseRustImports", () => {
   it("parses mod declarations", () => {
     const result = parseRustImports(`mod config;`);
     expect(result).toEqual([
-      { specifier: "config", importedNames: [] },
+      { specifier: "mod::config", importedNames: [] },
     ]);
   });
 
