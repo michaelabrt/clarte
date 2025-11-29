@@ -4,11 +4,11 @@
   "hubFiles": [
     {
       "path": "packages/api/src/handler.ts",
-      "authority": 0.0241
+      "authority": 0.1381
     },
     {
       "path": "packages/api/src/middleware.ts",
-      "authority": 0.0241
+      "authority": 0.1381
     },
     {
       "path": "packages/api/src/router.ts",
@@ -16,7 +16,7 @@
     },
     {
       "path": "packages/core/src/events.ts",
-      "authority": 0.6687
+      "authority": 0.5229
     },
     {
       "path": "packages/core/src/index.ts",
@@ -24,7 +24,7 @@
     },
     {
       "path": "packages/core/src/types.ts",
-      "authority": 0.2738
+      "authority": 0.2365
     },
     {
       "path": "packages/core/src/utils.ts",
@@ -36,7 +36,7 @@
     },
     {
       "path": "packages/web/src/store.ts",
-      "authority": 0.0919
+      "authority": 0.1943
     }
   ],
   "circularDeps": [],
@@ -94,21 +94,6 @@
       "from": "packages/api/src/router.ts",
       "to": "packages/api/src/middleware.ts",
       "importedNames": 2
-    },
-    {
-      "from": "packages/core/src/index.ts",
-      "to": "packages/core/src/events.ts",
-      "importedNames": 2
-    },
-    {
-      "from": "packages/core/src/index.ts",
-      "to": "packages/core/src/types.ts",
-      "importedNames": 3
-    },
-    {
-      "from": "packages/core/src/index.ts",
-      "to": "packages/core/src/utils.ts",
-      "importedNames": 3
     }
   ],
   "betweennessTopFiles": [

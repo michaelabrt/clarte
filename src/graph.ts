@@ -631,6 +631,11 @@ export function computeHITS(
       weight *= 0.3;
     }
 
+    // Barrel outgoing discount: re-exports contribute less authority to targets
+    if (barrels.has(edge.from)) {
+      weight *= 0.3;
+    }
+
     forward.get(edge.from)!.push({ to: edge.to, weight });
     reverse.get(edge.to)!.push({ from: edge.from, weight });
   }
@@ -818,6 +823,9 @@ export async function buildImportGraph(
     }
   }
 
+  // Build set of barrel file paths so we can exclude their outgoing edges from directInDegree
+  const barrelFilePaths = new Set([...barrelMap.namedExports.keys(), ...barrelMap.starExports.keys()]);
+
   // Init in-degree
   for (const file of files) {
     inDegree.set(file, 0);
@@ -919,7 +927,10 @@ export async function buildImportGraph(
               isDynamic: raw.isDynamic,
             });
             inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
-            directInDegree.set(resolved, (directInDegree.get(resolved) ?? 0) + 1);
+            // Barrel files' own outgoing edges are re-exports, not genuine usage
+            if (!barrelFilePaths.has(file)) {
+              directInDegree.set(resolved, (directInDegree.get(resolved) ?? 0) + 1);
+            }
           }
         } else if (language === "go" || language === "java" || language === "rust") {
           // For Go/Java/Rust, unresolved "relative" imports are actually external
@@ -958,7 +969,9 @@ export async function buildImportGraph(
             isDynamic: raw.isDynamic,
           });
           inDegree.set(aliasResolved, (inDegree.get(aliasResolved) ?? 0) + 1);
-          directInDegree.set(aliasResolved, (directInDegree.get(aliasResolved) ?? 0) + 1);
+          if (!barrelFilePaths.has(file)) {
+            directInDegree.set(aliasResolved, (directInDegree.get(aliasResolved) ?? 0) + 1);
+          }
         } else {
           // External package
           // Normalize specifier to package name (e.g. @scope/pkg/path -> @scope/pkg)
@@ -1108,7 +1121,7 @@ export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[] {
   // Build list of all files with their scores
   const files: HubFile[] = [];
   for (const [filePath] of graph.centrality) {
-    const importedBy = graph.inDegree.get(filePath) ?? 0;
+    const importedBy = graph.directInDegree?.get(filePath) ?? graph.inDegree.get(filePath) ?? 0;
     const imports = outCount.get(filePath) ?? 0;
     // Only include files that have some connectivity
     if (importedBy > 0 || imports > 0) {
@@ -1960,8 +1973,12 @@ export function findCrossCuttingFiles(
   const importerLayers = new Map<string, Set<string>>();
   const importerCounts = new Map<string, number>();
 
+  const barrels = graph.barrelFiles ?? new Set<string>();
+
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
+    // Skip barrel files' own re-export edges (not genuine cross-layer usage)
+    if (barrels.has(edge.from)) continue;
     const fromLayer = fileToLayer.get(edge.from);
     if (!fromLayer) continue;
 
@@ -2467,8 +2484,12 @@ export function findTightCouplings(
   // Aggregate named imports per (from, to) pair
   const pairNames = new Map<string, { from: string; to: string; names: Set<string> }>();
 
+  const barrels = graph.barrelFiles ?? new Set<string>();
+
   for (const edge of graph.edges) {
     if (edge.isExternal || edge.importedNames.length === 0) continue;
+    // Skip barrel files' own re-export edges (not genuine coupling)
+    if (barrels.has(edge.from)) continue;
     const key = `${edge.from}->${edge.to}`;
     let entry = pairNames.get(key);
     if (!entry) {
