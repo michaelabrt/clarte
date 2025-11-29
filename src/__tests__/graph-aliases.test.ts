@@ -227,8 +227,8 @@ describe("buildImportGraph barrel file resolution", () => {
 
     // helpers.ts: 4 total importers (barrel's own re-export + 2 barrel-routed + 1 direct)
     expect(graph.inDegree.get("src/utils/helpers.ts")).toBe(4);
-    // helpers.ts: 2 direct importers (barrel's own re-export + direct.ts)
-    expect(graph.directInDegree?.get("src/utils/helpers.ts")).toBe(2);
+    // helpers.ts: 1 direct importer (direct.ts only; barrel's own re-export excluded)
+    expect(graph.directInDegree?.get("src/utils/helpers.ts")).toBe(1);
 
     // Barrel-routed edges should be flagged (app.ts + page.ts)
     const barrelEdges = graph.edges.filter(
