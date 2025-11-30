@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, afterEach } from "vitest";
-import { detectContext, enrichFrameworksWithUsage, summarizeDetection, SECONDARY_LANGUAGE_THRESHOLD } from "../detect.js";
+import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage, summarizeDetection, SECONDARY_LANGUAGE_THRESHOLD } from "../detect.js";
 import type { DetectedContext, DetectedFramework } from "../types.js";
 
 /** Create a temporary project directory with the given file tree. */
@@ -583,5 +583,113 @@ describe("summarizeDetection", () => {
 
   it("returns empty string for unknown project", () => {
     expect(summarizeDetection(base)).toBe("");
+  });
+});
+
+// ── detectIDEs ─────────────────────────────────────────────────────────────
+
+describe("detectIDEs", () => {
+  let tmpDir: string;
+  afterEach(async () => {
+    if (tmpDir) await cleanup(tmpDir);
+  });
+
+  it("detects cursor IDE from .cursor directory", async () => {
+    tmpDir = await makeProject({ ".cursor/settings.json": "{}" });
+    const ides = await detectIDEs(tmpDir);
+    expect(ides).toContain("cursor");
+  });
+
+  it("detects copilot from .github/copilot-instructions.md", async () => {
+    tmpDir = await makeProject({ ".github/copilot-instructions.md": "# Copilot" });
+    const ides = await detectIDEs(tmpDir);
+    expect(ides).toContain("copilot");
+  });
+
+  it("detects windsurf from .windsurfrules", async () => {
+    tmpDir = await makeProject({ ".windsurfrules": "" });
+    const ides = await detectIDEs(tmpDir);
+    expect(ides).toContain("windsurf");
+  });
+
+  it("detects multiple IDEs simultaneously", async () => {
+    tmpDir = await makeProject({
+      ".cursor/settings.json": "{}",
+      ".windsurfrules": "",
+      "AGENTS.md": "# Agents",
+    });
+    const ides = await detectIDEs(tmpDir);
+    expect(ides).toEqual(expect.arrayContaining(["cursor", "windsurf", "opencode"]));
+    expect(ides).toHaveLength(3);
+  });
+
+  it("falls back to claude when no IDE markers found", async () => {
+    tmpDir = await makeProject({ "src/index.ts": "" });
+    const ides = await detectIDEs(tmpDir);
+    expect(ides).toEqual(["claude"]);
+  });
+});
+
+// ── detectProjectDescription ───────────────────────────────────────────────
+
+describe("detectProjectDescription", () => {
+  let tmpDir: string;
+  afterEach(async () => {
+    if (tmpDir) await cleanup(tmpDir);
+  });
+
+  it("extracts description from package.json", async () => {
+    tmpDir = await makeProject({
+      "package.json": JSON.stringify({ name: "test", description: "A test project" }),
+    });
+    expect(await detectProjectDescription(tmpDir)).toBe("A test project");
+  });
+
+  it("extracts description from Cargo.toml", async () => {
+    tmpDir = await makeProject({
+      "Cargo.toml": `[package]\nname = "mylib"\ndescription = "A Rust library"`,
+    });
+    expect(await detectProjectDescription(tmpDir)).toBe("A Rust library");
+  });
+
+  it("extracts description from pyproject.toml", async () => {
+    tmpDir = await makeProject({
+      "pyproject.toml": `[project]\nname = "mypkg"\ndescription = "A Python package"`,
+    });
+    expect(await detectProjectDescription(tmpDir)).toBe("A Python package");
+  });
+
+  it("extracts first paragraph from README.md", async () => {
+    tmpDir = await makeProject({
+      "README.md": "# My Project\n\n[![badge](url)](url)\n\nThis is a CLI tool for testing.\n\n## Usage",
+    });
+    expect(await detectProjectDescription(tmpDir)).toBe("This is a CLI tool for testing.");
+  });
+
+  it("prefers package.json over README", async () => {
+    tmpDir = await makeProject({
+      "package.json": JSON.stringify({ description: "From package" }),
+      "README.md": "# Title\n\nFrom README.",
+    });
+    expect(await detectProjectDescription(tmpDir)).toBe("From package");
+  });
+
+  it("returns null when no description sources exist", async () => {
+    tmpDir = await makeProject({ "src/main.ts": "" });
+    expect(await detectProjectDescription(tmpDir)).toBeNull();
+  });
+
+  it("returns null for empty package.json description", async () => {
+    tmpDir = await makeProject({
+      "package.json": JSON.stringify({ name: "test", description: "" }),
+    });
+    expect(await detectProjectDescription(tmpDir)).toBeNull();
+  });
+
+  it("skips badge images in README", async () => {
+    tmpDir = await makeProject({
+      "README.md": "# Title\n\n![badge](url)\n[![build](url)](url)\n\nActual description here.\n",
+    });
+    expect(await detectProjectDescription(tmpDir)).toBe("Actual description here.");
   });
 });

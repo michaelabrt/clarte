@@ -183,24 +183,26 @@ describe("computeLagCoupling", () => {
     }
   });
 
-  it("returns empty array when no lag patterns exist", () => {
-    // All files change together in every commit (no lagged pattern)
-    const commits = [
-      makeCommit(["a.ts", "b.ts"]),
-      makeCommit(["a.ts", "b.ts"]),
-      makeCommit(["a.ts", "b.ts"]),
-    ];
+  it("returns empty array when co-changing files are far apart in history", () => {
+    // Files co-change in commits 0 and 10, with unrelated commits in between.
+    // Lag 1-3 checks at index 0 (checks 1,2,3) and index 10 (checks 7,8,9,11,12,13)
+    // find nothing, so lagScore = 0 and the pair is excluded.
+    const commits: ParsedCommit[] = [];
+    for (let i = 0; i < 15; i++) {
+      if (i === 0 || i === 10) {
+        commits.push(makeCommit(["a.ts", "b.ts"]));
+      } else {
+        commits.push(makeCommit(["other.ts"]));
+      }
+    }
 
     const coupling = computeChangeCoupling(commits);
     const lagResults = computeLagCoupling(commits, coupling);
 
-    // All files always co-change, so lag coupling should either be empty
-    // or contain pairs where lag score exceeds the threshold.
-    // Regardless, the result must be an array with defined structure.
-    expect(lagResults).toBeInstanceOf(Array);
-    for (const r of lagResults) {
-      expect(r.lagScore).toBeGreaterThan(0);
-    }
+    const abPair = lagResults.find(
+      (r) => (r.fileA === "a.ts" && r.fileB === "b.ts") || (r.fileA === "b.ts" && r.fileB === "a.ts"),
+    );
+    expect(abPair).toBeUndefined();
   });
 
   it("weights lag=1 more than lag=3", () => {

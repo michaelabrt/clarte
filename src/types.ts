@@ -635,4 +635,6 @@ export interface ContextAnalysis {
   changeImpact?: Map<string, Array<{ file: string; score: number }>>;
   /** Architectural fitness violations */
   archViolations?: ArchViolation[];
+  /** Number of days used for git analysis window (default: 90) */
+  analysisDays?: number;
 }

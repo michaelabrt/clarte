@@ -264,15 +264,18 @@ describe("golden-file analysis", () => {
       it("matches golden snapshot", async () => {
         const golden = await loadGolden(fixture.name);
 
-        if (!golden || UPDATE) {
-          // First run or explicit update: write golden file
+        if (UPDATE) {
+          // Explicit update mode: regenerate golden file
           await saveGolden(fixture.name, analysis);
-          if (!golden) {
-            console.log(`  [golden] Created snapshot for ${fixture.name}`);
-          } else {
-            console.log(`  [golden] Updated snapshot for ${fixture.name}`);
-          }
+          console.log(`  [golden] ${golden ? "Updated" : "Created"} snapshot for ${fixture.name}`);
           return;
+        }
+
+        // Guard: golden file must exist in non-update mode (prevents silent self-seeding in CI)
+        if (!golden) {
+          throw new Error(
+            `Golden snapshot missing for "${fixture.name}". Run GOLDEN_UPDATE=1 npx vitest to create it.`,
+          );
         }
 
         // Compare key structural properties

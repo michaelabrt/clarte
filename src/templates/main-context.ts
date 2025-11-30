@@ -337,8 +337,8 @@ export async function buildSections(
     const hotLines: string[] = [];
     hotLines.push("## Recently Active Files");
     hotLines.push("");
-    // TODO: "90d" is hardcoded; should use the actual analysisDays value from ProjectConfig
-    hotLines.push("| File | Commits (90d) | Last Changed |");
+    const days = analysis.analysisDays ?? 90;
+    hotLines.push(`| File | Commits (${days}d) | Last Changed |`);
     hotLines.push("|------|--------------|--------------|");
     for (const hot of analysis.gitActivity.hotFiles.slice(0, 10)) {
       hotLines.push(`| \`${hot.path}\` | ${hot.commits} | ${hot.lastChanged} |`);
@@ -699,7 +699,9 @@ function enforceCharBudget(
         const newResult = result.replace(snapSection.content, newSnapContent);
 
         if (newResult.length <= available) {
-          return newResult;
+          // Add omission comment so the user knows the snapshot was trimmed
+          const trimComment = `\n<!-- Sections omitted to fit char budget: code-snapshot (trimmed). Run clarte --full for full output. -->\n`;
+          return newResult.replace(generatedComment, trimComment + generatedComment);
         }
         // Partially helped; continue with section dropping
         result = newResult;
