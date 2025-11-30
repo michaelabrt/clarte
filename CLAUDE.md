@@ -9,7 +9,7 @@ CLI tool that pre-generates context files for AI coding agents.
 
 ## Tech Stack
 
-- **Vitest** 4.0.18 (used in 55 files)
+- **Vitest** 4.0.18 (used in 56 files)
 - **TypeScript**
 - **npm** (package manager)
 
@@ -31,7 +31,7 @@ CLI tool that pre-generates context files for AI coding agents.
 - `src/index.ts` is a high-churn file (55 commits in 90 days). Review recent changes before modifying to avoid conflicts.
 - `README.md` is a high-churn file (40 commits in 90 days). Review recent changes before modifying to avoid conflicts.
 - `src/templates/main-context.ts` is a high-churn file (30 commits in 90 days). Review recent changes before modifying to avoid conflicts.
-- `src/graph.ts` is a Foundation file with high complexity (36 exports, 2400+ lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
+- `src/graph.ts` is a Foundation file with high complexity (38 exports, 2800+ lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
 - `src/index.ts` is a Orchestrator file with high complexity (0 exports, 1000+ lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
 - `src/watch.ts` is a Orchestrator file with high complexity (3 exports, 375 lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.
 - `src/index.ts` has multiple risk factors (high churn, tightly coupled). Consider extracting an interface and before making large changes.
@@ -82,15 +82,15 @@ Cross-layer edges: services -> types, services -> utils, utils -> types
 
 | File | Commits (90d) | Last Changed |
 |------|--------------|--------------|
-| `src/index.ts` | 55 | 3 minutes ago |
+| `src/index.ts` | 55 | 21 hours ago |
 | `README.md` | 40 | 2 days ago |
-| `src/templates/main-context.ts` | 30 | 3 minutes ago |
-| `src/summary.ts` | 30 | 4 days ago |
+| `src/templates/main-context.ts` | 30 | 21 hours ago |
+| `src/summary.ts` | 30 | 5 days ago |
 | `package.json` | 26 | 2 days ago |
-| `src/snapshot.ts` | 25 | 15 hours ago |
-| `src/types.ts` | 24 | 15 hours ago |
-| `src/graph.ts` | 23 | 3 minutes ago |
-| `CLAUDE.md` | 21 | 2 hours ago |
+| `src/graph.ts` | 25 | 17 minutes ago |
+| `src/snapshot.ts` | 25 | 2 days ago |
+| `src/types.ts` | 24 | 2 days ago |
+| `CLAUDE.md` | 22 | 21 hours ago |
 | `package-lock.json` | 21 | 2 days ago |
 
 ## Change Coupling
@@ -102,11 +102,11 @@ Files that frequently change together -- when modifying one, check if the other 
 | `src/index.ts` | `src/summary.ts` | 19 | 40% |
 | `src/index.ts` | `src/templates/main-context.ts` | 22 | 43% |
 | `src/generate.ts` | `src/index.ts` | 15 | 33% |
-| `src/graph.ts` | `src/snapshot.ts` | 14 | 50% |
+| `src/graph.ts` | `src/snapshot.ts` | 14 | 47% |
 | `src/index.ts` | `src/types.ts` | 19 | 39% |
 | `package-lock.json` | `package.json` | 19 | 70% |
 | `src/__tests__/hooks.test.ts` | `src/hooks.ts` | 5 | 83% |
-| `src/graph.ts` | `src/types.ts` | 12 | 39% |
+| `src/graph.ts` | `src/types.ts` | 12 | 36% |
 | `src/templates/main-context.ts` | `src/types.ts` | 15 | 42% |
 | `src/generate.ts` | `src/templates/main-context.ts` | 11 | 33% |
 
@@ -203,7 +203,7 @@ npm run build
 
 <!-- Sections omitted to fit token budget: code-snapshot. Run clarte --full for full output. -->
 
-<!-- clarte: generated 2026-02-24T09:24:58Z. Run npx clarte to regenerate. -->
+<!-- clarte: generated 2026-02-25T05:58:26Z. Run npx clarte to regenerate. -->
 
 <!-- clarte:user-start -->
 ## Style Rules
