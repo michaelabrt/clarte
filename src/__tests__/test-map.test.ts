@@ -316,7 +316,7 @@ describe("renderTestMappingSection", () => {
   });
 
   it("truncates long untested file lists", () => {
-    const untestedFiles = Array.from({ length: 15 }, (_, i) => `src/file${i}.ts`);
+    const untestedFiles = Array.from({ length: 20 }, (_, i) => `src/file${i}.ts`);
     const mapping: TestMapping = {
       sourceToTests: new Map(),
       untestedFiles,
