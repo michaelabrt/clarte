@@ -561,12 +561,13 @@ async function main() {
   }
 
   // Git history
-  const gitActivity = detected.isGitRepo ? await analyzeGitActivity(rootDir, verbose ? verboseLog : noopProgress) : null;
+  const analysisDays = savedConfig?.analysisDays ?? 90;
+  const gitActivity = detected.isGitRepo ? await analyzeGitActivity(rootDir, verbose ? verboseLog : noopProgress, analysisDays) : null;
   if (!jsonMode) {
     if (gitActivity) {
       const coupledPairs = gitActivity.changeCoupling.length;
       p.log.step(
-        `${t.brand("Git (90d)")}      ${t.textBold(String(gitActivity.hotFiles.length))} active file${gitActivity.hotFiles.length === 1 ? "" : "s"}, ${t.textBold(String(coupledPairs))} coupled pair${coupledPairs === 1 ? "" : "s"}`,
+        `${t.brand(`Git (${analysisDays}d)`)}      ${t.textBold(String(gitActivity.hotFiles.length))} active file${gitActivity.hotFiles.length === 1 ? "" : "s"}, ${t.textBold(String(coupledPairs))} coupled pair${coupledPairs === 1 ? "" : "s"}`,
       );
       if (verbose) {
         for (const h of gitActivity.hotFiles.slice(0, 5)) {
@@ -759,7 +760,7 @@ async function main() {
     if (impactMap.size > 0) changeImpact = impactMap;
   }
 
-  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined, graphTopology, structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined, tightCouplings: tightCouplings.length ? tightCouplings : undefined, monorepoAnalysis, changeImpact };
+  const analysis: ContextAnalysis = { hubFiles, circularDeps, layers, layerEdges, gitActivity, instabilities, communities, deadFiles, configConstraints, crossCuttingFiles, layerConsistency, chokepoints, conventions: conventions ?? undefined, testMapping: testMapping ?? undefined, graphTopology, structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined, tightCouplings: tightCouplings.length ? tightCouplings : undefined, monorepoAnalysis, changeImpact, analysisDays };
 
   // Save analysis cache for graph-derived results
   if (!useAnalysisCache) {
@@ -839,7 +840,7 @@ async function main() {
     }
     reportLines.push(`  ${"Circular deps"}   ${circularDeps.length === 0 ? t.textBold("none") : t.text(`${circularDeps.length} chain${circularDeps.length === 1 ? "" : "s"}`)}`);
     if (gitActivity) {
-      reportLines.push(`  ${"Hot files (90d)"} ${t.textBold(String(gitActivity.hotFiles.length))}`);
+      reportLines.push(`  ${"Hot files (" + analysisDays + "d)"} ${t.textBold(String(gitActivity.hotFiles.length))}`);
     }
     p.note(reportLines.join("\n"), "Analysis Report");
 
