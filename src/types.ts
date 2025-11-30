@@ -533,6 +533,8 @@ export interface TestMapping {
   };
   /** Classification of each test file by type (unit, integration, e2e) */
   testTypes?: Map<string, TestType>;
+  /** Most comprehensive test file (imports the most source modules), useful as pattern reference */
+  exemplarTestFile?: string;
 }
 
 /** A rendered section of the context file with priority and token estimate */

@@ -883,6 +883,10 @@ export async function buildImportGraph(
                 isBarrelRouted: true,
               });
               inDegree.set(source, (inDegree.get(source) ?? 0) + 1);
+              // Barrel-routed imports from non-barrel consumers are genuine usage
+              if (!barrelFilePaths.has(file)) {
+                directInDegree.set(source, (directInDegree.get(source) ?? 0) + 1);
+              }
             }
 
             // Unresolved names (could be from star exports): create edges to star sources
@@ -899,6 +903,10 @@ export async function buildImportGraph(
                   isBarrelRouted: true,
                 });
                 inDegree.set(starSource, (inDegree.get(starSource) ?? 0) + 1);
+                // Star-routed imports from non-barrel consumers are genuine usage
+                if (!barrelFilePaths.has(file)) {
+                  directInDegree.set(starSource, (directInDegree.get(starSource) ?? 0) + 1);
+                }
               }
             }
 

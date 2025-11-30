@@ -220,7 +220,14 @@ export function buildTestMapping(
     if (isExcludedFromUntested(file)) continue;
     untestedFiles.push(file);
   }
-  untestedFiles.sort();
+  // Sort by import count (most-imported first) so the most important untested
+  // files appear before the display limit truncates the list
+  untestedFiles.sort((a, b) => {
+    const aCount = graph.inDegree.get(a) ?? 0;
+    const bCount = graph.inDegree.get(b) ?? 0;
+    if (bCount !== aCount) return bCount - aCount;
+    return a.localeCompare(b);
+  });
 
   // Detect test pattern
   const testPattern = detectTestPattern(testFiles, ctx);
@@ -233,11 +240,22 @@ export function buildTestMapping(
     testTypes.set(testFile, classifyTestType(testFile, sourceImportCount));
   }
 
+  // Find exemplar test file (most source imports) as a pattern reference
+  let exemplarTestFile: string | undefined;
+  let maxImports = 0;
+  for (const [testFile, imports] of testImports) {
+    if (imports.size > maxImports) {
+      maxImports = imports.size;
+      exemplarTestFile = testFile;
+    }
+  }
+
   return {
     sourceToTests,
     untestedFiles,
     testPattern,
     testTypes,
+    exemplarTestFile,
   };
 }
 
@@ -273,12 +291,17 @@ export function renderTestMappingSection(
 
   // Untested files warning
   if (mapping.untestedFiles.length > 0) {
-    const displayed = mapping.untestedFiles.slice(0, 10);
+    const displayed = mapping.untestedFiles.slice(0, 15);
     const fileList = displayed.map((f) => `\`${f}\``).join(", ");
     lines.push(`- **Prefer**: Add tests for uncovered files: ${fileList}`);
-    if (mapping.untestedFiles.length > 10) {
-      lines.push(`  (${mapping.untestedFiles.length - 10} more untested files)`);
+    if (mapping.untestedFiles.length > 15) {
+      lines.push(`  (${mapping.untestedFiles.length - 15} more untested files)`);
     }
+  }
+
+  // Exemplar test file hint
+  if (mapping.exemplarTestFile) {
+    lines.push(`- **Prefer**: Follow existing test patterns in \`${mapping.exemplarTestFile}\` (most comprehensive test file)`);
   }
 
   // Test pattern info
