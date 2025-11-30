@@ -40,7 +40,7 @@ CLI tool that pre-generates context files for AI coding agents.
 - When you modify `src/index.ts`, you'll likely need to also update `src/summary.ts` within the next 1-2 commits (lagged co-change pattern).
 - When you modify `src/index.ts`, you'll likely need to also update `src/types.ts` within the next 1-2 commits (lagged co-change pattern).
 - When you modify `src/index.ts`, you'll likely need to also update `src/templates/main-context.ts` within the next 1-2 commits (lagged co-change pattern).
-- When modifying `src/graph.ts`, also check: `src/types.ts`, `src/snapshot.ts`, `src/cache.ts`, `src/ast-parse.ts`.
+- When modifying `src/graph.ts`, also check: `src/snapshot.ts`, `src/types.ts`, `src/cache.ts`, `src/diff.ts`.
 - When modifying `src/cache.ts`, also check: `src/ast-parse.ts`, `src/graph.ts`, `src/types.ts`, `src/utils.ts`.
 - When modifying `src/diff.ts`, also check: `src/theme.ts`, `src/utils.ts`, `src/cache.ts`, `src/graph.ts`.
 - When modifying `src/watch.ts`, also check: `src/graph.ts`, `src/cache.ts`, `src/config.ts`, `src/theme.ts`.
@@ -82,16 +82,16 @@ Cross-layer edges: services -> types, services -> utils, utils -> types
 
 | File | Commits (90d) | Last Changed |
 |------|--------------|--------------|
-| `src/index.ts` | 55 | 21 hours ago |
-| `README.md` | 40 | 2 days ago |
-| `src/templates/main-context.ts` | 30 | 21 hours ago |
-| `src/summary.ts` | 30 | 5 days ago |
-| `package.json` | 26 | 2 days ago |
-| `src/graph.ts` | 25 | 17 minutes ago |
+| `src/index.ts` | 55 | 28 hours ago |
+| `README.md` | 40 | 3 days ago |
+| `src/templates/main-context.ts` | 30 | 28 hours ago |
+| `src/summary.ts` | 30 | 6 days ago |
+| `src/graph.ts` | 26 | 23 minutes ago |
+| `package.json` | 26 | 3 days ago |
+| `src/types.ts` | 25 | 23 minutes ago |
 | `src/snapshot.ts` | 25 | 2 days ago |
-| `src/types.ts` | 24 | 2 days ago |
-| `CLAUDE.md` | 22 | 21 hours ago |
-| `package-lock.json` | 21 | 2 days ago |
+| `CLAUDE.md` | 23 | 8 hours ago |
+| `package-lock.json` | 21 | 3 days ago |
 
 ## Change Coupling
 
@@ -102,12 +102,12 @@ Files that frequently change together -- when modifying one, check if the other 
 | `src/index.ts` | `src/summary.ts` | 19 | 40% |
 | `src/index.ts` | `src/templates/main-context.ts` | 22 | 43% |
 | `src/generate.ts` | `src/index.ts` | 15 | 33% |
-| `src/graph.ts` | `src/snapshot.ts` | 14 | 47% |
-| `src/index.ts` | `src/types.ts` | 19 | 39% |
+| `src/graph.ts` | `src/snapshot.ts` | 14 | 45% |
+| `src/graph.ts` | `src/types.ts` | 13 | 38% |
+| `src/index.ts` | `src/types.ts` | 19 | 38% |
 | `package-lock.json` | `package.json` | 19 | 70% |
 | `src/__tests__/hooks.test.ts` | `src/hooks.ts` | 5 | 83% |
-| `src/graph.ts` | `src/types.ts` | 12 | 36% |
-| `src/templates/main-context.ts` | `src/types.ts` | 15 | 42% |
+| `src/templates/main-context.ts` | `src/types.ts` | 15 | 41% |
 | `src/generate.ts` | `src/templates/main-context.ts` | 11 | 33% |
 
 ## Test Coverage Map
@@ -117,6 +117,7 @@ Files that frequently change together -- when modifying one, check if the other 
 - **Must**: When modifying `src/diff.ts`, run its tests: `src/__tests__/diff-relevance.test.ts` (unit)
 - **Must**: When modifying `src/cache.ts`, run its tests: `src/__tests__/cache.test.ts` (unit)
 - **Prefer**: Add tests for uncovered files: `src/animations.ts`, `src/templates/framework-hints.ts`
+- **Prefer**: Follow existing test patterns in `src/__tests__/code-quality.test.ts` (most comprehensive test file)
 - **Style**: Test convention: co-located .test files (`*.test.{ts,tsx,js,jsx}`)
 
 ## Project Structure
@@ -203,7 +204,7 @@ npm run build
 
 <!-- Sections omitted to fit token budget: code-snapshot. Run clarte --full for full output. -->
 
-<!-- clarte: generated 2026-02-25T05:58:26Z. Run npx clarte to regenerate. -->
+<!-- clarte: generated 2026-02-25T13:41:31Z. Run npx clarte to regenerate. -->
 
 <!-- clarte:user-start -->
 ## Style Rules
