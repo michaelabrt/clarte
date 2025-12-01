@@ -2,11 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { loadConfig, configToAnswers } from "./config.js";
 import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
+import { buildImportGraph, mergeGraph } from "./graph-build.js";
+import { findCircularDeps } from "./graph-cycles.js";
 import {
-  buildImportGraph,
-  mergeGraph,
   getHubFiles,
-  findCircularDeps,
   detectArchitecturalLayers,
   computeInstability,
   detectCommunities,
@@ -17,7 +16,7 @@ import {
   computeGraphTopology,
   findStructuralTemporalMismatches,
   findTightCouplings,
-} from "./graph.js";
+} from "./graph-analysis.js";
 import { buildGraphWithCache } from "./cache.js";
 import { analyzeGitActivity } from "./git-analysis.js";
 import { scanConfigConstraints } from "./config-scan.js";

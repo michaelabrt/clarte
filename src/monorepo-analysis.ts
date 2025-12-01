@@ -7,7 +7,7 @@ import type {
   MonorepoInfo,
 } from "./types.js";
 import { readJsonFile } from "./utils.js";
-import { computeHITS } from "./graph.js";
+import { computeHITS } from "./centrality.js";
 
 /**
  * Determine the public API entry points for a package.
