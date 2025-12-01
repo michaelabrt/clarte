@@ -5,15 +5,14 @@ import { theme as t, unpatchPicocolors } from "./theme.js";
 import { writeFileSafe } from "./utils.js";
 import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import { buildGraphWithCache } from "./cache.js";
+import { buildImportGraph, mergeGraph } from "./graph-build.js";
+import { findCircularDeps } from "./graph-cycles.js";
 import {
-  buildImportGraph,
-  mergeGraph,
   getHubFiles,
-  findCircularDeps,
   detectArchitecturalLayers,
   computeInstability,
   detectCommunities,
-} from "./graph.js";
+} from "./graph-analysis.js";
 import { analyzeGitActivity } from "./git-analysis.js";
 import { loadConfig } from "./config.js";
 import { buildTestMapping } from "./test-map.js";

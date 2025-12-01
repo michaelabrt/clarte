@@ -2,7 +2,7 @@ import * as p from "@clack/prompts";
 import { theme as t } from "./theme.js";
 import type { CodeSnapshot, ContextAnalysis, GeneratedFile } from "./types.js";
 import { estimateTokens, formatBytes } from "./utils.js";
-import { INSTABILITY_THRESHOLD } from "./graph.js";
+import { INSTABILITY_THRESHOLD } from "./graph-analysis.js";
 
 /**
  * Print a summary of generated files with token estimates.

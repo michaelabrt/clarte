@@ -7,7 +7,7 @@ import { renderConstraintsSection } from "../config-scan.js";
 import { renderConventionsSection } from "../conventions.js";
 import { renderTestMappingSection } from "../test-map.js";
 import { renderDirectivesSection } from "./directives.js";
-import { findFeedbackEdges } from "../graph.js";
+import { findFeedbackEdges } from "../graph-cycles.js";
 
 /** Default token budget for context files. */
 export const DEFAULT_BUDGET = 5000;

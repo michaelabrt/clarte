@@ -26,11 +26,10 @@ import {
   saveAnalysisCache,
   type AnalysisCacheData,
 } from "./cache.js";
+import { buildImportGraph, mergeGraph } from "./graph-build.js";
+import { findCircularDeps } from "./graph-cycles.js";
 import {
-  buildImportGraph,
-  mergeGraph,
   getHubFiles,
-  findCircularDeps,
   detectArchitecturalLayers,
   computeInstability,
   INSTABILITY_THRESHOLD,
@@ -42,7 +41,7 @@ import {
   computeGraphTopology,
   findStructuralTemporalMismatches,
   findTightCouplings,
-} from "./graph.js";
+} from "./graph-analysis.js";
 import { analyzeGitActivity } from "./git-analysis.js";
 import { analyzeMonorepoGraph, computePackageCentrality } from "./monorepo-analysis.js";
 import { scanConfigConstraints } from "./config-scan.js";

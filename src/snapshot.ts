@@ -1,7 +1,7 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
 import { estimateTokens, readFileOr, readJsonFile } from "./utils.js";
-import { findUsedExports } from "./graph.js";
+import { findUsedExports } from "./graph-analysis.js";
 import { initTreeSitter, extractSnapshotAst } from "./ast-parse.js";
 import type { CodeSnapshot, DetectedContext, GitAnalysis, ImportGraph, Language, ProgressCallback, SnapshotEntry } from "./types.js";
 

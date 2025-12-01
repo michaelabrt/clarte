@@ -4,7 +4,7 @@ import { theme as t } from "./theme.js";
 import { startShimmer } from "./animations.js";
 import { detectContext } from "./detect.js";
 import { generateSnapshot } from "./snapshot.js";
-import { buildImportGraph } from "./graph.js";
+import { buildImportGraph } from "./graph-build.js";
 import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "./config.js";
 import { fileExists, readFileOr, writeFileSafe } from "./utils.js";
 
