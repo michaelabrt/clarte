@@ -2,19 +2,21 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { glob } from "tinyglobby";
+import { computeHITS, computeBetweenness } from "./centrality.js";
+import { detectBarrelFiles, buildImportGraph } from "./graph-build.js";
 import {
-  parseJsImports,
-  parsePythonImports,
-  parseGoImports,
-  parseRustImports,
-  parseJavaImports,
-  computeHITS,
-  computeBetweenness,
-  detectBarrelFiles,
-  buildImportGraph,
-} from "./graph.js";
+  getSourceGlob,
+  parseImports,
+  isRelativeSpecifier,
+  resolveImport,
+  resolveAliasImport,
+  loadTsconfigPaths,
+  getPackageName,
+  SOURCE_IGNORE,
+  type PathAlias,
+} from "./import-resolution.js";
 import { initTreeSitter } from "./ast-parse.js";
-import { readFileOr, readJsonFile } from "./utils.js";
+import { readFileOr } from "./utils.js";
 import type {
   ArchitecturalLayer,
   Chokepoint,
@@ -39,26 +41,6 @@ const CACHE_VERSION = 2;
 const CACHE_DIR = ".clarte";
 const CACHE_FILE = "cache.json";
 
-/** Ignore patterns matching buildImportGraph in graph.ts */
-const SOURCE_IGNORE = [
-  "**/node_modules/**",
-  "**/dist/**",
-  "**/build/**",
-  "**/.next/**",
-  "**/target/**",
-  "**/vendor/**",
-  "**/__pycache__/**",
-  "**/venv/**",
-  "**/.venv/**",
-  "**/.Trash/**",
-  "**/Library/**",
-  "**/.git/**",
-];
-
-/** JS/TS file extensions for import resolution */
-const JS_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs"];
-const INDEX_FILES = JS_EXTENSIONS.map((e) => `/index${e}`);
-
 // ── Types ─────────────────────────────────────────────────────────────
 
 interface SerializedEdge {
@@ -79,207 +61,6 @@ export interface CacheData {
   fileHashes: Record<string, string>;
   edges: SerializedEdge[];
   barrelFiles: string[];
-}
-
-interface PathAlias {
-  prefix: string;
-  replacement: string;
-}
-
-// ── Source globs (mirrored from graph.ts) ──────────────────────────────
-
-function getSourceGlob(lang: Language): string[] {
-  switch (lang) {
-    case "typescript":
-    case "javascript":
-      return ["**/*.{ts,tsx,js,jsx,mjs}"];
-    case "python":
-      return ["**/*.py"];
-    case "go":
-      return ["**/*.go"];
-    case "rust":
-      return ["**/*.rs"];
-    case "java":
-      return ["**/*.java"];
-    default:
-      return ["**/*.{ts,tsx,js,jsx,py,go,rs,java}"];
-  }
-}
-
-// ── Import resolution (mirrored from graph.ts private functions) ──────
-
-function parseImports(content: string, lang: Language) {
-  switch (lang) {
-    case "typescript":
-    case "javascript":
-      return parseJsImports(content);
-    case "python":
-      return parsePythonImports(content);
-    case "go":
-      return parseGoImports(content);
-    case "rust":
-      return parseRustImports(content);
-    case "java":
-      return parseJavaImports(content);
-    default:
-      return parseJsImports(content);
-  }
-}
-
-function isRelativeSpecifier(spec: string, lang: Language): boolean {
-  if (lang === "typescript" || lang === "javascript") {
-    return spec.startsWith("./") || spec.startsWith("../");
-  }
-  if (lang === "python") {
-    return spec.startsWith(".");
-  }
-  if (lang === "rust") {
-    return (
-      spec.startsWith("crate::") ||
-      spec.startsWith("super::") ||
-      spec.startsWith("self::")
-    );
-  }
-  return spec.startsWith("./") || spec.startsWith("../");
-}
-
-function resolveJsImport(
-  specifier: string,
-  fromFile: string,
-  allFiles: Set<string>,
-): string | null {
-  const dir = path.dirname(fromFile);
-  const raw = path.join(dir, specifier).replace(/\\/g, "/");
-  const stripped = raw.replace(/\.(jsx?|mjs)$/, "");
-  const bases = stripped !== raw ? [raw, stripped] : [raw];
-
-  for (const base of bases) {
-    if (allFiles.has(base)) return base;
-    for (const ext of JS_EXTENSIONS) {
-      if (allFiles.has(base + ext)) return base + ext;
-    }
-    for (const idx of INDEX_FILES) {
-      if (allFiles.has(base + idx)) return base + idx;
-    }
-  }
-  return null;
-}
-
-function resolvePythonImport(
-  specifier: string,
-  fromFile: string,
-  allFiles: Set<string>,
-): string | null {
-  if (!specifier.startsWith(".")) return null;
-  const dir = path.dirname(fromFile);
-  let dots = 0;
-  while (specifier[dots] === ".") dots++;
-  const modulePath = specifier.slice(dots).replace(/\./g, "/");
-  let baseDir = dir;
-  for (let i = 1; i < dots; i++) baseDir = path.dirname(baseDir);
-  const base = modulePath
-    ? path.join(baseDir, modulePath).replace(/\\/g, "/")
-    : baseDir;
-  if (allFiles.has(base + ".py")) return base + ".py";
-  if (allFiles.has(base + "/__init__.py")) return base + "/__init__.py";
-  return null;
-}
-
-function resolveImport(
-  specifier: string,
-  fromFile: string,
-  lang: Language,
-  allFiles: Set<string>,
-): string | null {
-  switch (lang) {
-    case "typescript":
-    case "javascript":
-      return resolveJsImport(specifier, fromFile, allFiles);
-    case "python":
-      return resolvePythonImport(specifier, fromFile, allFiles);
-    default:
-      return null;
-  }
-}
-
-function getPackageName(specifier: string): string {
-  if (specifier.startsWith("@")) {
-    const parts = specifier.split("/");
-    return parts.slice(0, 2).join("/");
-  }
-  return specifier.split("/")[0];
-}
-
-// ── Path alias resolution (mirrored from graph.ts) ────────────────────
-
-async function loadTsconfigPaths(rootDir: string): Promise<PathAlias[]> {
-  let configPath = path.join(rootDir, "tsconfig.json");
-  let baseUrl = ".";
-  let paths: Record<string, string[]> = {};
-
-  for (let depth = 0; depth < 5; depth++) {
-    const config = await readJsonFile(configPath);
-    if (!config) break;
-
-    const co = config.compilerOptions as Record<string, unknown> | undefined;
-    if (co?.baseUrl && typeof co.baseUrl === "string") baseUrl = co.baseUrl;
-    if (co?.paths && typeof co.paths === "object") {
-      const configPaths = co.paths as Record<string, string[]>;
-      for (const [key, value] of Object.entries(configPaths)) {
-        if (!(key in paths)) paths[key] = value;
-      }
-    }
-
-    const ext = config.extends as string | undefined;
-    if (!ext) break;
-
-    configPath = path.resolve(path.dirname(configPath), ext);
-    if (!configPath.endsWith(".json")) configPath += ".json";
-  }
-
-  const aliases: PathAlias[] = [];
-  for (const [pattern, mappings] of Object.entries(paths)) {
-    if (!mappings || mappings.length === 0) continue;
-    if (pattern.endsWith("/*") && mappings[0].endsWith("/*")) {
-      const prefix = pattern.slice(0, -1);
-      const target = mappings[0].slice(0, -1);
-      const replacement = path.join(baseUrl, target).replace(/\\/g, "/");
-      aliases.push({ prefix, replacement });
-    } else if (!pattern.includes("*")) {
-      aliases.push({
-        prefix: pattern,
-        replacement: path.join(baseUrl, mappings[0]).replace(/\\/g, "/"),
-      });
-    }
-  }
-
-  return aliases;
-}
-
-function resolveAliasImport(
-  specifier: string,
-  aliases: PathAlias[],
-  allFiles: Set<string>,
-): string | null {
-  for (const alias of aliases) {
-    if (specifier.startsWith(alias.prefix)) {
-      const remainder = specifier.slice(alias.prefix.length);
-      const raw = (alias.replacement + remainder).replace(/\\/g, "/");
-      const stripped = raw.replace(/\.(jsx?|mjs)$/, "");
-      const bases = stripped !== raw ? [raw, stripped] : [raw];
-
-      for (const base of bases) {
-        if (allFiles.has(base)) return base;
-        for (const ext of JS_EXTENSIONS) {
-          if (allFiles.has(base + ext)) return base + ext;
-        }
-        for (const idx of INDEX_FILES) {
-          if (allFiles.has(base + idx)) return base + idx;
-        }
-      }
-    }
-  }
-  return null;
 }
 
 // ── Cache I/O ─────────────────────────────────────────────────────────
