@@ -1,5 +1,45 @@
 import type { FileRole, ImportEdge, ImportGraph } from "./types.js";
 
+// ── Algorithm constants ──────────────────────────────────────────────
+
+/** HITS edge-weighting parameters */
+const HITS = {
+  /** Teleportation smoothing factor (prevents extreme score distributions in star graphs) */
+  TELEPORT_ALPHA: 0.15,
+  /** Weight discount for type-only imports (e.g. `import type { Foo }`) */
+  TYPE_ONLY_DISCOUNT: 0.7,
+  /** Weight multiplier for dynamic imports (`import()`) */
+  DYNAMIC_MULTIPLIER: 0.5,
+  /** Minimum specificity for any edge (floor) */
+  MIN_SPECIFICITY: 0.2,
+  /** Log base for specificity scaling: log2(nameCount+1) / log2(BASE) */
+  SPECIFICITY_LOG_BASE: 6,
+  /** Authority/hub discount for edges involving barrel files */
+  BARREL_DISCOUNT: 0.3,
+} as const;
+
+/** Thresholds for deriving file roles from HITS authority and hub scores.
+ *  Empirically tuned for typical project distributions after min-max normalization.
+ *  Boundary instability is expected in small graphs (<10 files). */
+const ROLE_THRESHOLDS = {
+  /** Minimum authority for Foundation role */
+  FOUNDATION_AUTH: 0.6,
+  /** Maximum hub score for Foundation role */
+  FOUNDATION_HUB_MAX: 0.3,
+  /** Minimum hub score for Orchestrator role */
+  ORCHESTRATOR_HUB: 0.6,
+  /** Maximum authority for Orchestrator role */
+  ORCHESTRATOR_AUTH_MAX: 0.3,
+  /** Minimum authority AND hub for Bridge role */
+  BRIDGE_MIN: 0.4,
+  /** Minimum authority for Utility role */
+  UTILITY_AUTH_MIN: 0.3,
+  /** Maximum authority for Utility role */
+  UTILITY_AUTH_MAX: 0.6,
+  /** Maximum hub score for Utility role */
+  UTILITY_HUB_MAX: 0.3,
+} as const;
+
 // ── HITS (Kleinberg) centrality ───────────────────────────────────────
 
 /**
@@ -27,7 +67,7 @@ export function computeHITS(
 
   const fileSet = new Set(files);
   const barrels = barrelFiles ?? new Set<string>();
-  const alpha = 0.15; // teleportation smoothing factor
+  const alpha = HITS.TELEPORT_ALPHA;
   const baseScore = 1 / n;
 
   // Build weighted adjacency lists (internal edges only)
@@ -44,22 +84,22 @@ export function computeHITS(
     if (edge.isExternal) continue;
     if (!fileSet.has(edge.from) || !fileSet.has(edge.to)) continue;
 
-    const typeOnlyDiscount = edge.isTypeOnly ? 0.7 : 0;
-    const dynamicDiscount = edge.isDynamic ? 0.5 : 1.0;
+    const typeOnlyDiscount = edge.isTypeOnly ? HITS.TYPE_ONLY_DISCOUNT : 0;
+    const dynamicDiscount = edge.isDynamic ? HITS.DYNAMIC_MULTIPLIER : 1.0;
     const nameCount = edge.importedNames.length;
     const specificity = nameCount > 0
-      ? Math.max(0.2, Math.log2(nameCount + 1) / Math.log2(6))
-      : 0.2;
+      ? Math.max(HITS.MIN_SPECIFICITY, Math.log2(nameCount + 1) / Math.log2(HITS.SPECIFICITY_LOG_BASE))
+      : HITS.MIN_SPECIFICITY;
     let weight = (1 - typeOnlyDiscount) * dynamicDiscount * specificity;
 
     // Barrel file authority discount: edges targeting barrels contribute less
     if (barrels.has(edge.to)) {
-      weight *= 0.3;
+      weight *= HITS.BARREL_DISCOUNT;
     }
 
     // Barrel outgoing discount: re-exports contribute less authority to targets
     if (barrels.has(edge.from)) {
-      weight *= 0.3;
+      weight *= HITS.BARREL_DISCOUNT;
     }
 
     forward.get(edge.from)!.push({ to: edge.to, weight });
@@ -159,10 +199,10 @@ export function computeHITS(
  */
 export function deriveRole(authority: number, hubScore: number, isBarrel = false): FileRole {
   if (isBarrel) return "Barrel";
-  if (authority > 0.6 && hubScore < 0.3) return "Foundation";
-  if (hubScore > 0.6 && authority < 0.3) return "Orchestrator";
-  if (authority > 0.4 && hubScore > 0.4) return "Bridge";
-  if (authority >= 0.3 && authority <= 0.6 && hubScore < 0.3) return "Utility";
+  if (authority > ROLE_THRESHOLDS.FOUNDATION_AUTH && hubScore < ROLE_THRESHOLDS.FOUNDATION_HUB_MAX) return "Foundation";
+  if (hubScore > ROLE_THRESHOLDS.ORCHESTRATOR_HUB && authority < ROLE_THRESHOLDS.ORCHESTRATOR_AUTH_MAX) return "Orchestrator";
+  if (authority > ROLE_THRESHOLDS.BRIDGE_MIN && hubScore > ROLE_THRESHOLDS.BRIDGE_MIN) return "Bridge";
+  if (authority >= ROLE_THRESHOLDS.UTILITY_AUTH_MIN && authority <= ROLE_THRESHOLDS.UTILITY_AUTH_MAX && hubScore < ROLE_THRESHOLDS.UTILITY_HUB_MAX) return "Utility";
   return "Leaf";
 }
 

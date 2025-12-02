@@ -2,6 +2,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 .npmrc
+.env
+.env.*
+coverage/
+*.log
 .clarte.json
 .clarte-diff.md
 .clarte/

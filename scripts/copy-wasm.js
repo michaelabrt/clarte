@@ -9,13 +9,15 @@
 import { cpSync, mkdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const wasmSrc = path.join(
   path.dirname(require.resolve("@vscode/tree-sitter-wasm/package.json")),
   "wasm",
 );
-const wasmDest = path.join(import.meta.dirname, "..", "dist", "wasm");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const wasmDest = path.join(__dirname, "..", "dist", "wasm");
 
 const files = [
   "tree-sitter.wasm",

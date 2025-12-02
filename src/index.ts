@@ -562,6 +562,31 @@ async function main() {
   // Git history
   const analysisDays = savedConfig?.analysisDays ?? 90;
   const gitActivity = detected.isGitRepo ? await analyzeGitActivity(rootDir, verbose ? verboseLog : noopProgress, analysisDays) : null;
+
+  // Filter deleted files from git-derived data (files may have been deleted
+  // within the analysis window but still appear in git log output)
+  if (gitActivity) {
+    const filesToCheck = new Set<string>();
+    for (const h of gitActivity.hotFiles) filesToCheck.add(h.path);
+    for (const c of gitActivity.changeCoupling) { filesToCheck.add(c.fileA); filesToCheck.add(c.fileB); }
+    if (gitActivity.lagCouplings) {
+      for (const c of gitActivity.lagCouplings) { filesToCheck.add(c.fileA); filesToCheck.add(c.fileB); }
+    }
+    const checks = await Promise.all(
+      [...filesToCheck].map(async (f) => [f, await fileExists(path.join(rootDir, f))] as const),
+    );
+    const alive = new Set(checks.filter(([, ok]) => ok).map(([f]) => f));
+    gitActivity.hotFiles = gitActivity.hotFiles.filter((h) => alive.has(h.path));
+    gitActivity.changeCoupling = gitActivity.changeCoupling.filter(
+      (c) => alive.has(c.fileA) && alive.has(c.fileB),
+    );
+    if (gitActivity.lagCouplings) {
+      gitActivity.lagCouplings = gitActivity.lagCouplings.filter(
+        (c) => alive.has(c.fileA) && alive.has(c.fileB),
+      );
+    }
+  }
+
   if (!jsonMode) {
     if (gitActivity) {
       const coupledPairs = gitActivity.changeCoupling.length;
@@ -747,7 +772,7 @@ async function main() {
   if (hubFiles.length > 0) {
     const topHubs = hubFiles
       .slice()
-      .sort((a, b) => b.authority - a.authority)
+      .sort((a, b) => b.authority - a.authority || a.path.localeCompare(b.path))
       .slice(0, 5);
     const impactMap = new Map<string, Array<{ file: string; score: number }>>();
     for (const hub of topHubs) {
@@ -811,10 +836,9 @@ async function main() {
 
   // --format=json: output full analysis as structured JSON and exit
   if (jsonMode) {
-    const savedCfg = await loadConfig(rootDir);
     let snapshot = null;
-    if (savedCfg?.generateSnapshot !== false) {
-      snapshot = await generateSnapshot(detected, savedCfg?.snapshotPaths ?? [], graph, maxTokens, undefined, gitActivity);
+    if (savedConfig?.generateSnapshot !== false) {
+      snapshot = await generateSnapshot(detected, savedConfig?.snapshotPaths ?? [], graph, maxTokens, undefined, gitActivity);
       if (snapshot.entries.length === 0) snapshot = null;
     }
     const directives = buildDirectives(analysis, detected, undefined, graph);

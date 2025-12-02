@@ -165,7 +165,7 @@ export function buildDirectives(
       pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
     }
     const pairs = [...pairCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 2);
     for (const [pair, count] of pairs) {
       directives.push(
@@ -282,7 +282,9 @@ export function buildDirectives(
       .sort((a, b) => {
         const countDiff = b[1].length - a[1].length;
         if (countDiff !== 0) return countDiff;
-        return (churnCounts.get(b[0]) ?? 0) - (churnCounts.get(a[0]) ?? 0);
+        const churnDiff = (churnCounts.get(b[0]) ?? 0) - (churnCounts.get(a[0]) ?? 0);
+        if (churnDiff !== 0) return churnDiff;
+        return a[0].localeCompare(b[0]);
       })
       .slice(0, 5);
 
@@ -340,7 +342,7 @@ export function buildDirectives(
     );
     const bottlenecks = [...graph.betweennessScores.entries()]
       .filter(([file, score]) => score > 0.5 && !chokepointFiles.has(file))
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 3);
 
     for (const [file] of bottlenecks) {
@@ -399,7 +401,7 @@ export function buildDirectives(
           pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
         }
         const topPair = [...pairCounts.entries()]
-          .sort((a, b) => b[1] - a[1])[0];
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
         if (topPair) {
           directives.push(
             `${upwardDeps.length} upward dependency violation${upwardDeps.length === 1 ? "" : "s"} detected. Most common: ${topPair[0]} (${topPair[1]} occurrence${topPair[1] === 1 ? "" : "s"}). Do not add more upward imports.`,

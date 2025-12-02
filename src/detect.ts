@@ -135,7 +135,7 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
   onProgress?.("Checking project markers...");
   const [
     hasGit,
-    hasPackageJson,
+    packageJson,
     hasGoMod,
     hasCargo,
     hasPyproject,
@@ -147,7 +147,7 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     hasBunLockBin,
     hasBunLockText,
     hasBunfigToml,
-    hasPomXml,
+    pomXmlContent,
     hasBuildGradle,
     hasBuildGradleKts,
     topEntries,
@@ -177,8 +177,8 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
 
   // -- Detect language + package manager --
 
-  if (hasPackageJson) {
-    const pkg = hasPackageJson;
+  if (packageJson) {
+    const pkg = packageJson;
     ctx.language = hasTsConfig ? "typescript" : "javascript";
     ctx.hasTypeScript = hasTsConfig;
 
@@ -307,9 +307,9 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
   }
 
   // -- Detect Java build tools (Maven / Gradle) --
-  if (hasPomXml) {
+  if (pomXmlContent) {
     if (ctx.language === "other") ctx.language = "java";
-    const mavenVersion = extractMavenVersion(hasPomXml);
+    const mavenVersion = extractMavenVersion(pomXmlContent);
     ctx.frameworks.push({ name: "Maven", version: mavenVersion });
   } else if (hasBuildGradle || hasBuildGradleKts) {
     if (ctx.language === "other") ctx.language = "java";

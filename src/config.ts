@@ -130,6 +130,7 @@ export async function loadConfig(
       : undefined,
     layers: validateLayers(cfg.layers),
     analysisDays: cfg.analysisDays,
+    sectionOrder: Array.isArray(cfg.sectionOrder) ? cfg.sectionOrder : undefined,
   };
 }
 
@@ -165,6 +166,7 @@ export async function saveConfig(
     ...(answers.layers?.length ? { layers: answers.layers } : {}),
     ...(existing?.analysisDays != null ? { analysisDays: existing.analysisDays } : {}),
     ...(existing?.autoRefreshOnCommit != null ? { autoRefreshOnCommit: existing.autoRefreshOnCommit } : {}),
+    ...(existing?.sectionOrder?.length ? { sectionOrder: existing.sectionOrder } : {}),
   };
   await writeFileSafe(configPath, JSON.stringify(cfg, null, 2) + "\n");
 }
@@ -185,6 +187,7 @@ export function configToAnswers(config: ProjectConfig): UserAnswers {
     stackCorrections: config.stackCorrections,
     generatePerPackage: config.generatePerPackage,
     layers: config.layers,
+    sectionOrder: config.sectionOrder,
   };
 }
 

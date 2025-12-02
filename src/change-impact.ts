@@ -35,9 +35,9 @@ export function predictChangeImpact(
   // Remove the input file itself
   rrfScores.delete(file);
 
-  // Sort by RRF score descending and return top 5
+  // Sort by RRF score descending and return top 5 (alphabetical tiebreaker)
   return [...rrfScores.entries()]
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, 5)
     .map(([f, score]) => ({ file: f, score }));
 }
@@ -74,10 +74,11 @@ function computeStructuralRanking(file: string, graph: ImportGraph): string[] {
   // BFS from the target file
   const distances = new Map<string, number>();
   const queue: string[] = [file];
+  let qHead = 0;
   distances.set(file, 0);
 
-  while (queue.length > 0) {
-    const current = queue.shift()!;
+  while (qHead < queue.length) {
+    const current = queue[qHead++]!;
     const dist = distances.get(current)!;
     for (const neighbor of adj.get(current) ?? []) {
       if (!distances.has(neighbor)) {
@@ -87,10 +88,10 @@ function computeStructuralRanking(file: string, graph: ImportGraph): string[] {
     }
   }
 
-  // Remove self and sort by distance ascending
+  // Remove self and sort by distance ascending (alphabetical tiebreaker)
   distances.delete(file);
   return [...distances.entries()]
-    .sort((a, b) => a[1] - b[1])
+    .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
     .map(([f]) => f);
 }
 
@@ -111,7 +112,7 @@ function computeTemporalRanking(file: string, gitActivity: GitAnalysis | null): 
   }
 
   return pairs
-    .sort((a, b) => b.confidence - a.confidence)
+    .sort((a, b) => b.confidence - a.confidence || a.other.localeCompare(b.other))
     .map((p) => p.other);
 }
 
@@ -156,6 +157,6 @@ function computeDirectoryRanking(file: string, allFiles: string[]): string[] {
   }
 
   return scored
-    .sort((a, b) => b.similarity - a.similarity)
+    .sort((a, b) => b.similarity - a.similarity || a.file.localeCompare(b.file))
     .map((s) => s.file);
 }

@@ -17,6 +17,38 @@ import type {
   TightCoupling,
 } from "./types.js";
 
+// ── Algorithm constants ──────────────────────────────────────────────
+
+/** Community detection parameters */
+const COMMUNITY = {
+  /** Minimum community size; smaller groups get merged into neighbors */
+  MIN_SIZE: 3,
+  /** Maximum merge rounds to attempt */
+  MAX_MERGE_ROUNDS: 3,
+  /** ARI threshold above which communities just mirror directory structure (no novel insight) */
+  ARI_NOVELTY_THRESHOLD: 0.85,
+} as const;
+
+/** Instability metric parameters */
+const INSTABILITY = {
+  /** Type-only imports carry less coupling risk (erased at runtime) */
+  TYPE_ONLY_WEIGHT: 0.3,
+} as const;
+
+/** Layer consistency parameters */
+const LAYER_CONSISTENCY = {
+  /** Minimum number of importers for a file to be a cross-cutting concern */
+  MIN_CROSS_LAYER_IMPORTERS: 5,
+  /** Minimum layers for a file to be cross-cutting */
+  MIN_LAYERS: 2,
+  /** Minimum layers for layer consistency scoring */
+  MIN_LAYERS_FOR_SCORING: 2,
+  /** Minimum confidence to report architectural mismatches */
+  DEFAULT_MIN_CONFIDENCE: 0.4,
+  /** Minimum layer skip distance to count as a violation */
+  MIN_SKIP_DISTANCE: 2,
+} as const;
+
 /**
  * Build a set of "filepath::ExportName" pairs that are actually imported
  * somewhere in the project. Used for dead export filtering.
@@ -69,7 +101,8 @@ export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[] {
   }
 
   // Sort by max(authority, hubScore) descending — captures both foundations and orchestrators
-  files.sort((a, b) => Math.max(b.authority, b.hubScore) - Math.max(a.authority, a.hubScore));
+  // Alphabetical tiebreaker for deterministic output
+  files.sort((a, b) => Math.max(b.authority, b.hubScore) - Math.max(a.authority, a.hubScore) || a.path.localeCompare(b.path));
 
   return files.slice(0, limit);
 }
@@ -177,8 +210,7 @@ export const INSTABILITY_THRESHOLD = 0.8;
  * Returns files with instability > INSTABILITY_THRESHOLD and fanIn >= 1 (high-risk zones).
  */
 export function computeInstability(graph: ImportGraph): FileInstability[] {
-  /** Type-only imports carry less coupling risk (erased at runtime) */
-  const TYPE_ONLY_WEIGHT = 0.3;
+  const TYPE_ONLY_WEIGHT = INSTABILITY.TYPE_ONLY_WEIGHT;
 
   // Count weighted outgoing internal edges per file
   const fanOutMap = new Map<string, number>();
@@ -210,8 +242,8 @@ export function computeInstability(graph: ImportGraph): FileInstability[] {
     }
   }
 
-  // Sort by instability descending
-  results.sort((a, b) => b.instability - a.instability);
+  // Sort by instability descending, alphabetical tiebreaker
+  results.sort((a, b) => b.instability - a.instability || a.path.localeCompare(b.path));
   return results;
 }
 
@@ -257,12 +289,12 @@ export function detectCommunities(graph: ImportGraph): Community[] {
   }
 
   // Phase 2: Merge tiny communities (< 3 files) into best neighbor
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < COMMUNITY.MAX_MERGE_ROUNDS; round++) {
     const groups = groupByCommunity(fileToCommunity);
     let merged = false;
 
     for (const [label, members] of groups) {
-      if (members.length >= 3) continue;
+      if (members.length >= COMMUNITY.MIN_SIZE) continue;
 
       // Find neighboring community with most edges
       const neighborCounts = new Map<number, number>();
@@ -299,7 +331,7 @@ export function detectCommunities(graph: ImportGraph): Community[] {
   }
 
   // Phase 3: Reassign files with >50% cross-community imports
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < COMMUNITY.MAX_MERGE_ROUNDS; round++) {
     let changed = false;
     // Process in deterministic sorted order
     for (const file of files.sort()) {
@@ -340,7 +372,7 @@ export function detectCommunities(graph: ImportGraph): Community[] {
   let id = 0;
 
   for (const memberFiles of finalGroups.values()) {
-    if (memberFiles.length < 3) continue;
+    if (memberFiles.length < COMMUNITY.MIN_SIZE) continue;
     const label = deriveLabel(memberFiles);
     communities.push({ id: id++, files: memberFiles.sort(), label });
   }
@@ -354,13 +386,13 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     if (!dirOnlyCommunities.has(dir)) dirOnlyCommunities.set(dir, dirNextLabel++);
   }
   const ari = computeARI(files, fileToCommunity, file => dirOnlyCommunities.get(getDeepestDir(file))!);
-  if (ari > 0.85) {
+  if (ari > COMMUNITY.ARI_NOVELTY_THRESHOLD) {
     // Communities just restate directory tree; no novel insight
     return [];
   }
 
-  // Sort by size descending
-  communities.sort((a, b) => b.files.length - a.files.length);
+  // Sort by size descending, alphabetical tiebreaker on first file
+  communities.sort((a, b) => b.files.length - a.files.length || (a.files[0] ?? "").localeCompare(b.files[0] ?? ""));
   return communities;
 }
 
@@ -548,8 +580,8 @@ export function findCrossCuttingFiles(
     }
   }
 
-  // Sort by layer spread descending, then by total importers descending
-  results.sort((a, b) => b.layerSpread - a.layerSpread || b.totalImporters - a.totalImporters);
+  // Sort by layer spread descending, then by total importers descending, alphabetical tiebreaker
+  results.sort((a, b) => b.layerSpread - a.layerSpread || b.totalImporters - a.totalImporters || a.file.localeCompare(b.file));
   return results;
 }
 
@@ -624,7 +656,7 @@ export function computeLayerConsistency(
   layers: ArchitecturalLayer[],
   layerEdges: LayerEdge[],
 ): LayerConsistency {
-  if (layers.length < 2) return { consistency: 1, violations: [] };
+  if (layers.length < LAYER_CONSISTENCY.MIN_LAYERS_FOR_SCORING) return { consistency: 1, violations: [] };
 
   // Build topological order and rank map
   const order = topologicalSortLayers(layers, layerEdges);
@@ -670,11 +702,11 @@ export function computeLayerConsistency(
   const total = correctCount + violations.length;
   const consistency = total === 0 ? 1 : correctCount / total;
 
-  // Sort violations by layer rank distance (most egregious first)
+  // Sort violations by layer rank distance (most egregious first), alphabetical tiebreaker
   violations.sort((a, b) => {
     const distA = (rank.get(a.toLayer) ?? 0) - (rank.get(a.fromLayer) ?? 0);
     const distB = (rank.get(b.toLayer) ?? 0) - (rank.get(b.fromLayer) ?? 0);
-    return distB - distA;
+    return distB - distA || a.from.localeCompare(b.from) || a.to.localeCompare(b.to);
   });
 
   return { consistency, violations: violations.slice(0, 10) };
@@ -794,8 +826,8 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
     });
   }
 
-  // Sort by separates descending, then importedBy descending
-  results.sort((a, b) => b.separates - a.separates || b.importedBy - a.importedBy);
+  // Sort by separates descending, then importedBy descending, alphabetical tiebreaker
+  results.sort((a, b) => b.separates - a.separates || b.importedBy - a.importedBy || a.file.localeCompare(b.file));
   return results;
 }
 
@@ -913,10 +945,11 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
       const dist = new Map<string, number>();
       dist.set(start, 0);
       const bfsQueue = [start];
+      let bfsHead = 0;
       let maxDist = 0;
 
-      while (bfsQueue.length > 0) {
-        const current = bfsQueue.shift()!;
+      while (bfsHead < bfsQueue.length) {
+        const current = bfsQueue[bfsHead++]!;
         const d = dist.get(current)!;
         for (const neighbor of adj.get(current) ?? []) {
           if (!dist.has(neighbor)) {
@@ -1009,8 +1042,8 @@ export function findStructuralTemporalMismatches(
     }
   }
 
-  // Sort by confidence descending (strongest hidden coupling first)
-  results.sort((a, b) => b.coChangeConfidence - a.coChangeConfidence);
+  // Sort by confidence descending (strongest hidden coupling first), alphabetical tiebreaker
+  results.sort((a, b) => b.coChangeConfidence - a.coChangeConfidence || a.fileA.localeCompare(b.fileA) || a.fileB.localeCompare(b.fileB));
   return results.slice(0, topN);
 }
 
@@ -1063,8 +1096,8 @@ export function findTightCouplings(
     }
   }
 
-  // Sort by number of imported names descending
-  results.sort((a, b) => b.importedNames - a.importedNames);
+  // Sort by number of imported names descending, alphabetical tiebreaker
+  results.sort((a, b) => b.importedNames - a.importedNames || a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
   return results.slice(0, topN);
 }
 
@@ -1161,7 +1194,7 @@ export function checkArchitecturalFitness(
   }
 
   // Compute layer ordering (depth: 0 = most foundational)
-  const hasLayers = layers.length >= 2;
+  const hasLayers = layers.length >= LAYER_CONSISTENCY.MIN_LAYERS_FOR_SCORING;
   const layerOrder = hasLayers ? computeLayerOrdering(layers, layerEdges) : new Map<string, number>();
 
   // Test file patterns
@@ -1196,7 +1229,7 @@ export function checkArchitecturalFitness(
 
         // Rule 3: Layer skip detection
         const skipDistance = Math.abs(toDepth - fromDepth);
-        if (skipDistance >= 2) {
+        if (skipDistance >= LAYER_CONSISTENCY.MIN_SKIP_DISTANCE) {
           // Only flag when going from higher to lower (normal direction but skipping)
           // i.e., fromDepth > toDepth means consumer importing foundational, but skipping
           if (fromDepth > toDepth) {

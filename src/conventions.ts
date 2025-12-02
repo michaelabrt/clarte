@@ -143,8 +143,8 @@ function detectNamingPrefixes(
 
   if (results.length === 0) return undefined;
 
-  // Sort by count descending, limit to top entries
-  results.sort((a, b) => b.count - a.count);
+  // Sort by count descending, alphabetical tiebreaker for determinism
+  results.sort((a, b) => b.count - a.count || a.prefix.localeCompare(b.prefix));
   return results;
 }
 
@@ -441,7 +441,7 @@ export async function inferConventions(
   // Sample up to 50 files for identifier analysis, preferring high-centrality files
   const sortedFiles = [...internalFiles]
     .filter((f) => !isTestFile(f) && !isConfigFile(f))
-    .sort((a, b) => (graph.centrality.get(b) ?? 0) - (graph.centrality.get(a) ?? 0))
+    .sort((a, b) => (graph.centrality.get(b) ?? 0) - (graph.centrality.get(a) ?? 0) || a.localeCompare(b))
     .slice(0, 50);
 
   if (sortedFiles.length === 0) return null;
