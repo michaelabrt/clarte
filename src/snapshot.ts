@@ -334,7 +334,7 @@ function renderMultiLangSnapshot(entries: SnapshotEntry[], primaryLang: Language
     byLang.set(effective, existing);
   }
 
-  // Render primary language first, then secondary
+  // Render primary language first, then secondary (sorted for determinism)
   const parts: string[] = [];
   const primaryEntries = byLang.get(primaryLang);
   if (primaryEntries && primaryEntries.length > 0) {
@@ -342,7 +342,8 @@ function renderMultiLangSnapshot(entries: SnapshotEntry[], primaryLang: Language
     byLang.delete(primaryLang);
   }
 
-  for (const [lang, langEntries] of byLang) {
+  const sortedLangs = [...byLang.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [lang, langEntries] of sortedLangs) {
     if (langEntries.length > 0) {
       parts.push(renderSnapshot(langEntries, lang));
     }

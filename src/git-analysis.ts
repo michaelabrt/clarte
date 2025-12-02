@@ -1,6 +1,38 @@
 import { execSync } from "node:child_process";
 import type { ChangeCoupling, GitAnalysis, LagCoupling, ProgressCallback } from "./types.js";
 
+// ── Algorithm constants ──────────────────────────────────────────────
+
+/** Adaptive decay half-lives (in decay-constant units, where halfLife = decayConst * ln(2)) */
+const DECAY = {
+  /** Fast repos (>30 commits/month): ~20-day half-life */
+  FAST: 29,
+  /** Moderate repos: ~31-day half-life */
+  MODERATE: 45,
+  /** Slow repos (<5 commits/month): ~60-day half-life */
+  SLOW: 87,
+  /** Commits/month threshold for "fast" repos */
+  FAST_THRESHOLD: 30,
+  /** Commits/month threshold for "slow" repos */
+  SLOW_THRESHOLD: 5,
+} as const;
+
+/** Coupling detection thresholds */
+const COUPLING = {
+  /** Maximum files in a commit before it's considered a mass rename (excluded) */
+  MAX_FILES_PER_COMMIT: 30,
+  /** Minimum Jaccard confidence to report a coupling pair */
+  MIN_CONFIDENCE: 0.3,
+  /** Minimum co-changes for low-activity repos (<=20 multi-file commits) */
+  MIN_CO_CHANGES_LOW: 2,
+  /** Minimum co-changes for active repos (>20 multi-file commits) */
+  MIN_CO_CHANGES_HIGH: 3,
+  /** Multi-file commit count threshold for switching min co-changes */
+  ACTIVITY_THRESHOLD: 20,
+  /** Maximum lag (in commits) to check for lagged co-change patterns */
+  MAX_LAG: 3,
+} as const;
+
 /**
  * Structured representation of a single commit from git log.
  * Used internally for both commit counting and coupling analysis.
@@ -124,7 +156,7 @@ export function analyzeGitActivity(
     onProgress?.(`Found activity in ${commitCounts.size} files`);
 
     // Build hot files list (top 15 by commit count)
-    const sorted = [...commitCounts.entries()].sort((a, b) => b[1] - a[1]);
+    const sorted = [...commitCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     const hotFiles: GitAnalysis["hotFiles"] = sorted
       .slice(0, 15)
       .map(([filePath, commitCount]) => ({
@@ -251,9 +283,9 @@ function commitAgeDays(isoDate: string, referenceMs?: number): number {
 export function adaptiveDecayConstant(totalCommits: number, windowDays: number = 90): number {
   const months = Math.max(windowDays / 30, 1); // avoid division by zero
   const commitsPerMonth = totalCommits / months;
-  if (commitsPerMonth > 30) return 29; // halfLife ~20 days
-  if (commitsPerMonth < 5) return 87;  // halfLife ~60 days
-  return 45;                           // halfLife ~31 days (default)
+  if (commitsPerMonth > DECAY.FAST_THRESHOLD) return DECAY.FAST;
+  if (commitsPerMonth < DECAY.SLOW_THRESHOLD) return DECAY.SLOW;
+  return DECAY.MODERATE;
 }
 
 /**
@@ -282,8 +314,7 @@ export function computeChangeCoupling(commits: ParsedCommit[], windowDays: numbe
   // Raw co-change counts (for display)
   const rawCoChanges = new Map<string, number>();
 
-  /** Skip commits touching too many files (mass renames, generated code) */
-  const MAX_COUPLING_FILES = 30;
+  const MAX_COUPLING_FILES = COUPLING.MAX_FILES_PER_COMMIT;
 
   const decayConst = adaptiveDecayConstant(commits.length, windowDays);
 
@@ -319,7 +350,9 @@ export function computeChangeCoupling(commits: ParsedCommit[], windowDays: numbe
   const totalMultiFileCommits = commits.filter((c) => c.files.length >= 2).length;
 
   // Adaptive minimum threshold
-  const minCoChanges = totalMultiFileCommits > 20 ? 3 : 2;
+  const minCoChanges = totalMultiFileCommits > COUPLING.ACTIVITY_THRESHOLD
+    ? COUPLING.MIN_CO_CHANGES_HIGH
+    : COUPLING.MIN_CO_CHANGES_LOW;
 
   for (const [key, rawCount] of rawCoChanges) {
     if (rawCount < minCoChanges) continue;
@@ -339,7 +372,7 @@ export function computeChangeCoupling(commits: ParsedCommit[], windowDays: numbe
 
     const support = totalMultiFileCommits > 0 ? rawCount / totalMultiFileCommits : 0;
 
-    if (confidence >= 0.3) {
+    if (confidence >= COUPLING.MIN_CONFIDENCE) {
       // Directional conditional probabilities
       const confidenceAB = commitsA.size > 0 ? intersection / commitsA.size : 0;
       const confidenceBA = commitsB.size > 0 ? intersection / commitsB.size : 0;
@@ -356,11 +389,12 @@ export function computeChangeCoupling(commits: ParsedCommit[], windowDays: numbe
     }
   }
 
-  // Sort by weighted score descending (primary), then by confidence (secondary)
+  // Sort by weighted score descending (primary), then by confidence (secondary),
+  // with alphabetical tiebreaker for deterministic output
   results.sort((a, b) => {
     const wA = weightedCoChanges.get([a.fileA, a.fileB].sort().join("||")) ?? 0;
     const wB = weightedCoChanges.get([b.fileA, b.fileB].sort().join("||")) ?? 0;
-    return wB - wA || b.confidence - a.confidence;
+    return wB - wA || b.confidence - a.confidence || a.fileA.localeCompare(b.fileA) || a.fileB.localeCompare(b.fileB);
   });
 
   return results.slice(0, 10);
@@ -403,7 +437,7 @@ export function computeLagCoupling(
     // For each commit of fileA, check if fileB changed within 1-3 commits (not same commit)
     let lagScore = 0;
     for (const ciA of timelineA) {
-      for (let lag = 1; lag <= 3; lag++) {
+      for (let lag = 1; lag <= COUPLING.MAX_LAG; lag++) {
         // Check both directions (fileB changed before or after fileA)
         if (setB.has(ciA + lag) || setB.has(ciA - lag)) {
           lagScore += 1 / lag; // Inverse lag weighting
@@ -422,8 +456,8 @@ export function computeLagCoupling(
     }
   }
 
-  // Sort by lagScore descending
-  results.sort((a, b) => b.lagScore - a.lagScore);
+  // Sort by lagScore descending, alphabetical tiebreaker
+  results.sort((a, b) => b.lagScore - a.lagScore || a.fileA.localeCompare(b.fileA) || a.fileB.localeCompare(b.fileB));
 
   return results;
 }

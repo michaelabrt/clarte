@@ -1,12 +1,12 @@
 import { defineConfig } from "tsup";
 import pkg from "./package.json";
 
-export default defineConfig({
+export default defineConfig((options) => ({
   entry: ["src/index.ts"],
   format: ["esm"],
   target: "node20",
   outDir: "dist",
-  clean: true,
+  clean: !options.watch,
   splitting: false,
   external: ["web-tree-sitter"],
   sourcemap: false,
@@ -19,4 +19,4 @@ export default defineConfig({
     PKG_NAME: JSON.stringify(pkg.name),
     PKG_DESCRIPTION: JSON.stringify(pkg.description),
   },
-});
+}));

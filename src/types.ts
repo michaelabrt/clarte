@@ -166,6 +166,8 @@ export interface UserAnswers {
   generatePerPackage: boolean;
   /** Custom architectural layer patterns (name + regex string) */
   layers?: Array<{ name: string; pattern: string }>;
+  /** Custom section ordering for context file (prefix with "-" to exclude) */
+  sectionOrder?: string[];
 }
 
 /** Persisted project config (.clarte.json) */
@@ -204,6 +206,8 @@ export interface ProjectConfig {
   analysisDays?: number;
   /** Auto-refresh context on pre-commit if stale */
   autoRefreshOnCommit?: boolean;
+  /** Custom section ordering for context file (prefix with "-" to exclude) */
+  sectionOrder?: string[];
 }
 
 /** A generated file ready to be written */

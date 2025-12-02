@@ -62,11 +62,11 @@ export async function buildImportGraph(
   const globs = getSourceGlob(language);
   let files: string[];
   try {
-    files = await glob(globs, {
+    files = (await glob(globs, {
       cwd: rootDir,
       ignore: SOURCE_IGNORE,
       absolute: false,
-    });
+    })).sort();
   } catch (err: unknown) {
     // Gracefully degrade on permission errors (e.g. scanning ~/ on macOS)
     const code = (err as NodeJS.ErrnoException).code;

@@ -1,4 +1,4 @@
-import type { CircularDependency, ImportGraph } from "./types.js";
+import type { CircularDependency, ImportEdge, ImportGraph } from "./types.js";
 
 /**
  * Find all strongly connected components using Tarjan's algorithm.
@@ -105,7 +105,7 @@ export function findCircularDeps(
   // Build adjacency restricted to internal edges
   const adj = new Map<string, Set<string>>();
   // Build edge lookup for type-only info: "from->to" -> ImportEdge
-  const edgeLookup = new Map<string, import("./types.js").ImportEdge>();
+  const edgeLookup = new Map<string, ImportEdge>();
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
     if (!adj.has(edge.from)) adj.set(edge.from, new Set());

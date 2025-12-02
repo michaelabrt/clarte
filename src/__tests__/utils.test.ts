@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ensureDir,
@@ -12,7 +13,7 @@ import {
   writeFileSafe,
 } from "../utils.js";
 
-const TMP = path.join(import.meta.dirname, ".tmp-utils-test");
+const TMP = path.join(path.dirname(fileURLToPath(import.meta.url)), ".tmp-utils-test");
 
 afterEach(async () => {
   await fs.rm(TMP, { recursive: true, force: true });

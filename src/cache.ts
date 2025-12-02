@@ -176,8 +176,10 @@ export async function computeFileHashes(
       ignore: SOURCE_IGNORE,
       absolute: false,
     });
-  } catch {
-    return new Map();
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "EACCES") return new Map();
+    throw err;
   }
 
   const HASH_CONCURRENCY = 32;
