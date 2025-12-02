@@ -1,5 +1,5 @@
 import type { FileRole, ImportEdge, ImportGraph } from "./types.js";
-import { getOrSet } from "./utils.js";
+import { buildAdjacency, getOrSet } from "./utils.js";
 
 // ── Algorithm constants ──────────────────────────────────────────────
 
@@ -253,16 +253,7 @@ export function computeBetweenness(
   // measures how many directed dependency chains pass through a file. A true
   // bottleneck sits on many transitive import paths; undirected conversion inflates
   // scores for leaf files that gain reverse-direction paths they don't actually have.
-  const adj = new Map<string, Set<string>>();
-  const allFiles = new Set<string>();
-
-  for (const edge of graph.edges) {
-    if (edge.isExternal) continue;
-    allFiles.add(edge.from);
-    allFiles.add(edge.to);
-
-    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
-  }
+  const { adj, allFiles } = buildAdjacency(graph.edges, { directed: true });
 
   const files = [...allFiles].sort();
   const n = files.length;

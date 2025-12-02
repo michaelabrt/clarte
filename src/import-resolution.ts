@@ -1,4 +1,5 @@
 import path from "node:path";
+import { IGNORE_GLOBS } from "./ignore-patterns.js";
 import { readFileOr, readJsonFile } from "./utils.js";
 import { initTreeSitter, parseImportsAst, resolveBarrelExportsAst } from "./ast-parse.js";
 import type { Language } from "./types.js";
@@ -18,20 +19,7 @@ export const JS_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs"];
 export const INDEX_FILES = JS_EXTENSIONS.map((e) => `/index${e}`);
 
 /** Ignore patterns matching buildImportGraph in graph.ts */
-export const SOURCE_IGNORE = [
-  "**/node_modules/**",
-  "**/dist/**",
-  "**/build/**",
-  "**/.next/**",
-  "**/target/**",
-  "**/vendor/**",
-  "**/__pycache__/**",
-  "**/venv/**",
-  "**/.venv/**",
-  "**/.Trash/**",
-  "**/Library/**",
-  "**/.git/**",
-];
+export const SOURCE_IGNORE = IGNORE_GLOBS;
 
 // ── tsconfig path alias resolution ─────────────────────────────────────
 

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { IGNORE_DIRS_SET } from "./ignore-patterns.js";
 import { loadConfig, configToAnswers } from "./config.js";
 import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import { buildImportGraph, mergeGraph } from "./graph-build.js";
@@ -35,19 +36,7 @@ import type { ContextAnalysis, ProgressCallback } from "./types.js";
 // ── Ignore patterns ───────────────────────────────────────────────────
 
 /** Directories and patterns to ignore in fs.watch events. */
-const IGNORE_DIRS = new Set([
-  "node_modules",
-  "dist",
-  "build",
-  ".next",
-  "target",
-  "vendor",
-  "__pycache__",
-  "venv",
-  ".venv",
-  ".git",
-  ".clarte",
-]);
+const IGNORE_DIRS = IGNORE_DIRS_SET;
 
 /** File extensions that trigger a rebuild. */
 const SOURCE_EXTENSIONS = new Set([

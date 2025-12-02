@@ -1,5 +1,5 @@
 import type { GitAnalysis, ImportGraph } from "./types.js";
-import { getOrSet } from "./utils.js";
+import { buildAdjacency } from "./utils.js";
 
 /**
  * Predict which files are most likely to need changes when a given file is modified.
@@ -60,13 +60,7 @@ function applyRRF(scores: Map<string, number>, ranking: string[]): void {
  * Returns files sorted by BFS distance ascending.
  */
 function computeStructuralRanking(file: string, graph: ImportGraph): string[] {
-  // Build bidirectional adjacency from internal edges
-  const adj = new Map<string, Set<string>>();
-  for (const edge of graph.edges) {
-    if (edge.isExternal) continue;
-    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
-    getOrSet(adj, edge.to, () => new Set()).add(edge.from);
-  }
+  const { adj } = buildAdjacency(graph.edges);
 
   if (!adj.has(file)) return [];
 
