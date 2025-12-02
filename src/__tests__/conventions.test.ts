@@ -3,9 +3,13 @@ import { inferConventions, renderConventionsSection } from "../conventions.js";
 import type { ConfigConstraints, ImportGraph, InferredConventions } from "../types.js";
 
 // Mock utils.ts to control file reads
-vi.mock("../utils.js", () => ({
-  readFileOr: vi.fn().mockResolvedValue(null),
-}));
+vi.mock("../utils.js", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    readFileOr: vi.fn().mockResolvedValue(null),
+  };
+});
 
 import { readFileOr } from "../utils.js";
 

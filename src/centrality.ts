@@ -1,4 +1,5 @@
 import type { FileRole, ImportEdge, ImportGraph } from "./types.js";
+import { getOrSet } from "./utils.js";
 
 // ── Algorithm constants ──────────────────────────────────────────────
 
@@ -260,8 +261,7 @@ export function computeBetweenness(
     allFiles.add(edge.from);
     allFiles.add(edge.to);
 
-    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
-    adj.get(edge.from)!.add(edge.to);
+    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
   }
 
   const files = [...allFiles].sort();

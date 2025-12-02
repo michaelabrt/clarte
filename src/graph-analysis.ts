@@ -16,6 +16,7 @@ import type {
   StructuralTemporalMismatch,
   TightCoupling,
 } from "./types.js";
+import { getOrSet, isTestFile } from "./utils.js";
 
 // ── Algorithm constants ──────────────────────────────────────────────
 
@@ -266,10 +267,8 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     allFiles.add(edge.from);
     allFiles.add(edge.to);
 
-    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
-    if (!adj.has(edge.to)) adj.set(edge.to, new Set());
-    adj.get(edge.from)!.add(edge.to);
-    adj.get(edge.to)!.add(edge.from);
+    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
+    getOrSet(adj, edge.to, () => new Set()).add(edge.from);
   }
 
   const files = [...allFiles];
@@ -511,7 +510,7 @@ export function findDeadFiles(
     if (degree > 0) continue;
     if (entrySet.has(file)) continue;
     // Skip test files
-    if (/\.(test|spec)\.[jt]sx?$/.test(file) || file.includes("__tests__/")) continue;
+    if (isTestFile(file)) continue;
     // Skip config files
     if (/\.(config|rc)\.[jt]sx?$/.test(file)) continue;
     // Skip scripts directory (standalone utility scripts)
@@ -565,8 +564,7 @@ export function findCrossCuttingFiles(
     const fromLayer = fileToLayer.get(edge.from);
     if (!fromLayer) continue;
 
-    if (!importerLayers.has(edge.to)) importerLayers.set(edge.to, new Set());
-    importerLayers.get(edge.to)!.add(fromLayer);
+    getOrSet(importerLayers, edge.to, () => new Set()).add(fromLayer);
     importerCounts.set(edge.to, (importerCounts.get(edge.to) ?? 0) + 1);
   }
 
@@ -623,15 +621,19 @@ function topologicalSortLayers(
   queue.sort(); // deterministic tie-breaking
 
   const sorted: string[] = [];
-  while (queue.length > 0) {
-    const node = queue.shift()!;
+  let qHead = 0;
+  while (qHead < queue.length) {
+    const node = queue[qHead++]!;
     sorted.push(node);
     for (const neighbor of adj.get(node) ?? []) {
       const newDeg = (inDeg.get(neighbor) ?? 1) - 1;
       inDeg.set(neighbor, newDeg);
       if (newDeg === 0) {
-        // Insert in sorted position for determinism
-        const insertIdx = queue.findIndex((q) => q > neighbor);
+        // Insert in sorted position for determinism (search only unprocessed part)
+        let insertIdx = -1;
+        for (let i = qHead; i < queue.length; i++) {
+          if (queue[i]! > neighbor) { insertIdx = i; break; }
+        }
         if (insertIdx === -1) queue.push(neighbor);
         else queue.splice(insertIdx, 0, neighbor);
       }
@@ -733,10 +735,8 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
     allFiles.add(edge.from);
     allFiles.add(edge.to);
 
-    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
-    if (!adj.has(edge.to)) adj.set(edge.to, new Set());
-    adj.get(edge.from)!.add(edge.to);
-    adj.get(edge.to)!.add(edge.from);
+    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
+    getOrSet(adj, edge.to, () => new Set()).add(edge.from);
   }
 
   if (allFiles.size === 0) return [];
@@ -893,10 +893,8 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
     allFiles.add(edge.from);
     allFiles.add(edge.to);
 
-    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
-    if (!adj.has(edge.to)) adj.set(edge.to, new Set());
-    adj.get(edge.from)!.add(edge.to);
-    adj.get(edge.to)!.add(edge.from);
+    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
+    getOrSet(adj, edge.to, () => new Set()).add(edge.from);
   }
 
   const totalFiles = allFiles.size;
@@ -1001,10 +999,8 @@ export function findStructuralTemporalMismatches(
   const adj = new Map<string, Set<string>>();
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
-    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
-    if (!adj.has(edge.to)) adj.set(edge.to, new Set());
-    adj.get(edge.from)!.add(edge.to);
-    adj.get(edge.to)!.add(edge.from);
+    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
+    getOrSet(adj, edge.to, () => new Set()).add(edge.from);
   }
 
   const bfsDistance = (from: string, to: string): number => {

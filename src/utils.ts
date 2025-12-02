@@ -1,6 +1,34 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+// ── Test file detection ────────────────────────────────────────────────
+
+const TEST_FILE_PATTERNS = [
+  /\.(test|spec)\.[jt]sx?$/,
+  /\.(test|spec)\.(ts|js)$/,
+  /__tests__\//,
+  /_test\.go$/,
+  /_test\.py$/,
+  /test_[^/]+\.py$/,
+  /tests\/[^/]+\.py$/,
+];
+
+export function isTestFile(filePath: string): boolean {
+  return TEST_FILE_PATTERNS.some((p) => p.test(filePath));
+}
+
+/**
+ * Get a value from a Map, or set it using the factory if missing.
+ */
+export function getOrSet<K, V>(map: Map<K, V>, key: K, factory: () => V): V {
+  let val = map.get(key);
+  if (val === undefined) {
+    val = factory();
+    map.set(key, val);
+  }
+  return val;
+}
+
 /**
  * Check if a file exists.
  */
