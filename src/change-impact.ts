@@ -1,4 +1,5 @@
 import type { GitAnalysis, ImportGraph } from "./types.js";
+import { getOrSet } from "./utils.js";
 
 /**
  * Predict which files are most likely to need changes when a given file is modified.
@@ -63,10 +64,8 @@ function computeStructuralRanking(file: string, graph: ImportGraph): string[] {
   const adj = new Map<string, Set<string>>();
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
-    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
-    if (!adj.has(edge.to)) adj.set(edge.to, new Set());
-    adj.get(edge.from)!.add(edge.to);
-    adj.get(edge.to)!.add(edge.from);
+    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
+    getOrSet(adj, edge.to, () => new Set()).add(edge.from);
   }
 
   if (!adj.has(file)) return [];

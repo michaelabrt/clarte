@@ -1,5 +1,5 @@
 import path from "node:path";
-import { readFileOr } from "./utils.js";
+import { isTestFile, readFileOr } from "./utils.js";
 import type { ConfigConstraints, ImportGraph, InferredConventions } from "./types.js";
 
 // ── Naming pattern classifiers ─────────────────────────────────────────
@@ -720,10 +720,6 @@ export function renderConventionsSection(conventions: InferredConventions): stri
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
-
-function isTestFile(filePath: string): boolean {
-  return /\.(test|spec)\.[jt]sx?$/.test(filePath) || filePath.includes("__tests__/");
-}
 
 function isConfigFile(filePath: string): boolean {
   const basename = path.basename(filePath);

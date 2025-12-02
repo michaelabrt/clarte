@@ -1,21 +1,6 @@
 import path from "node:path";
 import type { DetectedContext, ImportGraph, TestMapping, TestType } from "./types.js";
-
-// ── Test file detection ────────────────────────────────────────────────
-
-const TEST_FILE_PATTERNS = [
-  /\.(test|spec)\.[jt]sx?$/,
-  /\.(test|spec)\.(ts|js)$/,
-  /__tests__\//,
-  /_test\.go$/,
-  /_test\.py$/,
-  /test_[^/]+\.py$/,
-  /tests\/[^/]+\.py$/,
-];
-
-function isTestFile(filePath: string): boolean {
-  return TEST_FILE_PATTERNS.some((p) => p.test(filePath));
-}
+import { getOrSet, isTestFile } from "./utils.js";
 
 // ── Files to exclude from "untested" ──────────────────────────────────
 
@@ -167,8 +152,7 @@ export function buildTestMapping(
     if (!testFiles.has(edge.from)) continue;
     if (!sourceFiles.has(edge.to)) continue;
 
-    if (!testImports.has(edge.from)) testImports.set(edge.from, new Set());
-    testImports.get(edge.from)!.add(edge.to);
+    getOrSet(testImports, edge.from, () => new Set<string>()).add(edge.to);
   }
 
   // Detect if monorepo package structure exists
@@ -190,8 +174,7 @@ export function buildTestMapping(
         }
       }
 
-      if (!sourceToTests.has(sourceFile)) sourceToTests.set(sourceFile, []);
-      sourceToTests.get(sourceFile)!.push(testFile);
+      getOrSet(sourceToTests, sourceFile, () => [] as string[]).push(testFile);
     }
   }
 
