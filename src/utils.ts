@@ -30,6 +30,28 @@ export function getOrSet<K, V>(map: Map<K, V>, key: K, factory: () => V): V {
 }
 
 /**
+ * Build adjacency map from import edges, skipping external edges.
+ * Returns both the adjacency map and the set of all files seen.
+ */
+export function buildAdjacency(
+  edges: readonly { from: string; to: string; isExternal?: boolean }[],
+  opts?: { directed?: boolean },
+): { adj: Map<string, Set<string>>; allFiles: Set<string> } {
+  const adj = new Map<string, Set<string>>();
+  const allFiles = new Set<string>();
+  for (const edge of edges) {
+    if (edge.isExternal) continue;
+    allFiles.add(edge.from);
+    allFiles.add(edge.to);
+    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
+    if (!opts?.directed) {
+      getOrSet(adj, edge.to, () => new Set()).add(edge.from);
+    }
+  }
+  return { adj, allFiles };
+}
+
+/**
  * Check if a file exists.
  */
 export async function fileExists(filePath: string): Promise<boolean> {

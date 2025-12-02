@@ -16,7 +16,7 @@ import type {
   StructuralTemporalMismatch,
   TightCoupling,
 } from "./types.js";
-import { getOrSet, isTestFile } from "./utils.js";
+import { buildAdjacency, getOrSet, isTestFile } from "./utils.js";
 
 // ── Algorithm constants ──────────────────────────────────────────────
 
@@ -258,18 +258,7 @@ export function computeInstability(graph: ImportGraph): FileInstability[] {
  * Phase 4: Validate novelty (skip if communities just mirror directories).
  */
 export function detectCommunities(graph: ImportGraph): Community[] {
-  // Build undirected adjacency from internal edges
-  const adj = new Map<string, Set<string>>();
-  const allFiles = new Set<string>();
-
-  for (const edge of graph.edges) {
-    if (edge.isExternal) continue;
-    allFiles.add(edge.from);
-    allFiles.add(edge.to);
-
-    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
-    getOrSet(adj, edge.to, () => new Set()).add(edge.from);
-  }
+  const { adj, allFiles } = buildAdjacency(graph.edges);
 
   const files = [...allFiles];
   if (files.length === 0) return [];
@@ -726,18 +715,7 @@ export function computeLayerConsistency(
  * Runs in O(V + E), same complexity as SCC detection.
  */
 export function findChokepoints(graph: ImportGraph): Chokepoint[] {
-  // Build undirected adjacency from internal edges
-  const adj = new Map<string, Set<string>>();
-  const allFiles = new Set<string>();
-
-  for (const edge of graph.edges) {
-    if (edge.isExternal) continue;
-    allFiles.add(edge.from);
-    allFiles.add(edge.to);
-
-    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
-    getOrSet(adj, edge.to, () => new Set()).add(edge.from);
-  }
+  const { adj, allFiles } = buildAdjacency(graph.edges);
 
   if (allFiles.size === 0) return [];
 
@@ -884,18 +862,7 @@ function analyzeComponentsWithout(
  * subsystems or is a tightly connected monolith.
  */
 export function computeGraphTopology(graph: ImportGraph): GraphTopology {
-  // Build undirected adjacency from internal edges
-  const adj = new Map<string, Set<string>>();
-  const allFiles = new Set<string>();
-
-  for (const edge of graph.edges) {
-    if (edge.isExternal) continue;
-    allFiles.add(edge.from);
-    allFiles.add(edge.to);
-
-    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
-    getOrSet(adj, edge.to, () => new Set()).add(edge.from);
-  }
+  const { adj, allFiles } = buildAdjacency(graph.edges);
 
   const totalFiles = allFiles.size;
   if (totalFiles === 0) {
@@ -995,13 +962,7 @@ export function findStructuralTemporalMismatches(
 ): StructuralTemporalMismatch[] {
   if (changeCoupling.length === 0) return [];
 
-  // Build undirected adjacency for BFS distance
-  const adj = new Map<string, Set<string>>();
-  for (const edge of graph.edges) {
-    if (edge.isExternal) continue;
-    getOrSet(adj, edge.from, () => new Set()).add(edge.to);
-    getOrSet(adj, edge.to, () => new Set()).add(edge.from);
-  }
+  const { adj } = buildAdjacency(graph.edges);
 
   const bfsDistance = (from: string, to: string): number => {
     if (from === to) return 0;

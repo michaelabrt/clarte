@@ -1,5 +1,6 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
+import { IGNORE_GLOBS } from "./ignore-patterns.js";
 import { estimateTokens, readFileOr, readJsonFile } from "./utils.js";
 import { findUsedExports } from "./graph-analysis.js";
 import { initTreeSitter, extractSnapshotAst } from "./ast-parse.js";
@@ -439,15 +440,10 @@ export async function generateSnapshot(
   const patterns = scanPaths.map((p) => `${p}/${fileGlob}`);
 
   const ignorePatterns = [
-    "**/node_modules/**",
-    "**/dist/**",
-    "**/build/**",
+    ...IGNORE_GLOBS,
     "**/*.test.*",
     "**/*.spec.*",
     "**/__tests__/**",
-    "**/.Trash/**",
-    "**/Library/**",
-    "**/.git/**",
   ];
 
   // Language-specific ignore patterns
