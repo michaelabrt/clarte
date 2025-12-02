@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "bench": "vitest bench",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "prepare": "husky"
   },
   "keywords": [
     "static-analysis",
@@ -59,10 +60,13 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "@vscode/tree-sitter-wasm": "^0.3.0",
+    "@commitlint/cli": "^20.4.2",
+    "@commitlint/config-conventional": "^20.4.2",
     "@semantic-release/changelog": "^6.0.0",
     "@semantic-release/git": "^10.0.0",
     "@types/node": "^22.0.0",
+    "@vscode/tree-sitter-wasm": "^0.3.0",
+    "husky": "^9.1.7",
     "semantic-release": "^25.0.0",
     "tsup": "^8.4.0",
     "typescript": "^5.9.3",

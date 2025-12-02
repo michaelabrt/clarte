@@ -514,6 +514,8 @@ export function findDeadFiles(
     if (/\.(test|spec)\.[jt]sx?$/.test(file) || file.includes("__tests__/")) continue;
     // Skip config files
     if (/\.(config|rc)\.[jt]sx?$/.test(file)) continue;
+    // Skip scripts directory (standalone utility scripts)
+    if (file.startsWith("scripts/")) continue;
     // Skip entry points by convention
     const basename = file.split("/").pop() ?? "";
     if (/^(index|main|app|server|cli|worker|seed|migrate|setup|cron|bootstrap|handler|lambda)\.[jt]sx?$/.test(basename)) continue;
