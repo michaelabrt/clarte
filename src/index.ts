@@ -156,69 +156,73 @@ function printHelp(): void {
   console.log("");
 }
 
-async function main() {
-  const startTime = performance.now();
-  const args = process.argv.slice(2);
+interface CliArgs {
+  rootDir: string;
+  force: boolean;
+  dryRun: boolean;
+  refresh: boolean;
+  reconfigure: boolean;
+  diffMode: boolean;
+  diffRef: string | undefined;
+  diffFilterFiles: string[];
+  diffFile: string | undefined;
+  check: boolean;
+  checkTimestamp: boolean;
+  ciMode: boolean;
+  verbose: boolean;
+  watchMode: boolean;
+  generateSkills: boolean;
+  maxTokens: number | undefined;
+  jsonMode: boolean;
+  effectiveBudget: number | undefined;
+  sectionFilter: SectionFilterOptions | undefined;
+  maxChars: number | undefined;
+  initHook: boolean;
+}
 
-  // Early-exit flags (before any project validation)
-  if (args.includes("--help") || args.includes("-h")) {
-    initTheme("dark");
-    printHelp();
-    resetTerminalColors();
-    process.exit(0);
-  }
-
-  if (args.includes("--version") || args.includes("-V")) {
-    console.log(VERSION);
-    process.exit(0);
-  }
-
-  const force = args.includes("--force");
-  const dryRun = args.includes("--dry-run");
-  const refresh = args.includes("--refresh-snapshot");
-  const reconfigure = args.includes("--reconfigure");
-  const diffArg = args.find((a) => a === "--diff" || a.startsWith("--diff="));
+function parseCliArgs(rawArgs: string[]): CliArgs {
+  const force = rawArgs.includes("--force");
+  const dryRun = rawArgs.includes("--dry-run");
+  const refresh = rawArgs.includes("--refresh-snapshot");
+  const reconfigure = rawArgs.includes("--reconfigure");
+  const diffArg = rawArgs.find((a) => a === "--diff" || a.startsWith("--diff="));
   const diffMode = !!diffArg;
   const diffRef = diffArg?.startsWith("--diff=") ? diffArg.split("=")[1] : undefined;
   // Collect positional args after --diff as file filters
   const diffFilterFiles: string[] = [];
   if (diffMode) {
-    const diffIdx = args.indexOf(diffArg!);
-    for (let i = diffIdx + 1; i < args.length; i++) {
-      const a = args[i];
+    const diffIdx = rawArgs.indexOf(diffArg!);
+    for (let i = diffIdx + 1; i < rawArgs.length; i++) {
+      const a = rawArgs[i];
       if (a.startsWith("-")) break;
       diffFilterFiles.push(a);
     }
   }
-  const checkArg = args.find((a) => a === "--check" || a.startsWith("--check="));
+  const checkArg = rawArgs.find((a) => a === "--check" || a.startsWith("--check="));
   const check = !!checkArg;
   const checkTimestamp = checkArg === "--check=timestamp";
-  const ciMode = args.includes("--ci");
-  const verbose = args.includes("--verbose") || args.includes("-v");
-  const watchMode = args.includes("--watch");
-  const generateSkills = args.includes("--generate-skills");
-  const diffArg = args.find((a) => a === "--diff" || a.startsWith("--diff="));
-  const diffMode = !!diffArg;
-  const diffRef = diffArg?.startsWith("--diff=") ? diffArg.split("=")[1] : undefined;
-  const maxTokensArg = args.find((a) => a.startsWith("--max-tokens="));
+  const ciMode = rawArgs.includes("--ci");
+  const verbose = rawArgs.includes("--verbose") || rawArgs.includes("-v");
+  const watchMode = rawArgs.includes("--watch");
+  const generateSkills = rawArgs.includes("--generate-skills");
+  const maxTokensArg = rawArgs.find((a) => a.startsWith("--max-tokens="));
   const maxTokensRaw = maxTokensArg ? parseInt(maxTokensArg.split("=").slice(1).join("="), 10) : undefined;
   if (maxTokensRaw !== undefined && Number.isNaN(maxTokensRaw)) {
     console.error(`Invalid --max-tokens value: ${maxTokensArg?.split("=").slice(1).join("=")}`);
     process.exit(1);
   }
   const maxTokens = maxTokensRaw;
-  const formatArg = args.find((a) => a.startsWith("--format="));
+  const formatArg = rawArgs.find((a) => a.startsWith("--format="));
   const jsonMode = formatArg?.split("=")[1] === "json";
-  const budgetArg = args.find((a) => a.startsWith("--budget="));
+  const budgetArg = rawArgs.find((a) => a.startsWith("--budget="));
   const budgetRaw = budgetArg ? parseInt(budgetArg.split("=").slice(1).join("="), 10) : undefined;
   if (budgetRaw !== undefined && Number.isNaN(budgetRaw)) {
     console.error(`Invalid --budget value: ${budgetArg?.split("=").slice(1).join("=")}`);
     process.exit(1);
   }
-  const budget = budgetRaw;
-  const fullMode = args.includes("--full");
-  const includeArg = args.find((a) => a.startsWith("--include="));
-  const excludeArg = args.find((a) => a.startsWith("--exclude="));
+  const fullMode = rawArgs.includes("--full");
+  const includeArg = rawArgs.find((a) => a.startsWith("--include="));
+  const excludeArg = rawArgs.find((a) => a.startsWith("--exclude="));
   const sectionFilter: SectionFilterOptions | undefined =
     includeArg || excludeArg
       ? {
@@ -226,25 +230,90 @@ async function main() {
           exclude: excludeArg ? new Set(excludeArg.split("=").slice(1).join("=").split(",")) : undefined,
         }
       : undefined;
-  const effectiveBudget = fullMode ? 0 : budget;
-  const maxCharsArg = args.find((a) => a.startsWith("--max-chars="));
+  const effectiveBudget = fullMode ? 0 : budgetRaw;
+  const maxCharsArg = rawArgs.find((a) => a.startsWith("--max-chars="));
   const maxCharsRaw = maxCharsArg ? parseInt(maxCharsArg.split("=").slice(1).join("="), 10) : undefined;
   if (maxCharsRaw !== undefined && Number.isNaN(maxCharsRaw)) {
     console.error(`Invalid --max-chars value: ${maxCharsArg?.split("=").slice(1).join("=")}`);
     process.exit(1);
   }
-  const maxChars = maxCharsRaw;
-  const initHook = args.includes("--init-hook");
-  const diffFileArg = args.find((a) => a.startsWith("--diff-file="));
+  const initHook = rawArgs.includes("--init-hook");
+  const diffFileArg = rawArgs.find((a) => a.startsWith("--diff-file="));
   const diffFile = diffFileArg?.split("=").slice(1).join("=");
   const diffFilterSet = new Set(diffFilterFiles);
-  const targetDir = args.find((a) => !a.startsWith("-") && !diffFilterSet.has(a)) ?? process.cwd();
+  const targetDir = rawArgs.find((a) => !a.startsWith("-") && !diffFilterSet.has(a)) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
   // Warn if --diff-file is used without --diff
   if (diffFile && !diffMode) {
     console.error("[clarte] --diff-file requires --diff mode; ignoring.");
   }
+
+  return {
+    rootDir,
+    force,
+    dryRun,
+    refresh,
+    reconfigure,
+    diffMode,
+    diffRef,
+    diffFilterFiles,
+    diffFile,
+    check,
+    checkTimestamp,
+    ciMode,
+    verbose,
+    watchMode,
+    generateSkills,
+    maxTokens,
+    jsonMode,
+    effectiveBudget,
+    sectionFilter,
+    maxChars: maxCharsRaw,
+    initHook,
+  };
+}
+
+async function main() {
+  const startTime = performance.now();
+  const rawArgs = process.argv.slice(2);
+
+  // Early-exit flags (before any project validation)
+  if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
+    initTheme("dark");
+    printHelp();
+    resetTerminalColors();
+    process.exit(0);
+  }
+
+  if (rawArgs.includes("--version") || rawArgs.includes("-V")) {
+    console.log(VERSION);
+    process.exit(0);
+  }
+
+  const {
+    rootDir,
+    force,
+    dryRun,
+    refresh,
+    reconfigure,
+    diffMode,
+    diffRef,
+    diffFilterFiles,
+    diffFile,
+    check,
+    checkTimestamp,
+    ciMode,
+    verbose,
+    watchMode,
+    generateSkills,
+    maxTokens,
+    jsonMode,
+    effectiveBudget,
+    sectionFilter,
+    maxChars,
+    initHook,
+  } = parseCliArgs(rawArgs);
 
   // --init-hook: install git pre-commit hook
   if (initHook) {
