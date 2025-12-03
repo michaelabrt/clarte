@@ -96,8 +96,8 @@ export function detectCommunities(graph: ImportGraph): Community[] {
   // Phase 3: Reassign files with >50% cross-community imports
   for (let round = 0; round < COMMUNITY.MAX_MERGE_ROUNDS; round++) {
     let changed = false;
-    // Process in deterministic sorted order
-    for (const file of files.sort()) {
+    // Process in deterministic sorted order (spread to avoid mutating original array)
+    for (const file of [...files].sort()) {
       const currentLabel = fileToCommunity.get(file)!;
       const neighbors = adj.get(file);
       if (!neighbors || neighbors.size === 0) continue;

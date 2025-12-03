@@ -94,9 +94,9 @@ export function detectArchitecturalLayers(
   for (const [name, files] of layerFiles) {
     layers.push({
       name,
-      files,
+      files: [...files].sort(),
       importedByLayers: layerImportedBy.get(name)?.size ?? 0,
-      dependsOn: [...(layerDependsOn.get(name) ?? [])],
+      dependsOn: [...(layerDependsOn.get(name) ?? [])].sort(),
     });
   }
 

@@ -391,15 +391,26 @@ export function computeChangeCoupling(
     }
   }
 
+  // Pre-compute weighted scores to avoid allocations inside comparator
+  const resultWeights = new Map<number, number>();
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    const key = r.fileA < r.fileB ? `${r.fileA}||${r.fileB}` : `${r.fileB}||${r.fileA}`;
+    resultWeights.set(i, weightedCoChanges.get(key) ?? 0);
+  }
+
   // Sort by weighted score descending (primary), then by confidence (secondary),
   // with alphabetical tiebreaker for deterministic output
-  results.sort((a, b) => {
-    const wA = weightedCoChanges.get([a.fileA, a.fileB].sort().join("||")) ?? 0;
-    const wB = weightedCoChanges.get([b.fileA, b.fileB].sort().join("||")) ?? 0;
-    return wB - wA || b.confidence - a.confidence || a.fileA.localeCompare(b.fileA) || a.fileB.localeCompare(b.fileB);
-  });
+  const indices = results.map((_, i) => i);
+  indices.sort((a, b) =>
+    (resultWeights.get(b)! - resultWeights.get(a)!)
+    || (results[b].confidence - results[a].confidence)
+    || results[a].fileA.localeCompare(results[b].fileA)
+    || results[a].fileB.localeCompare(results[b].fileB),
+  );
+  const sorted = indices.map((i) => results[i]);
 
-  return results.slice(0, 10);
+  return sorted.slice(0, 10);
 }
 
 /**

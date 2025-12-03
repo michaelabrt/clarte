@@ -29,7 +29,7 @@ export function findSCCs(graph: ImportGraph): string[][] {
   // Each frame stores the current node and the index into its neighbor list.
   const callStack: Array<{ v: string; neighborIdx: number }> = [];
 
-  for (const file of allFiles) {
+  for (const file of [...allFiles].sort()) {
     if (indices.has(file)) continue;
 
     callStack.push({ v: file, neighborIdx: 0 });
@@ -268,8 +268,8 @@ function findActualCycles(scc: string[], adj: Map<string, Set<string>>, maxCycle
   // 2. BFS shortest cycle through each node
   // Sort by degree descending: high-degree nodes find diverse cycles faster
   const byDegree = [...scc].sort((a, b) => {
-    const degA = (sccAdj.get(a)?.size ?? 0) + (sccAdj.get(b)?.size ?? 0);
-    const degB = (sccAdj.get(b)?.size ?? 0) + (sccAdj.get(a)?.size ?? 0);
+    const degA = sccAdj.get(a)?.size ?? 0;
+    const degB = sccAdj.get(b)?.size ?? 0;
     return degB - degA;
   });
 
