@@ -43,11 +43,11 @@ CLI tool that pre-generates context files for AI coding agents.
 - When you modify `src/index.ts`, you'll likely need to also update `src/summary.ts` within the next 1-2 commits (lagged co-change pattern).
 - When you modify `src/index.ts`, you'll likely need to also update `src/types.ts` within the next 1-2 commits (lagged co-change pattern).
 - When you modify `src/index.ts`, you'll likely need to also update `src/templates/main-context.ts` within the next 1-2 commits (lagged co-change pattern).
-- When modifying `src/utils.ts`, also check: `src/cache.ts`, `src/check.ts`, `src/config-scan.ts`, `src/config.ts`.
-- When modifying `src/graph-analysis.ts`, also check: `src/types.ts`, `src/centrality.ts`, `src/theme.ts`, `src/diff.ts`.
-- When modifying `src/detect.ts`, also check: `src/types.ts`, `src/utils.ts`, `src/ast-parse.ts`, `src/diff.ts`.
-- When modifying `src/theme.ts`, also check: `src/animations.ts`, `src/cache.ts`, `src/diff.ts`, `src/utils.ts`.
-- When modifying `src/config.ts`, also check: `src/types.ts`, `src/utils.ts`, `src/ast-parse.ts`, `src/cache.ts`.
+- When modifying `src/utils.ts`, also check: `src/check.ts`, `src/config-scan.ts`, `src/config.ts`, `src/conventions.ts`.
+- When modifying `src/graph-analysis.ts`, also check: `src/theme.ts`, `src/types.ts`, `src/centrality.ts`, `src/diff.ts`.
+- When modifying `src/detect.ts`, also check: `src/types.ts`, `src/utils.ts`, `src/diff.ts`, `src/ast-parse.ts`.
+- When modifying `src/theme.ts`, also check: `src/animations.ts`, `src/diff.ts`, `src/utils.ts`, `src/types.ts`.
+- When modifying `src/config.ts`, also check: `src/types.ts`, `src/utils.ts`, `src/ast-parse.ts`, `src/centrality.ts`.
 - `src/templates/main-context.ts` is a flow bottleneck (many import paths pass through it). Consider splitting if it grows further.
 
 ## Key Files
@@ -85,15 +85,15 @@ Cross-layer edges: services -> types, services -> utils, utils -> types
 
 | File | Commits (90d) | Last Changed |
 |------|--------------|--------------|
-| `src/index.ts` | 57 | 2 minutes ago |
+| `src/index.ts` | 57 | 17 minutes ago |
 | `README.md` | 40 | 3 days ago |
-| `src/templates/main-context.ts` | 32 | 2 minutes ago |
-| `src/summary.ts` | 31 | 2 minutes ago |
-| `src/graph.ts` | 27 | 5 minutes ago |
-| `src/snapshot.ts` | 26 | 2 minutes ago |
-| `src/types.ts` | 26 | 70 minutes ago |
+| `src/templates/main-context.ts` | 32 | 17 minutes ago |
+| `src/summary.ts` | 31 | 17 minutes ago |
+| `src/graph.ts` | 27 | 21 minutes ago |
+| `src/snapshot.ts` | 26 | 17 minutes ago |
+| `src/types.ts` | 26 | 86 minutes ago |
 | `package.json` | 26 | 3 days ago |
-| `CLAUDE.md` | 24 | 10 hours ago |
+| `CLAUDE.md` | 25 | 15 minutes ago |
 | `package-lock.json` | 21 | 3 days ago |
 
 ## Change Coupling
@@ -128,10 +128,10 @@ Files that frequently change together -- when modifying one, check if the other 
 ## Project Structure
 
 ```
+docs/
+scripts/
 src/
   __tests__/
-scripts/
-docs/
 ```
 
 ## Dead Files
@@ -161,9 +161,9 @@ Files whose removal would disconnect parts of the codebase. Refactor with extrem
 | `src/ast-parse.ts` | 5 components | 12 files |
 | `src/git-analysis.ts` | 5 components | 4 files |
 | `src/generate.ts` | 5 components | 3 files |
+| `src/hooks.ts` | 5 components | 2 files |
 | `src/watch.ts` | 5 components | 2 files |
 | `src/refresh.ts` | 5 components | 2 files |
-| `src/hooks.ts` | 5 components | 2 files |
 
 ## Tight Coupling
 
@@ -173,12 +173,12 @@ File pairs where one file imports many named exports from another, indicating st
 - `src/graph-analysis.ts` imports 15 names from `src/types.ts`
 - `src/graph-build.ts` imports 14 names from `src/import-resolution.ts`
 - `src/__tests__/golden/golden.test.ts` imports 13 names from `src/graph.ts`
-- `src/index.ts` imports 12 names from `src/graph-analysis.ts`
 - `src/__tests__/bench/pipeline.bench.ts` imports 12 names from `src/graph.ts`
+- `src/index.ts` imports 12 names from `src/graph-analysis.ts`
 - `src/watch.ts` imports 11 names from `src/graph-analysis.ts`
-- `src/cache.ts` imports 9 names from `src/import-resolution.ts`
 - `src/detect.ts` imports 9 names from `src/types.ts`
 - `src/__tests__/cache.test.ts` imports 9 names from `src/cache.ts`
+- `src/__tests__/graph-algorithms.test.ts` imports 9 names from `src/graph.ts`
 
 ## Hidden Coupling
 
@@ -209,7 +209,7 @@ npm run build
 
 <!-- Sections omitted to fit token budget: code-snapshot. Run clarte --full for full output. -->
 
-<!-- clarte: generated 2026-02-25T23:19:36Z. Run npx clarte to regenerate. -->
+<!-- clarte: generated 2026-02-25T23:35:20Z. Run npx clarte to regenerate. -->
 
 <!-- clarte:user-start -->
 ## Style Rules

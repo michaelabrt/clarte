@@ -22,7 +22,13 @@ import { validateContextPaths } from "./check.js";
 import { initPreCommitHook } from "./hooks.js";
 import { runDiffMode } from "./diff.js";
 import { runWatchMode } from "./watch.js";
-import { buildGraphWithCache, computeAnalysisCacheKey, loadAnalysisCache, saveAnalysisCache } from "./cache.js";
+import {
+  buildGraphWithCache,
+  computeAnalysisCacheKey,
+  loadAnalysisCache,
+  saveAnalysisCache,
+  ANALYSIS_CACHE_VERSION,
+} from "./cache.js";
 import { buildImportGraph, mergeGraph } from "./graph-build.js";
 import { findCircularDeps } from "./graph-cycles.js";
 import {
@@ -953,7 +959,7 @@ async function main() {
   if (!useAnalysisCache) {
     try {
       await saveAnalysisCache(rootDir, {
-        version: 1,
+        version: ANALYSIS_CACHE_VERSION,
         cacheKey: analysisCacheKey,
         hubFiles,
         circularDeps,

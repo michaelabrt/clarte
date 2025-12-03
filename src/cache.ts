@@ -86,7 +86,7 @@ export async function saveCache(rootDir: string, data: CacheData): Promise<void>
 
 // ── Analysis Cache ────────────────────────────────────────────────────
 
-const ANALYSIS_CACHE_VERSION = 2;
+export const ANALYSIS_CACHE_VERSION = 2;
 const ANALYSIS_CACHE_FILE = "analysis-cache.json";
 
 /** Cached graph-derived analysis results (deterministic given edges + config) */

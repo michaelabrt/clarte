@@ -301,7 +301,7 @@ export async function buildSections(
 
     pkgLines.push("| From Package | To Package | Edges | Violations |");
     pkgLines.push("|-------------|------------|-------|------------|");
-    for (const [key, val] of pairMap) {
+    for (const [key, val] of [...pairMap.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
       const [fromPkg, toPkg] = key.split("|");
       pkgLines.push(`| \`${fromPkg}\` | \`${toPkg}\` | ${val.edges} | ${val.violations} |`);
     }
@@ -326,7 +326,7 @@ export async function buildSections(
       pkgLines.push("");
       pkgLines.push("### Key Files by Package");
       pkgLines.push("");
-      for (const [pkgName, hubFiles] of mono.packageHubFiles) {
+      for (const [pkgName, hubFiles] of [...mono.packageHubFiles.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
         if (hubFiles.length === 0) continue;
         pkgLines.push(`**${pkgName}**: ${hubFiles.map((f) => `\`${f.path}\``).join(", ")}`);
       }
@@ -859,18 +859,17 @@ export function applyCharBudget(
   const included = [...sorted];
   const dropped: string[] = [];
 
-  const measure = () =>
-    included
-      .map((s) => s.content)
-      .join("\n\n")
-      .trimEnd().length +
-    1 +
-    generatedComment.length;
+  // Compute total size incrementally instead of O(n) string rebuild on each drop
+  let totalChars = included.reduce((sum, s) => sum + s.content.trimEnd().length, 0)
+    + (included.length > 1 ? (included.length - 1) * 2 : 0) // "\n\n" separators
+    + 1 + generatedComment.length;
 
-  while (measure() > maxChars && droppable.length > 0) {
+  while (totalChars > maxChars && droppable.length > 0) {
     const toDrop = droppable.shift()!;
     const idx = included.findIndex((s) => s.id === toDrop.id);
     if (idx >= 0) {
+      totalChars -= toDrop.content.trimEnd().length;
+      if (included.length > 1) totalChars -= 2; // remove one "\n\n" separator
       included.splice(idx, 1);
       dropped.push(toDrop.id);
     }
@@ -1023,9 +1022,9 @@ function buildStructureTree(ctx: DetectedContext): string {
     }
   }
 
-  for (const [dir, children] of grouped) {
+  for (const [dir, children] of [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     lines.push(`${dir}/`);
-    for (const child of children) {
+    for (const child of [...children].sort()) {
       lines.push(`  ${child}/`);
     }
   }

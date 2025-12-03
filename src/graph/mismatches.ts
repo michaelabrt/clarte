@@ -29,24 +29,39 @@ export function findStructuralTemporalMismatches(
     adj.get(edge.to)!.add(edge.from);
   }
 
+  // Cache BFS results to avoid redundant traversals for the same source node
+  const distCache = new Map<string, Map<string, number>>();
+
   const bfsDistance = (from: string, to: string): number => {
     if (from === to) return 0;
     if (!adj.has(from) || !adj.has(to)) return -1;
+
+    // Check cache
+    const cached = distCache.get(from)?.get(to) ?? distCache.get(to)?.get(from);
+    if (cached !== undefined) return cached;
+
     const visited = new Set<string>();
-    const queue: Array<{ node: string; dist: number }> = [{ node: from, dist: 0 }];
+    const distances = new Map<string, number>();
+    const queue: string[] = [from];
     let qHead = 0;
     visited.add(from);
+    distances.set(from, 0);
+
     while (qHead < queue.length) {
-      const { node, dist } = queue[qHead++];
+      const node = queue[qHead++];
+      const dist = distances.get(node)!;
       for (const neighbor of adj.get(node) ?? []) {
-        if (neighbor === to) return dist + 1;
         if (!visited.has(neighbor)) {
           visited.add(neighbor);
-          queue.push({ node: neighbor, dist: dist + 1 });
+          distances.set(neighbor, dist + 1);
+          queue.push(neighbor);
         }
       }
     }
-    return -1; // unreachable
+
+    // Cache all distances from this source
+    distCache.set(from, distances);
+    return distances.get(to) ?? -1;
   };
 
   const results: StructuralTemporalMismatch[] = [];
