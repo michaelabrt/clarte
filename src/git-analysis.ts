@@ -60,9 +60,7 @@ function parseGitLog(rootDir: string, window: TimeWindow = { days: 90 }): Parsed
   const SEP = "---CLARTE_COMMIT_SEP---";
 
   // Build the range argument based on the time window type
-  const rangeArg = "ref" in window
-    ? `${window.ref}..HEAD`
-    : `--since="${window.days} days ago"`;
+  const rangeArg = "ref" in window ? `${window.ref}..HEAD` : `--since="${window.days} days ago"`;
 
   // Single git log call with all data:
   // - --no-merges: exclude merge commits (inflates counts and creates spurious coupling)
@@ -95,7 +93,14 @@ function parseGitLog(rootDir: string, window: TimeWindow = { days: 90 }): Parsed
     const message = parts.slice(3).join("\x1f"); // rejoin in case subject somehow contains \x1f
 
     // Remaining lines are file paths, deduplicated to handle renames
-    const files = [...new Set(lines.slice(1).map((f) => f.trim()).filter(Boolean))];
+    const files = [
+      ...new Set(
+        lines
+          .slice(1)
+          .map((f) => f.trim())
+          .filter(Boolean),
+      ),
+    ];
 
     if (files.length > 0) {
       commits.push({ hash, date, relativeDate, message, files });
@@ -123,13 +128,9 @@ export function analyzeGitActivity(
   sinceRef?: string,
 ): GitAnalysis | null {
   try {
-    const window: TimeWindow = sinceRef
-      ? { ref: sinceRef }
-      : { days: analysisDays };
+    const window: TimeWindow = sinceRef ? { ref: sinceRef } : { days: analysisDays };
 
-    const windowLabel = sinceRef
-      ? `since ${sinceRef}`
-      : `last ${analysisDays} days`;
+    const windowLabel = sinceRef ? `since ${sinceRef}` : `last ${analysisDays} days`;
     onProgress?.(`Analyzing git history (${windowLabel})...`);
 
     const commits = parseGitLog(rootDir, window);
@@ -157,13 +158,11 @@ export function analyzeGitActivity(
 
     // Build hot files list (top 15 by commit count)
     const sorted = [...commitCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-    const hotFiles: GitAnalysis["hotFiles"] = sorted
-      .slice(0, 15)
-      .map(([filePath, commitCount]) => ({
-        path: filePath,
-        commits: commitCount,
-        lastChanged: lastChanged.get(filePath) ?? "",
-      }));
+    const hotFiles: GitAnalysis["hotFiles"] = sorted.slice(0, 15).map(([filePath, commitCount]) => ({
+      path: filePath,
+      commits: commitCount,
+      lastChanged: lastChanged.get(filePath) ?? "",
+    }));
 
     // Analyze change coupling using the same parsed commits
     onProgress?.("Analyzing change coupling...");
@@ -199,14 +198,14 @@ export function computeFileChurn(
   window: TimeWindow = { days: 90 },
 ): Map<string, { linesAdded: number; linesRemoved: number }> | null {
   try {
-    const rangeArg = "ref" in window
-      ? `${window.ref}..HEAD`
-      : `--since="${window.days} days ago"`;
+    const rangeArg = "ref" in window ? `${window.ref}..HEAD` : `--since="${window.days} days ago"`;
 
-    const output = execSync(
-      `git log --numstat --format="" ${rangeArg} --no-merges`,
-      { cwd: rootDir, encoding: "utf-8", timeout: 15000, maxBuffer: 10 * 1024 * 1024 },
-    ).trim();
+    const output = execSync(`git log --numstat --format="" ${rangeArg} --no-merges`, {
+      cwd: rootDir,
+      encoding: "utf-8",
+      timeout: 15000,
+      maxBuffer: 10 * 1024 * 1024,
+    }).trim();
 
     if (!output) return null;
 
@@ -223,7 +222,7 @@ export function computeFileChurn(
 
       const added = parseInt(parts[0], 10);
       const removed = parseInt(parts[1], 10);
-      if (isNaN(added) || isNaN(removed)) continue;
+      if (Number.isNaN(added) || Number.isNaN(removed)) continue;
 
       const file = parts.slice(2).join("\t"); // filename may contain tabs (rare)
       const existing = churn.get(file);
@@ -306,7 +305,11 @@ function temporalDecay(ageDays: number, decayConstant: number = 45): number {
  * 3. Noise classification: lint/merge/format commits are discounted
  * 4. Jaccard similarity for symmetric confidence metric
  */
-export function computeChangeCoupling(commits: ParsedCommit[], windowDays: number = 90, referenceMs?: number): ChangeCoupling[] {
+export function computeChangeCoupling(
+  commits: ParsedCommit[],
+  windowDays: number = 90,
+  referenceMs?: number,
+): ChangeCoupling[] {
   // Track which commits each file appears in (for Jaccard)
   const fileCommitSets = new Map<string, Set<number>>();
   // Weighted co-change scores
@@ -350,9 +353,8 @@ export function computeChangeCoupling(commits: ParsedCommit[], windowDays: numbe
   const totalMultiFileCommits = commits.filter((c) => c.files.length >= 2).length;
 
   // Adaptive minimum threshold
-  const minCoChanges = totalMultiFileCommits > COUPLING.ACTIVITY_THRESHOLD
-    ? COUPLING.MIN_CO_CHANGES_HIGH
-    : COUPLING.MIN_CO_CHANGES_LOW;
+  const minCoChanges =
+    totalMultiFileCommits > COUPLING.ACTIVITY_THRESHOLD ? COUPLING.MIN_CO_CHANGES_HIGH : COUPLING.MIN_CO_CHANGES_LOW;
 
   for (const [key, rawCount] of rawCoChanges) {
     if (rawCount < minCoChanges) continue;
@@ -408,10 +410,7 @@ export function computeChangeCoupling(commits: ParsedCommit[], windowDays: numbe
  * Only examines pairs that already have high same-commit coupling, since those
  * are the most likely to exhibit lag patterns.
  */
-export function computeLagCoupling(
-  commits: ParsedCommit[],
-  couplingResults: ChangeCoupling[],
-): LagCoupling[] {
+export function computeLagCoupling(commits: ParsedCommit[], couplingResults: ChangeCoupling[]): LagCoupling[] {
   // Build file timeline: map each file to the commit indices it appears in
   const fileTimeline = new Map<string, number[]>();
   for (let ci = 0; ci < commits.length; ci++) {

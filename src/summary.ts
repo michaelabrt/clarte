@@ -106,11 +106,7 @@ export function printSummary(
   );
 
   if (snapshot?.budgetExcluded && snapshot.budgetExcluded > 0) {
-    lines.push(
-      t.muted(
-        `  (${snapshot.budgetExcluded} snapshot entries excluded by token budget)`,
-      ),
-    );
+    lines.push(t.muted(`  (${snapshot.budgetExcluded} snapshot entries excluded by token budget)`));
   }
 
   p.log.message(lines.join("\n"));
@@ -122,8 +118,16 @@ export function printSummary(
     // Circular dependencies (always a finding)
     if (analysis.circularDeps.length > 0) {
       for (const c of analysis.circularDeps.slice(0, 3)) {
-        const names = c.chain.map((f) => f.split("/").pop()?.replace(/\.[jt]sx?$/, "") ?? f);
-        findings.push(`${analysis.circularDeps.length > 1 ? "" : ""}${t.textBold("1")} circular dependency chain (${names.slice(0, 2).join(" \u2194 ")})`);
+        const names = c.chain.map(
+          (f) =>
+            f
+              .split("/")
+              .pop()
+              ?.replace(/\.[jt]sx?$/, "") ?? f,
+        );
+        findings.push(
+          `${analysis.circularDeps.length > 1 ? "" : ""}${t.textBold("1")} circular dependency chain (${names.slice(0, 2).join(" \u2194 ")})`,
+        );
       }
       if (analysis.circularDeps.length > 1) {
         findings[0] = `${t.textBold(String(analysis.circularDeps.length))} circular dependency chain${analysis.circularDeps.length === 1 ? "" : "s"}`;
@@ -136,16 +140,22 @@ export function printSummary(
       highInstabilityFiles.sort((a, b) => b.instability - a.instability);
       const cap = 10;
       const shown = highInstabilityFiles.slice(0, cap);
-      const subLines = shown.map((f) => t.muted(`     ${f.path.split("/").pop() ?? f.path}`) + ` I=${t.textBold(f.instability.toFixed(2))}`);
+      const subLines = shown.map(
+        (f) => t.muted(`     ${f.path.split("/").pop() ?? f.path}`) + ` I=${t.textBold(f.instability.toFixed(2))}`,
+      );
       if (highInstabilityFiles.length > cap) {
         subLines.push(t.muted(`     ... and ${highInstabilityFiles.length - cap} more`));
       }
-      findings.push(`${t.textBold(String(highInstabilityFiles.length))} high-instability file${highInstabilityFiles.length === 1 ? "" : "s"}\n${subLines.join("\n")}`);
+      findings.push(
+        `${t.textBold(String(highInstabilityFiles.length))} high-instability file${highInstabilityFiles.length === 1 ? "" : "s"}\n${subLines.join("\n")}`,
+      );
     }
 
     // Layer violations
     if (analysis.layerConsistency && analysis.layerConsistency.violations.length > 0) {
-      findings.push(`${t.textBold(String(analysis.layerConsistency.violations.length))} layer dependency violation${analysis.layerConsistency.violations.length === 1 ? "" : "s"}`);
+      findings.push(
+        `${t.textBold(String(analysis.layerConsistency.violations.length))} layer dependency violation${analysis.layerConsistency.violations.length === 1 ? "" : "s"}`,
+      );
     }
 
     if (findings.length > 0) {
@@ -168,7 +178,6 @@ export function printSummary(
     );
   }
 }
-
 
 function formatNumber(n: number): string {
   if (n >= 1000) {

@@ -15,25 +15,16 @@ import {
   detectJavaSourceRoots,
   getPackageName,
   SOURCE_IGNORE,
-  type PathAlias,
   type BarrelExportMap,
   type ResolveContext,
 } from "./import-resolution.js";
-import type {
-  ImportEdge,
-  ImportGraph,
-  Language,
-  ProgressCallback,
-} from "./types.js";
+import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "./types.js";
 
 /**
  * Detect barrel files: files where >50% of top-level statements are re-exports.
  * Returns a Set of relative file paths identified as barrels.
  */
-export async function detectBarrelFiles(
-  rootDir: string,
-  fileSet: Set<string>,
-): Promise<Set<string>> {
+export async function detectBarrelFiles(rootDir: string, fileSet: Set<string>): Promise<Set<string>> {
   const barrels = new Set<string>();
 
   for (const file of fileSet) {
@@ -62,17 +53,27 @@ export async function buildImportGraph(
   const globs = getSourceGlob(language);
   let files: string[];
   try {
-    files = (await glob(globs, {
-      cwd: rootDir,
-      ignore: SOURCE_IGNORE,
-      absolute: false,
-    })).sort();
+    files = (
+      await glob(globs, {
+        cwd: rootDir,
+        ignore: SOURCE_IGNORE,
+        absolute: false,
+      })
+    ).sort();
   } catch (err: unknown) {
     // Gracefully degrade on permission errors (e.g. scanning ~/ on macOS)
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EPERM" || code === "EACCES") {
       onProgress?.("Warning: permission error scanning files, returning empty graph");
-      return { edges: [], inDegree: new Map(), directInDegree: new Map(), centrality: new Map(), externalImportCounts: new Map(), authority: new Map(), hubScores: new Map() };
+      return {
+        edges: [],
+        inDegree: new Map(),
+        directInDegree: new Map(),
+        centrality: new Map(),
+        externalImportCounts: new Map(),
+        authority: new Map(),
+        hubScores: new Map(),
+      };
     }
     throw err;
   }
@@ -87,9 +88,7 @@ export async function buildImportGraph(
 
   // Load path aliases for TS/JS projects
   const isJsTs = language === "typescript" || language === "javascript";
-  const pathAliases = isJsTs
-    ? await loadTsconfigPaths(rootDir)
-    : [];
+  const pathAliases = isJsTs ? await loadTsconfigPaths(rootDir) : [];
   if (pathAliases.length > 0) {
     onProgress?.(`Loaded ${pathAliases.length} path alias(es) from tsconfig`);
   }
@@ -105,7 +104,9 @@ export async function buildImportGraph(
   if (language === "java") {
     resolveCtx.javaSourceRoots = detectJavaSourceRoots(files);
     if (resolveCtx.javaSourceRoots.length > 0) {
-      onProgress?.(`Java source root${resolveCtx.javaSourceRoots.length === 1 ? "" : "s"}: ${resolveCtx.javaSourceRoots.join(", ")}`);
+      onProgress?.(
+        `Java source root${resolveCtx.javaSourceRoots.length === 1 ? "" : "s"}: ${resolveCtx.javaSourceRoots.join(", ")}`,
+      );
     }
   }
 
@@ -251,16 +252,11 @@ export async function buildImportGraph(
             isTypeOnly: raw.isTypeOnly,
             isDynamic: raw.isDynamic,
           });
-          externalImportCounts.set(
-            pkgName,
-            (externalImportCounts.get(pkgName) ?? 0) + 1,
-          );
+          externalImportCounts.set(pkgName, (externalImportCounts.get(pkgName) ?? 0) + 1);
         }
       } else {
         // Try path alias resolution before treating as external
-        const aliasResolved = pathAliases.length > 0
-          ? resolveAliasImport(raw.specifier, pathAliases, fileSet)
-          : null;
+        const aliasResolved = pathAliases.length > 0 ? resolveAliasImport(raw.specifier, pathAliases, fileSet) : null;
 
         if (aliasResolved) {
           edges.push({
@@ -289,10 +285,7 @@ export async function buildImportGraph(
             isTypeOnly: raw.isTypeOnly,
             isDynamic: raw.isDynamic,
           });
-          externalImportCounts.set(
-            pkgName,
-            (externalImportCounts.get(pkgName) ?? 0) + 1,
-          );
+          externalImportCounts.set(pkgName, (externalImportCounts.get(pkgName) ?? 0) + 1);
         }
       }
     }
@@ -312,12 +305,29 @@ export async function buildImportGraph(
 
   onProgress?.("Computing betweenness centrality...");
   const graphForBetweenness: ImportGraph = {
-    edges, inDegree, directInDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles: detectedBarrels,
+    edges,
+    inDegree,
+    directInDegree,
+    centrality: authority,
+    externalImportCounts,
+    authority,
+    hubScores,
+    barrelFiles: detectedBarrels,
   };
   const betweennessScores = computeBetweenness(graphForBetweenness);
 
   // Use authority as centrality for backward compat (snapshot.ts etc.)
-  return { edges, inDegree, directInDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles: detectedBarrels, betweennessScores };
+  return {
+    edges,
+    inDegree,
+    directInDegree,
+    centrality: authority,
+    externalImportCounts,
+    authority,
+    hubScores,
+    barrelFiles: detectedBarrels,
+    betweennessScores,
+  };
 }
 
 /**

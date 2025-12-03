@@ -7,12 +7,7 @@ import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import { buildGraphWithCache } from "./cache.js";
 import { buildImportGraph, mergeGraph } from "./graph-build.js";
 import { findCircularDeps } from "./graph-cycles.js";
-import {
-  getHubFiles,
-  detectArchitecturalLayers,
-  computeInstability,
-  detectCommunities,
-} from "./graph-analysis.js";
+import { getHubFiles, detectArchitecturalLayers, computeInstability, detectCommunities } from "./graph-analysis.js";
 import { analyzeGitActivity } from "./git-analysis.js";
 import { loadConfig } from "./config.js";
 import { buildTestMapping } from "./test-map.js";
@@ -21,7 +16,13 @@ import { buildDirectives } from "./templates/directives.js";
 import { startShimmer } from "./animations.js";
 import type { ContextAnalysis, ProgressCallback } from "./types.js";
 
-export async function runDiffMode(rootDir: string, ref?: string, verbose = false, outputFile?: string, filterFiles: string[] = []): Promise<void> {
+export async function runDiffMode(
+  rootDir: string,
+  ref?: string,
+  verbose = false,
+  outputFile?: string,
+  filterFiles: string[] = [],
+): Promise<void> {
   const verboseLog: ProgressCallback = (msg) => {
     if (verbose) p.log.info(t.muted(msg));
   };
@@ -30,14 +31,21 @@ export async function runDiffMode(rootDir: string, ref?: string, verbose = false
   let changedFiles: string[];
   let diffStat: Map<string, { added: number; removed: number }> | null = null;
   try {
-    const cmd = ref
-      ? `git diff --name-only ${ref}...HEAD`
-      : "git diff --name-only HEAD";
-    let output = execSync(cmd, { cwd: rootDir, encoding: "utf-8", timeout: 10000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+    const cmd = ref ? `git diff --name-only ${ref}...HEAD` : "git diff --name-only HEAD";
+    let output = execSync(cmd, {
+      cwd: rootDir,
+      encoding: "utf-8",
+      timeout: 10000,
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
 
     // Also include staged + unstaged changes if no ref
     if (!ref) {
-      const staged = execSync("git diff --name-only --cached", { cwd: rootDir, encoding: "utf-8", timeout: 5000 }).trim();
+      const staged = execSync("git diff --name-only --cached", {
+        cwd: rootDir,
+        encoding: "utf-8",
+        timeout: 5000,
+      }).trim();
       const unstaged = execSync("git diff --name-only", { cwd: rootDir, encoding: "utf-8", timeout: 5000 }).trim();
       output = [output, staged, unstaged].filter(Boolean).join("\n");
     }
@@ -46,18 +54,20 @@ export async function runDiffMode(rootDir: string, ref?: string, verbose = false
 
     // Filter to specific files if provided
     if (filterFiles.length > 0) {
-      const filterSet = new Set(filterFiles.map(f => path.normalize(f)));
-      changedFiles = changedFiles.filter(f => filterSet.has(path.normalize(f)));
+      const filterSet = new Set(filterFiles.map((f) => path.normalize(f)));
+      changedFiles = changedFiles.filter((f) => filterSet.has(path.normalize(f)));
     }
 
     // Get line change counts
     try {
-      const statCmd = ref
-        ? `git diff --numstat ${ref}...HEAD`
-        : "git diff --numstat HEAD";
+      const statCmd = ref ? `git diff --numstat ${ref}...HEAD` : "git diff --numstat HEAD";
       let statOutput = execSync(statCmd, { cwd: rootDir, encoding: "utf-8", timeout: 10000 }).trim();
       if (!ref) {
-        const stagedStat = execSync("git diff --numstat --cached", { cwd: rootDir, encoding: "utf-8", timeout: 5000 }).trim();
+        const stagedStat = execSync("git diff --numstat --cached", {
+          cwd: rootDir,
+          encoding: "utf-8",
+          timeout: 5000,
+        }).trim();
         const unstagedStat = execSync("git diff --numstat", { cwd: rootDir, encoding: "utf-8", timeout: 5000 }).trim();
         statOutput = [statOutput, stagedStat, unstagedStat].filter(Boolean).join("\n");
       }
@@ -114,10 +124,7 @@ export async function runDiffMode(rootDir: string, ref?: string, verbose = false
   }
 
   // Enrich frameworks
-  detected.frameworks = enrichFrameworksWithUsage(
-    detected.frameworks,
-    graph.externalImportCounts,
-  );
+  detected.frameworks = enrichFrameworksWithUsage(detected.frameworks, graph.externalImportCounts);
 
   shimmer.stop();
 
@@ -184,7 +191,9 @@ export async function runDiffMode(rootDir: string, ref?: string, verbose = false
   const allRelevant = [...changedSet, ...neighborSet, ...testFiles];
 
   p.log.step(
-    t.text(`Scope: ${changedFiles.length} changed, ${hop1Set.size} direct + ${hop2Set.size} indirect neighbor${hop1Set.size + hop2Set.size === 1 ? "" : "s"}, ${testFiles.size} test file${testFiles.size === 1 ? "" : "s"}`),
+    t.text(
+      `Scope: ${changedFiles.length} changed, ${hop1Set.size} direct + ${hop2Set.size} indirect neighbor${hop1Set.size + hop2Set.size === 1 ? "" : "s"}, ${testFiles.size} test file${testFiles.size === 1 ? "" : "s"}`,
+    ),
   );
 
   // 7. Build markdown output
@@ -201,19 +210,25 @@ export async function runDiffMode(rootDir: string, ref?: string, verbose = false
     const statStr = stat ? `, +${stat.added} / -${stat.removed}` : "";
     sections.push("# Diff Context");
     sections.push("");
-    sections.push(`> \`${f}\` (${role}, imported by ${importedBy}${statStr})${ref ? ` vs \`${ref}\`` : ""}. Generated by Clart\u00e9.`);
+    sections.push(
+      `> \`${f}\` (${role}, imported by ${importedBy}${statStr})${ref ? ` vs \`${ref}\`` : ""}. Generated by Clart\u00e9.`,
+    );
     sections.push("");
 
     // Inline risk annotation for the single file
     if (hub && (hub.role === "Foundation" || hub.role === "Orchestrator" || hub.role === "Bridge")) {
-      sections.push(`**Risk:** ${hub.role} file, imported by ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"}. Check dependents for breaking changes.`);
+      sections.push(
+        `**Risk:** ${hub.role} file, imported by ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"}. Check dependents for breaking changes.`,
+      );
       sections.push("");
     }
   } else {
     // Multi-file format: tables
     sections.push("# Diff Context");
     sections.push("");
-    sections.push(`> Focused context for ${changedFiles.length} changed files${ref ? ` vs \`${ref}\`` : ""}. Generated by Clart\u00e9.`);
+    sections.push(
+      `> Focused context for ${changedFiles.length} changed files${ref ? ` vs \`${ref}\`` : ""}. Generated by Clart\u00e9.`,
+    );
     sections.push("");
 
     sections.push("## Changed Files");
@@ -269,8 +284,7 @@ export async function runDiffMode(rootDir: string, ref?: string, verbose = false
         .filter(
           (c) =>
             c.confidence >= 0.5 &&
-            ((c.fileA === f && !changedSet.has(c.fileB)) ||
-              (c.fileB === f && !changedSet.has(c.fileA))),
+            ((c.fileA === f && !changedSet.has(c.fileB)) || (c.fileB === f && !changedSet.has(c.fileA))),
         )
         .map((c) => {
           const partner = c.fileA === f ? c.fileB : c.fileA;
@@ -278,9 +292,7 @@ export async function runDiffMode(rootDir: string, ref?: string, verbose = false
           return `\`${partner}\` (${pct}% co-change)`;
         });
       if (partners.length > 0) {
-        suggestions.push(
-          `When modifying \`${f}\`, consider also checking: ${partners.join(", ")}`,
-        );
+        suggestions.push(`When modifying \`${f}\`, consider also checking: ${partners.join(", ")}`);
       }
     }
     if (suggestions.length > 0) {
@@ -365,7 +377,7 @@ export async function runDiffMode(rootDir: string, ref?: string, verbose = false
 
   // Snapshot entries for changed files
   const filesWithEntries = [...changedSet, ...neighborSet]
-    .filter(f => entryIndex.has(f))
+    .filter((f) => entryIndex.has(f))
     .sort((a, b) => (graph.centrality.get(b) ?? 0) - (graph.centrality.get(a) ?? 0));
 
   if (filesWithEntries.length > 0) {
@@ -389,9 +401,7 @@ export async function runDiffMode(rootDir: string, ref?: string, verbose = false
 
   // Scoped directives: filter buildDirectives to only include ones mentioning changed files
   const allDirectives = buildDirectives(analysis, detected);
-  const scopedDirectives = allDirectives.filter((d) =>
-    changedFiles.some((f) => d.includes(f)),
-  );
+  const scopedDirectives = allDirectives.filter((d) => changedFiles.some((f) => d.includes(f)));
   if (scopedDirectives.length > 0) {
     sections.push("## Working Guidelines");
     sections.push("");
@@ -420,18 +430,17 @@ export async function runDiffMode(rootDir: string, ref?: string, verbose = false
     process.stdout.write(content);
   }
 
-  p.outro(
-    t.success("Diff context ready. ") +
-      t.muted(`${allRelevant.length} files in scope.`),
-  );
+  p.outro(t.success("Diff context ready. ") + t.muted(`${allRelevant.length} files in scope.`));
   unpatchPicocolors();
 }
 
 function isDiffTestFile(filePath: string): boolean {
-  return /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
+  return (
+    /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
     /\/__tests__\//.test(filePath) ||
     /\/test_[^/]+\.py$/.test(filePath) ||
-    /\/tests\//.test(filePath);
+    /\/tests\//.test(filePath)
+  );
 }
 
 // ── Exported helpers for testing diff-mode logic ──────────────────────
@@ -476,9 +485,7 @@ export function scopeHubFiles<T extends { path: string }>(
   hop1Set: Set<string>,
   hop2Set: Set<string>,
 ): T[] {
-  return hubFiles.filter(h =>
-    changedSet.has(h.path) || hop1Set.has(h.path) || hop2Set.has(h.path),
-  );
+  return hubFiles.filter((h) => changedSet.has(h.path) || hop1Set.has(h.path) || hop2Set.has(h.path));
 }
 
 /**
@@ -490,7 +497,5 @@ export function scopeCircularDeps<T extends { chain: string[] }>(
   changedSet: Set<string>,
   hop1Set: Set<string>,
 ): T[] {
-  return circularDeps.filter(dep =>
-    dep.chain.some(f => changedSet.has(f) || hop1Set.has(f)),
-  );
+  return circularDeps.filter((dep) => dep.chain.some((f) => changedSet.has(f) || hop1Set.has(f)));
 }

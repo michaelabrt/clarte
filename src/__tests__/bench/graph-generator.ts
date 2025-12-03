@@ -36,18 +36,7 @@ const DIRS = [
   "src/config",
 ];
 
-const EXTERNAL_PACKAGES = [
-  "react",
-  "lodash",
-  "axios",
-  "zod",
-  "date-fns",
-  "uuid",
-  "chalk",
-  "express",
-  "path",
-  "fs",
-];
+const EXTERNAL_PACKAGES = ["react", "lodash", "axios", "zod", "date-fns", "uuid", "chalk", "express", "path", "fs"];
 
 function generateFilePaths(count: number, rng: () => number): string[] {
   const files: string[] = [];
@@ -65,18 +54,14 @@ function generateFilePaths(count: number, rng: () => number): string[] {
  * Hub files (low indices) get more outgoing edges; popular targets
  * (also power-law distributed) get more incoming edges.
  */
-function generateEdges(
-  files: string[],
-  density: number,
-  rng: () => number,
-): ImportEdge[] {
+function generateEdges(files: string[], density: number, rng: () => number): ImportEdge[] {
   const n = files.length;
   const targetEdgeCount = Math.floor(n * density);
   const edges: ImportEdge[] = [];
   const seen = new Set<string>();
 
   // Pre-compute power-law weights for targets (incoming popularity)
-  const targetWeights = files.map((_, i) => 1 / Math.pow(i + 1, 0.8));
+  const targetWeights = files.map((_, i) => 1 / (i + 1) ** 0.8);
   const totalTargetWeight = targetWeights.reduce((a, b) => a + b, 0);
   const cumulativeTarget: number[] = [];
   let cumSum = 0;
@@ -99,7 +84,7 @@ function generateEdges(
   while (edges.length < internalCount && attempts < internalCount * 5) {
     attempts++;
     // Source: power-law biased toward hub files (low indices)
-    const srcIdx = Math.floor(Math.pow(rng(), 1.5) * n);
+    const srcIdx = Math.floor(rng() ** 1.5 * n);
     const tgtIdx = pickTarget();
     if (srcIdx === tgtIdx) continue;
 
@@ -154,11 +139,7 @@ function generateImportNames(rng: () => number): string[] {
  * @param edgeDensity - Average number of edges per node (default: 3)
  * @param seed - PRNG seed for reproducibility (default: 42)
  */
-export function generateGraph(
-  nodeCount: number,
-  edgeDensity = 3,
-  seed = 42,
-): ImportGraph {
+export function generateGraph(nodeCount: number, edgeDensity = 3, seed = 42): ImportGraph {
   const rng = xorshift32(seed);
   const files = generateFilePaths(nodeCount, rng);
   const edges = generateEdges(files, edgeDensity, rng);

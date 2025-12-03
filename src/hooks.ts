@@ -30,7 +30,9 @@ export async function initPreCommitHook(rootDir: string): Promise<void> {
   if (await fileExists(huskyDir)) {
     console.log("Husky detected. Add to your .husky/pre-commit file:");
     console.log("");
-    console.log('  npx clarte --check || { npx clarte --refresh-snapshot && git add CLAUDE.md .cursor/rules/ 2>/dev/null; }');
+    console.log(
+      "  npx clarte --check || { npx clarte --refresh-snapshot && git add CLAUDE.md .cursor/rules/ 2>/dev/null; }",
+    );
     return;
   }
 
@@ -43,7 +45,9 @@ export async function initPreCommitHook(rootDir: string): Promise<void> {
       console.log("  pre-commit:");
       console.log("    commands:");
       console.log("      clarte-refresh:");
-      console.log('        run: npx clarte --check || { npx clarte --refresh-snapshot && git add CLAUDE.md .cursor/rules/ 2>/dev/null; }');
+      console.log(
+        "        run: npx clarte --check || { npx clarte --refresh-snapshot && git add CLAUDE.md .cursor/rules/ 2>/dev/null; }",
+      );
       return;
     }
   }
@@ -59,7 +63,8 @@ export async function initPreCommitHook(rootDir: string): Promise<void> {
       return;
     }
     // Append to existing hook
-    const snippet = 'npx clarte --check || { npx clarte --refresh-snapshot && git add CLAUDE.md .cursor/rules/ 2>/dev/null; }';
+    const snippet =
+      "npx clarte --check || { npx clarte --refresh-snapshot && git add CLAUDE.md .cursor/rules/ 2>/dev/null; }";
     const appended = existing.trimEnd() + "\n" + snippet + "\n";
     await writeFileSafe(hookPath, appended);
   } else {

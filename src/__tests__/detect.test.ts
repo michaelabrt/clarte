@@ -2,13 +2,18 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, afterEach } from "vitest";
-import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage, summarizeDetection, SECONDARY_LANGUAGE_THRESHOLD } from "../detect.js";
+import {
+  detectContext,
+  detectIDEs,
+  detectProjectDescription,
+  enrichFrameworksWithUsage,
+  summarizeDetection,
+  SECONDARY_LANGUAGE_THRESHOLD,
+} from "../detect.js";
 import type { DetectedContext, DetectedFramework } from "../types.js";
 
 /** Create a temporary project directory with the given file tree. */
-async function makeProject(
-  files: Record<string, string>,
-): Promise<string> {
+async function makeProject(files: Record<string, string>): Promise<string> {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-test-"));
   for (const [relPath, content] of Object.entries(files)) {
     const fullPath = path.join(tmpDir, relPath);
@@ -221,7 +226,7 @@ describe("detectContext", () => {
 
   it("detects Netlify CI", async () => {
     tmpDir = await makeProject({
-      "netlify.toml": "[build]\ncommand = \"npm run build\"\n",
+      "netlify.toml": '[build]\ncommand = "npm run build"\n',
       "package.json": JSON.stringify({ name: "test" }),
     });
     const ctx = await detectContext(tmpDir);
@@ -248,7 +253,7 @@ describe("detectContext", () => {
 
   it("detects Railway CI from railway.toml", async () => {
     tmpDir = await makeProject({
-      "railway.toml": "[build]\ncommand = \"npm run build\"\n",
+      "railway.toml": '[build]\ncommand = "npm run build"\n',
       "package.json": JSON.stringify({ name: "test" }),
     });
     const ctx = await detectContext(tmpDir);
@@ -257,7 +262,7 @@ describe("detectContext", () => {
 
   it("detects Fly.io CI", async () => {
     tmpDir = await makeProject({
-      "fly.toml": "app = \"my-app\"\n",
+      "fly.toml": 'app = "my-app"\n',
       "package.json": JSON.stringify({ name: "test" }),
     });
     const ctx = await detectContext(tmpDir);
@@ -288,12 +293,12 @@ describe("detectContext", () => {
     tmpDir = await makeProject({
       "pom.xml": [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        '<project>',
-        '  <modelVersion>4.0.0</modelVersion>',
-        '  <groupId>com.example</groupId>',
-        '  <artifactId>myapp</artifactId>',
-        '  <version>1.2.3</version>',
-        '</project>',
+        "<project>",
+        "  <modelVersion>4.0.0</modelVersion>",
+        "  <groupId>com.example</groupId>",
+        "  <artifactId>myapp</artifactId>",
+        "  <version>1.2.3</version>",
+        "</project>",
       ].join("\n"),
       "src/main/java/App.java": "public class App {}",
     });
@@ -351,14 +356,9 @@ describe("detectContext", () => {
 
   it("detects mypy from [tool.mypy] in pyproject.toml", async () => {
     tmpDir = await makeProject({
-      "pyproject.toml": [
-        "[project]",
-        'name = "myapp"',
-        "dependencies = []",
-        "",
-        "[tool.mypy]",
-        "strict = true",
-      ].join("\n"),
+      "pyproject.toml": ["[project]", 'name = "myapp"', "dependencies = []", "", "[tool.mypy]", "strict = true"].join(
+        "\n",
+      ),
       "main.py": "x = 1\n",
     });
     const ctx = await detectContext(tmpDir);

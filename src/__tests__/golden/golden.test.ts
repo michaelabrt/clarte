@@ -64,10 +64,7 @@ interface GoldenAnalysis {
  * Run the full graph analysis pipeline on a fixture directory and
  * return a normalized, serializable result object.
  */
-async function analyzeFixture(
-  fixtureDir: string,
-  language: "typescript" | "python",
-): Promise<GoldenAnalysis> {
+async function analyzeFixture(fixtureDir: string, language: "typescript" | "python"): Promise<GoldenAnalysis> {
   const graph: ImportGraph = await buildImportGraph(fixtureDir, language);
 
   const hubFiles = getHubFiles(graph, 10);
@@ -77,10 +74,7 @@ async function analyzeFixture(
   const communities = detectCommunities(graph);
   const deadFiles = findDeadFiles(graph);
   const crossCuttingFiles = findCrossCuttingFiles(graph, layers, 2);
-  const layerConsistency =
-    layers.length > 0
-      ? computeLayerConsistency(graph, layers, layerEdges)
-      : null;
+  const layerConsistency = layers.length > 0 ? computeLayerConsistency(graph, layers, layerEdges) : null;
   const chokepoints = findChokepoints(graph);
   const tightCouplings = findTightCouplings(graph, 2, 20);
   const betweenness = computeBetweenness(graph, graph.inDegree.size);
@@ -110,9 +104,7 @@ async function analyzeFixture(
       .map((i) => ({ file: i.file, instability: round(i.instability) }))
       .sort((a, b) => a.file.localeCompare(b.file)),
     communityCount: communities.length,
-    communityFiles: communities
-      .map((c) => [...c.files].sort())
-      .sort((a, b) => a.join(",").localeCompare(b.join(","))),
+    communityFiles: communities.map((c) => [...c.files].sort()).sort((a, b) => a.join(",").localeCompare(b.join(","))),
     deadFiles: [...deadFiles].sort(),
     crossCuttingFiles: crossCuttingFiles
       .map((c) => ({ file: c.file, layerSpread: c.layerSpread }))
@@ -209,11 +201,7 @@ const fixtures: FixtureDef[] = [
       expect(a.fileCount).toBeGreaterThanOrEqual(8);
       expect(a.edgeCount).toBeGreaterThan(8);
       // core/src/types.ts or core/src/utils.ts should be hubs
-      expect(
-        a.hubFiles.some(
-          (h) => h.path.includes("core/src/types") || h.path.includes("core/src/utils"),
-        ),
-      ).toBe(true);
+      expect(a.hubFiles.some((h) => h.path.includes("core/src/types") || h.path.includes("core/src/utils"))).toBe(true);
       // Should detect at least one community
       expect(a.communityCount).toBeGreaterThanOrEqual(1);
       // Should have tight couplings across packages
@@ -297,8 +285,12 @@ describe("golden-file analysis", () => {
         // approximateDiameter is sampled BFS, so allow ±1 tolerance
         expect(analysis.graphTopology.componentCount).toBe(golden.graphTopology.componentCount);
         expect(analysis.graphTopology.componentSizes).toEqual(golden.graphTopology.componentSizes);
-        expect(analysis.graphTopology.approximateDiameter).toBeGreaterThanOrEqual(golden.graphTopology.approximateDiameter - 1);
-        expect(analysis.graphTopology.approximateDiameter).toBeLessThanOrEqual(golden.graphTopology.approximateDiameter + 1);
+        expect(analysis.graphTopology.approximateDiameter).toBeGreaterThanOrEqual(
+          golden.graphTopology.approximateDiameter - 1,
+        );
+        expect(analysis.graphTopology.approximateDiameter).toBeLessThanOrEqual(
+          golden.graphTopology.approximateDiameter + 1,
+        );
         expect(analysis.graphTopology.reachability).toBe(golden.graphTopology.reachability);
         expect(analysis.graphTopology.isFragmented).toBe(golden.graphTopology.isFragmented);
       });

@@ -2,23 +2,33 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import type { DetectedContext, UserAnswers, CodeSnapshot, ContextAnalysis } from "../types.js";
+import type { DetectedContext, UserAnswers } from "../types.js";
 
 // Mock template builders
 vi.mock("../templates/main-context.js", () => ({
   buildMainContext: vi.fn().mockResolvedValue("# Main Context\n\nGenerated content here."),
   getMainContextFilename: vi.fn((ide: string) => {
     switch (ide) {
-      case "claude": return "CLAUDE.md";
-      case "cursor": return "CLAUDE.md";
-      case "opencode": return "AGENTS.md";
-      case "copilot": return ".github/copilot-instructions.md";
-      case "windsurf": return ".windsurfrules";
-      case "cline": return ".clinerules";
-      case "continue": return ".continuerules";
-      case "aider": return ".aider.conf.yml";
-      case "generic": return "CONTEXT.md";
-      default: return "CLAUDE.md";
+      case "claude":
+        return "CLAUDE.md";
+      case "cursor":
+        return "CLAUDE.md";
+      case "opencode":
+        return "AGENTS.md";
+      case "copilot":
+        return ".github/copilot-instructions.md";
+      case "windsurf":
+        return ".windsurfrules";
+      case "cline":
+        return ".clinerules";
+      case "continue":
+        return ".continuerules";
+      case "aider":
+        return ".aider.conf.yml";
+      case "generic":
+        return "CONTEXT.md";
+      default:
+        return "CLAUDE.md";
     }
   }),
 }));
@@ -151,13 +161,7 @@ describe("generateFiles", () => {
   });
 
   it("produces cursor rules for cursor target", async () => {
-    const files = await generateFiles(
-      makeCtx(),
-      makeAnswers({ ides: ["cursor"] }),
-      null,
-      true,
-      true,
-    );
+    const files = await generateFiles(makeCtx(), makeAnswers({ ides: ["cursor"] }), null, true, true);
 
     // Should have the main file + rule files
     const mainFile = files.find((f) => f.path === "CLAUDE.md");
@@ -170,13 +174,7 @@ describe("generateFiles", () => {
   });
 
   it("produces aider config for aider target", async () => {
-    const files = await generateFiles(
-      makeCtx(),
-      makeAnswers({ ides: ["aider"] }),
-      null,
-      true,
-      true,
-    );
+    const files = await generateFiles(makeCtx(), makeAnswers({ ides: ["aider"] }), null, true, true);
 
     const aiderFile = files.find((f) => f.path === ".aider.conf.yml");
     expect(aiderFile).toBeDefined();
@@ -218,13 +216,7 @@ describe("generateFiles", () => {
 
   it("deduplicates files by path", async () => {
     // Both claude and cursor produce CLAUDE.md
-    const files = await generateFiles(
-      makeCtx(),
-      makeAnswers({ ides: ["claude", "cursor"] }),
-      null,
-      true,
-      true,
-    );
+    const files = await generateFiles(makeCtx(), makeAnswers({ ides: ["claude", "cursor"] }), null, true, true);
 
     const claudeFiles = files.filter((f) => f.path === "CLAUDE.md");
     expect(claudeFiles).toHaveLength(1);
@@ -277,10 +269,12 @@ describe("extractUserSections", () => {
 describe("mergeUserSections", () => {
   it("inserts section after its anchor header", () => {
     const newContent = "## Key Patterns\n\nNew patterns\n\n## Other\n\nOther stuff";
-    const sections = [{
-      content: "<!-- clarte:user-start -->\nMy custom stuff\n<!-- clarte:user-end -->",
-      anchor: "## Key Patterns",
-    }];
+    const sections = [
+      {
+        content: "<!-- clarte:user-start -->\nMy custom stuff\n<!-- clarte:user-end -->",
+        anchor: "## Key Patterns",
+      },
+    ];
 
     const result = mergeUserSections(newContent, sections);
     expect(result).toContain("My custom stuff");
@@ -292,10 +286,12 @@ describe("mergeUserSections", () => {
 
   it("appends at end when anchor not found", () => {
     const newContent = "## Different Header\n\nContent";
-    const sections = [{
-      content: "<!-- clarte:user-start -->\nOrphaned\n<!-- clarte:user-end -->",
-      anchor: "## Missing Header",
-    }];
+    const sections = [
+      {
+        content: "<!-- clarte:user-start -->\nOrphaned\n<!-- clarte:user-end -->",
+        anchor: "## Missing Header",
+      },
+    ];
 
     const result = mergeUserSections(newContent, sections);
     expect(result).toContain("Orphaned");

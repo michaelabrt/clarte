@@ -1,12 +1,5 @@
 import type { DetectedContext } from "../types.js";
 
-interface FrameworkHint {
-  /** Framework name (matches DetectedFramework.name) */
-  name: string;
-  /** Markdown conventions to include in context files */
-  conventions: string[];
-}
-
 /**
  * Get framework-specific conventions based on detected context.
  * Returns markdown lines (bullet points) to embed in context files.
@@ -53,19 +46,13 @@ const HINT_GENERATORS: HintGenerator[] = [
     name: "Next.js",
     getHints: (ctx) => {
       const hints: string[] = [];
-      const hasAppDir = ctx.directories.some(
-        (d) => d === "app" || d.startsWith("app/") || d === "src/app",
-      );
-      const hasPagesDir = ctx.directories.some(
-        (d) => d === "pages" || d.startsWith("pages/") || d === "src/pages",
-      );
+      const hasAppDir = ctx.directories.some((d) => d === "app" || d.startsWith("app/") || d === "src/app");
+      const hasPagesDir = ctx.directories.some((d) => d === "pages" || d.startsWith("pages/") || d === "src/pages");
 
       if (hasAppDir && !hasPagesDir) {
         hints.push("### Next.js (App Router)");
         hints.push("");
-        hints.push(
-          "- **App Router**: all routes in `app/` use React Server Components by default",
-        );
+        hints.push("- **App Router**: all routes in `app/` use React Server Components by default");
         hints.push(
           '- Add `"use client"` directive at the top of files that need browser APIs, hooks, or event handlers',
         );
@@ -75,47 +62,29 @@ const HINT_GENERATORS: HintGenerator[] = [
         hints.push(
           "- Data fetching: `async` server components with direct `fetch()` or DB calls (no `getServerSideProps`)",
         );
-        hints.push(
-          "- Route handlers: `app/api/*/route.ts` with exported `GET`, `POST`, etc. functions",
-        );
-        hints.push(
-          "- Middleware in `middleware.ts` at project root for auth, redirects, rewrites",
-        );
-        hints.push(
-          "- Use `next/image` for optimized images, `next/font` for font loading",
-        );
+        hints.push("- Route handlers: `app/api/*/route.ts` with exported `GET`, `POST`, etc. functions");
+        hints.push("- Middleware in `middleware.ts` at project root for auth, redirects, rewrites");
+        hints.push("- Use `next/image` for optimized images, `next/font` for font loading");
       } else if (hasPagesDir && !hasAppDir) {
         hints.push("### Next.js (Pages Router)");
         hints.push("");
         hints.push("- **Pages Router**: routes in `pages/` directory");
-        hints.push(
-          "- `getServerSideProps` for server-side data fetching, `getStaticProps` for static generation",
-        );
-        hints.push(
-          "- `_app.tsx` for global layout/providers, `_document.tsx` for HTML customization",
-        );
+        hints.push("- `getServerSideProps` for server-side data fetching, `getStaticProps` for static generation");
+        hints.push("- `_app.tsx` for global layout/providers, `_document.tsx` for HTML customization");
         hints.push("- API routes in `pages/api/`");
       } else if (hasAppDir && hasPagesDir) {
         hints.push("### Next.js (Hybrid: App + Pages Router)");
         hints.push("");
-        hints.push(
-          "- Both `app/` (App Router) and `pages/` (Pages Router) coexist. New routes should use App Router",
-        );
+        hints.push("- Both `app/` (App Router) and `pages/` (Pages Router) coexist. New routes should use App Router");
         hints.push(
           '- App Router components are server components by default; add `"use client"` for client components',
         );
-        hints.push(
-          "- Pages Router uses `getServerSideProps` / `getStaticProps` for data fetching",
-        );
+        hints.push("- Pages Router uses `getServerSideProps` / `getStaticProps` for data fetching");
       } else {
         hints.push("### Next.js");
         hints.push("");
-        hints.push(
-          "- Use `next/image` for optimized images, `next/font` for font loading",
-        );
-        hints.push(
-          "- Middleware in `middleware.ts` at project root for auth, redirects, rewrites",
-        );
+        hints.push("- Use `next/image` for optimized images, `next/font` for font loading");
+        hints.push("- Middleware in `middleware.ts` at project root for auth, redirects, rewrites");
       }
       return hints;
     },
@@ -175,22 +144,12 @@ const HINT_GENERATORS: HintGenerator[] = [
     getHints: (ctx) => {
       const hasRN = ctx.frameworks.some((f) => f.name === "React Native");
       const hints = ["### Expo / React Native", ""];
-      hints.push(
-        "- **expo-router** for file-based routing (if using); Stack, Tabs, Drawer navigators",
-      );
-      hints.push(
-        "- Expo Go has limited native module support. Some packages require a dev build (`npx expo run:ios`)",
-      );
-      hints.push(
-        "- Use `expo-constants`, `expo-device` etc. instead of raw RN APIs when available",
-      );
-      hints.push(
-        "- Platform-specific files: `*.ios.tsx` / `*.android.tsx` or `Platform.select()`",
-      );
+      hints.push("- **expo-router** for file-based routing (if using); Stack, Tabs, Drawer navigators");
+      hints.push("- Expo Go has limited native module support. Some packages require a dev build (`npx expo run:ios`)");
+      hints.push("- Use `expo-constants`, `expo-device` etc. instead of raw RN APIs when available");
+      hints.push("- Platform-specific files: `*.ios.tsx` / `*.android.tsx` or `Platform.select()`");
       if (hasRN) {
-        hints.push(
-          "- **Reanimated**: worklet functions need the `\"worklet\"` directive on the first line",
-        );
+        hints.push('- **Reanimated**: worklet functions need the `"worklet"` directive on the first line');
         hints.push(
           "- Avoid `FadeIn`/`FadeOut` entering/exiting animations on conditionally rendered components. They cause flashes",
         );
@@ -208,7 +167,7 @@ const HINT_GENERATORS: HintGenerator[] = [
         "",
         "- Use `StyleSheet.create()` for styles. Avoid inline style objects in render",
         "- Platform-specific: `*.ios.tsx` / `*.android.tsx` or `Platform.select()`",
-        "- **Reanimated**: worklet functions need the `\"worklet\"` directive",
+        '- **Reanimated**: worklet functions need the `"worklet"` directive',
         "- Navigation: React Navigation with Stack/Tab/Drawer navigators",
         "- Test with both iOS and Android. Layout behavior differs",
       ];
@@ -329,7 +288,7 @@ const HINT_GENERATORS: HintGenerator[] = [
       "- **Pydantic models** for request/response schemas with automatic validation and OpenAPI docs",
       "- Async endpoints by default (`async def`); use sync `def` only for blocking I/O with threadpool",
       "- Routers: `APIRouter()` for modular route organization, mount with `app.include_router()`",
-      "- Middleware with `@app.middleware(\"http\")` or Starlette middleware classes",
+      '- Middleware with `@app.middleware("http")` or Starlette middleware classes',
       "- Background tasks with `BackgroundTasks` parameter for fire-and-forget work",
       "- Auto-generated docs at `/docs` (Swagger) and `/redoc`",
     ],
@@ -413,7 +372,9 @@ const HINT_GENERATORS: HintGenerator[] = [
       const hasSvelte = ctx.frameworks.some((f) => f.name === "Svelte");
       const integrations = [hasReact && "React", hasVue && "Vue", hasSvelte && "Svelte"].filter(Boolean);
       if (integrations.length > 0) {
-        hints.push(`- Framework integrations detected: ${integrations.join(", ")}. Use \`client:load\` to hydrate these components`);
+        hints.push(
+          `- Framework integrations detected: ${integrations.join(", ")}. Use \`client:load\` to hydrate these components`,
+        );
       }
       return hints;
     },

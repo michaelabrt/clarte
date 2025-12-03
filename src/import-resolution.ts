@@ -1,7 +1,7 @@
 import path from "node:path";
 import { IGNORE_GLOBS } from "./ignore-patterns.js";
 import { readFileOr, readJsonFile } from "./utils.js";
-import { initTreeSitter, parseImportsAst, resolveBarrelExportsAst } from "./ast-parse.js";
+import { parseImportsAst, resolveBarrelExportsAst } from "./ast-parse.js";
 import type { Language } from "./types.js";
 
 // Re-export RawImport from ast-parse for backward compatibility
@@ -37,7 +37,7 @@ export interface PathAlias {
 export async function loadTsconfigPaths(rootDir: string): Promise<PathAlias[]> {
   let configPath = path.join(rootDir, "tsconfig.json");
   let baseUrl = ".";
-  let paths: Record<string, string[]> = {};
+  const paths: Record<string, string[]> = {};
 
   for (let depth = 0; depth < 5; depth++) {
     const config = await readJsonFile(configPath);
@@ -85,11 +85,7 @@ export async function loadTsconfigPaths(rootDir: string): Promise<PathAlias[]> {
 /**
  * Try to resolve a path alias import to an actual file path.
  */
-export function resolveAliasImport(
-  specifier: string,
-  aliases: PathAlias[],
-  allFiles: Set<string>,
-): string | null {
+export function resolveAliasImport(specifier: string, aliases: PathAlias[], allFiles: Set<string>): string | null {
   for (const alias of aliases) {
     if (specifier.startsWith(alias.prefix)) {
       const remainder = specifier.slice(alias.prefix.length);
@@ -173,7 +169,9 @@ export function isRelativeSpecifier(spec: string, lang: Language): boolean {
     return true;
   }
   if (lang === "rust") {
-    return spec.startsWith("crate::") || spec.startsWith("super::") || spec.startsWith("self::") || spec.startsWith("mod::");
+    return (
+      spec.startsWith("crate::") || spec.startsWith("super::") || spec.startsWith("self::") || spec.startsWith("mod::")
+    );
   }
   if (lang === "java") {
     // All Java imports attempt resolution first; unresolved fall through to external
@@ -186,11 +184,7 @@ export function isRelativeSpecifier(spec: string, lang: Language): boolean {
  * Try to resolve a JS/TS relative import to an actual file path.
  * Returns the resolved relative path or null.
  */
-export function resolveJsImport(
-  specifier: string,
-  fromFile: string,
-  allFiles: Set<string>,
-): string | null {
+export function resolveJsImport(specifier: string, fromFile: string, allFiles: Set<string>): string | null {
   const dir = path.dirname(fromFile);
   const raw = path.join(dir, specifier).replace(/\\/g, "/");
 
@@ -228,11 +222,7 @@ export async function loadGoModule(rootDir: string): Promise<string | null> {
  * Go imports are package-level: "myapp/internal/handler" resolves to any .go file
  * in that directory. We return the first match (stable via sort).
  */
-function resolveGoImport(
-  specifier: string,
-  goModulePath: string,
-  allFiles: Set<string>,
-): string | null {
+function resolveGoImport(specifier: string, goModulePath: string, allFiles: Set<string>): string | null {
   // Only resolve imports that start with the module path
   if (specifier !== goModulePath && !specifier.startsWith(goModulePath + "/")) {
     return null;
@@ -258,11 +248,7 @@ function resolveGoImport(
 /**
  * Try to resolve a Python relative import to a file path.
  */
-function resolvePythonImport(
-  specifier: string,
-  fromFile: string,
-  allFiles: Set<string>,
-): string | null {
+function resolvePythonImport(specifier: string, fromFile: string, allFiles: Set<string>): string | null {
   if (!specifier.startsWith(".")) return null;
   const dir = path.dirname(fromFile);
   // Count leading dots
@@ -306,7 +292,6 @@ export function detectJavaSourceRoots(allFiles: string[]): string[] {
     const srcIdx = file.indexOf("src/");
     if (srcIdx >= 0) {
       roots.add(file.slice(0, srcIdx + "src/".length));
-      continue;
     }
   }
   // Fallback: try root directory
@@ -318,11 +303,7 @@ export function detectJavaSourceRoots(allFiles: string[]): string[] {
  * Try to resolve a Java import (e.g. "com.example.model.User") to a file path.
  * Converts dots to path separators and tries each source root.
  */
-function resolveJavaImport(
-  specifier: string,
-  allFiles: Set<string>,
-  sourceRoots: string[],
-): string | null {
+function resolveJavaImport(specifier: string, allFiles: Set<string>, sourceRoots: string[]): string | null {
   // Wildcard import: com.example.model.* -- skip, too ambiguous for single edge
   if (specifier.endsWith(".*")) {
     const dirPath = specifier.slice(0, -2).replace(/\./g, "/");
@@ -351,11 +332,7 @@ function resolveJavaImport(
  * Try to resolve a Rust use path or mod declaration to a file path.
  * Handles crate::, super::, self::, and mod:: (synthetic prefix for mod declarations).
  */
-function resolveRustImport(
-  specifier: string,
-  fromFile: string,
-  allFiles: Set<string>,
-): string | null {
+function resolveRustImport(specifier: string, fromFile: string, allFiles: Set<string>): string | null {
   // Detect crate root (directory containing lib.rs or main.rs)
   let crateRoot = "src";
   for (const f of allFiles) {
@@ -404,11 +381,7 @@ function resolveRustImport(
  * Resolve a Rust mod declaration: `mod foo;` -> find foo.rs or foo/mod.rs
  * relative to the declaring file's directory.
  */
-function resolveRustModDecl(
-  modName: string,
-  fromFile: string,
-  allFiles: Set<string>,
-): string | null {
+function resolveRustModDecl(modName: string, fromFile: string, allFiles: Set<string>): string | null {
   const fromDir = path.dirname(fromFile).replace(/\\/g, "/");
   // Try sibling file: src/models.rs
   const asFile = `${fromDir}/${modName}.rs`;
@@ -424,11 +397,7 @@ function resolveRustModDecl(
  * Tries progressively shorter segment lists to find the module file,
  * since the last segment(s) may be item names rather than module paths.
  */
-function resolveRustModulePath(
-  baseDir: string,
-  segments: string[],
-  allFiles: Set<string>,
-): string | null {
+function resolveRustModulePath(baseDir: string, segments: string[], allFiles: Set<string>): string | null {
   // Try full path first, then progressively drop trailing segments (item names)
   for (let len = segments.length; len >= 1; len--) {
     const modPath = segments.slice(0, len).join("/");
@@ -461,9 +430,7 @@ export function resolveImport(
     case "python":
       return resolvePythonImport(specifier, fromFile, allFiles);
     case "go":
-      return ctx.goModulePath
-        ? resolveGoImport(specifier, ctx.goModulePath, allFiles)
-        : null;
+      return ctx.goModulePath ? resolveGoImport(specifier, ctx.goModulePath, allFiles) : null;
     case "java":
       return resolveJavaImport(specifier, allFiles, ctx.javaSourceRoots ?? []);
     case "rust":
@@ -487,10 +454,7 @@ export interface BarrelExportMap {
  * Scan barrel files (index.ts, etc.) and build a map from barrel path to
  * the source files and exported names they re-export.
  */
-export async function resolveBarrelFiles(
-  rootDir: string,
-  fileSet: Set<string>,
-): Promise<BarrelExportMap> {
+export async function resolveBarrelFiles(rootDir: string, fileSet: Set<string>): Promise<BarrelExportMap> {
   const namedExports = new Map<string, Map<string, string>>();
   const starExports = new Map<string, Set<string>>();
 

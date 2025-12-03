@@ -7,10 +7,8 @@ import type {
   DetectedFramework,
   IDETarget,
   Language,
-  Linter,
   MonorepoInfo,
   MonorepoPackage,
-  PackageManager,
   ProgressCallback,
 } from "./types.js";
 import { fileExists, readFileOr, readJsonFile, readDirSafe } from "./utils.js";
@@ -210,10 +208,8 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     if (hasBiome) {
       ctx.linter = "biome";
     } else {
-      const hasEslint = ctx.dependencies.includes("eslint") ||
-        topEntries.some((e) => e.startsWith(".eslintrc"));
-      const hasPrettier = ctx.dependencies.includes("prettier") ||
-        topEntries.some((e) => e.startsWith(".prettierrc"));
+      const hasEslint = ctx.dependencies.includes("eslint") || topEntries.some((e) => e.startsWith(".eslintrc"));
+      const hasPrettier = ctx.dependencies.includes("prettier") || topEntries.some((e) => e.startsWith(".prettierrc"));
       if (hasEslint) ctx.linter = "eslint";
       else if (hasPrettier) ctx.linter = "prettier";
     }
@@ -246,7 +242,12 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
       if (reqContent) {
         const pkgs = reqContent
           .split("\n")
-          .map((l) => l.trim().split(/[=<>!~[]/)[0].toLowerCase())
+          .map((l) =>
+            l
+              .trim()
+              .split(/[=<>!~[]/)[0]
+              .toLowerCase(),
+          )
           .filter(Boolean);
         allPyDeps.push(...pkgs);
       }
@@ -282,16 +283,20 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
 
     // Detect additional Python tools (Black, isort, mypy, flake8).
     // These don't fit the Linter enum, so add them as DetectedFramework entries.
-    const pyContent = hasPyproject
-      ? await readFileOr(path.join(rootDir, "pyproject.toml"))
-      : null;
+    const pyContent = hasPyproject ? await readFileOr(path.join(rootDir, "pyproject.toml")) : null;
     const setupCfg = await readFileOr(path.join(rootDir, "setup.cfg"));
 
     if (allPyDeps.includes("black") || pyContent?.includes("[tool.black]")) {
-      if (!seenFw.has("Black")) { seenFw.add("Black"); ctx.frameworks.push({ name: "Black" }); }
+      if (!seenFw.has("Black")) {
+        seenFw.add("Black");
+        ctx.frameworks.push({ name: "Black" });
+      }
     }
     if (allPyDeps.includes("isort") || pyContent?.includes("[tool.isort]")) {
-      if (!seenFw.has("isort")) { seenFw.add("isort"); ctx.frameworks.push({ name: "isort" }); }
+      if (!seenFw.has("isort")) {
+        seenFw.add("isort");
+        ctx.frameworks.push({ name: "isort" });
+      }
     }
     if (
       allPyDeps.includes("mypy") ||
@@ -299,10 +304,16 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
       setupCfg?.includes("[mypy]") ||
       pyContent?.includes("[tool.mypy]")
     ) {
-      if (!seenFw.has("mypy")) { seenFw.add("mypy"); ctx.frameworks.push({ name: "mypy" }); }
+      if (!seenFw.has("mypy")) {
+        seenFw.add("mypy");
+        ctx.frameworks.push({ name: "mypy" });
+      }
     }
     if (allPyDeps.includes("flake8") || topEntries.includes(".flake8") || setupCfg?.includes("[flake8]")) {
-      if (!seenFw.has("flake8")) { seenFw.add("flake8"); ctx.frameworks.push({ name: "flake8" }); }
+      if (!seenFw.has("flake8")) {
+        seenFw.add("flake8");
+        ctx.frameworks.push({ name: "flake8" });
+      }
     }
   }
 
@@ -361,7 +372,10 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
       onProgress?.(`Counting ${sourceFiles.length} source files...`);
       const sizes = await Promise.all(
         sourceFiles.map((f) =>
-          fs.stat(path.join(rootDir, f)).then((s) => s.size).catch(() => 0),
+          fs
+            .stat(path.join(rootDir, f))
+            .then((s) => s.size)
+            .catch(() => 0),
         ),
       );
       ctx.totalSourceBytes = sizes.reduce((sum, s) => sum + s, 0);
@@ -453,8 +467,11 @@ function getExtensionsForLanguage(lang: Language): string[] {
 
 /** Extension to language mapping for secondary language detection */
 const EXT_TO_LANGUAGE: Record<string, Language> = {
-  ".ts": "typescript", ".tsx": "typescript",
-  ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript",
+  ".ts": "typescript",
+  ".tsx": "typescript",
+  ".js": "javascript",
+  ".jsx": "javascript",
+  ".mjs": "javascript",
   ".py": "python",
   ".go": "go",
   ".rs": "rust",
@@ -472,15 +489,22 @@ async function detectLanguageBreakdown(ctx: DetectedContext, rootDir: string): P
 
   try {
     const allSourceFiles = await glob(
-      ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs",
-       "**/*.py", "**/*.go", "**/*.rs", "**/*.java"],
+      ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.py", "**/*.go", "**/*.rs", "**/*.java"],
       {
         cwd: rootDir,
         ignore: [
-          "**/node_modules/**", "**/dist/**", "**/build/**",
-          "**/.next/**", "**/target/**", "**/vendor/**",
-          "**/__pycache__/**", "**/venv/**", "**/.venv/**",
-          "**/.Trash/**", "**/Library/**", "**/.git/**",
+          "**/node_modules/**",
+          "**/dist/**",
+          "**/build/**",
+          "**/.next/**",
+          "**/target/**",
+          "**/vendor/**",
+          "**/__pycache__/**",
+          "**/venv/**",
+          "**/.venv/**",
+          "**/.Trash/**",
+          "**/Library/**",
+          "**/.git/**",
         ],
       },
     );
@@ -530,10 +554,7 @@ async function detectLanguageBreakdown(ctx: DetectedContext, rootDir: string): P
 /**
  * Detect monorepo tooling and enumerate packages.
  */
-async function detectMonorepo(
-  rootDir: string,
-  topEntries: string[],
-): Promise<MonorepoInfo | null> {
+async function detectMonorepo(rootDir: string, topEntries: string[]): Promise<MonorepoInfo | null> {
   // Determine monorepo type
   const hasTurboJson = topEntries.includes("turbo.json");
   const hasNxJson = topEntries.includes("nx.json");
@@ -549,9 +570,11 @@ async function detectMonorepo(
     const pkg = await readJsonFile(path.join(rootDir, "package.json"));
     if (pkg) {
       const workspaces = pkg.workspaces;
-      const hasWorkspaces = Array.isArray(workspaces) ||
-        (workspaces && typeof workspaces === "object" &&
-         Array.isArray((workspaces as Record<string, unknown>).packages));
+      const hasWorkspaces =
+        Array.isArray(workspaces) ||
+        (workspaces &&
+          typeof workspaces === "object" &&
+          Array.isArray((workspaces as Record<string, unknown>).packages));
       if (hasWorkspaces) type = "npm-workspaces";
     }
   }
@@ -563,9 +586,7 @@ async function detectMonorepo(
 
   if (hasPnpmWorkspace || hasTurboJson) {
     // pnpm-workspace.yaml (also used by Turborepo)
-    const yamlContent = await readFileOr(
-      path.join(rootDir, "pnpm-workspace.yaml"),
-    );
+    const yamlContent = await readFileOr(path.join(rootDir, "pnpm-workspace.yaml"));
     if (yamlContent) {
       // Simple YAML parse: extract lines under "packages:"
       const lines = yamlContent.split("\n");
@@ -608,8 +629,7 @@ async function detectMonorepo(
         typeof workspaces === "object" &&
         Array.isArray((workspaces as Record<string, unknown>).packages)
       ) {
-        packageGlobs = (workspaces as Record<string, unknown>)
-          .packages as string[];
+        packageGlobs = (workspaces as Record<string, unknown>).packages as string[];
       }
     }
   }
@@ -683,7 +703,10 @@ async function parsePyprojectDeps(filePath: string, warnings?: string[]): Promis
       if (Array.isArray(projDeps)) {
         for (const dep of projDeps) {
           if (typeof dep === "string") {
-            const name = dep.split(/[=<>!~;\[]/)[0].trim().toLowerCase();
+            const name = dep
+              .split(/[=<>!~;[]/)[0]
+              .trim()
+              .toLowerCase();
             if (name) deps.push(name);
           }
         }
@@ -696,7 +719,10 @@ async function parsePyprojectDeps(filePath: string, warnings?: string[]): Promis
           if (Array.isArray(group)) {
             for (const dep of group) {
               if (typeof dep === "string") {
-                const name = dep.split(/[=<>!~;\[]/)[0].trim().toLowerCase();
+                const name = dep
+                  .split(/[=<>!~;[]/)[0]
+                  .trim()
+                  .toLowerCase();
                 if (name) deps.push(name);
               }
             }
@@ -737,7 +763,6 @@ function extractMavenVersion(pomXml: string): string | undefined {
   const parentMatch = pomXml.match(/<parent>[\s\S]*?<version>([^<]+)<\/version>[\s\S]*?<\/parent>/);
   return parentMatch?.[1] ?? undefined;
 }
-
 
 /**
  * Build a reverse map: framework display name -> dependency names.
@@ -790,13 +815,9 @@ export async function detectIDEs(rootDir: string): Promise<IDETarget[]> {
     { path: "AGENTS.md", ide: "opencode" },
   ];
 
-  const checks = await Promise.all(
-    markers.map((m) => fileExists(path.join(rootDir, m.path))),
-  );
+  const checks = await Promise.all(markers.map((m) => fileExists(path.join(rootDir, m.path))));
 
-  const detected: IDETarget[] = markers
-    .filter((_, i) => checks[i])
-    .map((m) => m.ide);
+  const detected: IDETarget[] = markers.filter((_, i) => checks[i]).map((m) => m.ide);
 
   return detected.length > 0 ? detected : ["claude"];
 }

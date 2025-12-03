@@ -31,111 +31,195 @@ const files1000 = [...new Set(graph1000.edges.filter((e) => !e.isExternal).flatM
 // ── HITS ────────────────────────────────────────────────────────────
 
 describe("computeHITS", () => {
-  bench("100 nodes", () => {
-    computeHITS(files100, graph100.edges);
-  }, { time: 5000 });
+  bench(
+    "100 nodes",
+    () => {
+      computeHITS(files100, graph100.edges);
+    },
+    { time: 5000 },
+  );
 
-  bench("500 nodes", () => {
-    computeHITS(files500, graph500.edges);
-  }, { time: 5000 });
+  bench(
+    "500 nodes",
+    () => {
+      computeHITS(files500, graph500.edges);
+    },
+    { time: 5000 },
+  );
 
-  bench("1000 nodes", () => {
-    computeHITS(files1000, graph1000.edges);
-  }, { time: 5000 });
+  bench(
+    "1000 nodes",
+    () => {
+      computeHITS(files1000, graph1000.edges);
+    },
+    { time: 5000 },
+  );
 });
 
 // ── Betweenness (k=50) ─────────────────────────────────────────────
 
 describe("computeBetweenness", () => {
-  bench("100 nodes", () => {
-    computeBetweenness(graph100, 50);
-  }, { time: 5000 });
+  bench(
+    "100 nodes",
+    () => {
+      computeBetweenness(graph100, 50);
+    },
+    { time: 5000 },
+  );
 
-  bench("500 nodes", () => {
-    computeBetweenness(graph500, 50);
-  }, { time: 5000 });
+  bench(
+    "500 nodes",
+    () => {
+      computeBetweenness(graph500, 50);
+    },
+    { time: 5000 },
+  );
 
-  bench("1000 nodes", () => {
-    computeBetweenness(graph1000, 50);
-  }, { time: 5000 });
+  bench(
+    "1000 nodes",
+    () => {
+      computeBetweenness(graph1000, 50);
+    },
+    { time: 5000 },
+  );
 });
 
 // ── Communities (label propagation) ─────────────────────────────────
 
 describe("detectCommunities", () => {
-  bench("100 nodes", () => {
-    detectCommunities(graph100);
-  }, { time: 5000 });
+  bench(
+    "100 nodes",
+    () => {
+      detectCommunities(graph100);
+    },
+    { time: 5000 },
+  );
 
-  bench("500 nodes", () => {
-    detectCommunities(graph500);
-  }, { time: 5000 });
+  bench(
+    "500 nodes",
+    () => {
+      detectCommunities(graph500);
+    },
+    { time: 5000 },
+  );
 
-  bench("1000 nodes", () => {
-    detectCommunities(graph1000);
-  }, { time: 5000 });
+  bench(
+    "1000 nodes",
+    () => {
+      detectCommunities(graph1000);
+    },
+    { time: 5000 },
+  );
 });
 
 // ── Chokepoints (articulation points) ───────────────────────────────
 
 describe("findChokepoints", () => {
-  bench("100 nodes", () => {
-    findChokepoints(graph100);
-  }, { time: 5000 });
+  bench(
+    "100 nodes",
+    () => {
+      findChokepoints(graph100);
+    },
+    { time: 5000 },
+  );
 
-  bench("500 nodes", () => {
-    findChokepoints(graph500);
-  }, { time: 5000 });
+  bench(
+    "500 nodes",
+    () => {
+      findChokepoints(graph500);
+    },
+    { time: 5000 },
+  );
 
-  bench("1000 nodes", () => {
-    findChokepoints(graph1000);
-  }, { time: 5000 });
+  bench(
+    "1000 nodes",
+    () => {
+      findChokepoints(graph1000);
+    },
+    { time: 5000 },
+  );
 });
 
 // ── Instability ─────────────────────────────────────────────────────
 
 describe("computeInstability", () => {
-  bench("100 nodes", () => {
-    computeInstability(graph100);
-  }, { time: 5000 });
+  bench(
+    "100 nodes",
+    () => {
+      computeInstability(graph100);
+    },
+    { time: 5000 },
+  );
 
-  bench("500 nodes", () => {
-    computeInstability(graph500);
-  }, { time: 5000 });
+  bench(
+    "500 nodes",
+    () => {
+      computeInstability(graph500);
+    },
+    { time: 5000 },
+  );
 
-  bench("1000 nodes", () => {
-    computeInstability(graph1000);
-  }, { time: 5000 });
+  bench(
+    "1000 nodes",
+    () => {
+      computeInstability(graph1000);
+    },
+    { time: 5000 },
+  );
 });
 
 // ── Circular dependency detection ───────────────────────────────────
 
 describe("findCircularDeps", () => {
-  bench("100 nodes", () => {
-    findCircularDeps(graph100);
-  }, { time: 5000 });
+  bench(
+    "100 nodes",
+    () => {
+      findCircularDeps(graph100);
+    },
+    { time: 5000 },
+  );
 
-  bench("500 nodes", () => {
-    findCircularDeps(graph500);
-  }, { time: 5000 });
+  bench(
+    "500 nodes",
+    () => {
+      findCircularDeps(graph500);
+    },
+    { time: 5000 },
+  );
 
-  bench("1000 nodes", () => {
-    findCircularDeps(graph1000);
-  }, { time: 5000 });
+  bench(
+    "1000 nodes",
+    () => {
+      findCircularDeps(graph1000);
+    },
+    { time: 5000 },
+  );
 });
 
 // ── Dead file detection ─────────────────────────────────────────────
 
 describe("findDeadFiles", () => {
-  bench("100 nodes", () => {
-    findDeadFiles(graph100);
-  }, { time: 5000 });
+  bench(
+    "100 nodes",
+    () => {
+      findDeadFiles(graph100);
+    },
+    { time: 5000 },
+  );
 
-  bench("500 nodes", () => {
-    findDeadFiles(graph500);
-  }, { time: 5000 });
+  bench(
+    "500 nodes",
+    () => {
+      findDeadFiles(graph500);
+    },
+    { time: 5000 },
+  );
 
-  bench("1000 nodes", () => {
-    findDeadFiles(graph1000);
-  }, { time: 5000 });
+  bench(
+    "1000 nodes",
+    () => {
+      findDeadFiles(graph1000);
+    },
+    { time: 5000 },
+  );
 });

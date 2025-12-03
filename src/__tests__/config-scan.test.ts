@@ -365,12 +365,12 @@ describe("scanConfigConstraints -- Rust", () => {
     mockReadFileOr.mockImplementation(async (filePath: string) => {
       if (filePath.endsWith("Cargo.toml")) {
         return [
-          '[package]',
+          "[package]",
           'name = "myapp"',
           'version = "0.1.0"',
           'edition = "2021"',
-          '',
-          '[lints.clippy]',
+          "",
+          "[lints.clippy]",
           'pedantic = "deny"',
           'complexity = "deny"',
           'style = "warn"',
@@ -399,11 +399,7 @@ describe("scanConfigConstraints -- Python", () => {
   it("extracts requires-python version from pyproject.toml", async () => {
     mockReadFileOr.mockImplementation(async (filePath: string) => {
       if (filePath.endsWith("pyproject.toml")) {
-        return [
-          '[project]',
-          'name = "myapp"',
-          'requires-python = ">=3.9"',
-        ].join("\n");
+        return ["[project]", 'name = "myapp"', 'requires-python = ">=3.9"'].join("\n");
       }
       return null;
     });
@@ -419,11 +415,11 @@ describe("scanConfigConstraints -- Python", () => {
     mockReadFileOr.mockImplementation(async (filePath: string) => {
       if (filePath.endsWith("pyproject.toml")) {
         return [
-          '[project]',
+          "[project]",
           'name = "myapp"',
           'requires-python = ">=3.9"',
-          '',
-          '[tool.ruff.lint]',
+          "",
+          "[tool.ruff.lint]",
           'select = ["E", "F", "W", "I"]',
         ].join("\n");
       }
@@ -440,13 +436,7 @@ describe("scanConfigConstraints -- Python", () => {
   it("extracts ruff rules from [tool.ruff] (without .lint suffix)", async () => {
     mockReadFileOr.mockImplementation(async (filePath: string) => {
       if (filePath.endsWith("pyproject.toml")) {
-        return [
-          '[project]',
-          'name = "myapp"',
-          '',
-          '[tool.ruff]',
-          'select = ["E", "F"]',
-        ].join("\n");
+        return ["[project]", 'name = "myapp"', "", "[tool.ruff]", 'select = ["E", "F"]'].join("\n");
       }
       return null;
     });
@@ -461,13 +451,7 @@ describe("scanConfigConstraints -- Python", () => {
   it("extracts mypy strict mode", async () => {
     mockReadFileOr.mockImplementation(async (filePath: string) => {
       if (filePath.endsWith("pyproject.toml")) {
-        return [
-          '[project]',
-          'name = "myapp"',
-          '',
-          '[tool.mypy]',
-          'strict = true',
-        ].join("\n");
+        return ["[project]", 'name = "myapp"', "", "[tool.mypy]", "strict = true"].join("\n");
       }
       return null;
     });

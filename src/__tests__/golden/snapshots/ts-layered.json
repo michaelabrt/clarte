@@ -47,33 +47,18 @@
   "layers": [
     {
       "name": "services",
-      "files": [
-        "services/product-service.ts",
-        "services/user-service.ts"
-      ],
-      "dependsOn": [
-        "types",
-        "utils"
-      ]
+      "files": ["services/product-service.ts", "services/user-service.ts"],
+      "dependsOn": ["types", "utils"]
     },
     {
       "name": "types",
-      "files": [
-        "types/errors.ts",
-        "types/index.ts"
-      ],
+      "files": ["types/errors.ts", "types/index.ts"],
       "dependsOn": []
     },
     {
       "name": "utils",
-      "files": [
-        "utils/format.ts",
-        "utils/logger.ts",
-        "utils/validate.ts"
-      ],
-      "dependsOn": [
-        "types"
-      ]
+      "files": ["utils/format.ts", "utils/logger.ts", "utils/validate.ts"],
+      "dependsOn": ["types"]
     }
   ],
   "layerEdges": [
@@ -173,9 +158,7 @@
   ],
   "graphTopology": {
     "componentCount": 1,
-    "componentSizes": [
-      10
-    ],
+    "componentSizes": [10],
     "approximateDiameter": 3,
     "reachability": 1,
     "isFragmented": false

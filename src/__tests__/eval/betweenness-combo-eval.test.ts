@@ -198,8 +198,7 @@ async function askWithContext(
     messages: [
       {
         role: "user",
-        content:
-          `You are an expert developer analyzing a codebase. Here is the project's CLAUDE.md context file:\n\n<context>\n${context}\n</context>\n\nAnswer this question concisely:\n${question}`,
+        content: `You are an expert developer analyzing a codebase. Here is the project's CLAUDE.md context file:\n\n<context>\n${context}\n</context>\n\nAnswer this question concisely:\n${question}`,
       },
     ],
   });
@@ -259,17 +258,13 @@ async function scoreTask(context: string, task: EvalTask): Promise<CallResult> {
 
 // ── Report formatting ────────────────────────────────────────────────────────
 
-function formatReport(
-  results: TaskResult[],
-  baselineBytes: number,
-  directedBytes: number,
-): string {
+function formatReport(results: TaskResult[], baselineBytes: number, directedBytes: number): string {
   const sep = "=".repeat(72);
   const lines: string[] = [];
 
   const baselineTokensEst = estimateTokens(baselineContext);
   const directedTokensEst = estimateTokens(directedContext);
-  const sizeDelta = ((directedBytes - baselineBytes) / baselineBytes * 100).toFixed(1);
+  const sizeDelta = (((directedBytes - baselineBytes) / baselineBytes) * 100).toFixed(1);
 
   lines.push("");
   lines.push(sep);
@@ -279,8 +274,12 @@ function formatReport(
   lines.push(`  Config: model=${MODEL}, temp=${TEMPERATURE}, iters=${N_ITERS}`);
   lines.push("");
   lines.push("  Context Sizes:");
-  lines.push(`    Baseline (undirected): ${baselineBytes.toLocaleString()} bytes  (~${baselineTokensEst.toLocaleString()} tokens)`);
-  lines.push(`    Directed:              ${directedBytes.toLocaleString()} bytes  (~${directedTokensEst.toLocaleString()} tokens)`);
+  lines.push(
+    `    Baseline (undirected): ${baselineBytes.toLocaleString()} bytes  (~${baselineTokensEst.toLocaleString()} tokens)`,
+  );
+  lines.push(
+    `    Directed:              ${directedBytes.toLocaleString()} bytes  (~${directedTokensEst.toLocaleString()} tokens)`,
+  );
   lines.push(`    Delta:                 ${sizeDelta}%`);
   lines.push("");
 
@@ -329,8 +328,8 @@ function formatReport(
     const deltaStr = catDelta === 0 ? "  0" : catDelta > 0 ? ` +${catDelta}` : ` ${catDelta}`;
     lines.push(
       `    ${cat.padEnd(16)} ${catBaseline}/${catTotal}`.padEnd(32) +
-      `${catDirected}/${catTotal}`.padEnd(10) +
-      deltaStr,
+        `${catDirected}/${catTotal}`.padEnd(10) +
+        deltaStr,
     );
   }
   lines.push("");
@@ -345,14 +344,20 @@ function formatReport(
   const totalCost = baselineCost + directedCost;
 
   lines.push("  Token Usage:");
-  lines.push(`    Baseline: ${baselineInputTotal.toLocaleString()} in / ${baselineOutputTotal.toLocaleString()} out  ($${baselineCost.toFixed(3)})`);
-  lines.push(`    Directed: ${directedInputTotal.toLocaleString()} in / ${directedOutputTotal.toLocaleString()} out  ($${directedCost.toFixed(3)})`);
+  lines.push(
+    `    Baseline: ${baselineInputTotal.toLocaleString()} in / ${baselineOutputTotal.toLocaleString()} out  ($${baselineCost.toFixed(3)})`,
+  );
+  lines.push(
+    `    Directed: ${directedInputTotal.toLocaleString()} in / ${directedOutputTotal.toLocaleString()} out  ($${directedCost.toFixed(3)})`,
+  );
   lines.push(`    Total:    $${totalCost.toFixed(3)}`);
   lines.push("");
 
   // Per-task detail
   lines.push("  Per-Task Detail:");
-  lines.push(`    ${"Task".padEnd(10)} ${"Cat".padEnd(16)} ${"Iter".padEnd(6)} ${"Baseline".padEnd(10)} ${"Directed".padEnd(10)} Flip`);
+  lines.push(
+    `    ${"Task".padEnd(10)} ${"Cat".padEnd(16)} ${"Iter".padEnd(6)} ${"Baseline".padEnd(10)} ${"Directed".padEnd(10)} Flip`,
+  );
   lines.push(`    ${"-".repeat(62)}`);
   for (const r of results) {
     const bStr = r.baseline.passed ? "PASS" : "FAIL";
@@ -374,7 +379,7 @@ function formatReport(
     const bPass = iterResults.filter((r) => r.baseline.passed).length;
     const dPass = iterResults.filter((r) => r.directed.passed).length;
     const iterDelta = (dPass - bPass) / iterResults.length;
-    if (iterDelta < -0.10) allPass = false;
+    if (iterDelta < -0.1) allPass = false;
     if (iterDelta < -0.15) anyHardFail = true;
   }
 
@@ -454,7 +459,7 @@ describe.skipIf(SKIP)("Directed Betweenness Combo Eval (E.3-lite)", () => {
       expect(
         iterDelta,
         `Iteration ${iter + 1} delta ${(iterDelta * 100).toFixed(1)}% below non-inferiority gate (-10%)`,
-      ).toBeGreaterThanOrEqual(-0.10);
+      ).toBeGreaterThanOrEqual(-0.1);
     }
   }, 900_000); // 15 min timeout
 });

@@ -285,10 +285,7 @@ export function process(input: string | number): string | number {
     mockGlob.mockResolvedValue(["src/hooks/useAuth.ts"] as any);
     mockReadFileOr.mockResolvedValue(content);
 
-    const result = await generateSnapshot(
-      makeTsCtx({ directories: ["src", "src/hooks"] }),
-      [],
-    );
+    const result = await generateSnapshot(makeTsCtx({ directories: ["src", "src/hooks"] }), []);
 
     const entry = result.entries.find((e) => e.signature.includes("useAuth"));
     expect(entry).toBeDefined();
@@ -305,10 +302,7 @@ export function process(input: string | number): string | number {
     mockGlob.mockResolvedValue(["src/stores/auth.ts"] as any);
     mockReadFileOr.mockResolvedValue(content);
 
-    const result = await generateSnapshot(
-      makeTsCtx({ directories: ["src", "src/stores"] }),
-      [],
-    );
+    const result = await generateSnapshot(makeTsCtx({ directories: ["src", "src/stores"] }), []);
 
     const entry = result.entries.find((e) => e.signature.includes("AuthSlice"));
     expect(entry).toBeDefined();
@@ -330,7 +324,7 @@ export function process(input: string | number): string | number {
     expect(entry).toBeDefined();
     expect(entry!.category).toBe("function");
     // Should NOT contain body
-    expect(entry!.signature).not.toContain("Response(\"ok\")");
+    expect(entry!.signature).not.toContain('Response("ok")');
   });
 
   it("handles JSX/TSX files", async () => {
@@ -372,10 +366,7 @@ export default function Card({ title, body }: CardProps) {
     mockGlob.mockResolvedValue(["src/components/Card.tsx"] as any);
     mockReadFileOr.mockResolvedValue(content);
 
-    const result = await generateSnapshot(
-      makeTsCtx({ directories: ["src", "src/components"] }),
-      [],
-    );
+    const result = await generateSnapshot(makeTsCtx({ directories: ["src", "src/components"] }), []);
 
     // Non-exported Props interface should be captured in component directories
     const propsEntry = result.entries.find((e) => e.signature.includes("interface CardProps"));

@@ -123,9 +123,7 @@ const PREFIX_PATTERNS: PrefixPattern[] = [
   { prefix: "make", label: "factory functions", regex: /^make[A-Z]/ },
 ];
 
-function detectNamingPrefixes(
-  functions: string[],
-): InferredConventions["namingPrefixes"] {
+function detectNamingPrefixes(functions: string[]): InferredConventions["namingPrefixes"] {
   if (functions.length === 0) return undefined;
 
   const results: Array<{ prefix: string; count: number; example: string }> = [];
@@ -224,13 +222,10 @@ function detectImportOrderingDetailed(content: string): ImportOrderingResult {
   const baseKind = (k: ImportGroupKind) => (k === "node-builtin" ? "external" : k);
 
   // Check if external imports come before internal/relative
-  const firstExternal = importLines.findIndex(
-    (l) => baseKind(l.kind) === "external",
-  );
+  const firstExternal = importLines.findIndex((l) => baseKind(l.kind) === "external");
   const firstRelative = importLines.findIndex((l) => l.kind === "relative");
 
-  const externalFirst =
-    firstExternal !== -1 && (firstRelative === -1 || firstExternal < firstRelative);
+  const externalFirst = firstExternal !== -1 && (firstRelative === -1 || firstExternal < firstRelative);
 
   // Check for blank-line separation between groups
   const hasBlankSep = importLines.some((l) => l.blankBefore);
@@ -259,9 +254,7 @@ function detectImportOrderingDetailed(content: string): ImportOrderingResult {
 
   // Check if node:* imports are separated from other external imports
   const hasNodeBuiltin = importLines.some((l) => l.kind === "node-builtin");
-  const hasOtherExternal = importLines.some(
-    (l) => baseKind(l.kind) === "external" && l.kind !== "node-builtin",
-  );
+  const hasOtherExternal = importLines.some((l) => baseKind(l.kind) === "external" && l.kind !== "node-builtin");
   let nodeBuiltinSeparated = false;
   if (hasNodeBuiltin && hasOtherExternal) {
     // Check if there is a blank line between node:* and other external imports
@@ -291,7 +284,7 @@ function detectImportOrderingDetailed(content: string): ImportOrderingResult {
 }
 
 // Keep the old function signature for backward compat (internal use only)
-function detectImportOrdering(content: string): string | null {
+function _detectImportOrdering(content: string): string | null {
   return detectImportOrderingDetailed(content).ordering;
 }
 
@@ -524,9 +517,7 @@ export async function inferConventions(
 
   // Export style
   const totalExportFiles = defaultExportCount + namedExportCount;
-  const defaultPercent = totalExportFiles > 0
-    ? Math.round((defaultExportCount / totalExportFiles) * 100)
-    : 0;
+  const defaultPercent = totalExportFiles > 0 ? Math.round((defaultExportCount / totalExportFiles) * 100) : 0;
 
   // Import ordering (majority vote across sampled files, enhanced)
   const orderingCounts = new Map<string, number>();
@@ -544,9 +535,7 @@ export async function inferConventions(
     }
   }
 
-  let importOrdering = orderingCounts.size > 0
-    ? majorityStyle(orderingCounts)
-    : undefined;
+  let importOrdering = orderingCounts.size > 0 ? majorityStyle(orderingCounts) : undefined;
 
   // Enhance ordering string with alphabetical and node-builtin info
   if (importOrdering && importOrdering !== "mixed") {
@@ -568,11 +557,7 @@ export async function inferConventions(
   };
 
   // Detect per-directory overrides
-  const directoryOverrides = detectDirectoryOverrides(
-    fileIdentifiers,
-    fileNamesByFile,
-    globalNaming,
-  );
+  const directoryOverrides = detectDirectoryOverrides(fileIdentifiers, fileNamesByFile, globalNaming);
 
   // Detect naming prefixes
   const namingPrefixes = detectNamingPrefixes(allFunctions);
@@ -637,9 +622,10 @@ export function renderConventionsSection(conventions: InferredConventions): stri
         overrideParts.push(`${override.naming.files} for files`);
       }
       if (overrideParts.length > 0) {
-        const globalRef = conventions.naming.files !== "mixed"
-          ? ` (overrides project-wide ${conventions.naming.files !== "mixed" ? conventions.naming.files : "convention"})`
-          : "";
+        const globalRef =
+          conventions.naming.files !== "mixed"
+            ? ` (overrides project-wide ${conventions.naming.files !== "mixed" ? conventions.naming.files : "convention"})`
+            : "";
         lines.push(`- **Prefer**: In \`${override.directory}/\`, use ${overrideParts.join(", ")}${globalRef}`);
       }
     }
@@ -672,7 +658,9 @@ export function renderConventionsSection(conventions: InferredConventions): stri
         const examples: string[] = [];
         if (isEntry) examples.push(isEntry.example);
         if (hasEntry) examples.push(hasEntry.example);
-        lines.push(`- **Prefer**: Use \`is\`/\`has\` prefixes for boolean-returning functions (e.g., \`${examples.join("`, `")}\`)`);
+        lines.push(
+          `- **Prefer**: Use \`is\`/\`has\` prefixes for boolean-returning functions (e.g., \`${examples.join("`, `")}\`)`,
+        );
         rendered.add("is/has");
         prefixCount++;
         continue;
@@ -686,7 +674,9 @@ export function renderConventionsSection(conventions: InferredConventions): stri
         const examples: string[] = [];
         if (createEntry) examples.push(createEntry.example);
         if (makeEntry) examples.push(makeEntry.example);
-        lines.push(`- **Prefer**: Use \`create\`/\`make\` prefixes for factory functions (e.g., \`${examples.join("`, `")}\`)`);
+        lines.push(
+          `- **Prefer**: Use \`create\`/\`make\` prefixes for factory functions (e.g., \`${examples.join("`, `")}\`)`,
+        );
         rendered.add("create/make");
         prefixCount++;
         continue;
@@ -703,7 +693,9 @@ export function renderConventionsSection(conventions: InferredConventions): stri
   if (conventions.exportStyle.defaultExportPercent <= 10) {
     lines.push("- **Prefer**: Named exports (no default exports)");
   } else if (conventions.exportStyle.preferNamed) {
-    lines.push(`- **Prefer**: Named exports (${100 - conventions.exportStyle.defaultExportPercent}% named, ${conventions.exportStyle.defaultExportPercent}% default)`);
+    lines.push(
+      `- **Prefer**: Named exports (${100 - conventions.exportStyle.defaultExportPercent}% named, ${conventions.exportStyle.defaultExportPercent}% default)`,
+    );
   }
   if (conventions.exportStyle.barrelFileCount > 0) {
     lines.push(`- **Style**: Uses barrel files (${conventions.exportStyle.barrelFileCount} index re-export files)`);
@@ -723,10 +715,12 @@ export function renderConventionsSection(conventions: InferredConventions): stri
 
 function isConfigFile(filePath: string): boolean {
   const basename = path.basename(filePath);
-  return /\.(config|rc)\.[jt]sx?$/.test(basename)
-    || basename.startsWith(".")
-    || basename === "jest.setup.ts"
-    || basename === "vitest.config.ts";
+  return (
+    /\.(config|rc)\.[jt]sx?$/.test(basename) ||
+    basename.startsWith(".") ||
+    basename === "jest.setup.ts" ||
+    basename === "vitest.config.ts"
+  );
 }
 
 function isBarrelFile(content: string): boolean {
@@ -753,9 +747,7 @@ function filterCoveredConventions(
   const result = { ...conventions };
 
   // If linter enforces naming conventions, clear naming
-  const hasNamingRule = configConstraints.linter?.keyRules.some(
-    (r) => r.rule.includes("naming-convention"),
-  );
+  const hasNamingRule = configConstraints.linter?.keyRules.some((r) => r.rule.includes("naming-convention"));
   if (hasNamingRule) {
     result.naming = { functions: "mixed", types: "mixed", constants: "mixed", files: "mixed" };
     result.directoryOverrides = undefined;

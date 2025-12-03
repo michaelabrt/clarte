@@ -1,10 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
-import { computeChangeCoupling, computeLagCoupling, adaptiveDecayConstant, computeFileChurn, type ParsedCommit, type TimeWindow } from "../git-analysis.js";
+import { describe, expect, it } from "vitest";
+import {
+  computeChangeCoupling,
+  computeLagCoupling,
+  adaptiveDecayConstant,
+  computeFileChurn,
+  type ParsedCommit,
+  type TimeWindow,
+} from "../git-analysis.js";
 
-function makeCommit(
-  files: string[],
-  overrides?: Partial<ParsedCommit>,
-): ParsedCommit {
+function makeCommit(files: string[], overrides?: Partial<ParsedCommit>): ParsedCommit {
   return {
     hash: Math.random().toString(36).slice(2, 10),
     date: new Date().toISOString(),
@@ -17,11 +21,7 @@ function makeCommit(
 
 describe("computeChangeCoupling", () => {
   it("detects co-changing file pairs", () => {
-    const commits = [
-      makeCommit(["a.ts", "b.ts"]),
-      makeCommit(["a.ts", "b.ts"]),
-      makeCommit(["a.ts", "b.ts"]),
-    ];
+    const commits = [makeCommit(["a.ts", "b.ts"]), makeCommit(["a.ts", "b.ts"]), makeCommit(["a.ts", "b.ts"])];
 
     const result = computeChangeCoupling(commits);
 
@@ -45,12 +45,8 @@ describe("computeChangeCoupling", () => {
     const result = computeChangeCoupling([...normalCommits, ...lintCommits]);
 
     // Both pairs should appear, but normal pair should rank higher (weighted score)
-    const normalPair = result.find(
-      (r) => r.fileA === "a.ts" && r.fileB === "b.ts",
-    );
-    const lintPair = result.find(
-      (r) => r.fileA === "c.ts" && r.fileB === "d.ts",
-    );
+    const normalPair = result.find((r) => r.fileA === "a.ts" && r.fileB === "b.ts");
+    const lintPair = result.find((r) => r.fileA === "c.ts" && r.fileB === "d.ts");
 
     expect(normalPair).toBeDefined();
     expect(lintPair).toBeDefined();
@@ -71,12 +67,8 @@ describe("computeChangeCoupling", () => {
     const result = computeChangeCoupling([...normalCommits, ...noiseCommits]);
 
     // Normal pair should rank higher than noise pair
-    const normalPair = result.find(
-      (r) => r.fileA === "a.ts" && r.fileB === "b.ts",
-    );
-    const noisePair = result.find(
-      (r) => r.fileA === "c.ts" && r.fileB === "d.ts",
-    );
+    const normalPair = result.find((r) => r.fileA === "a.ts" && r.fileB === "b.ts");
+    const noisePair = result.find((r) => r.fileA === "c.ts" && r.fileB === "d.ts");
 
     expect(normalPair).toBeDefined();
     expect(noisePair).toBeDefined();
@@ -84,11 +76,7 @@ describe("computeChangeCoupling", () => {
   });
 
   it("skips single-file commits", () => {
-    const commits = [
-      makeCommit(["a.ts"]),
-      makeCommit(["a.ts"]),
-      makeCommit(["a.ts"]),
-    ];
+    const commits = [makeCommit(["a.ts"]), makeCommit(["a.ts"]), makeCommit(["a.ts"])];
 
     const result = computeChangeCoupling(commits);
     expect(result).toHaveLength(0);
@@ -96,10 +84,7 @@ describe("computeChangeCoupling", () => {
 
   it("handles large commits with inverse-size weighting", () => {
     // A 2-file commit should contribute more per-pair than a 10-file commit
-    const smallCommits = [
-      makeCommit(["x.ts", "y.ts"]),
-      makeCommit(["x.ts", "y.ts"]),
-    ];
+    const smallCommits = [makeCommit(["x.ts", "y.ts"]), makeCommit(["x.ts", "y.ts"])];
     const largeCommits = [
       makeCommit(["a.ts", "b.ts", "c.ts", "d.ts", "e.ts", "f.ts", "g.ts", "h.ts", "i.ts", "j.ts"]),
       makeCommit(["a.ts", "b.ts", "c.ts", "d.ts", "e.ts", "f.ts", "g.ts", "h.ts", "i.ts", "j.ts"]),
@@ -108,9 +93,7 @@ describe("computeChangeCoupling", () => {
     const result = computeChangeCoupling([...smallCommits, ...largeCommits]);
 
     // The x.ts+y.ts pair should rank highest due to higher weight per pair
-    const smallPair = result.find(
-      (r) => r.fileA === "x.ts" && r.fileB === "y.ts",
-    );
+    const smallPair = result.find((r) => r.fileA === "x.ts" && r.fileB === "y.ts");
     expect(smallPair).toBeDefined();
     expect(result[0].fileA).toBe("x.ts");
   });
@@ -129,9 +112,7 @@ describe("computeChangeCoupling", () => {
 
     // a.ts+b.ts: intersection=2, A={0,1,2,3}, B={0,1,4} → union=5 → Jaccard=2/5=0.4
     const abPair = result.find(
-      (r) =>
-        (r.fileA === "a.ts" && r.fileB === "b.ts") ||
-        (r.fileA === "b.ts" && r.fileB === "a.ts"),
+      (r) => (r.fileA === "a.ts" && r.fileB === "b.ts") || (r.fileA === "b.ts" && r.fileB === "a.ts"),
     );
     expect(abPair).toBeDefined();
     expect(abPair!.confidence).toBeCloseTo(0.4, 1);
@@ -143,12 +124,12 @@ describe("computeLagCoupling", () => {
     // fileA changes in commits 0, 2, 4; fileB changes in commits 1, 3, 5
     // They never co-occur (different commits) but fileB reacts to fileA within lag=1
     const commits = [
-      makeCommit(["a.ts", "x.ts"]),    // commit 0: a + x
-      makeCommit(["b.ts", "x.ts"]),    // commit 1: b + x (lag 1 from a)
-      makeCommit(["a.ts", "x.ts"]),    // commit 2: a + x
-      makeCommit(["b.ts", "x.ts"]),    // commit 3: b + x (lag 1 from a)
-      makeCommit(["a.ts", "x.ts"]),    // commit 4: a + x
-      makeCommit(["b.ts", "x.ts"]),    // commit 5: b + x (lag 1 from a)
+      makeCommit(["a.ts", "x.ts"]), // commit 0: a + x
+      makeCommit(["b.ts", "x.ts"]), // commit 1: b + x (lag 1 from a)
+      makeCommit(["a.ts", "x.ts"]), // commit 2: a + x
+      makeCommit(["b.ts", "x.ts"]), // commit 3: b + x (lag 1 from a)
+      makeCommit(["a.ts", "x.ts"]), // commit 4: a + x
+      makeCommit(["b.ts", "x.ts"]), // commit 5: b + x (lag 1 from a)
     ];
 
     // First compute change coupling to get pairs with same-commit co-changes

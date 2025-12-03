@@ -18,16 +18,9 @@ import {
   detectCommunities,
   detectArchitecturalLayers,
   findDeadFiles,
-  computeBetweenness,
 } from "../../graph.js";
 import { buildGraphFromFixture, missingFromTopN } from "./helpers.js";
-import {
-  layeredApp,
-  hubAndSpoke,
-  circularMess,
-  monolith,
-  EVAL_FIXTURES,
-} from "./fixtures.js";
+import { layeredApp, hubAndSpoke, circularMess, monolith, EVAL_FIXTURES } from "./fixtures.js";
 
 // ── Fixture: layered-app ──────────────────────────────────────────────
 
@@ -38,7 +31,7 @@ describe("eval: layered-app", () => {
   describe("HITS authority ranking", () => {
     it("types/index.ts should have the highest authority score", () => {
       const hubFiles = getHubFiles(graph, fixture.graph.files.length);
-      const ranked = hubFiles.map((h) => h.path);
+      const _ranked = hubFiles.map((h) => h.path);
 
       // types/index.ts is imported by the most files transitively
       const topAuthority = hubFiles.sort((a, b) => b.authority - a.authority);
@@ -47,15 +40,9 @@ describe("eval: layered-app", () => {
 
     it("expected top authority files should rank in the top 5", () => {
       const hubFiles = getHubFiles(graph, fixture.graph.files.length);
-      const byAuthority = hubFiles
-        .sort((a, b) => b.authority - a.authority)
-        .map((h) => h.path);
+      const byAuthority = hubFiles.sort((a, b) => b.authority - a.authority).map((h) => h.path);
 
-      const missing = missingFromTopN(
-        byAuthority,
-        fixture.expectations.topAuthorityFiles!,
-        5,
-      );
+      const missing = missingFromTopN(byAuthority, fixture.expectations.topAuthorityFiles!, 5);
       expect(missing).toEqual([]);
     });
   });
@@ -191,9 +178,7 @@ describe("eval: hub-and-spoke", () => {
       expect(featureFiles.length).toBeGreaterThan(0);
 
       // At least some feature files should have higher hub score than api-client
-      const featureWithHigherHub = featureFiles.filter(
-        (f) => f.hubScore > apiClient!.hubScore,
-      );
+      const featureWithHigherHub = featureFiles.filter((f) => f.hubScore > apiClient!.hubScore);
       expect(featureWithHigherHub.length).toBeGreaterThan(0);
     });
   });
@@ -202,24 +187,15 @@ describe("eval: hub-and-spoke", () => {
     it("pure sink config.ts should have zero betweenness", () => {
       expect(graph.betweennessScores).toBeDefined();
       for (const file of fixture.expectations.zeroBetweennessFiles!) {
-        expect(
-          graph.betweennessScores!.get(file) ?? 0,
-          `${file} should have zero betweenness (pure sink)`,
-        ).toBe(0);
+        expect(graph.betweennessScores!.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
       }
     });
 
     it("api-client.ts should rank in top-3 betweenness (bridge to config)", () => {
       expect(graph.betweennessScores).toBeDefined();
-      const ranked = [...graph.betweennessScores!.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([file]) => file);
+      const ranked = [...graph.betweennessScores!.entries()].sort((a, b) => b[1] - a[1]).map(([file]) => file);
 
-      const missing = missingFromTopN(
-        ranked,
-        fixture.expectations.topBetweennessFiles!,
-        3,
-      );
+      const missing = missingFromTopN(ranked, fixture.expectations.topBetweennessFiles!, 3);
       expect(missing).toEqual([]);
     });
   });
@@ -255,12 +231,7 @@ describe("eval: circular-mess", () => {
       const sccs = findSCCs(graph);
       const fourNodeScc = sccs.find((scc) => scc.length === 4);
       expect(fourNodeScc).toBeDefined();
-      expect(fourNodeScc!.sort()).toEqual([
-        "modules/f.ts",
-        "modules/g.ts",
-        "modules/h.ts",
-        "modules/i.ts",
-      ]);
+      expect(fourNodeScc!.sort()).toEqual(["modules/f.ts", "modules/g.ts", "modules/h.ts", "modules/i.ts"]);
     });
 
     it("clean files should NOT appear in any SCC", () => {
@@ -281,25 +252,19 @@ describe("eval: circular-mess", () => {
     it("every reported cycle should form a closed loop", () => {
       const cycles = findCircularDeps(graph, 20);
       for (const cycle of cycles) {
-        expect(
-          cycle.chain[0],
-          "cycle chain should start and end with the same file",
-        ).toBe(cycle.chain[cycle.chain.length - 1]);
+        expect(cycle.chain[0], "cycle chain should start and end with the same file").toBe(
+          cycle.chain[cycle.chain.length - 1],
+        );
       }
     });
 
     it("every consecutive pair in a reported cycle should have an actual edge", () => {
       const cycles = findCircularDeps(graph, 20);
-      const edgeSet = new Set(
-        fixture.graph.edges.map((e) => `${e.from}->${e.to}`),
-      );
+      const edgeSet = new Set(fixture.graph.edges.map((e) => `${e.from}->${e.to}`));
       for (const cycle of cycles) {
         for (let i = 0; i < cycle.chain.length - 1; i++) {
           const key = `${cycle.chain[i]}->${cycle.chain[i + 1]}`;
-          expect(
-            edgeSet.has(key),
-            `expected edge ${key} in cycle but it does not exist in the graph`,
-          ).toBe(true);
+          expect(edgeSet.has(key), `expected edge ${key} in cycle but it does not exist in the graph`).toBe(true);
         }
       }
     });
@@ -318,10 +283,7 @@ describe("eval: circular-mess", () => {
     it("pure sink clean-z.ts should have zero betweenness", () => {
       expect(graph.betweennessScores).toBeDefined();
       for (const file of fixture.expectations.zeroBetweennessFiles!) {
-        expect(
-          graph.betweennessScores!.get(file) ?? 0,
-          `${file} should have zero betweenness (pure sink)`,
-        ).toBe(0);
+        expect(graph.betweennessScores!.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
       }
     });
   });
@@ -336,12 +298,8 @@ describe("eval: monolith", () => {
   describe("community detection", () => {
     it("should detect a meaningful number of communities (between 3 and 10)", () => {
       const communities = detectCommunities(graph);
-      expect(communities.length).toBeGreaterThanOrEqual(
-        fixture.expectations.minCommunities!,
-      );
-      expect(communities.length).toBeLessThanOrEqual(
-        fixture.expectations.maxCommunities!,
-      );
+      expect(communities.length).toBeGreaterThanOrEqual(fixture.expectations.minCommunities!);
+      expect(communities.length).toBeLessThanOrEqual(fixture.expectations.maxCommunities!);
     });
 
     it("every file in a community should exist in the fixture", () => {
@@ -349,10 +307,7 @@ describe("eval: monolith", () => {
       const allFixtureFiles = new Set(fixture.graph.files);
       for (const community of communities) {
         for (const file of community.files) {
-          expect(
-            allFixtureFiles.has(file),
-            `community contains unknown file: ${file}`,
-          ).toBe(true);
+          expect(allFixtureFiles.has(file), `community contains unknown file: ${file}`).toBe(true);
         }
       }
     });
@@ -405,9 +360,7 @@ describe("eval: monolith", () => {
   describe("HITS authority", () => {
     it("shared/api-client.ts should be among the top 5 authority files", () => {
       const hubFiles = getHubFiles(graph, fixture.graph.files.length);
-      const byAuthority = [...hubFiles]
-        .sort((a, b) => b.authority - a.authority)
-        .map((h) => h.path);
+      const byAuthority = [...hubFiles].sort((a, b) => b.authority - a.authority).map((h) => h.path);
 
       const missing = missingFromTopN(byAuthority, ["shared/api-client.ts"], 5);
       expect(missing).toEqual([]);
@@ -418,18 +371,15 @@ describe("eval: monolith", () => {
 
       // Average authority of shared/ files
       const sharedFiles = hubFiles.filter((h) => h.path.startsWith("shared/"));
-      const avgSharedAuth =
-        sharedFiles.reduce((sum, h) => sum + h.authority, 0) / sharedFiles.length;
+      const avgSharedAuth = sharedFiles.reduce((sum, h) => sum + h.authority, 0) / sharedFiles.length;
 
       // Average authority of worker/ files
       const workerFiles = hubFiles.filter((h) => h.path.startsWith("worker/"));
       if (workerFiles.length > 0) {
-        const avgWorkerAuth =
-          workerFiles.reduce((sum, h) => sum + h.authority, 0) / workerFiles.length;
-        expect(
-          avgSharedAuth,
-          "shared/ average authority should exceed worker/ average authority",
-        ).toBeGreaterThan(avgWorkerAuth);
+        const avgWorkerAuth = workerFiles.reduce((sum, h) => sum + h.authority, 0) / workerFiles.length;
+        expect(avgSharedAuth, "shared/ average authority should exceed worker/ average authority").toBeGreaterThan(
+          avgWorkerAuth,
+        );
       }
     });
   });
@@ -438,10 +388,7 @@ describe("eval: monolith", () => {
     it("pure sink shared/config.ts should have zero betweenness", () => {
       expect(graph.betweennessScores).toBeDefined();
       for (const file of fixture.expectations.zeroBetweennessFiles!) {
-        expect(
-          graph.betweennessScores!.get(file) ?? 0,
-          `${file} should have zero betweenness (pure sink)`,
-        ).toBe(0);
+        expect(graph.betweennessScores!.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
       }
     });
   });
@@ -513,20 +460,11 @@ describe("eval: cross-fixture consistency", () => {
   it("betweennessScores should be defined with values in [0,1] for all fixtures", () => {
     for (const fixture of EVAL_FIXTURES) {
       const graph = buildGraphFromFixture(fixture.graph.files, fixture.graph.edges);
-      expect(
-        graph.betweennessScores,
-        `betweennessScores should be defined for ${fixture.name}`,
-      ).toBeDefined();
+      expect(graph.betweennessScores, `betweennessScores should be defined for ${fixture.name}`).toBeDefined();
 
       for (const [file, score] of graph.betweennessScores!) {
-        expect(
-          score,
-          `betweenness for ${file} in ${fixture.name} should be >= 0`,
-        ).toBeGreaterThanOrEqual(0);
-        expect(
-          score,
-          `betweenness for ${file} in ${fixture.name} should be <= 1`,
-        ).toBeLessThanOrEqual(1);
+        expect(score, `betweenness for ${file} in ${fixture.name} should be >= 0`).toBeGreaterThanOrEqual(0);
+        expect(score, `betweenness for ${file} in ${fixture.name} should be <= 1`).toBeLessThanOrEqual(1);
       }
     }
   });

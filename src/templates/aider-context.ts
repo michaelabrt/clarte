@@ -32,13 +32,13 @@ export async function buildAiderContext(
     lines.push(`  - "Project: ${escapeYaml(answers.projectPurpose)}"`);
   }
   lines.push(`  - "Stack: ${escapeYaml(stackSummary)}"`);
-  lines.push(`  - "INSTRUCTION: This file is your starting point. Only read additional files when the task requires details not captured here."`);
+  lines.push(
+    `  - "INSTRUCTION: This file is your starting point. Only read additional files when the task requires details not captured here."`,
+  );
 
   // Frameworks
   if (ctx.frameworks.length > 0) {
-    const fws = ctx.frameworks
-      .map((f) => `${f.name}${f.version ? ` ${f.version}` : ""}`)
-      .join(", ");
+    const fws = ctx.frameworks.map((f) => `${f.name}${f.version ? ` ${f.version}` : ""}`).join(", ");
     lines.push(`  - "Frameworks: ${escapeYaml(fws)}"`);
   }
 
@@ -124,7 +124,7 @@ export async function buildAiderContext(
     // Filter to just the bullet-point lines (skip headers and blank lines)
     for (const hint of fwHints) {
       const trimmed = hint.trim();
-      if (trimmed && trimmed.startsWith("- ")) {
+      if (trimmed?.startsWith("- ")) {
         lines.push(`  - "${escapeYaml(trimmed.slice(2))}"`);
       }
     }
@@ -143,14 +143,9 @@ export async function buildAiderContext(
 
   // Monorepo info
   if (ctx.monorepo && ctx.monorepo.packages.length > 0) {
-    lines.push(
-      `  - "Monorepo: ${ctx.monorepo.type} with ${ctx.monorepo.packages.length} packages"`,
-    );
+    lines.push(`  - "Monorepo: ${ctx.monorepo.type} with ${ctx.monorepo.packages.length} packages"`);
     for (const pkg of ctx.monorepo.packages) {
-      const fws =
-        pkg.frameworks.length > 0
-          ? ` (${pkg.frameworks.map((f) => f.name).join(", ")})`
-          : "";
+      const fws = pkg.frameworks.length > 0 ? ` (${pkg.frameworks.map((f) => f.name).join(", ")})` : "";
       lines.push(`  - "Package: ${escapeYaml(pkg.name)} at ${escapeYaml(pkg.path)}${escapeYaml(fws)}"`);
     }
   }
@@ -170,21 +165,27 @@ export async function buildAiderContext(
   // Instability warnings
   if (analysis?.instabilities && analysis.instabilities.length > 0) {
     for (const inst of analysis.instabilities) {
-      lines.push(`  - "UNSTABLE: ${escapeYaml(inst.path)}: ${(inst.instability * 100).toFixed(0)}% unstable (${inst.fanIn} dependents, ${inst.fanOut} deps)"`);
+      lines.push(
+        `  - "UNSTABLE: ${escapeYaml(inst.path)}: ${(inst.instability * 100).toFixed(0)}% unstable (${inst.fanIn} dependents, ${inst.fanOut} deps)"`,
+      );
     }
   }
 
   // Change coupling
   if (analysis?.gitActivity?.changeCoupling && analysis.gitActivity.changeCoupling.length > 0) {
     for (const pair of analysis.gitActivity.changeCoupling.slice(0, 5)) {
-      lines.push(`  - "CO-CHANGE: ${escapeYaml(pair.fileA)} <-> ${escapeYaml(pair.fileB)} (${pair.coChangeCount} co-changes, ${(pair.confidence * 100).toFixed(0)}% confidence)"`);
+      lines.push(
+        `  - "CO-CHANGE: ${escapeYaml(pair.fileA)} <-> ${escapeYaml(pair.fileB)} (${pair.coChangeCount} co-changes, ${(pair.confidence * 100).toFixed(0)}% confidence)"`,
+      );
     }
   }
 
   // Cross-cutting files
   if (analysis?.crossCuttingFiles && analysis.crossCuttingFiles.length > 0) {
     for (const f of analysis.crossCuttingFiles) {
-      lines.push(`  - "CROSS-CUTTING: ${escapeYaml(f.file)} spans ${f.layerSpread} layers (${escapeYaml(f.layers.join(", "))}), changes have wide blast radius"`);
+      lines.push(
+        `  - "CROSS-CUTTING: ${escapeYaml(f.file)} spans ${f.layerSpread} layers (${escapeYaml(f.layers.join(", "))}), changes have wide blast radius"`,
+      );
     }
   }
 
@@ -193,14 +194,18 @@ export async function buildAiderContext(
     const pct = (analysis.layerConsistency.consistency * 100).toFixed(0);
     lines.push(`  - "LAYER ORDER: ${pct}% consistent. Do not introduce upward dependency violations."`);
     for (const v of analysis.layerConsistency.violations.slice(0, 3)) {
-      lines.push(`  - "VIOLATION: ${escapeYaml(v.from)} (${escapeYaml(v.fromLayer)}) imports ${escapeYaml(v.to)} (${escapeYaml(v.toLayer)})"`);
+      lines.push(
+        `  - "VIOLATION: ${escapeYaml(v.from)} (${escapeYaml(v.fromLayer)}) imports ${escapeYaml(v.to)} (${escapeYaml(v.toLayer)})"`,
+      );
     }
   }
 
   // Chokepoints
   if (analysis?.chokepoints && analysis.chokepoints.length > 0) {
     for (const cp of analysis.chokepoints.slice(0, 5)) {
-      lines.push(`  - "CHOKEPOINT: ${escapeYaml(cp.file)} separates ${cp.separates} components, refactor with extreme care"`);
+      lines.push(
+        `  - "CHOKEPOINT: ${escapeYaml(cp.file)} separates ${cp.separates} components, refactor with extreme care"`,
+      );
     }
   }
 
@@ -214,25 +219,30 @@ export async function buildAiderContext(
   // Structural mismatches (hidden coupling)
   if (analysis?.structuralMismatches && analysis.structuralMismatches.length > 0) {
     for (const m of analysis.structuralMismatches.slice(0, 3)) {
-      lines.push(`  - "HIDDEN COUPLING: ${escapeYaml(m.fileA)} and ${escapeYaml(m.fileB)} change together but have no import link. Consider adding an explicit dependency."`);
+      lines.push(
+        `  - "HIDDEN COUPLING: ${escapeYaml(m.fileA)} and ${escapeYaml(m.fileB)} change together but have no import link. Consider adding an explicit dependency."`,
+      );
     }
   }
 
   // Monorepo cross-package analysis
   if (analysis?.monorepoAnalysis && analysis.monorepoAnalysis.crossPackageEdges.length > 0) {
     const mono = analysis.monorepoAnalysis;
-    lines.push(`  - "MONOREPO: ${mono.crossPackageEdges.length} cross-package edge(s), ${mono.encapsulationViolations.length} encapsulation violation(s)"`);
+    lines.push(
+      `  - "MONOREPO: ${mono.crossPackageEdges.length} cross-package edge(s), ${mono.encapsulationViolations.length} encapsulation violation(s)"`,
+    );
     for (const v of mono.encapsulationViolations.slice(0, 3)) {
-      lines.push(`  - "ENCAPSULATION: ${escapeYaml(v.from)} imports internal file ${escapeYaml(v.to)} from ${escapeYaml(v.toPackage)}. Use the public API instead."`);
+      lines.push(
+        `  - "ENCAPSULATION: ${escapeYaml(v.from)} imports internal file ${escapeYaml(v.to)} from ${escapeYaml(v.toPackage)}. Use the public API instead."`,
+      );
     }
   }
 
   // Circular dependencies
   if (analysis?.circularDeps && analysis.circularDeps.length > 0) {
     for (const dep of analysis.circularDeps) {
-      const severity = dep.severity != null
-        ? dep.severity === 0 ? " [type-only]" : dep.severity < 1 ? " [mixed]" : ""
-        : "";
+      const severity =
+        dep.severity != null ? (dep.severity === 0 ? " [type-only]" : dep.severity < 1 ? " [mixed]" : "") : "";
       const hint = dep.breakHint ? ` -- ${escapeYaml(dep.breakHint)}` : "";
       lines.push(`  - "CIRCULAR DEP: ${escapeYaml(dep.chain.join(" -> "))}${severity}${hint}"`);
     }
@@ -250,17 +260,13 @@ export async function buildAiderContext(
   // Code snapshot
   if (snapshot?.markdown) {
     lines.push("");
-    lines.push(
-      "# CODE SNAPSHOT (auto-generated, update when types/stores/services change)",
-    );
+    lines.push("# CODE SNAPSHOT (auto-generated, update when types/stores/services change)");
     lines.push("# Formatted as a multi-line read block for Aider context.");
     lines.push("read:");
     // We can't inline markdown directly into YAML conventions cleanly.
     // Instead, write a companion markdown file and reference it.
     // For now, include the snapshot as a YAML comment block.
-    lines.push(
-      "  # To include the code snapshot, create a file and add it here:",
-    );
+    lines.push("  # To include the code snapshot, create a file and add it here:");
     lines.push("  # - .aider.context.md");
 
     // Also add the snapshot as commented YAML for reference

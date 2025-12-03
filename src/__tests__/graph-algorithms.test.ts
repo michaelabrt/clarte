@@ -10,7 +10,7 @@ import {
   computeBetweenness,
   checkArchitecturalFitness,
 } from "../graph.js";
-import type { ArchitecturalLayer, ImportEdge, ImportGraph, LayerEdge } from "../types.js";
+import type { ArchitecturalLayer, ImportEdge, LayerEdge } from "../types.js";
 import { makeGraph, edge } from "./eval/helpers.js";
 
 function dynamicEdge(from: string, to: string, names: string[] = []): ImportEdge {
@@ -19,11 +19,7 @@ function dynamicEdge(from: string, to: string, names: string[] = []): ImportEdge
 
 describe("findSCCs", () => {
   it("finds a simple cycle", () => {
-    const graph = makeGraph(["a", "b", "c"], [
-      edge("a", "b"),
-      edge("b", "c"),
-      edge("c", "a"),
-    ]);
+    const graph = makeGraph(["a", "b", "c"], [edge("a", "b"), edge("b", "c"), edge("c", "a")]);
     const sccs = findSCCs(graph);
     expect(sccs).toHaveLength(1);
     expect(sccs[0].sort()).toEqual(["a", "b", "c"]);
@@ -37,22 +33,15 @@ describe("findSCCs", () => {
   });
 
   it("returns empty for a chain with no cycles", () => {
-    const graph = makeGraph(["a", "b", "c"], [
-      edge("a", "b"),
-      edge("b", "c"),
-    ]);
+    const graph = makeGraph(["a", "b", "c"], [edge("a", "b"), edge("b", "c")]);
     const sccs = findSCCs(graph);
     expect(sccs).toHaveLength(0);
   });
-
 });
 
 describe("findCircularDeps", () => {
   it("reports cycles as circular deps", () => {
-    const graph = makeGraph(["a", "b"], [
-      edge("a", "b"),
-      edge("b", "a"),
-    ]);
+    const graph = makeGraph(["a", "b"], [edge("a", "b"), edge("b", "a")]);
     const deps = findCircularDeps(graph);
     expect(deps).toHaveLength(1);
     // Chain should close the loop
@@ -63,14 +52,7 @@ describe("findCircularDeps", () => {
     // Create 3 separate cycles
     const graph = makeGraph(
       ["a", "b", "c", "d", "e", "f"],
-      [
-        edge("a", "b"),
-        edge("b", "a"),
-        edge("c", "d"),
-        edge("d", "c"),
-        edge("e", "f"),
-        edge("f", "e"),
-      ],
+      [edge("a", "b"), edge("b", "a"), edge("c", "d"), edge("d", "c"), edge("e", "f"), edge("f", "e")],
     );
     const deps = findCircularDeps(graph, 2);
     expect(deps.length).toBeLessThanOrEqual(2);
@@ -79,12 +61,7 @@ describe("findCircularDeps", () => {
   it("reports only valid paths (every consecutive pair has an edge)", () => {
     // SCC {A, B, C} with edges A->B, B->A, B->C, C->B (two overlapping 2-cycles)
     // Previously this would report [A, B, C, A] which has no edge A->C
-    const graph = makeGraph(["a", "b", "c"], [
-      edge("a", "b"),
-      edge("b", "a"),
-      edge("b", "c"),
-      edge("c", "b"),
-    ]);
+    const graph = makeGraph(["a", "b", "c"], [edge("a", "b"), edge("b", "a"), edge("b", "c"), edge("c", "b")]);
     const deps = findCircularDeps(graph);
     expect(deps.length).toBeGreaterThan(0);
 
@@ -104,12 +81,7 @@ describe("findCircularDeps", () => {
   });
 
   it("finds mutual imports as 2-cycles", () => {
-    const graph = makeGraph(["a", "b", "c"], [
-      edge("a", "b"),
-      edge("b", "a"),
-      edge("b", "c"),
-      edge("c", "b"),
-    ]);
+    const graph = makeGraph(["a", "b", "c"], [edge("a", "b"), edge("b", "a"), edge("b", "c"), edge("c", "b")]);
     const deps = findCircularDeps(graph);
     // Should find both 2-cycles: a<->b and b<->c
     const twoCycles = deps.filter((d) => d.chain.length === 3);
@@ -120,11 +92,7 @@ describe("findCircularDeps", () => {
 describe("computeHITS", () => {
   it("assigns high authority to star center (widely depended upon)", () => {
     const files = ["center", "a", "b", "c"];
-    const edges = [
-      edge("a", "center", ["foo", "bar"]),
-      edge("b", "center", ["foo"]),
-      edge("c", "center", ["baz"]),
-    ];
+    const edges = [edge("a", "center", ["foo", "bar"]), edge("b", "center", ["foo"]), edge("c", "center", ["baz"])];
 
     const { authority, hub } = computeHITS(files, edges);
 
@@ -139,11 +107,7 @@ describe("computeHITS", () => {
 
   it("handles chain graph — intermediate nodes as bridges", () => {
     const files = ["a", "b", "c", "d"];
-    const edges = [
-      edge("a", "b", ["x"]),
-      edge("b", "c", ["y"]),
-      edge("c", "d", ["z"]),
-    ];
+    const edges = [edge("a", "b", ["x"]), edge("b", "c", ["y"]), edge("c", "d", ["z"])];
 
     const { authority, hub } = computeHITS(files, edges);
 
@@ -168,7 +132,7 @@ describe("computeHITS", () => {
   it("type-only edges contribute less weight", () => {
     const files = ["a", "b", "typeTarget", "valueTarget"];
     const edges = [
-      edge("a", "typeTarget", ["Foo", "Bar"], true),  // type-only
+      edge("a", "typeTarget", ["Foo", "Bar"], true), // type-only
       edge("b", "valueTarget", ["Foo", "Bar"], false), // value import
     ];
 
@@ -236,15 +200,24 @@ describe("deriveRole", () => {
 describe("getHubFiles", () => {
   it("returns hub files sorted by max(authority, hubScore)", () => {
     // Star graph: center is the hub
-    const graph = makeGraph(["center", "a", "b", "c"], [
-      edge("a", "center", ["foo"]),
-      edge("b", "center", ["bar"]),
-      edge("c", "center", ["baz"]),
-    ]);
+    const graph = makeGraph(
+      ["center", "a", "b", "c"],
+      [edge("a", "center", ["foo"]), edge("b", "center", ["bar"]), edge("c", "center", ["baz"])],
+    );
     // Manually set scores for testing
     graph.centrality.set("center", 1.0);
-    graph.authority = new Map([["center", 1.0], ["a", 0.1], ["b", 0.1], ["c", 0.1]]);
-    graph.hubScores = new Map([["center", 0.0], ["a", 0.3], ["b", 0.3], ["c", 0.3]]);
+    graph.authority = new Map([
+      ["center", 1.0],
+      ["a", 0.1],
+      ["b", 0.1],
+      ["c", 0.1],
+    ]);
+    graph.hubScores = new Map([
+      ["center", 0.0],
+      ["a", 0.3],
+      ["b", 0.3],
+      ["c", 0.3],
+    ]);
     graph.inDegree.set("center", 3);
 
     const hubs = getHubFiles(graph);
@@ -256,17 +229,23 @@ describe("getHubFiles", () => {
   });
 
   it("respects limit parameter", () => {
-    const graph = makeGraph(["a", "b", "c", "d"], [
-      edge("a", "b"),
-      edge("a", "c"),
-      edge("a", "d"),
-      edge("b", "c"),
-      edge("b", "d"),
-      edge("c", "d"),
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "c", "d"],
+      [edge("a", "b"), edge("a", "c"), edge("a", "d"), edge("b", "c"), edge("b", "d"), edge("c", "d")],
+    );
     graph.centrality.set("d", 1.0);
-    graph.authority = new Map([["a", 0.2], ["b", 0.5], ["c", 0.8], ["d", 1.0]]);
-    graph.hubScores = new Map([["a", 0.8], ["b", 0.5], ["c", 0.3], ["d", 0.0]]);
+    graph.authority = new Map([
+      ["a", 0.2],
+      ["b", 0.5],
+      ["c", 0.8],
+      ["d", 1.0],
+    ]);
+    graph.hubScores = new Map([
+      ["a", 0.8],
+      ["b", 0.5],
+      ["c", 0.3],
+      ["d", 0.0],
+    ]);
     graph.centrality.set("c", 0.8);
     graph.centrality.set("b", 0.5);
     graph.centrality.set("a", 0.2);
@@ -276,14 +255,25 @@ describe("getHubFiles", () => {
   });
 
   it("assigns correct roles based on HITS scores", () => {
-    const graph = makeGraph(["types", "index", "utils"], [
-      edge("index", "types", ["Foo"]),
-      edge("index", "utils", ["bar"]),
-      edge("utils", "types", ["Baz"]),
+    const graph = makeGraph(
+      ["types", "index", "utils"],
+      [edge("index", "types", ["Foo"]), edge("index", "utils", ["bar"]), edge("utils", "types", ["Baz"])],
+    );
+    graph.authority = new Map([
+      ["types", 0.9],
+      ["utils", 0.4],
+      ["index", 0.0],
     ]);
-    graph.authority = new Map([["types", 0.9], ["utils", 0.4], ["index", 0.0]]);
-    graph.hubScores = new Map([["types", 0.0], ["utils", 0.2], ["index", 0.9]]);
-    graph.centrality = new Map([["types", 0.9], ["utils", 0.4], ["index", 0.0]]);
+    graph.hubScores = new Map([
+      ["types", 0.0],
+      ["utils", 0.2],
+      ["index", 0.9],
+    ]);
+    graph.centrality = new Map([
+      ["types", 0.9],
+      ["utils", 0.4],
+      ["index", 0.0],
+    ]);
 
     const hubs = getHubFiles(graph);
     const typesHub = hubs.find((h) => h.path === "types");
@@ -296,10 +286,13 @@ describe("getHubFiles", () => {
 
 describe("findCircularDeps severity", () => {
   it("assigns severity 0 for type-only cycles", () => {
-    const graph = makeGraph(["a", "b"], [
-      edge("a", "b", ["Foo"], true),  // type-only
-      edge("b", "a", ["Bar"], true),  // type-only
-    ]);
+    const graph = makeGraph(
+      ["a", "b"],
+      [
+        edge("a", "b", ["Foo"], true), // type-only
+        edge("b", "a", ["Bar"], true), // type-only
+      ],
+    );
     const deps = findCircularDeps(graph);
     expect(deps).toHaveLength(1);
     expect(deps[0].severity).toBe(0);
@@ -307,21 +300,21 @@ describe("findCircularDeps severity", () => {
   });
 
   it("assigns severity 1 for all-runtime cycles", () => {
-    const graph = makeGraph(["a", "b"], [
-      edge("a", "b", ["foo"]),
-      edge("b", "a", ["bar"]),
-    ]);
+    const graph = makeGraph(["a", "b"], [edge("a", "b", ["foo"]), edge("b", "a", ["bar"])]);
     const deps = findCircularDeps(graph);
     expect(deps).toHaveLength(1);
     expect(deps[0].severity).toBe(1);
   });
 
   it("assigns mixed severity for mixed cycles", () => {
-    const graph = makeGraph(["a", "b", "c"], [
-      edge("a", "b", ["foo"]),       // runtime
-      edge("b", "c", ["Bar"], true), // type-only
-      edge("c", "a", ["baz"]),       // runtime
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "c"],
+      [
+        edge("a", "b", ["foo"]), // runtime
+        edge("b", "c", ["Bar"], true), // type-only
+        edge("c", "a", ["baz"]), // runtime
+      ],
+    );
     const deps = findCircularDeps(graph);
     // Should find a 3-cycle with 2/3 runtime edges
     const threeCycle = deps.find((d) => d.chain.length === 4);
@@ -331,22 +324,22 @@ describe("findCircularDeps severity", () => {
   });
 
   it("provides break hints", () => {
-    const graph = makeGraph(["a", "b"], [
-      edge("a", "b", ["foo"]),
-      edge("b", "a", ["bar"]),
-    ]);
+    const graph = makeGraph(["a", "b"], [edge("a", "b", ["foo"]), edge("b", "a", ["bar"])]);
     const deps = findCircularDeps(graph);
     expect(deps[0].breakHint).toBeDefined();
     expect(deps[0].breakHint!.length).toBeGreaterThan(0);
   });
 
   it("sorts type-only cycles after runtime cycles", () => {
-    const graph = makeGraph(["a", "b", "c", "d"], [
-      edge("a", "b", ["Foo"], true),  // type-only cycle
-      edge("b", "a", ["Bar"], true),
-      edge("c", "d", ["foo"]),         // runtime cycle
-      edge("d", "c", ["bar"]),
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "c", "d"],
+      [
+        edge("a", "b", ["Foo"], true), // type-only cycle
+        edge("b", "a", ["Bar"], true),
+        edge("c", "d", ["foo"]), // runtime cycle
+        edge("d", "c", ["bar"]),
+      ],
+    );
     const deps = findCircularDeps(graph);
     expect(deps.length).toBeGreaterThanOrEqual(2);
     // Runtime cycle should come first
@@ -359,15 +352,11 @@ describe("findCircularDeps severity", () => {
 describe("findStructuralTemporalMismatches", () => {
   it("detects file pairs with high co-change but large graph distance", () => {
     // Linear chain: a -> b -> c -> d -> e
-    const graph = makeGraph(["a", "b", "c", "d", "e"], [
-      edge("a", "b"),
-      edge("b", "c"),
-      edge("c", "d"),
-      edge("d", "e"),
-    ]);
-    const coupling = [
-      { fileA: "a", fileB: "e", confidence: 0.8, coChangeCount: 5 },
-    ];
+    const graph = makeGraph(
+      ["a", "b", "c", "d", "e"],
+      [edge("a", "b"), edge("b", "c"), edge("c", "d"), edge("d", "e")],
+    );
+    const coupling = [{ fileA: "a", fileB: "e", confidence: 0.8, coChangeCount: 5 }];
     const mismatches = findStructuralTemporalMismatches(graph, coupling, 0.4, 3);
     expect(mismatches).toHaveLength(1);
     expect(mismatches[0].graphDistance).toBe(4);
@@ -375,26 +364,16 @@ describe("findStructuralTemporalMismatches", () => {
   });
 
   it("ignores pairs within threshold distance", () => {
-    const graph = makeGraph(["a", "b", "c"], [
-      edge("a", "b"),
-      edge("b", "c"),
-    ]);
-    const coupling = [
-      { fileA: "a", fileB: "c", confidence: 0.8, coChangeCount: 5 },
-    ];
+    const graph = makeGraph(["a", "b", "c"], [edge("a", "b"), edge("b", "c")]);
+    const coupling = [{ fileA: "a", fileB: "c", confidence: 0.8, coChangeCount: 5 }];
     // Distance is 2 (a->b->c), threshold is 3
     const mismatches = findStructuralTemporalMismatches(graph, coupling, 0.4, 3);
     expect(mismatches).toHaveLength(0);
   });
 
   it("detects unreachable pairs", () => {
-    const graph = makeGraph(["a", "b", "c", "d"], [
-      edge("a", "b"),
-      edge("c", "d"),
-    ]);
-    const coupling = [
-      { fileA: "a", fileB: "d", confidence: 0.6, coChangeCount: 3 },
-    ];
+    const graph = makeGraph(["a", "b", "c", "d"], [edge("a", "b"), edge("c", "d")]);
+    const coupling = [{ fileA: "a", fileB: "d", confidence: 0.6, coChangeCount: 3 }];
     const mismatches = findStructuralTemporalMismatches(graph, coupling, 0.4, 3);
     expect(mismatches).toHaveLength(1);
     expect(mismatches[0].graphDistance).toBe(-1);
@@ -408,9 +387,7 @@ describe("findStructuralTemporalMismatches", () => {
 
 describe("findTightCouplings", () => {
   it("detects files importing many names", () => {
-    const graph = makeGraph(["a", "b"], [
-      edge("a", "b", ["foo", "bar", "baz", "qux", "quux"]),
-    ]);
+    const graph = makeGraph(["a", "b"], [edge("a", "b", ["foo", "bar", "baz", "qux", "quux"])]);
     const couplings = findTightCouplings(graph, 5);
     expect(couplings).toHaveLength(1);
     expect(couplings[0].from).toBe("a");
@@ -419,28 +396,23 @@ describe("findTightCouplings", () => {
   });
 
   it("ignores pairs below threshold", () => {
-    const graph = makeGraph(["a", "b"], [
-      edge("a", "b", ["foo", "bar"]),
-    ]);
+    const graph = makeGraph(["a", "b"], [edge("a", "b", ["foo", "bar"])]);
     const couplings = findTightCouplings(graph, 5);
     expect(couplings).toHaveLength(0);
   });
 
   it("aggregates names across multiple edges", () => {
-    const graph = makeGraph(["a", "b"], [
-      edge("a", "b", ["foo", "bar", "baz"]),
-      edge("a", "b", ["qux", "quux"]),
-    ]);
+    const graph = makeGraph(["a", "b"], [edge("a", "b", ["foo", "bar", "baz"]), edge("a", "b", ["qux", "quux"])]);
     const couplings = findTightCouplings(graph, 5);
     expect(couplings).toHaveLength(1);
     expect(couplings[0].importedNames).toBe(5);
   });
 
   it("sorts by name count descending", () => {
-    const graph = makeGraph(["a", "b", "c"], [
-      edge("a", "b", ["w", "x", "y", "z", "v"]),
-      edge("a", "c", ["a1", "a2", "a3", "a4", "a5", "a6", "a7"]),
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "c"],
+      [edge("a", "b", ["w", "x", "y", "z", "v"]), edge("a", "c", ["a1", "a2", "a3", "a4", "a5", "a6", "a7"])],
+    );
     const couplings = findTightCouplings(graph, 5);
     expect(couplings).toHaveLength(2);
     expect(couplings[0].to).toBe("c"); // 7 names
@@ -456,10 +428,7 @@ describe("findTightCouplings", () => {
 describe("computeHITS with dynamic imports", () => {
   it("gives lower authority to dynamically-imported files vs statically-imported", () => {
     const files = ["a", "b", "staticTarget", "dynamicTarget"];
-    const edges = [
-      edge("a", "staticTarget", ["foo", "bar"]),
-      dynamicEdge("b", "dynamicTarget", ["foo", "bar"]),
-    ];
+    const edges = [edge("a", "staticTarget", ["foo", "bar"]), dynamicEdge("b", "dynamicTarget", ["foo", "bar"])];
 
     const { authority } = computeHITS(files, edges);
 
@@ -470,9 +439,9 @@ describe("computeHITS with dynamic imports", () => {
   it("dynamic edges weigh between type-only and value imports", () => {
     const files = ["a", "b", "c", "typeTarget", "dynamicTarget", "valueTarget"];
     const edges = [
-      edge("a", "typeTarget", ["Foo"], true),     // type-only: 0.3x weight
-      dynamicEdge("b", "dynamicTarget", ["Foo"]),  // dynamic: 0.5x weight
-      edge("c", "valueTarget", ["Foo"]),            // value: 1.0x weight
+      edge("a", "typeTarget", ["Foo"], true), // type-only: 0.3x weight
+      dynamicEdge("b", "dynamicTarget", ["Foo"]), // dynamic: 0.5x weight
+      edge("c", "valueTarget", ["Foo"]), // value: 1.0x weight
     ];
 
     const { authority } = computeHITS(files, edges);
@@ -501,10 +470,7 @@ describe("computeHITS with barrel files", () => {
 
   it("non-barrel files are not affected by barrel discount", () => {
     const files = ["a", "b", "target"];
-    const edges = [
-      edge("a", "target", ["foo"]),
-      edge("b", "target", ["bar"]),
-    ];
+    const edges = [edge("a", "target", ["foo"]), edge("b", "target", ["bar"])];
     const barrelFiles = new Set<string>(); // empty
 
     const withoutBarrels = computeHITS(files, edges);
@@ -535,10 +501,7 @@ describe("deriveRole with barrel files", () => {
 
 describe("findCircularDeps with dynamic imports", () => {
   it("assigns lower severity to dynamic-only cycles", () => {
-    const graph = makeGraph(["a", "b"], [
-      dynamicEdge("a", "b", ["foo"]),
-      dynamicEdge("b", "a", ["bar"]),
-    ]);
+    const graph = makeGraph(["a", "b"], [dynamicEdge("a", "b", ["foo"]), dynamicEdge("b", "a", ["bar"])]);
     const deps = findCircularDeps(graph);
     expect(deps).toHaveLength(1);
     // Dynamic-only cycle: each edge contributes 0.5, so severity = 0.5
@@ -546,21 +509,21 @@ describe("findCircularDeps with dynamic imports", () => {
   });
 
   it("assigns severity 1 for static runtime cycles", () => {
-    const graph = makeGraph(["a", "b"], [
-      edge("a", "b", ["foo"]),
-      edge("b", "a", ["bar"]),
-    ]);
+    const graph = makeGraph(["a", "b"], [edge("a", "b", ["foo"]), edge("b", "a", ["bar"])]);
     const deps = findCircularDeps(graph);
     expect(deps).toHaveLength(1);
     expect(deps[0].severity).toBe(1);
   });
 
   it("assigns mixed severity for static + dynamic cycles", () => {
-    const graph = makeGraph(["a", "b", "c"], [
-      edge("a", "b", ["foo"]),          // static: 1.0
-      dynamicEdge("b", "c", ["bar"]),   // dynamic: 0.5
-      edge("c", "a", ["baz"]),          // static: 1.0
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "c"],
+      [
+        edge("a", "b", ["foo"]), // static: 1.0
+        dynamicEdge("b", "c", ["bar"]), // dynamic: 0.5
+        edge("c", "a", ["baz"]), // static: 1.0
+      ],
+    );
     const deps = findCircularDeps(graph);
     const threeCycle = deps.find((d) => d.chain.length === 4);
     expect(threeCycle).toBeDefined();
@@ -569,12 +532,15 @@ describe("findCircularDeps with dynamic imports", () => {
   });
 
   it("sorts dynamic-only cycles after static runtime cycles", () => {
-    const graph = makeGraph(["a", "b", "c", "d"], [
-      dynamicEdge("a", "b"),   // dynamic cycle
-      dynamicEdge("b", "a"),
-      edge("c", "d", ["foo"]), // runtime cycle
-      edge("d", "c", ["bar"]),
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "c", "d"],
+      [
+        dynamicEdge("a", "b"), // dynamic cycle
+        dynamicEdge("b", "a"),
+        edge("c", "d", ["foo"]), // runtime cycle
+        edge("d", "c", ["bar"]),
+      ],
+    );
     const deps = findCircularDeps(graph);
     expect(deps.length).toBeGreaterThanOrEqual(2);
     // Runtime cycle (severity 1.0) should come before dynamic cycle (severity 0.5)
@@ -587,12 +553,10 @@ describe("findCircularDeps with dynamic imports", () => {
 describe("computeBetweenness", () => {
   it("assigns zero to a pure dependency sink in a star", () => {
     // Star graph: a, b, c, d all import center (center is a sink with no outgoing edges)
-    const graph = makeGraph(["center", "a", "b", "c", "d"], [
-      edge("a", "center"),
-      edge("b", "center"),
-      edge("c", "center"),
-      edge("d", "center"),
-    ]);
+    const graph = makeGraph(
+      ["center", "a", "b", "c", "d"],
+      [edge("a", "center"), edge("b", "center"), edge("c", "center"), edge("d", "center")],
+    );
 
     const scores = computeBetweenness(graph);
 
@@ -607,13 +571,10 @@ describe("computeBetweenness", () => {
     // center imports lib1 and lib2; a, b, c all import center.
     // Directed paths: a -> center -> lib1, b -> center -> lib2, etc.
     // center is the only node on paths between importers and their transitive deps.
-    const graph = makeGraph(["a", "b", "c", "center", "lib1", "lib2"], [
-      edge("a", "center"),
-      edge("b", "center"),
-      edge("c", "center"),
-      edge("center", "lib1"),
-      edge("center", "lib2"),
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "c", "center", "lib1", "lib2"],
+      [edge("a", "center"), edge("b", "center"), edge("c", "center"), edge("center", "lib1"), edge("center", "lib2")],
+    );
 
     const scores = computeBetweenness(graph);
 
@@ -629,12 +590,10 @@ describe("computeBetweenness", () => {
 
   it("assigns highest scores to middle nodes in a chain", () => {
     // Chain: a - b - c - d - e
-    const graph = makeGraph(["a", "b", "c", "d", "e"], [
-      edge("a", "b"),
-      edge("b", "c"),
-      edge("c", "d"),
-      edge("d", "e"),
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "c", "d", "e"],
+      [edge("a", "b"), edge("b", "c"), edge("c", "d"), edge("d", "e")],
+    );
 
     const scores = computeBetweenness(graph);
 
@@ -651,10 +610,7 @@ describe("computeBetweenness", () => {
 
   it("assigns zero betweenness between disconnected components", () => {
     // Two disconnected pairs: a-b and c-d
-    const graph = makeGraph(["a", "b", "c", "d"], [
-      edge("a", "b"),
-      edge("c", "d"),
-    ]);
+    const graph = makeGraph(["a", "b", "c", "d"], [edge("a", "b"), edge("c", "d")]);
 
     const scores = computeBetweenness(graph);
 
@@ -673,14 +629,10 @@ describe("computeBetweenness", () => {
 
   it("produces deterministic results", () => {
     // Same graph should produce same scores every time
-    const graph = makeGraph(["a", "b", "c", "d", "e", "f"], [
-      edge("a", "b"),
-      edge("b", "c"),
-      edge("c", "d"),
-      edge("d", "e"),
-      edge("a", "f"),
-      edge("f", "e"),
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "c", "d", "e", "f"],
+      [edge("a", "b"), edge("b", "c"), edge("c", "d"), edge("d", "e"), edge("a", "f"), edge("f", "e")],
+    );
 
     const scores1 = computeBetweenness(graph);
     const scores2 = computeBetweenness(graph);
@@ -691,11 +643,7 @@ describe("computeBetweenness", () => {
   });
 
   it("normalizes scores to 0-1 range", () => {
-    const graph = makeGraph(["a", "b", "c", "d"], [
-      edge("a", "b"),
-      edge("b", "c"),
-      edge("c", "d"),
-    ]);
+    const graph = makeGraph(["a", "b", "c", "d"], [edge("a", "b"), edge("b", "c"), edge("c", "d")]);
 
     const scores = computeBetweenness(graph);
 
@@ -719,11 +667,7 @@ describe("computeBetweenness", () => {
 
   it("ignores self-loops in betweenness computation", () => {
     // Self-loops should not inflate betweenness scores
-    const graph = makeGraph(["a", "b", "c"], [
-      edge("a", "a"),
-      edge("a", "b"),
-      edge("b", "c"),
-    ]);
+    const graph = makeGraph(["a", "b", "c"], [edge("a", "a"), edge("a", "b"), edge("b", "c")]);
     const scores = computeBetweenness(graph);
     // b is the only bridge node; self-loop on a should not affect this
     expect(scores.get("b")!).toBeGreaterThan(scores.get("a")!);
@@ -741,12 +685,10 @@ describe("computeBetweenness", () => {
     //   Source b: c on 2 (b->d, b->e); d on 1 (b->e)
     //   Source c: d on 1 (c->e)
     // Raw: a=0, b=3, c=4, d=3, e=0. Normalized (max=4): a=0, b=0.75, c=1.0, d=0.75, e=0
-    const graph = makeGraph(["a", "b", "c", "d", "e"], [
-      edge("a", "b"),
-      edge("b", "c"),
-      edge("c", "d"),
-      edge("d", "e"),
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "c", "d", "e"],
+      [edge("a", "b"), edge("b", "c"), edge("c", "d"), edge("d", "e")],
+    );
 
     const scores = computeBetweenness(graph, 5); // k = n for exhaustive
 
@@ -761,12 +703,10 @@ describe("computeBetweenness", () => {
     // a -> m, b -> m, m -> x, m -> y
     // m is on all 4 paths (a->x, a->y, b->x, b->y). No other node is on any path.
     // Raw: a=0, b=0, m=4, x=0, y=0. Normalized: m=1.0, all others=0
-    const graph = makeGraph(["a", "b", "m", "x", "y"], [
-      edge("a", "m"),
-      edge("b", "m"),
-      edge("m", "x"),
-      edge("m", "y"),
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "m", "x", "y"],
+      [edge("a", "m"), edge("b", "m"), edge("m", "x"), edge("m", "y")],
+    );
 
     const scores = computeBetweenness(graph, 5);
 
@@ -784,12 +724,7 @@ describe("computeBetweenness", () => {
     //            delta(q) = sigma(q)/sigma(x) * (1 + delta(x)) = 1/2 * 1 = 0.5
     // No other source produces paths through p or q.
     // Raw: a=0, p=0.5, q=0.5, x=0. Normalized (max=0.5): p=1.0, q=1.0
-    const graph = makeGraph(["a", "p", "q", "x"], [
-      edge("a", "p"),
-      edge("a", "q"),
-      edge("p", "x"),
-      edge("q", "x"),
-    ]);
+    const graph = makeGraph(["a", "p", "q", "x"], [edge("a", "p"), edge("a", "q"), edge("p", "x"), edge("q", "x")]);
 
     const scores = computeBetweenness(graph, 4);
 
@@ -828,9 +763,9 @@ describe("checkArchitecturalFitness", () => {
     const graph = makeGraph(
       ["src/types.ts", "src/services.ts", "src/components.ts"],
       [
-        edge("src/services.ts", "src/types.ts"),       // correct
-        edge("src/components.ts", "src/services.ts"),   // correct
-        edge("src/types.ts", "src/components.ts"),      // violation: types -> components (upward)
+        edge("src/services.ts", "src/types.ts"), // correct
+        edge("src/components.ts", "src/services.ts"), // correct
+        edge("src/types.ts", "src/components.ts"), // violation: types -> components (upward)
       ],
     );
 
@@ -846,8 +781,8 @@ describe("checkArchitecturalFitness", () => {
     const graph = makeGraph(
       ["src/__tests__/auth.test.ts", "src/__tests__/user.test.ts", "src/auth.ts"],
       [
-        edge("src/__tests__/auth.test.ts", "src/__tests__/user.test.ts"),  // violation
-        edge("src/__tests__/auth.test.ts", "src/auth.ts"),                  // correct
+        edge("src/__tests__/auth.test.ts", "src/__tests__/user.test.ts"), // violation
+        edge("src/__tests__/auth.test.ts", "src/auth.ts"), // correct
       ],
     );
 
@@ -861,9 +796,7 @@ describe("checkArchitecturalFitness", () => {
   it("allows test files to import from __fixtures__", () => {
     const graph = makeGraph(
       ["src/__tests__/auth.test.ts", "src/__tests__/__fixtures__/mock-user.ts"],
-      [
-        edge("src/__tests__/auth.test.ts", "src/__tests__/__fixtures__/mock-user.ts"),
-      ],
+      [edge("src/__tests__/auth.test.ts", "src/__tests__/__fixtures__/mock-user.ts")],
     );
 
     const violations = checkArchitecturalFitness(graph, [], []);
@@ -874,9 +807,7 @@ describe("checkArchitecturalFitness", () => {
   it("allows test files to import from test-utils", () => {
     const graph = makeGraph(
       ["src/__tests__/auth.test.ts", "src/test-utils/setup.ts"],
-      [
-        edge("src/__tests__/auth.test.ts", "src/test-utils/setup.ts"),
-      ],
+      [edge("src/__tests__/auth.test.ts", "src/test-utils/setup.ts")],
     );
 
     const violations = checkArchitecturalFitness(graph, [], []);
@@ -902,8 +833,8 @@ describe("checkArchitecturalFitness", () => {
     const graph = makeGraph(
       ["src/types.ts", "src/utils.ts", "src/services.ts", "src/pages.ts"],
       [
-        edge("src/services.ts", "src/utils.ts"),  // correct, skip=1
-        edge("src/pages.ts", "src/types.ts"),      // skip: pages -> types, skipping 2 layers
+        edge("src/services.ts", "src/utils.ts"), // correct, skip=1
+        edge("src/pages.ts", "src/types.ts"), // skip: pages -> types, skipping 2 layers
       ],
     );
 
@@ -921,14 +852,12 @@ describe("checkArchitecturalFitness", () => {
       { name: "services", files: ["src/services.ts"] },
     ]);
 
-    const layerEdges: LayerEdge[] = [
-      { from: "services", to: "types" },
-    ];
+    const layerEdges: LayerEdge[] = [{ from: "services", to: "types" }];
 
     const graph = makeGraph(
       ["src/types.ts", "src/services.ts"],
       [
-        edge("src/services.ts", "src/types.ts"),  // adjacent, no skip
+        edge("src/services.ts", "src/types.ts"), // adjacent, no skip
       ],
     );
 
@@ -945,9 +874,7 @@ describe("checkArchitecturalFitness", () => {
       { name: "services", files: ["src/services.ts"] },
     ]);
 
-    const layerEdges: LayerEdge[] = [
-      { from: "services", to: "types" },
-    ];
+    const layerEdges: LayerEdge[] = [{ from: "services", to: "types" }];
 
     // Each types file imports services (upward violation)
     const edges = typeFiles.map((f) => edge(f, "src/services.ts"));
@@ -958,16 +885,12 @@ describe("checkArchitecturalFitness", () => {
   });
 
   it("returns empty for fewer than 2 layers on layer rules", () => {
-    const layers = makeLayers([
-      { name: "types", files: ["src/types.ts"] },
-    ]);
+    const layers = makeLayers([{ name: "types", files: ["src/types.ts"] }]);
 
     const graph = makeGraph(["src/types.ts"], []);
     const violations = checkArchitecturalFitness(graph, layers, []);
     // No upward or skip violations with only one layer
-    const layerViolations = violations.filter(
-      (v) => v.rule === "no-upward-dep" || v.rule === "layer-skip",
-    );
+    const layerViolations = violations.filter((v) => v.rule === "no-upward-dep" || v.rule === "layer-skip");
     expect(layerViolations).toHaveLength(0);
   });
 
@@ -977,19 +900,17 @@ describe("checkArchitecturalFitness", () => {
       { name: "services", files: ["src/services.ts"] },
     ]);
 
-    const layerEdges: LayerEdge[] = [
-      { from: "services", to: "types" },
-    ];
+    const layerEdges: LayerEdge[] = [{ from: "services", to: "types" }];
 
     const externalEdge: ImportEdge = {
-      from: "src/types.ts", to: "react", isExternal: true,
-      specifier: "react", importedNames: ["useState"],
+      from: "src/types.ts",
+      to: "react",
+      isExternal: true,
+      specifier: "react",
+      importedNames: ["useState"],
     };
 
-    const graph = makeGraph(
-      ["src/types.ts", "src/services.ts"],
-      [externalEdge],
-    );
+    const graph = makeGraph(["src/types.ts", "src/services.ts"], [externalEdge]);
 
     const violations = checkArchitecturalFitness(graph, layers, layerEdges);
     expect(violations).toHaveLength(0);

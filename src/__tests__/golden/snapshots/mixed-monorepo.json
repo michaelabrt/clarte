@@ -43,11 +43,7 @@
   "layers": [
     {
       "name": "services",
-      "files": [
-        "packages/api/src/handler.ts",
-        "packages/api/src/middleware.ts",
-        "packages/api/src/router.ts"
-      ],
+      "files": ["packages/api/src/handler.ts", "packages/api/src/middleware.ts", "packages/api/src/router.ts"],
       "dependsOn": []
     }
   ],
@@ -65,9 +61,7 @@
       "packages/web/src/store.ts"
     ]
   ],
-  "deadFiles": [
-    "packages/api/src/router.ts"
-  ],
+  "deadFiles": ["packages/api/src/router.ts"],
   "crossCuttingFiles": [],
   "layerConsistency": {
     "consistency": 1,
@@ -120,9 +114,7 @@
   ],
   "graphTopology": {
     "componentCount": 1,
-    "componentSizes": [
-      9
-    ],
+    "componentSizes": [9],
     "approximateDiameter": 3,
     "reachability": 1,
     "isFragmented": false

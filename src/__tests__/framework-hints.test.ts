@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getFrameworkHints, getFrameworkHintsSection } from "../templates/framework-hints.js";
 import type { DetectedContext, DetectedFramework } from "../types.js";
 
-function makeCtx(
-  frameworks: DetectedFramework[] = [],
-  directories: string[] = [],
-): DetectedContext {
+function makeCtx(frameworks: DetectedFramework[] = [], directories: string[] = []): DetectedContext {
   return {
     rootDir: "/test",
     language: "typescript",
@@ -34,32 +31,24 @@ describe("getFrameworkHints", () => {
   // --- Next.js ---
 
   it("returns App Router hints for Next.js with app directory", () => {
-    const hints = getFrameworkHints(
-      makeCtx([{ name: "Next.js" }], ["app", "src"]),
-    );
+    const hints = getFrameworkHints(makeCtx([{ name: "Next.js" }], ["app", "src"]));
     expect(hints.some((h) => h.includes("App Router"))).toBe(true);
     expect(hints.some((h) => h.includes("use client"))).toBe(true);
   });
 
   it("returns Pages Router hints for Next.js with pages directory", () => {
-    const hints = getFrameworkHints(
-      makeCtx([{ name: "Next.js" }], ["pages", "src"]),
-    );
+    const hints = getFrameworkHints(makeCtx([{ name: "Next.js" }], ["pages", "src"]));
     expect(hints.some((h) => h.includes("Pages Router"))).toBe(true);
     expect(hints.some((h) => h.includes("getServerSideProps"))).toBe(true);
   });
 
   it("returns hybrid hints for Next.js with both app and pages", () => {
-    const hints = getFrameworkHints(
-      makeCtx([{ name: "Next.js" }], ["app", "pages"]),
-    );
+    const hints = getFrameworkHints(makeCtx([{ name: "Next.js" }], ["app", "pages"]));
     expect(hints.some((h) => h.includes("Hybrid"))).toBe(true);
   });
 
   it("returns generic hints for Next.js with neither app nor pages", () => {
-    const hints = getFrameworkHints(
-      makeCtx([{ name: "Next.js" }], ["src"]),
-    );
+    const hints = getFrameworkHints(makeCtx([{ name: "Next.js" }], ["src"]));
     expect(hints.some((h) => h.includes("next/image"))).toBe(true);
   });
 
@@ -96,9 +85,7 @@ describe("getFrameworkHints", () => {
   // --- Expo / React Native ---
 
   it("returns Expo hints with React Native extras", () => {
-    const hints = getFrameworkHints(
-      makeCtx([{ name: "Expo" }, { name: "React Native" }]),
-    );
+    const hints = getFrameworkHints(makeCtx([{ name: "Expo" }, { name: "React Native" }]));
     expect(hints.some((h) => h.includes("expo-router"))).toBe(true);
     expect(hints.some((h) => h.includes("Reanimated"))).toBe(true);
   });
@@ -115,9 +102,7 @@ describe("getFrameworkHints", () => {
   });
 
   it("skips React Native hints when Expo is also present", () => {
-    const hints = getFrameworkHints(
-      makeCtx([{ name: "React Native" }, { name: "Expo" }]),
-    );
+    const hints = getFrameworkHints(makeCtx([{ name: "React Native" }, { name: "Expo" }]));
     // Should NOT have standalone RN hints (Expo covers them)
     expect(hints.some((h) => h.includes("StyleSheet.create()"))).toBe(false);
   });
@@ -130,9 +115,7 @@ describe("getFrameworkHints", () => {
   });
 
   it("skips React hints when Next.js is present", () => {
-    const hints = getFrameworkHints(
-      makeCtx([{ name: "React" }, { name: "Next.js" }], ["app"]),
-    );
+    const hints = getFrameworkHints(makeCtx([{ name: "React" }, { name: "Next.js" }], ["app"]));
     expect(hints.some((h) => h.includes("Functional components"))).toBe(false);
     // But Next.js hints should be present
     expect(hints.some((h) => h.includes("App Router"))).toBe(true);
@@ -160,9 +143,7 @@ describe("getFrameworkHints", () => {
   });
 
   it("skips Svelte hints when SvelteKit is present", () => {
-    const hints = getFrameworkHints(
-      makeCtx([{ name: "Svelte" }, { name: "SvelteKit" }]),
-    );
+    const hints = getFrameworkHints(makeCtx([{ name: "Svelte" }, { name: "SvelteKit" }]));
     expect(hints.some((h) => h.includes("Reactive declarations"))).toBe(false);
     expect(hints.some((h) => h.includes("File-based routing"))).toBe(true);
   });
@@ -216,9 +197,7 @@ describe("getFrameworkHints", () => {
   });
 
   it("skips Tailwind CSS hints when NativeWind is present", () => {
-    const hints = getFrameworkHints(
-      makeCtx([{ name: "Tailwind CSS" }, { name: "NativeWind" }]),
-    );
+    const hints = getFrameworkHints(makeCtx([{ name: "Tailwind CSS" }, { name: "NativeWind" }]));
     expect(hints.some((h) => h.includes("Utility-first"))).toBe(false);
   });
 
@@ -240,9 +219,7 @@ describe("getFrameworkHints", () => {
   });
 
   it("returns Astro hints with framework integration info", () => {
-    const hints = getFrameworkHints(
-      makeCtx([{ name: "Astro" }, { name: "React" }]),
-    );
+    const hints = getFrameworkHints(makeCtx([{ name: "Astro" }, { name: "React" }]));
     expect(hints.some((h) => h.includes("React"))).toBe(true);
     expect(hints.some((h) => h.includes("client:load"))).toBe(true);
   });
@@ -260,9 +237,7 @@ describe("getFrameworkHints", () => {
   // --- Multiple frameworks ---
 
   it("combines hints from multiple frameworks", () => {
-    const hints = getFrameworkHints(
-      makeCtx([{ name: "Express" }, { name: "Prisma" }]),
-    );
+    const hints = getFrameworkHints(makeCtx([{ name: "Express" }, { name: "Prisma" }]));
     expect(hints.some((h) => h.includes("Middleware chain"))).toBe(true);
     expect(hints.some((h) => h.includes("schema.prisma"))).toBe(true);
   });

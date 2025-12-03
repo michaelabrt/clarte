@@ -36,6 +36,8 @@ jobs:
 
       - run: npm run typecheck
 
+      - run: npm run lint
+
       - name: Self-test diff (Node 22 only)
         if: matrix.node-version == 22
         run: |

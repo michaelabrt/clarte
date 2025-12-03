@@ -103,7 +103,9 @@ afterEach(async () => {
 describe("refreshSnapshot", () => {
   it("exits when no context file found", async () => {
     const realExit = process.exit;
-    process.exit = vi.fn(() => { throw new Error("exit"); }) as never;
+    process.exit = vi.fn(() => {
+      throw new Error("exit");
+    }) as never;
 
     await expect(refreshSnapshot(tmpDir)).rejects.toThrow("exit");
 
@@ -184,16 +186,14 @@ describe("refreshSnapshot", () => {
 
   it("shows budget-trimmed error message", async () => {
     // File with "Sections omitted" and "code-snapshot" but no markers
-    const content = [
-      "# Project",
-      "",
-      "<!-- Sections omitted to fit token budget: code-snapshot. -->",
-    ].join("\n");
+    const content = ["# Project", "", "<!-- Sections omitted to fit token budget: code-snapshot. -->"].join("\n");
 
     await fs.writeFile(path.join(tmpDir, "CLAUDE.md"), content);
 
     const realExit = process.exit;
-    process.exit = vi.fn(() => { throw new Error("exit"); }) as never;
+    process.exit = vi.fn(() => {
+      throw new Error("exit");
+    }) as never;
 
     await expect(refreshSnapshot(tmpDir)).rejects.toThrow("exit");
 

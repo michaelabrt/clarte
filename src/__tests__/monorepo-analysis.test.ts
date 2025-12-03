@@ -58,10 +58,7 @@ describe("analyzeMonorepoGraph", () => {
     for (const pkg of monorepo.packages) {
       const pkgDir = path.join(tmpDir, pkg.path);
       await fs.mkdir(pkgDir, { recursive: true });
-      await fs.writeFile(
-        path.join(pkgDir, "package.json"),
-        JSON.stringify({ name: pkg.name }),
-      );
+      await fs.writeFile(path.join(pkgDir, "package.json"), JSON.stringify({ name: pkg.name }));
     }
   }
 
@@ -138,14 +135,8 @@ describe("analyzeMonorepoGraph", () => {
       path.join(tmpDir, "packages/shared/package.json"),
       JSON.stringify({ name: "@app/shared", main: "./dist/main.js" }),
     );
-    await fs.writeFile(
-      path.join(tmpDir, "packages/web/package.json"),
-      JSON.stringify({ name: "@app/web" }),
-    );
-    await fs.writeFile(
-      path.join(tmpDir, "packages/api/package.json"),
-      JSON.stringify({ name: "@app/api" }),
-    );
+    await fs.writeFile(path.join(tmpDir, "packages/web/package.json"), JSON.stringify({ name: "@app/web" }));
+    await fs.writeFile(path.join(tmpDir, "packages/api/package.json"), JSON.stringify({ name: "@app/api" }));
 
     const graph = makeGraph([
       // Import via main entry point
@@ -158,14 +149,10 @@ describe("analyzeMonorepoGraph", () => {
 
     expect(result.crossPackageEdges).toHaveLength(2);
     // main entry point import should NOT be a violation
-    const mainImport = result.crossPackageEdges.find(
-      (e) => e.to === "packages/shared/dist/main.js",
-    );
+    const mainImport = result.crossPackageEdges.find((e) => e.to === "packages/shared/dist/main.js");
     expect(mainImport?.isEncapsulationViolation).toBe(false);
     // internal import should be a violation
-    const internalImport = result.crossPackageEdges.find(
-      (e) => e.to === "packages/shared/src/internal/db.ts",
-    );
+    const internalImport = result.crossPackageEdges.find((e) => e.to === "packages/shared/src/internal/db.ts");
     expect(internalImport?.isEncapsulationViolation).toBe(true);
   });
 
@@ -285,14 +272,10 @@ describe("annotateCrossPackageEdges", () => {
 
     annotateCrossPackageEdges(graph, monorepo);
 
-    const crossEdge = graph.edges.find(
-      (e) => e.to === "packages/shared/src/index.ts",
-    );
+    const crossEdge = graph.edges.find((e) => e.to === "packages/shared/src/index.ts");
     expect(crossEdge?.crossPackage).toBe(true);
 
-    const sameEdge = graph.edges.find(
-      (e) => e.to === "packages/web/src/utils.ts",
-    );
+    const sameEdge = graph.edges.find((e) => e.to === "packages/web/src/utils.ts");
     expect(sameEdge?.crossPackage).toBeUndefined();
   });
 
@@ -350,9 +333,7 @@ describe("computePackageCentrality", () => {
   });
 
   it("returns empty maps for a package with no edges", () => {
-    const graph = makeGraph([
-      edge("packages/web/src/app.ts", "packages/web/src/utils.ts"),
-    ]);
+    const graph = makeGraph([edge("packages/web/src/app.ts", "packages/web/src/utils.ts")]);
 
     const { authority, hub } = computePackageCentrality(graph, "packages/shared");
 

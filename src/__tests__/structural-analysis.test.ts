@@ -5,7 +5,7 @@ import {
   findChokepoints,
   detectArchitecturalLayers,
 } from "../graph.js";
-import type { ArchitecturalLayer, ImportEdge, ImportGraph, LayerEdge } from "../types.js";
+import type { ArchitecturalLayer, ImportEdge, LayerEdge } from "../types.js";
 import { makeGraph, edge } from "./eval/helpers.js";
 
 function makeLayers(defs: Array<{ name: string; files: string[] }>): ArchitecturalLayer[] {
@@ -47,13 +47,9 @@ describe("detectArchitecturalLayers with custom patterns", () => {
   it("custom patterns take priority over built-in patterns", () => {
     // "app" matches built-in "pages" pattern, but custom "application" should win
     const files = ["src/app/index.ts", "src/types/model.ts"];
-    const graph = makeGraph(files, [
-      edge("src/app/index.ts", "src/types/model.ts"),
-    ]);
+    const graph = makeGraph(files, [edge("src/app/index.ts", "src/types/model.ts")]);
 
-    const customLayers = [
-      { name: "application", pattern: "(?:^|/)app/" },
-    ];
+    const customLayers = [{ name: "application", pattern: "(?:^|/)app/" }];
 
     const { layers } = detectArchitecturalLayers(graph, customLayers);
     const names = layers.map((l) => l.name);
@@ -66,9 +62,7 @@ describe("detectArchitecturalLayers with custom patterns", () => {
 
   it("falls back to built-in patterns when no custom layers provided", () => {
     const files = ["src/types/model.ts", "src/components/Button.tsx"];
-    const graph = makeGraph(files, [
-      edge("src/components/Button.tsx", "src/types/model.ts"),
-    ]);
+    const graph = makeGraph(files, [edge("src/components/Button.tsx", "src/types/model.ts")]);
 
     const { layers } = detectArchitecturalLayers(graph);
     const names = layers.map((l) => l.name);
@@ -78,9 +72,7 @@ describe("detectArchitecturalLayers with custom patterns", () => {
 
   it("computes layer edges correctly with custom patterns", () => {
     const files = ["src/domain/user.ts", "src/infra/db.ts"];
-    const graph = makeGraph(files, [
-      edge("src/infra/db.ts", "src/domain/user.ts"),
-    ]);
+    const graph = makeGraph(files, [edge("src/infra/db.ts", "src/domain/user.ts")]);
 
     const customLayers = [
       { name: "domain", pattern: "(?:^|/)domain/" },
@@ -94,9 +86,7 @@ describe("detectArchitecturalLayers with custom patterns", () => {
 
   it("custom patterns with empty array behave like no custom layers", () => {
     const files = ["src/hooks/useAuth.ts", "src/types/model.ts"];
-    const graph = makeGraph(files, [
-      edge("src/hooks/useAuth.ts", "src/types/model.ts"),
-    ]);
+    const graph = makeGraph(files, [edge("src/hooks/useAuth.ts", "src/types/model.ts")]);
 
     const { layers } = detectArchitecturalLayers(graph, []);
     const names = layers.map((l) => l.name);
@@ -160,10 +150,7 @@ describe("findCrossCuttingFiles", () => {
       { name: "services", files: ["b.ts"] },
     ]);
 
-    const graph = makeGraph(["a.ts", "b.ts", "c.ts"], [
-      edge("a.ts", "c.ts"),
-      edge("b.ts", "c.ts"),
-    ]);
+    const graph = makeGraph(["a.ts", "b.ts", "c.ts"], [edge("a.ts", "c.ts"), edge("b.ts", "c.ts")]);
 
     const result = findCrossCuttingFiles(graph, layers, 3);
     expect(result).toHaveLength(0);
@@ -202,9 +189,13 @@ describe("findCrossCuttingFiles", () => {
 
     const graph = makeGraph(
       [
-        "src/types/a.ts", "src/types/b.ts", "src/services/a.ts",
-        "src/hooks/a.ts", "src/components/a.ts",
-        "src/utils.ts", "src/shared.ts",
+        "src/types/a.ts",
+        "src/types/b.ts",
+        "src/services/a.ts",
+        "src/hooks/a.ts",
+        "src/components/a.ts",
+        "src/utils.ts",
+        "src/shared.ts",
       ],
       [
         // utils: imported from 4 layers
@@ -233,15 +224,14 @@ describe("findCrossCuttingFiles", () => {
     ]);
 
     const externalEdge: ImportEdge = {
-      from: "a.ts", to: "react", isExternal: true,
-      specifier: "react", importedNames: ["useState"],
+      from: "a.ts",
+      to: "react",
+      isExternal: true,
+      specifier: "react",
+      importedNames: ["useState"],
     };
 
-    const graph = makeGraph(["a.ts", "b.ts", "c.ts"], [
-      edge("a.ts", "d.ts"),
-      edge("b.ts", "d.ts"),
-      externalEdge,
-    ]);
+    const graph = makeGraph(["a.ts", "b.ts", "c.ts"], [edge("a.ts", "d.ts"), edge("b.ts", "d.ts"), externalEdge]);
 
     const result = findCrossCuttingFiles(graph, layers, 3);
     expect(result).toHaveLength(0);
@@ -284,9 +274,7 @@ describe("computeLayerConsistency", () => {
       { name: "services", files: ["src/services.ts"] },
     ]);
 
-    const layerEdges: LayerEdge[] = [
-      { from: "services", to: "types" },
-    ];
+    const layerEdges: LayerEdge[] = [{ from: "services", to: "types" }];
 
     const graph = makeGraph(
       ["src/types.ts", "src/services.ts"],
@@ -309,9 +297,7 @@ describe("computeLayerConsistency", () => {
       { name: "types", files: ["src/types.ts"] },
     ]);
 
-    const layerEdges: LayerEdge[] = [
-      { from: "services", to: "types" },
-    ];
+    const layerEdges: LayerEdge[] = [{ from: "services", to: "types" }];
 
     const graph = makeGraph(
       ["src/services/a.ts", "src/services/b.ts", "src/types.ts"],
@@ -327,9 +313,7 @@ describe("computeLayerConsistency", () => {
   });
 
   it("returns consistency=1 with fewer than 2 layers", () => {
-    const layers = makeLayers([
-      { name: "types", files: ["a.ts"] },
-    ]);
+    const layers = makeLayers([{ name: "types", files: ["a.ts"] }]);
 
     const graph = makeGraph(["a.ts"], []);
     const result = computeLayerConsistency(graph, layers, []);
@@ -343,9 +327,7 @@ describe("computeLayerConsistency", () => {
       { name: "services", files: ["src/services/s.ts"] },
     ]);
 
-    const layerEdges: LayerEdge[] = [
-      { from: "services", to: "types" },
-    ];
+    const layerEdges: LayerEdge[] = [{ from: "services", to: "types" }];
 
     // Create 15 violations: each types file imports services
     const edges = layers[0].files.map((f) => edge(f, "src/services/s.ts"));
@@ -396,10 +378,7 @@ describe("computeLayerConsistency", () => {
 describe("findChokepoints", () => {
   it("finds the chokepoint in a linear chain", () => {
     // a - b - c (b is an articulation point)
-    const graph = makeGraph(["a", "b", "c"], [
-      edge("a", "b"),
-      edge("b", "c"),
-    ]);
+    const graph = makeGraph(["a", "b", "c"], [edge("a", "b"), edge("b", "c")]);
 
     const result = findChokepoints(graph);
     expect(result).toHaveLength(1);
@@ -409,11 +388,7 @@ describe("findChokepoints", () => {
 
   it("finds no chokepoints in a complete graph", () => {
     // a - b - c - a (triangle, no articulation points)
-    const graph = makeGraph(["a", "b", "c"], [
-      edge("a", "b"),
-      edge("b", "c"),
-      edge("c", "a"),
-    ]);
+    const graph = makeGraph(["a", "b", "c"], [edge("a", "b"), edge("b", "c"), edge("c", "a")]);
 
     const result = findChokepoints(graph);
     expect(result).toHaveLength(0);
@@ -421,14 +396,10 @@ describe("findChokepoints", () => {
 
   it("finds no chokepoints in a star graph (center is not articulation)", () => {
     // center connects to a, b, c but a-b, b-c, a-c also connected
-    const graph = makeGraph(["center", "a", "b", "c"], [
-      edge("center", "a"),
-      edge("center", "b"),
-      edge("center", "c"),
-      edge("a", "b"),
-      edge("b", "c"),
-      edge("a", "c"),
-    ]);
+    const graph = makeGraph(
+      ["center", "a", "b", "c"],
+      [edge("center", "a"), edge("center", "b"), edge("center", "c"), edge("a", "b"), edge("b", "c"), edge("a", "c")],
+    );
 
     const result = findChokepoints(graph);
     expect(result).toHaveLength(0);
@@ -436,11 +407,7 @@ describe("findChokepoints", () => {
 
   it("finds center as chokepoint in a pure star (no leaf-to-leaf edges)", () => {
     // center connects to a, b, c with no connections among leaves
-    const graph = makeGraph(["center", "a", "b", "c"], [
-      edge("center", "a"),
-      edge("center", "b"),
-      edge("center", "c"),
-    ]);
+    const graph = makeGraph(["center", "a", "b", "c"], [edge("center", "a"), edge("center", "b"), edge("center", "c")]);
 
     const result = findChokepoints(graph);
     // center is an articulation point (root with 3 children)
@@ -469,19 +436,22 @@ describe("findChokepoints", () => {
   it("handles bridge topology", () => {
     // Two triangles connected by a bridge: {a,b,c} - bridge - {d,e,f}
     // bridge is the articulation point
-    const graph = makeGraph(["a", "b", "c", "bridge", "d", "e", "f"], [
-      // Left triangle
-      edge("a", "b"),
-      edge("b", "c"),
-      edge("c", "a"),
-      // Bridge connection
-      edge("c", "bridge"),
-      edge("bridge", "d"),
-      // Right triangle
-      edge("d", "e"),
-      edge("e", "f"),
-      edge("f", "d"),
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "c", "bridge", "d", "e", "f"],
+      [
+        // Left triangle
+        edge("a", "b"),
+        edge("b", "c"),
+        edge("c", "a"),
+        // Bridge connection
+        edge("c", "bridge"),
+        edge("bridge", "d"),
+        // Right triangle
+        edge("d", "e"),
+        edge("e", "f"),
+        edge("f", "d"),
+      ],
+    );
 
     const result = findChokepoints(graph);
     const bridgePoint = result.find((r) => r.file === "bridge");
@@ -497,12 +467,10 @@ describe("findChokepoints", () => {
 
   it("sorts by separates descending", () => {
     // a-b-c-d-e (chain): b, c, d are articulation points
-    const graph = makeGraph(["a", "b", "c", "d", "e"], [
-      edge("a", "b"),
-      edge("b", "c"),
-      edge("c", "d"),
-      edge("d", "e"),
-    ]);
+    const graph = makeGraph(
+      ["a", "b", "c", "d", "e"],
+      [edge("a", "b"), edge("b", "c"), edge("c", "d"), edge("d", "e")],
+    );
 
     const result = findChokepoints(graph);
     expect(result.length).toBeGreaterThanOrEqual(1);
@@ -516,11 +484,7 @@ describe("findChokepoints", () => {
   });
 
   it("includes importedBy count", () => {
-    const graph = makeGraph(["a", "b", "c", "d"], [
-      edge("a", "b"),
-      edge("c", "b"),
-      edge("b", "d"),
-    ]);
+    const graph = makeGraph(["a", "b", "c", "d"], [edge("a", "b"), edge("c", "b"), edge("b", "d")]);
 
     const result = findChokepoints(graph);
     const bPoint = result.find((r) => r.file === "b");
@@ -530,15 +494,14 @@ describe("findChokepoints", () => {
 
   it("ignores external edges", () => {
     const externalEdge: ImportEdge = {
-      from: "a", to: "react", isExternal: true,
-      specifier: "react", importedNames: ["useState"],
+      from: "a",
+      to: "react",
+      isExternal: true,
+      specifier: "react",
+      importedNames: ["useState"],
     };
 
-    const graph = makeGraph(["a", "b", "c"], [
-      edge("a", "b"),
-      edge("b", "c"),
-      externalEdge,
-    ]);
+    const graph = makeGraph(["a", "b", "c"], [edge("a", "b"), edge("b", "c"), externalEdge]);
 
     const result = findChokepoints(graph);
     // b is still a chokepoint between a and c

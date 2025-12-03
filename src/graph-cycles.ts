@@ -77,10 +77,7 @@ export function findSCCs(graph: ImportGraph): string[][] {
         callStack.pop();
         if (callStack.length > 0) {
           const parentFrame = callStack[callStack.length - 1]!;
-          lowlinks.set(
-            parentFrame.v,
-            Math.min(lowlinks.get(parentFrame.v)!, lowlinks.get(frame.v)!),
-          );
+          lowlinks.set(parentFrame.v, Math.min(lowlinks.get(parentFrame.v)!, lowlinks.get(frame.v)!));
         }
       }
     }
@@ -94,10 +91,7 @@ export function findSCCs(graph: ImportGraph): string[][] {
  * then extract actual valid cycles via BFS within each SCC.
  * Returns up to maxCycles results, shortest first.
  */
-export function findCircularDeps(
-  graph: ImportGraph,
-  maxCycles = 10,
-): CircularDependency[] {
+export function findCircularDeps(graph: ImportGraph, maxCycles = 10): CircularDependency[] {
   const sccs = findSCCs(graph);
 
   // Sort SCCs by size (smallest first, more actionable)
@@ -128,13 +122,22 @@ export function findCircularDeps(
 
   // Compute severity and break hints for each cycle
   // Severity is a weighted average: type-only edges = 0, dynamic edges = 0.5, static runtime = 1.0
-  const shortName = (f: string) => f.split("/").pop()?.replace(/\.[^.]+$/, "") ?? f;
+  const shortName = (f: string) =>
+    f
+      .split("/")
+      .pop()
+      ?.replace(/\.[^.]+$/, "") ?? f;
   for (const cycle of allCycles) {
     const edges: Array<{ from: string; to: string; isTypeOnly: boolean; isDynamic: boolean }> = [];
     for (let i = 0; i < cycle.chain.length - 1; i++) {
       const key = `${cycle.chain[i]}->${cycle.chain[i + 1]}`;
       const e = edgeLookup.get(key);
-      edges.push({ from: cycle.chain[i], to: cycle.chain[i + 1], isTypeOnly: !!e?.isTypeOnly, isDynamic: !!e?.isDynamic });
+      edges.push({
+        from: cycle.chain[i],
+        to: cycle.chain[i + 1],
+        isTypeOnly: !!e?.isTypeOnly,
+        isDynamic: !!e?.isDynamic,
+      });
     }
     const runtimeEdges = edges.filter((e) => !e.isTypeOnly);
     if (edges.length > 0) {
@@ -158,7 +161,7 @@ export function findCircularDeps(
       cycle.breakHint = `${runtimeEdges.length} of ${edges.length} edges are runtime; convert more to type-only`;
     } else if (runtimeEdges.length > 0) {
       // All runtime: suggest extracting shared types
-      const shortest = runtimeEdges.reduce((a, b) => a.from < b.from ? a : b);
+      const shortest = runtimeEdges.reduce((a, b) => (a.from < b.from ? a : b));
       cycle.breakHint = `Extract shared types from ${shortName(shortest.from)} and ${shortName(shortest.to)}`;
     }
   }
@@ -199,9 +202,7 @@ export function findFeedbackEdges(
   }
 
   // Sort by count descending and return top N
-  const sorted = [...edgeCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, topN);
+  const sorted = [...edgeCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN);
 
   return sorted.map(([key, count]) => {
     const [from, to] = key.split("||");
@@ -227,11 +228,7 @@ function canonicalizeCycle(cycle: string[]): string {
  * Find actual valid cycles within an SCC using BFS.
  * Returns deduplicated cycles sorted by length (shortest first).
  */
-function findActualCycles(
-  scc: string[],
-  adj: Map<string, Set<string>>,
-  maxCycles: number,
-): CircularDependency[] {
+function findActualCycles(scc: string[], adj: Map<string, Set<string>>, maxCycles: number): CircularDependency[] {
   const sccSet = new Set(scc);
 
   // Build SCC-restricted adjacency

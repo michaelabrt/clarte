@@ -86,7 +86,7 @@ describe("language pipeline integration", () => {
         // These should all complete without throwing
         const hubFiles = getHubFiles(graph, 10);
         const circularDeps = findCircularDeps(graph, 10);
-        const { layers, layerEdges } = detectArchitecturalLayers(graph);
+        const { layers } = detectArchitecturalLayers(graph);
         const instabilities = computeInstability(graph);
         const communities = detectCommunities(graph);
         const topology = computeGraphTopology(graph);
@@ -116,10 +116,7 @@ describe("language pipeline integration", () => {
       it("detects external imports", async () => {
         const graph = await buildImportGraph(fixture.dir, fixture.language);
         // External import counts should be populated (stdlib, third-party)
-        const totalExternal = [...graph.externalImportCounts.values()].reduce(
-          (sum, n) => sum + n,
-          0,
-        );
+        const totalExternal = [...graph.externalImportCounts.values()].reduce((sum, n) => sum + n, 0);
         // Most languages import at least some external packages
         expect(totalExternal).toBeGreaterThanOrEqual(0);
       }, 30_000);

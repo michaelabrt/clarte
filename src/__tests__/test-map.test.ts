@@ -20,10 +20,7 @@ function makeCtx(overrides: Partial<DetectedContext> = {}): DetectedContext {
   };
 }
 
-function makeGraph(
-  files: string[],
-  edges: Array<{ from: string; to: string }>,
-): ImportGraph {
+function makeGraph(files: string[], edges: Array<{ from: string; to: string }>): ImportGraph {
   const inDegree = new Map<string, number>();
   const centrality = new Map<string, number>();
   const authority = new Map<string, number>();
@@ -220,20 +217,14 @@ describe("buildTestMapping — test pattern detection", () => {
 
 describe("buildTestMapping — edge cases", () => {
   it("returns null when no test files exist", () => {
-    const graph = makeGraph(
-      ["src/a.ts", "src/b.ts"],
-      [{ from: "src/a.ts", to: "src/b.ts" }],
-    );
+    const graph = makeGraph(["src/a.ts", "src/b.ts"], [{ from: "src/a.ts", to: "src/b.ts" }]);
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).toBeNull();
   });
 
   it("handles test files that import no source files", () => {
-    const graph = makeGraph(
-      ["src/a.ts", "src/__tests__/standalone.test.ts"],
-      [],
-    );
+    const graph = makeGraph(["src/a.ts", "src/__tests__/standalone.test.ts"], []);
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
@@ -267,10 +258,7 @@ describe("renderTestMappingSection", () => {
       untestedFiles: [],
     };
 
-    const result = renderTestMappingSection(mapping, [
-      { path: "src/utils.ts" },
-      { path: "src/graph.ts" },
-    ]);
+    const result = renderTestMappingSection(mapping, [{ path: "src/utils.ts" }, { path: "src/graph.ts" }]);
 
     expect(result).toContain("## Test Coverage Map");
     expect(result).toContain("When modifying `src/utils.ts`");
@@ -371,12 +359,7 @@ describe("classifyTestType", () => {
 describe("buildTestMapping — test type classification", () => {
   it("populates testTypes map for all test files", () => {
     const graph = makeGraph(
-      [
-        "src/utils.ts",
-        "src/graph.ts",
-        "src/__tests__/utils.test.ts",
-        "src/__tests__/graph.test.ts",
-      ],
+      ["src/utils.ts", "src/graph.ts", "src/__tests__/utils.test.ts", "src/__tests__/graph.test.ts"],
       [
         { from: "src/__tests__/utils.test.ts", to: "src/utils.ts" },
         { from: "src/__tests__/graph.test.ts", to: "src/graph.ts" },
@@ -391,10 +374,7 @@ describe("buildTestMapping — test type classification", () => {
   });
 
   it("classifies e2e test files in the mapping", () => {
-    const graph = makeGraph(
-      ["src/utils.ts", "e2e/flow.spec.ts"],
-      [{ from: "e2e/flow.spec.ts", to: "src/utils.ts" }],
-    );
+    const graph = makeGraph(["src/utils.ts", "e2e/flow.spec.ts"], [{ from: "e2e/flow.spec.ts", to: "src/utils.ts" }]);
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
@@ -403,12 +383,7 @@ describe("buildTestMapping — test type classification", () => {
 
   it("classifies integration test files by import count", () => {
     const graph = makeGraph(
-      [
-        "src/a.ts",
-        "src/b.ts",
-        "src/c.ts",
-        "src/__tests__/cross.test.ts",
-      ],
+      ["src/a.ts", "src/b.ts", "src/c.ts", "src/__tests__/cross.test.ts"],
       [
         { from: "src/__tests__/cross.test.ts", to: "src/a.ts" },
         { from: "src/__tests__/cross.test.ts", to: "src/b.ts" },
@@ -427,9 +402,7 @@ describe("buildTestMapping — test type classification", () => {
 describe("renderTestMappingSection — test type annotations", () => {
   it("includes test type in hub file directives when available", () => {
     const mapping: TestMapping = {
-      sourceToTests: new Map([
-        ["src/graph.ts", ["src/__tests__/graph.test.ts", "e2e/graph-flow.spec.ts"]],
-      ]),
+      sourceToTests: new Map([["src/graph.ts", ["src/__tests__/graph.test.ts", "e2e/graph-flow.spec.ts"]]]),
       untestedFiles: [],
       testTypes: new Map([
         ["src/__tests__/graph.test.ts", "unit"],
@@ -444,9 +417,7 @@ describe("renderTestMappingSection — test type annotations", () => {
 
   it("omits test type when testTypes map is not present", () => {
     const mapping: TestMapping = {
-      sourceToTests: new Map([
-        ["src/utils.ts", ["src/__tests__/utils.test.ts"]],
-      ]),
+      sourceToTests: new Map([["src/utils.ts", ["src/__tests__/utils.test.ts"]]]),
       untestedFiles: [],
     };
 
@@ -503,11 +474,7 @@ describe("buildTestMapping — monorepo per-package", () => {
 
   it("allows same-package cross-directory test imports", () => {
     const graph = makeGraph(
-      [
-        "packages/auth/src/login.ts",
-        "packages/auth/src/session.ts",
-        "packages/auth/tests/login.test.ts",
-      ],
+      ["packages/auth/src/login.ts", "packages/auth/src/session.ts", "packages/auth/tests/login.test.ts"],
       [
         { from: "packages/auth/tests/login.test.ts", to: "packages/auth/src/login.ts" },
         { from: "packages/auth/tests/login.test.ts", to: "packages/auth/src/session.ts" },

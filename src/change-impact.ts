@@ -83,9 +83,7 @@ function computeStructuralRanking(file: string, graph: ImportGraph): string[] {
 
   // Remove self and sort by distance ascending (alphabetical tiebreaker)
   distances.delete(file);
-  return [...distances.entries()]
-    .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
-    .map(([f]) => f);
+  return [...distances.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).map(([f]) => f);
 }
 
 /**
@@ -104,9 +102,7 @@ function computeTemporalRanking(file: string, gitActivity: GitAnalysis | null): 
     }
   }
 
-  return pairs
-    .sort((a, b) => b.confidence - a.confidence || a.other.localeCompare(b.other))
-    .map((p) => p.other);
+  return pairs.sort((a, b) => b.confidence - a.confidence || a.other.localeCompare(b.other)).map((p) => p.other);
 }
 
 /**
@@ -149,7 +145,5 @@ function computeDirectoryRanking(file: string, allFiles: string[]): string[] {
     }
   }
 
-  return scored
-    .sort((a, b) => b.similarity - a.similarity || a.file.localeCompare(b.file))
-    .map((s) => s.file);
+  return scored.sort((a, b) => b.similarity - a.similarity || a.file.localeCompare(b.file)).map((s) => s.file);
 }

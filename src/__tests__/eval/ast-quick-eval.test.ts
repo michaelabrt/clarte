@@ -90,7 +90,8 @@ const TASKS: EvalTask[] = [
   {
     id: "mod-1",
     category: "modification",
-    question: "If I wanted to add support for a new programming language (e.g., Kotlin) to clarte, which files would I need to modify? Explain your reasoning.",
+    question:
+      "If I wanted to add support for a new programming language (e.g., Kotlin) to clarte, which files would I need to modify? Explain your reasoning.",
     judgePrompt: `Score 1 if the answer mentions at least 3 of these files: graph.ts, snapshot.ts, types.ts, detect.ts, ast-parse.ts. Score 0 otherwise. Reply with just "1" or "0".`,
   },
   {
@@ -148,8 +149,7 @@ async function askWithContext(
     messages: [
       {
         role: "user",
-        content:
-          `You are an expert developer analyzing a codebase. Here is the project's CLAUDE.md context file:\n\n<context>\n${context}\n</context>\n\nAnswer this question concisely:\n${question}`,
+        content: `You are an expert developer analyzing a codebase. Here is the project's CLAUDE.md context file:\n\n<context>\n${context}\n</context>\n\nAnswer this question concisely:\n${question}`,
       },
     ],
   });
@@ -209,18 +209,14 @@ async function scoreTask(context: string, task: EvalTask): Promise<CallResult> {
 
 // ── Report formatting ────────────────────────────────────────────────────────
 
-function formatReport(
-  results: TaskResult[],
-  mainContextBytes: number,
-  astContextBytes: number,
-): string {
+function formatReport(results: TaskResult[], mainContextBytes: number, astContextBytes: number): string {
   const sep = "=".repeat(72);
   const lines: string[] = [];
 
   // Context sizes
   const mainTokensEst = estimateTokens(mainContext);
   const astTokensEst = estimateTokens(astContext);
-  const sizeDelta = ((astContextBytes - mainContextBytes) / mainContextBytes * 100).toFixed(1);
+  const sizeDelta = (((astContextBytes - mainContextBytes) / mainContextBytes) * 100).toFixed(1);
 
   lines.push("");
   lines.push(sep);
@@ -228,8 +224,12 @@ function formatReport(
   lines.push(sep);
   lines.push("");
   lines.push("  Context Sizes:");
-  lines.push(`    Main (regex):       ${mainContextBytes.toLocaleString()} bytes  (~${mainTokensEst.toLocaleString()} tokens)`);
-  lines.push(`    AST (tree-sitter):  ${astContextBytes.toLocaleString()} bytes  (~${astTokensEst.toLocaleString()} tokens)`);
+  lines.push(
+    `    Main (regex):       ${mainContextBytes.toLocaleString()} bytes  (~${mainTokensEst.toLocaleString()} tokens)`,
+  );
+  lines.push(
+    `    AST (tree-sitter):  ${astContextBytes.toLocaleString()} bytes  (~${astTokensEst.toLocaleString()} tokens)`,
+  );
   lines.push(`    Delta:              ${sizeDelta}%`);
   lines.push("");
 
@@ -257,8 +257,12 @@ function formatReport(
   const totalCost = mainCost + astCost;
 
   lines.push("  Token Usage:");
-  lines.push(`    Main:  ${mainInputTotal.toLocaleString()} in / ${mainOutputTotal.toLocaleString()} out  ($${mainCost.toFixed(3)})`);
-  lines.push(`    AST:   ${astInputTotal.toLocaleString()} in / ${astOutputTotal.toLocaleString()} out  ($${astCost.toFixed(3)})`);
+  lines.push(
+    `    Main:  ${mainInputTotal.toLocaleString()} in / ${mainOutputTotal.toLocaleString()} out  ($${mainCost.toFixed(3)})`,
+  );
+  lines.push(
+    `    AST:   ${astInputTotal.toLocaleString()} in / ${astOutputTotal.toLocaleString()} out  ($${astCost.toFixed(3)})`,
+  );
   lines.push(`    Total: $${totalCost.toFixed(3)}`);
   lines.push("");
 
@@ -275,16 +279,16 @@ function formatReport(
     const catDelta = catAst - catMain;
     const deltaStr = catDelta === 0 ? "  0" : catDelta > 0 ? ` +${catDelta}` : ` ${catDelta}`;
     lines.push(
-      `    ${cat.padEnd(22)} ${catMain}/${catTotal}`.padEnd(36) +
-      `${catAst}/${catTotal}`.padEnd(10) +
-      deltaStr,
+      `    ${cat.padEnd(22)} ${catMain}/${catTotal}`.padEnd(36) + `${catAst}/${catTotal}`.padEnd(10) + deltaStr,
     );
   }
   lines.push("");
 
   // Per-task detail (across all iterations)
   lines.push("  Per-Task Detail:");
-  lines.push(`    ${"Task".padEnd(10)} ${"Cat".padEnd(18)} ${"Iter".padEnd(6)} ${"Main".padEnd(8)} ${"AST".padEnd(8)} Flip`);
+  lines.push(
+    `    ${"Task".padEnd(10)} ${"Cat".padEnd(18)} ${"Iter".padEnd(6)} ${"Main".padEnd(8)} ${"AST".padEnd(8)} Flip`,
+  );
   lines.push(`    ${"-".repeat(60)}`);
   for (const r of results) {
     const mainStr = r.main.passed ? "PASS" : "FAIL";
@@ -299,7 +303,7 @@ function formatReport(
   lines.push("");
 
   // Verdict
-  const nonInferior = delta >= -0.10;
+  const nonInferior = delta >= -0.1;
   lines.push(`  Verdict: ${nonInferior ? "PASS" : "FAIL"} (non-inferiority gate: delta >= -10%)`);
   lines.push(sep);
 
@@ -322,10 +326,7 @@ describe.skipIf(SKIP)("AST A/B Eval", () => {
       console.log(`\n── Iteration ${iter + 1}/${N_ITERS} ──`);
 
       for (const task of TASKS) {
-        const [mainResult, astResult] = await Promise.all([
-          scoreTask(mainContext, task),
-          scoreTask(astContext, task),
-        ]);
+        const [mainResult, astResult] = await Promise.all([scoreTask(mainContext, task), scoreTask(astContext, task)]);
 
         results.push({
           taskId: task.id,
@@ -357,7 +358,7 @@ describe.skipIf(SKIP)("AST A/B Eval", () => {
     const delta = (astPasses - mainPasses) / results.length;
 
     // Non-inferiority: AST should not regress more than 10%
-    expect(delta).toBeGreaterThanOrEqual(-0.10);
+    expect(delta).toBeGreaterThanOrEqual(-0.1);
 
     // No single category should lose more than 2 tasks
     const categories = [...new Set(TASKS.map((t) => t.category))];
@@ -366,10 +367,7 @@ describe.skipIf(SKIP)("AST A/B Eval", () => {
       const catMainPass = catResults.filter((r) => r.main.passed).length;
       const catAstPass = catResults.filter((r) => r.ast.passed).length;
       const catDelta = catAstPass - catMainPass;
-      expect(
-        catDelta,
-        `Category "${cat}" regressed by ${Math.abs(catDelta)} tasks`,
-      ).toBeGreaterThanOrEqual(-2);
+      expect(catDelta, `Category "${cat}" regressed by ${Math.abs(catDelta)} tasks`).toBeGreaterThanOrEqual(-2);
     }
   }, 600_000); // 10 min timeout
 });

@@ -15,10 +15,7 @@ export interface FileComplexityInfo {
  * Counts exports, lines, and branching keywords (if, else, for, while,
  * switch, case, catch, &&, ||, ternary).
  */
-export async function computeFileComplexity(
-  rootDir: string,
-  hubFiles: HubFile[],
-): Promise<FileComplexityInfo[]> {
+export async function computeFileComplexity(rootDir: string, hubFiles: HubFile[]): Promise<FileComplexityInfo[]> {
   const results: FileComplexityInfo[] = [];
 
   for (const hub of hubFiles) {
@@ -75,9 +72,7 @@ export function buildDirectives(
 
   // 1. Foundation file guards (hub files with role === "Foundation", max 3)
   if (analysis.hubFiles) {
-    const foundations = analysis.hubFiles
-      .filter((h) => h.role === "Foundation")
-      .slice(0, 3);
+    const foundations = analysis.hubFiles.filter((h) => h.role === "Foundation").slice(0, 3);
     for (const hub of foundations) {
       directives.push(
         `When modifying \`${hub.path}\` (Foundation, imported by ${hub.importedBy} files), check dependents for breaking changes.`,
@@ -100,9 +95,7 @@ export function buildDirectives(
   // 3. Co-change hints (confidence >= 0.6, max 5)
   // Uses directional probabilities when available for more precise guidance
   if (analysis.gitActivity?.changeCoupling) {
-    const highConfidence = analysis.gitActivity.changeCoupling
-      .filter((c) => c.confidence >= 0.6)
-      .slice(0, 5);
+    const highConfidence = analysis.gitActivity.changeCoupling.filter((c) => c.confidence >= 0.6).slice(0, 5);
     for (const pair of highConfidence) {
       const ab = pair.confidenceAB ?? pair.confidence;
       const ba = pair.confidenceBA ?? pair.confidence;
@@ -147,9 +140,7 @@ export function buildDirectives(
   // 5. Test reminders (untested hub files with importedBy >= 2, max 3)
   if (analysis.testMapping?.untestedFiles && analysis.hubFiles) {
     const untestedSet = new Set(analysis.testMapping.untestedFiles);
-    const untestedHubs = analysis.hubFiles
-      .filter((h) => h.importedBy >= 2 && untestedSet.has(h.path))
-      .slice(0, 3);
+    const untestedHubs = analysis.hubFiles.filter((h) => h.importedBy >= 2 && untestedSet.has(h.path)).slice(0, 3);
     for (const hub of untestedHubs) {
       directives.push(
         `\`${hub.path}\` (imported by ${hub.importedBy} files) has no tests. Add test coverage before modifying.`,
@@ -164,9 +155,7 @@ export function buildDirectives(
       const key = `${v.fromLayer} -> ${v.toLayer}`;
       pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
     }
-    const pairs = [...pairCounts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .slice(0, 2);
+    const pairs = [...pairCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 2);
     for (const [pair, count] of pairs) {
       directives.push(
         `Layer violation: ${count} import${count === 1 ? "" : "s"} flow ${pair}. Do not add more upward dependencies.`,
@@ -176,9 +165,7 @@ export function buildDirectives(
 
   // 7. High-churn caution (top 3 by commits, >= 10 commits, max 3)
   if (analysis.gitActivity?.hotFiles) {
-    const highChurn = analysis.gitActivity.hotFiles
-      .filter((h) => h.commits >= 10)
-      .slice(0, 3);
+    const highChurn = analysis.gitActivity.hotFiles.filter((h) => h.commits >= 10).slice(0, 3);
     for (const hot of highChurn) {
       const days = analysis.analysisDays ?? 90;
       directives.push(
@@ -297,9 +284,7 @@ export function buildDirectives(
       if (factors.includes("high instability")) advice.push("Stabilize the API");
       if (factors.includes("high churn")) advice.push("before making large changes");
 
-      directives.push(
-        `\`${file}\` has multiple risk factors (${factorList}). ${advice.join(" and ")}.`,
-      );
+      directives.push(`\`${file}\` has multiple risk factors (${factorList}). ${advice.join(" and ")}.`);
     }
   }
 
@@ -327,19 +312,18 @@ export function buildDirectives(
     for (const [hubFile, predictions] of analysis.changeImpact) {
       if (impactCount >= 5) break;
       if (predictions.length === 0) continue;
-      const targets = predictions.slice(0, 4).map((p) => `\`${p.file}\``).join(", ");
-      directives.push(
-        `When modifying \`${hubFile}\`, also check: ${targets}.`,
-      );
+      const targets = predictions
+        .slice(0, 4)
+        .map((p) => `\`${p.file}\``)
+        .join(", ");
+      directives.push(`When modifying \`${hubFile}\`, also check: ${targets}.`);
       impactCount++;
     }
   }
 
   // 14. Flow bottleneck directives (high betweenness, NOT articulation points, max 3)
   if (graph?.betweennessScores) {
-    const chokepointFiles = new Set(
-      (analysis.chokepoints ?? []).map((cp) => cp.file),
-    );
+    const chokepointFiles = new Set((analysis.chokepoints ?? []).map((cp) => cp.file));
     const bottlenecks = [...graph.betweennessScores.entries()]
       .filter(([file, score]) => score > 0.5 && !chokepointFiles.has(file))
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -400,8 +384,7 @@ export function buildDirectives(
           const key = `${fromLayer} -> ${toLayer}`;
           pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
         }
-        const topPair = [...pairCounts.entries()]
-          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+        const topPair = [...pairCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
         if (topPair) {
           directives.push(
             `${upwardDeps.length} upward dependency violation${upwardDeps.length === 1 ? "" : "s"} detected. Most common: ${topPair[0]} (${topPair[1]} occurrence${topPair[1] === 1 ? "" : "s"}). Do not add more upward imports.`,
@@ -423,14 +406,10 @@ function buildToolHints(ctx: DetectedContext): string[] {
   const dirs = new Set(ctx.directories);
 
   if (dirs.has(".beads")) {
-    hints.push(
-      "Beads is configured in this project. Check `.beads/` for session context before starting work.",
-    );
+    hints.push("Beads is configured in this project. Check `.beads/` for session context before starting work.");
   }
   if (dirs.has(".beans")) {
-    hints.push(
-      "Beans is configured in this project. Check `.beans/` for memory context.",
-    );
+    hints.push("Beans is configured in this project. Check `.beans/` for memory context.");
   }
 
   return hints;
@@ -448,9 +427,8 @@ export async function renderDirectivesSection(
   ctx: DetectedContext,
   graph?: ImportGraph,
 ): Promise<string | null> {
-  const fileComplexity = analysis.hubFiles.length > 0
-    ? await computeFileComplexity(ctx.rootDir, analysis.hubFiles)
-    : undefined;
+  const fileComplexity =
+    analysis.hubFiles.length > 0 ? await computeFileComplexity(ctx.rootDir, analysis.hubFiles) : undefined;
 
   const directives = buildDirectives(analysis, ctx, fileComplexity, graph);
   if (directives.length === 0) return null;
@@ -458,9 +436,7 @@ export async function renderDirectivesSection(
   const lines: string[] = [];
   lines.push("## Working Guidelines");
   lines.push("");
-  lines.push(
-    "> Analysis-derived guidelines. Follow these when making changes.",
-  );
+  lines.push("> Analysis-derived guidelines. Follow these when making changes.");
   lines.push("");
   for (const d of directives) {
     lines.push(`- ${d}`);

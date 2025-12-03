@@ -133,8 +133,7 @@ const JAVA_TASKS: EvalTask[] = [
   {
     id: "j-1",
     category: "hub-detection",
-    question:
-      "Which file is the main orchestrator in this Java application? What does it depend on?",
+    question: "Which file is the main orchestrator in this Java application? What does it depend on?",
     judgePrompt: `Score 1 if the answer:
 1. Identifies UserController.java as the main orchestrator
 2. Names its dependencies: User.java (model) and UserService.java (service)
@@ -153,8 +152,7 @@ Score 0 if it cannot describe the layered architecture. Reply with just "1" or "
   {
     id: "j-3",
     category: "foundation",
-    question:
-      "Which file in this Java application is the most reused foundation? How many other files depend on it?",
+    question: "Which file in this Java application is the most reused foundation? How many other files depend on it?",
     judgePrompt: `Score 1 if the answer:
 1. Identifies User.java as the most imported/foundational file
 2. States it is imported by 2 files (UserController and UserService)
@@ -215,7 +213,7 @@ interface TaskResult {
 
 let client: Anthropic;
 
-function estimateTokens(text: string): number {
+function _estimateTokens(text: string): number {
   return Math.ceil(text.length / 3.2);
 }
 
@@ -234,8 +232,7 @@ async function askWithContext(
     messages: [
       {
         role: "user",
-        content:
-          `You are an expert developer analyzing a codebase. Here is the project's CLAUDE.md context file:\n\n<context>\n${context}\n</context>\n\nAnswer this question concisely:\n${question}`,
+        content: `You are an expert developer analyzing a codebase. Here is the project's CLAUDE.md context file:\n\n<context>\n${context}\n</context>\n\nAnswer this question concisely:\n${question}`,
       },
     ],
   });
@@ -303,8 +300,10 @@ function formatReport(results: TaskResult[]): string {
     const bPass = langResults.filter((r) => r.baseline.passed).length;
     const ePass = langResults.filter((r) => r.experiment.passed).length;
     const total = langResults.length;
-    const delta = ((ePass - bPass) / total * 100).toFixed(1);
-    lines.push(`  ${lang}:  baseline ${bPass}/${total}  experiment ${ePass}/${total}  delta ${Number(delta) >= 0 ? "+" : ""}${delta}%`);
+    const delta = (((ePass - bPass) / total) * 100).toFixed(1);
+    lines.push(
+      `  ${lang}:  baseline ${bPass}/${total}  experiment ${ePass}/${total}  delta ${Number(delta) >= 0 ? "+" : ""}${delta}%`,
+    );
   }
   lines.push("");
 
@@ -312,8 +311,10 @@ function formatReport(results: TaskResult[]): string {
   const bTotal = results.filter((r) => r.baseline.passed).length;
   const eTotal = results.filter((r) => r.experiment.passed).length;
   const total = results.length;
-  const aggDelta = ((eTotal - bTotal) / total * 100).toFixed(1);
-  lines.push(`  Aggregate: baseline ${bTotal}/${total} (${(bTotal / total * 100).toFixed(1)}%)  experiment ${eTotal}/${total} (${(eTotal / total * 100).toFixed(1)}%)  delta ${Number(aggDelta) >= 0 ? "+" : ""}${aggDelta}%`);
+  const aggDelta = (((eTotal - bTotal) / total) * 100).toFixed(1);
+  lines.push(
+    `  Aggregate: baseline ${bTotal}/${total} (${((bTotal / total) * 100).toFixed(1)}%)  experiment ${eTotal}/${total} (${((eTotal / total) * 100).toFixed(1)}%)  delta ${Number(aggDelta) >= 0 ? "+" : ""}${aggDelta}%`,
+  );
   lines.push("");
 
   // Token usage
@@ -321,13 +322,17 @@ function formatReport(results: TaskResult[]): string {
   const bOut = results.reduce((a, r) => a + r.baseline.outputTokens, 0);
   const eIn = results.reduce((a, r) => a + r.experiment.inputTokens, 0);
   const eOut = results.reduce((a, r) => a + r.experiment.outputTokens, 0);
-  lines.push(`  Tokens:  baseline ${bIn.toLocaleString()}/${bOut.toLocaleString()}  experiment ${eIn.toLocaleString()}/${eOut.toLocaleString()}`);
+  lines.push(
+    `  Tokens:  baseline ${bIn.toLocaleString()}/${bOut.toLocaleString()}  experiment ${eIn.toLocaleString()}/${eOut.toLocaleString()}`,
+  );
   lines.push(`  Cost:    $${(costFromTokens(bIn, bOut) + costFromTokens(eIn, eOut)).toFixed(3)}`);
   lines.push("");
 
   // Per-task detail
   lines.push("  Per-Task Detail:");
-  lines.push(`    ${"Task".padEnd(8)} ${"Lang".padEnd(6)} ${"Cat".padEnd(20)} ${"Base".padEnd(6)} ${"Exp".padEnd(6)} Flip`);
+  lines.push(
+    `    ${"Task".padEnd(8)} ${"Lang".padEnd(6)} ${"Cat".padEnd(20)} ${"Base".padEnd(6)} ${"Exp".padEnd(6)} Flip`,
+  );
   lines.push(`    ${"-".repeat(56)}`);
   for (const r of results) {
     const bStr = r.baseline.passed ? "PASS" : "FAIL";
@@ -335,12 +340,14 @@ function formatReport(results: TaskResult[]): string {
     let flip = "  -";
     if (r.baseline.passed && !r.experiment.passed) flip = "  REGRESS";
     else if (!r.baseline.passed && r.experiment.passed) flip = "  IMPROVE";
-    lines.push(`    ${r.taskId.padEnd(8)} ${r.lang.padEnd(6)} ${r.category.padEnd(20)} ${bStr.padEnd(6)} ${eStr.padEnd(6)}${flip}`);
+    lines.push(
+      `    ${r.taskId.padEnd(8)} ${r.lang.padEnd(6)} ${r.category.padEnd(20)} ${bStr.padEnd(6)} ${eStr.padEnd(6)}${flip}`,
+    );
   }
   lines.push("");
 
   const delta = (eTotal - bTotal) / total;
-  const verdict = delta >= -0.10 ? "PASS" : "FAIL";
+  const verdict = delta >= -0.1 ? "PASS" : "FAIL";
   lines.push(`  Verdict: ${verdict} (delta ${(delta * 100).toFixed(1)}%, gate >= -10%)`);
   lines.push(sep);
 
@@ -349,63 +356,56 @@ function formatReport(results: TaskResult[]): string {
 
 // ── Test ─────────────────────────────────────────────────────────────────────
 
-const allFilesExist = EVALS.every(
-  (e) => existsSync(e.baselinePath) && existsSync(e.experimentPath),
-);
+const allFilesExist = EVALS.every((e) => existsSync(e.baselinePath) && existsSync(e.experimentPath));
 
-describe.skipIf(SKIP || !allFilesExist)(
-  "Import Resolution A/B Eval (E.2)",
-  () => {
-    beforeAll(() => {
-      client = new Anthropic();
-    });
+describe.skipIf(SKIP || !allFilesExist)("Import Resolution A/B Eval (E.2)", () => {
+  beforeAll(() => {
+    client = new Anthropic();
+  });
 
-    const allTasks = EVALS.flatMap((e) =>
-      e.tasks.map((t) => ({ ...t, lang: e.lang })),
-    );
+  const allTasks = EVALS.flatMap((e) => e.tasks.map((t) => ({ ...t, lang: e.lang })));
 
-    it(`runs ${N_ITERS} iteration(s) of ${allTasks.length} tasks across 3 languages`, async () => {
-      const results: TaskResult[] = [];
+  it(`runs ${N_ITERS} iteration(s) of ${allTasks.length} tasks across 3 languages`, async () => {
+    const results: TaskResult[] = [];
 
-      for (let iter = 0; iter < N_ITERS; iter++) {
-        console.log(`\n-- Iteration ${iter + 1}/${N_ITERS} --`);
+    for (let iter = 0; iter < N_ITERS; iter++) {
+      console.log(`\n-- Iteration ${iter + 1}/${N_ITERS} --`);
 
-        for (const langEval of EVALS) {
-          const baseline = readFileSync(langEval.baselinePath, "utf-8");
-          const experiment = readFileSync(langEval.experimentPath, "utf-8");
+      for (const langEval of EVALS) {
+        const baseline = readFileSync(langEval.baselinePath, "utf-8");
+        const experiment = readFileSync(langEval.experimentPath, "utf-8");
 
-          console.log(`  ${langEval.lang}: baseline ${baseline.length}B  experiment ${experiment.length}B`);
+        console.log(`  ${langEval.lang}: baseline ${baseline.length}B  experiment ${experiment.length}B`);
 
-          for (const task of langEval.tasks) {
-            const [baselineResult, experimentResult] = await Promise.all([
-              scoreTask(baseline, task),
-              scoreTask(experiment, task),
-            ]);
+        for (const task of langEval.tasks) {
+          const [baselineResult, experimentResult] = await Promise.all([
+            scoreTask(baseline, task),
+            scoreTask(experiment, task),
+          ]);
 
-            results.push({
-              taskId: task.id,
-              category: task.category,
-              lang: langEval.lang,
-              iteration: iter,
-              baseline: baselineResult,
-              experiment: experimentResult,
-            });
+          results.push({
+            taskId: task.id,
+            category: task.category,
+            lang: langEval.lang,
+            iteration: iter,
+            baseline: baselineResult,
+            experiment: experimentResult,
+          });
 
-            const bIcon = baselineResult.passed ? "PASS" : "FAIL";
-            const eIcon = experimentResult.passed ? "PASS" : "FAIL";
-            console.log(`    ${task.id.padEnd(8)} baseline=${bIcon}  experiment=${eIcon}`);
-          }
+          const bIcon = baselineResult.passed ? "PASS" : "FAIL";
+          const eIcon = experimentResult.passed ? "PASS" : "FAIL";
+          console.log(`    ${task.id.padEnd(8)} baseline=${bIcon}  experiment=${eIcon}`);
         }
       }
+    }
 
-      const report = formatReport(results);
-      console.log(report);
+    const report = formatReport(results);
+    console.log(report);
 
-      // Assertion: non-inferiority gate
-      const bTotal = results.filter((r) => r.baseline.passed).length;
-      const eTotal = results.filter((r) => r.experiment.passed).length;
-      const delta = (eTotal - bTotal) / results.length;
-      expect(delta).toBeGreaterThanOrEqual(-0.10);
-    }, 600_000);
-  },
-);
+    // Assertion: non-inferiority gate
+    const bTotal = results.filter((r) => r.baseline.passed).length;
+    const eTotal = results.filter((r) => r.experiment.passed).length;
+    const delta = (eTotal - bTotal) / results.length;
+    expect(delta).toBeGreaterThanOrEqual(-0.1);
+  }, 600_000);
+});

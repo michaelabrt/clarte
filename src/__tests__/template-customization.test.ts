@@ -39,24 +39,39 @@ function mockAnswers(overrides?: Partial<UserAnswers>): UserAnswers {
 function mockAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
   return {
     hubFiles: [
-      { path: "src/types.ts", centrality: 1.0, authority: 1.0, hubScore: 0.1, role: "Foundation", importedBy: 20, imports: 0 },
-      { path: "src/utils.ts", centrality: 0.8, authority: 0.8, hubScore: 0.3, role: "Foundation", importedBy: 14, imports: 2 },
+      {
+        path: "src/types.ts",
+        centrality: 1.0,
+        authority: 1.0,
+        hubScore: 0.1,
+        role: "Foundation",
+        importedBy: 20,
+        imports: 0,
+      },
+      {
+        path: "src/utils.ts",
+        centrality: 0.8,
+        authority: 0.8,
+        hubScore: 0.3,
+        role: "Foundation",
+        importedBy: 14,
+        imports: 2,
+      },
     ],
-    circularDeps: [
-      { chain: ["src/a.ts", "src/b.ts", "src/a.ts"], severity: 0.5, breakHint: "Extract shared type" },
-    ],
+    circularDeps: [{ chain: ["src/a.ts", "src/b.ts", "src/a.ts"], severity: 0.5, breakHint: "Extract shared type" }],
     layers: [
       { name: "types", files: ["src/types.ts"], importedByLayers: 3, dependsOn: [] },
       { name: "utils", files: ["src/utils.ts"], importedByLayers: 2, dependsOn: ["types"] },
       { name: "graph", files: ["src/graph.ts"], importedByLayers: 1, dependsOn: ["types", "utils"] },
     ],
-    layerEdges: [{ from: "utils", to: "types" }, { from: "graph", to: "utils" }],
+    layerEdges: [
+      { from: "utils", to: "types" },
+      { from: "graph", to: "utils" },
+    ],
     gitActivity: {
       commitCounts: new Map([["src/index.ts", 16]]),
       hotFiles: [{ path: "src/index.ts", commits: 16, lastChanged: "2 hours ago" }],
-      changeCoupling: [
-        { fileA: "a.ts", fileB: "b.ts", coChangeCount: 10, support: 0.5, confidence: 0.83 },
-      ],
+      changeCoupling: [{ fileA: "a.ts", fileB: "b.ts", coChangeCount: 10, support: 0.5, confidence: 0.83 }],
     },
     instabilities: [],
     communities: [{ id: 0, files: ["src/types.ts"], label: "types" }],
@@ -64,11 +79,15 @@ function mockAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
     crossCuttingFiles: [
       { file: "src/types.ts", totalImporters: 20, layerSpread: 3, layers: ["types", "utils", "graph"] },
     ],
-    chokepoints: [
-      { file: "src/utils.ts", separates: 2, importedBy: 14 },
-    ],
+    chokepoints: [{ file: "src/utils.ts", separates: 2, importedBy: 14 }],
     structuralMismatches: [
-      { fileA: "src/schema.ts", fileB: "src/migration.ts", graphDistance: -1, coChangeConfidence: 0.9, coChangeCount: 8 },
+      {
+        fileA: "src/schema.ts",
+        fileB: "src/migration.ts",
+        graphDistance: -1,
+        coChangeConfidence: 0.9,
+        coChangeCount: 8,
+      },
       { fileA: "src/config.ts", fileB: "src/refresh.ts", graphDistance: 3, coChangeConfidence: 0.75, coChangeCount: 5 },
     ],
     ...overrides,
@@ -165,8 +184,12 @@ describe("aider context enrichment", () => {
   it("includes dead file warnings (max 5)", async () => {
     const analysis = mockAnalysis({
       deadFiles: [
-        "src/unused1.ts", "src/unused2.ts", "src/unused3.ts",
-        "src/unused4.ts", "src/unused5.ts", "src/unused6.ts",
+        "src/unused1.ts",
+        "src/unused2.ts",
+        "src/unused3.ts",
+        "src/unused4.ts",
+        "src/unused5.ts",
+        "src/unused6.ts",
       ],
     });
 
@@ -180,9 +203,7 @@ describe("aider context enrichment", () => {
 
   it("includes circular dependency details", async () => {
     const analysis = mockAnalysis({
-      circularDeps: [
-        { chain: ["src/a.ts", "src/b.ts", "src/a.ts"], severity: 0.5, breakHint: "Extract shared type" },
-      ],
+      circularDeps: [{ chain: ["src/a.ts", "src/b.ts", "src/a.ts"], severity: 0.5, breakHint: "Extract shared type" }],
     });
 
     const result = await buildAiderContext(mockCtx(), mockAnswers(), null, analysis);
@@ -195,8 +216,20 @@ describe("aider context enrichment", () => {
   it("includes structural mismatch warnings (max 3)", async () => {
     const analysis = mockAnalysis({
       structuralMismatches: [
-        { fileA: "src/schema.ts", fileB: "src/migration.ts", graphDistance: -1, coChangeConfidence: 0.9, coChangeCount: 8 },
-        { fileA: "src/config.ts", fileB: "src/refresh.ts", graphDistance: 3, coChangeConfidence: 0.75, coChangeCount: 5 },
+        {
+          fileA: "src/schema.ts",
+          fileB: "src/migration.ts",
+          graphDistance: -1,
+          coChangeConfidence: 0.9,
+          coChangeCount: 8,
+        },
+        {
+          fileA: "src/config.ts",
+          fileB: "src/refresh.ts",
+          graphDistance: 3,
+          coChangeConfidence: 0.75,
+          coChangeCount: 5,
+        },
         { fileA: "src/a.ts", fileB: "src/b.ts", graphDistance: 2, coChangeConfidence: 0.7, coChangeCount: 4 },
         { fileA: "src/c.ts", fileB: "src/d.ts", graphDistance: -1, coChangeConfidence: 0.6, coChangeCount: 3 },
       ],
@@ -204,8 +237,12 @@ describe("aider context enrichment", () => {
 
     const result = await buildAiderContext(mockCtx(), mockAnswers(), null, analysis);
 
-    expect(result).toContain("HIDDEN COUPLING: src/schema.ts and src/migration.ts change together but have no import link.");
-    expect(result).toContain("HIDDEN COUPLING: src/config.ts and src/refresh.ts change together but have no import link.");
+    expect(result).toContain(
+      "HIDDEN COUPLING: src/schema.ts and src/migration.ts change together but have no import link.",
+    );
+    expect(result).toContain(
+      "HIDDEN COUPLING: src/config.ts and src/refresh.ts change together but have no import link.",
+    );
     expect(result).toContain("HIDDEN COUPLING: src/a.ts and src/b.ts change together but have no import link.");
     // 4th entry should be excluded (max 3)
     expect(result).not.toContain("HIDDEN COUPLING: src/c.ts");
@@ -239,12 +276,7 @@ describe("per-IDE section emphasis", () => {
       },
     });
 
-    const sections = await buildSections(
-      mockCtx(),
-      mockAnswers({ ides: ["claude"] }),
-      null,
-      analysis,
-    );
+    const sections = await buildSections(mockCtx(), mockAnswers({ ides: ["claude"] }), null, analysis);
 
     const guidelines = sections.find((s) => s.id === "working-guidelines");
     const constraints = sections.find((s) => s.id === "config-constraints");
@@ -256,12 +288,7 @@ describe("per-IDE section emphasis", () => {
   });
 
   it("Cursor boosts architecture to priority 2", async () => {
-    const sections = await buildSections(
-      mockCtx(),
-      mockAnswers({ ides: ["cursor"] }),
-      null,
-      mockAnalysis(),
-    );
+    const sections = await buildSections(mockCtx(), mockAnswers({ ides: ["cursor"] }), null, mockAnalysis());
 
     const architecture = sections.find((s) => s.id === "architecture");
     expect(architecture).toBeDefined();
@@ -280,12 +307,7 @@ describe("per-IDE section emphasis", () => {
       },
     });
 
-    const sections = await buildSections(
-      mockCtx(),
-      mockAnswers({ ides: ["copilot"] }),
-      snapshot,
-      analysis,
-    );
+    const sections = await buildSections(mockCtx(), mockAnswers({ ides: ["copilot"] }), snapshot, analysis);
 
     const conventions = sections.find((s) => s.id === "conventions");
     const codeSnapshot = sections.find((s) => s.id === "code-snapshot");
@@ -296,12 +318,7 @@ describe("per-IDE section emphasis", () => {
   });
 
   it("does not apply boosts when multiple IDEs are targeted", async () => {
-    const sections = await buildSections(
-      mockCtx(),
-      mockAnswers({ ides: ["claude", "cursor"] }),
-      null,
-      mockAnalysis(),
-    );
+    const sections = await buildSections(mockCtx(), mockAnswers({ ides: ["claude", "cursor"] }), null, mockAnalysis());
 
     const guidelines = sections.find((s) => s.id === "working-guidelines");
     const architecture = sections.find((s) => s.id === "architecture");
@@ -311,12 +328,7 @@ describe("per-IDE section emphasis", () => {
   });
 
   it("does not apply boosts for aider IDE", async () => {
-    const sections = await buildSections(
-      mockCtx(),
-      mockAnswers({ ides: ["aider"] }),
-      null,
-      mockAnalysis(),
-    );
+    const sections = await buildSections(mockCtx(), mockAnswers({ ides: ["aider"] }), null, mockAnalysis());
 
     // All sections should have their default priorities
     const guidelines = sections.find((s) => s.id === "working-guidelines");

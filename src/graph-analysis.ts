@@ -103,7 +103,9 @@ export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[] {
 
   // Sort by max(authority, hubScore) descending — captures both foundations and orchestrators
   // Alphabetical tiebreaker for deterministic output
-  files.sort((a, b) => Math.max(b.authority, b.hubScore) - Math.max(a.authority, a.hubScore) || a.path.localeCompare(b.path));
+  files.sort(
+    (a, b) => Math.max(b.authority, b.hubScore) - Math.max(a.authority, a.hubScore) || a.path.localeCompare(b.path),
+  );
 
   return files.slice(0, limit);
 }
@@ -373,7 +375,7 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     const dir = getDeepestDir(file);
     if (!dirOnlyCommunities.has(dir)) dirOnlyCommunities.set(dir, dirNextLabel++);
   }
-  const ari = computeARI(files, fileToCommunity, file => dirOnlyCommunities.get(getDeepestDir(file))!);
+  const ari = computeARI(files, fileToCommunity, (file) => dirOnlyCommunities.get(getDeepestDir(file))!);
   if (ari > COMMUNITY.ARI_NOVELTY_THRESHOLD) {
     // Communities just restate directory tree; no novel insight
     return [];
@@ -410,11 +412,7 @@ function groupByCommunity(fileToCommunity: Map<string, number>): Map<number, str
  * Compute Adjusted Rand Index between two clusterings of the same files.
  * Returns a value between -1 and 1, where 1 means identical clusterings.
  */
-function computeARI(
-  files: string[],
-  labelingA: Map<string, number>,
-  getLabelB: (file: string) => number,
-): number {
+function computeARI(files: string[], labelingA: Map<string, number>, getLabelB: (file: string) => number): number {
   const n = files.length;
   if (n < 2) return 1;
 
@@ -488,10 +486,7 @@ function deriveLabel(files: string[]): string {
  * Find dead files: files with zero in-degree (not imported by anything).
  * Excludes entry points, test files, and config files.
  */
-export function findDeadFiles(
-  graph: ImportGraph,
-  entryPoints: string[] = [],
-): string[] {
+export function findDeadFiles(graph: ImportGraph, entryPoints: string[] = []): string[] {
   const entrySet = new Set(entryPoints);
   const dead: string[] = [];
 
@@ -506,16 +501,23 @@ export function findDeadFiles(
     if (file.startsWith("scripts/")) continue;
     // Skip entry points by convention
     const basename = file.split("/").pop() ?? "";
-    if (/^(index|main|app|server|cli|worker|seed|migrate|setup|cron|bootstrap|handler|lambda)\.[jt]sx?$/.test(basename)) continue;
+    if (/^(index|main|app|server|cli|worker|seed|migrate|setup|cron|bootstrap|handler|lambda)\.[jt]sx?$/.test(basename))
+      continue;
     if (basename === "mod.ts" || basename === "lib.rs" || basename === "main.rs") continue;
-    if (basename === "main.go" || basename === "main.py" || basename === "manage.py" || basename === "wsgi.py" || basename === "asgi.py") continue;
+    if (
+      basename === "main.go" ||
+      basename === "main.py" ||
+      basename === "manage.py" ||
+      basename === "wsgi.py" ||
+      basename === "asgi.py"
+    )
+      continue;
 
     dead.push(file);
   }
 
   return dead.sort();
 }
-
 
 // ── §1.7 Cross-Layer Fan-In Analysis ──────────────────────────────────
 
@@ -570,7 +572,9 @@ export function findCrossCuttingFiles(
   }
 
   // Sort by layer spread descending, then by total importers descending, alphabetical tiebreaker
-  results.sort((a, b) => b.layerSpread - a.layerSpread || b.totalImporters - a.totalImporters || a.file.localeCompare(b.file));
+  results.sort(
+    (a, b) => b.layerSpread - a.layerSpread || b.totalImporters - a.totalImporters || a.file.localeCompare(b.file),
+  );
   return results;
 }
 
@@ -581,10 +585,7 @@ export function findCrossCuttingFiles(
  * Returns layers ordered from most foundational to most consumer.
  * Falls back to input order for cycles.
  */
-function topologicalSortLayers(
-  layers: ArchitecturalLayer[],
-  layerEdges: LayerEdge[],
-): string[] {
+function topologicalSortLayers(layers: ArchitecturalLayer[], layerEdges: LayerEdge[]): string[] {
   const layerNames = new Set(layers.map((l) => l.name));
   const inDeg = new Map<string, number>();
   const adj = new Map<string, string[]>();
@@ -621,7 +622,10 @@ function topologicalSortLayers(
         // Insert in sorted position for determinism (search only unprocessed part)
         let insertIdx = -1;
         for (let i = qHead; i < queue.length; i++) {
-          if (queue[i]! > neighbor) { insertIdx = i; break; }
+          if (queue[i]! > neighbor) {
+            insertIdx = i;
+            break;
+          }
         }
         if (insertIdx === -1) queue.push(neighbor);
         else queue.splice(insertIdx, 0, neighbor);
@@ -901,11 +905,7 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
 
   if (largest.length > 1) {
     // Sample up to 3 nodes deterministically (first, middle, last)
-    const samples = [
-      largest[0],
-      largest[Math.floor(largest.length / 2)],
-      largest[largest.length - 1],
-    ];
+    const samples = [largest[0], largest[Math.floor(largest.length / 2)], largest[largest.length - 1]];
 
     for (const start of samples) {
       // BFS to find max distance from start
@@ -1002,7 +1002,10 @@ export function findStructuralTemporalMismatches(
   }
 
   // Sort by confidence descending (strongest hidden coupling first), alphabetical tiebreaker
-  results.sort((a, b) => b.coChangeConfidence - a.coChangeConfidence || a.fileA.localeCompare(b.fileA) || a.fileB.localeCompare(b.fileB));
+  results.sort(
+    (a, b) =>
+      b.coChangeConfidence - a.coChangeConfidence || a.fileA.localeCompare(b.fileA) || a.fileB.localeCompare(b.fileB),
+  );
   return results.slice(0, topN);
 }
 
@@ -1017,11 +1020,7 @@ export function findStructuralTemporalMismatches(
  * file may be too tightly coupled and could benefit from an intermediate
  * interface or facade.
  */
-export function findTightCouplings(
-  graph: ImportGraph,
-  minNames = 5,
-  topN = 10,
-): TightCoupling[] {
+export function findTightCouplings(graph: ImportGraph, minNames = 5, topN = 10): TightCoupling[] {
   // Aggregate named imports per (from, to) pair
   const pairNames = new Map<string, { from: string; to: string; names: Set<string> }>();
 
@@ -1067,10 +1066,7 @@ export function findTightCouplings(
  * Returns a map of layer name to its depth (0 = lowest/most foundational).
  * Uses Kahn's algorithm; layers in cycles get the same depth.
  */
-function computeLayerOrdering(
-  layers: ArchitecturalLayer[],
-  layerEdges: LayerEdge[],
-): Map<string, number> {
+function computeLayerOrdering(layers: ArchitecturalLayer[], layerEdges: LayerEdge[]): Map<string, number> {
   const layerNames = new Set(layers.map((l) => l.name));
   const inDegree = new Map<string, number>();
   const adj = new Map<string, string[]>();

@@ -28,7 +28,8 @@ const PROJECT_ROOT = path.resolve(__dirname, "../..");
 
 // --- Regex patterns ---
 
-const JS_IMPORT_FROM = /import\s+(type\s+)?(?:\{([^}]*)\}|(\*\s+as\s+\w+|\w+)(?:\s*,\s*\{([^}]*)\})?)\s+from\s+['"]([^'"]+)['"]/g;
+const JS_IMPORT_FROM =
+  /import\s+(type\s+)?(?:\{([^}]*)\}|(\*\s+as\s+\w+|\w+)(?:\s*,\s*\{([^}]*)\})?)\s+from\s+['"]([^'"]+)['"]/g;
 const JS_IMPORT_SIDE = /import\s+['"]([^'"]+)['"]/g;
 const JS_REQUIRE = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
 const JS_DYNAMIC = /import\(\s*['"]([^'"]+)['"]\s*\)/g;
@@ -50,66 +51,139 @@ function stripCommentsAndStrings(content: string, commentsOnly = false): string 
     const ch = content[i];
     const next = i + 1 < len ? content[i + 1] : "";
     if (ch === "/" && next === "/") {
-      result += "  "; i += 2;
-      while (i < len && content[i] !== "\n") { result += " "; i++; }
+      result += "  ";
+      i += 2;
+      while (i < len && content[i] !== "\n") {
+        result += " ";
+        i++;
+      }
       continue;
     }
     if (ch === "/" && next === "*") {
-      result += "  "; i += 2;
+      result += "  ";
+      i += 2;
       while (i < len) {
-        if (content[i] === "*" && i + 1 < len && content[i + 1] === "/") { result += "  "; i += 2; break; }
-        result += content[i] === "\n" ? "\n" : " "; i++;
+        if (content[i] === "*" && i + 1 < len && content[i + 1] === "/") {
+          result += "  ";
+          i += 2;
+          break;
+        }
+        result += content[i] === "\n" ? "\n" : " ";
+        i++;
       }
       continue;
     }
     if (!commentsOnly) {
       if (ch === "`") {
-        result += " "; i++; let d = 0;
+        result += " ";
+        i++;
+        let d = 0;
         while (i < len) {
-          if (content[i] === "\\" && i + 1 < len) { result += "  "; i += 2; continue; }
-          if (content[i] === "$" && i + 1 < len && content[i + 1] === "{") { result += "  "; i += 2; d++; continue; }
-          if (d > 0 && content[i] === "}") { result += " "; i++; d--; continue; }
-          if (d === 0 && content[i] === "`") { result += " "; i++; break; }
-          result += content[i] === "\n" ? "\n" : " "; i++;
-        }
-        continue;
-      }
-      if (ch === '"' || ch === "'") {
-        const q = ch; result += " "; i++;
-        while (i < len) {
-          if (content[i] === "\\" && i + 1 < len) { result += "  "; i += 2; continue; }
-          if (content[i] === q) { result += " "; i++; break; }
-          if (content[i] === "\n") break;
-          result += " "; i++;
-        }
-        continue;
-      }
-    } else {
-      if (ch === "`") {
-        result += ch; i++; let d = 0;
-        while (i < len) {
-          result += content[i];
-          if (content[i] === "\\" && i + 1 < len) { i++; result += content[i]; i++; continue; }
-          if (content[i] === "$" && i + 1 < len && content[i + 1] === "{") { i++; result += content[i]; i++; d++; continue; }
-          if (d > 0 && content[i] === "}") { i++; d--; continue; }
-          if (d === 0 && content[i] === "`") { i++; break; }
+          if (content[i] === "\\" && i + 1 < len) {
+            result += "  ";
+            i += 2;
+            continue;
+          }
+          if (content[i] === "$" && i + 1 < len && content[i + 1] === "{") {
+            result += "  ";
+            i += 2;
+            d++;
+            continue;
+          }
+          if (d > 0 && content[i] === "}") {
+            result += " ";
+            i++;
+            d--;
+            continue;
+          }
+          if (d === 0 && content[i] === "`") {
+            result += " ";
+            i++;
+            break;
+          }
+          result += content[i] === "\n" ? "\n" : " ";
           i++;
         }
         continue;
       }
       if (ch === '"' || ch === "'") {
-        const q = ch; result += ch; i++;
+        const q = ch;
+        result += " ";
+        i++;
+        while (i < len) {
+          if (content[i] === "\\" && i + 1 < len) {
+            result += "  ";
+            i += 2;
+            continue;
+          }
+          if (content[i] === q) {
+            result += " ";
+            i++;
+            break;
+          }
+          if (content[i] === "\n") break;
+          result += " ";
+          i++;
+        }
+        continue;
+      }
+    } else {
+      if (ch === "`") {
+        result += ch;
+        i++;
+        let d = 0;
         while (i < len) {
           result += content[i];
-          if (content[i] === "\\" && i + 1 < len) { i++; result += content[i]; i++; continue; }
-          if (content[i] === q) { i++; break; }
+          if (content[i] === "\\" && i + 1 < len) {
+            i++;
+            result += content[i];
+            i++;
+            continue;
+          }
+          if (content[i] === "$" && i + 1 < len && content[i + 1] === "{") {
+            i++;
+            result += content[i];
+            i++;
+            d++;
+            continue;
+          }
+          if (d > 0 && content[i] === "}") {
+            i++;
+            d--;
+            continue;
+          }
+          if (d === 0 && content[i] === "`") {
+            i++;
+            break;
+          }
+          i++;
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        const q = ch;
+        result += ch;
+        i++;
+        while (i < len) {
+          result += content[i];
+          if (content[i] === "\\" && i + 1 < len) {
+            i++;
+            result += content[i];
+            i++;
+            continue;
+          }
+          if (content[i] === q) {
+            i++;
+            break;
+          }
           if (content[i] === "\n") break;
           i++;
         }
         continue;
       }
     }
-    result += ch; i++;
+    result += ch;
+    i++;
   }
   return result;
 }
@@ -123,31 +197,52 @@ function stripPythonComments(content: string): string {
     if (i + 2 < len) {
       const triple = content.slice(i, i + 3);
       if (triple === '"""' || triple === "'''") {
-        result += triple; i += 3;
+        result += triple;
+        i += 3;
         while (i < len) {
-          if (i + 2 < len && content.slice(i, i + 3) === triple) { result += triple; i += 3; break; }
-          result += content[i]; i++;
+          if (i + 2 < len && content.slice(i, i + 3) === triple) {
+            result += triple;
+            i += 3;
+            break;
+          }
+          result += content[i];
+          i++;
         }
         continue;
       }
     }
     if (ch === '"' || ch === "'") {
-      const q = ch; result += ch; i++;
+      const q = ch;
+      result += ch;
+      i++;
       while (i < len) {
         result += content[i];
-        if (content[i] === "\\" && i + 1 < len) { i++; result += content[i]; i++; continue; }
-        if (content[i] === q) { i++; break; }
+        if (content[i] === "\\" && i + 1 < len) {
+          i++;
+          result += content[i];
+          i++;
+          continue;
+        }
+        if (content[i] === q) {
+          i++;
+          break;
+        }
         if (content[i] === "\n") break;
         i++;
       }
       continue;
     }
     if (ch === "#") {
-      result += " "; i++;
-      while (i < len && content[i] !== "\n") { result += " "; i++; }
+      result += " ";
+      i++;
+      while (i < len && content[i] !== "\n") {
+        result += " ";
+        i++;
+      }
       continue;
     }
-    result += ch; i++;
+    result += ch;
+    i++;
   }
   return result;
 }
@@ -161,12 +256,34 @@ function regexParseJsImports(content: string): RawImport[] {
   for (const m of cleaned.matchAll(JS_IMPORT_FROM)) {
     const isTypeOnly = !!m[1];
     const names: string[] = [];
-    if (m[2]) names.push(...m[2].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
+    if (m[2])
+      names.push(
+        ...m[2]
+          .split(",")
+          .map((n) =>
+            n
+              .trim()
+              .split(/\s+as\s+/)[0]
+              .trim(),
+          )
+          .filter(Boolean),
+      );
     if (m[3]) {
       const g3 = m[3].trim();
       if (!g3.startsWith("*")) names.push(g3);
     }
-    if (m[4]) names.push(...m[4].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean));
+    if (m[4])
+      names.push(
+        ...m[4]
+          .split(",")
+          .map((n) =>
+            n
+              .trim()
+              .split(/\s+as\s+/)[0]
+              .trim(),
+          )
+          .filter(Boolean),
+      );
     fromSpecifiers.add(m[5]);
     imports.push({ specifier: m[5], importedNames: names, isTypeOnly });
   }
@@ -187,11 +304,27 @@ function regexParsePythonImports(content: string): RawImport[] {
   const imports: RawImport[] = [];
   for (const m of cleaned.matchAll(PY_FROM_IMPORT)) {
     const module = m[1];
-    const names = m[2].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
+    const names = m[2]
+      .split(",")
+      .map((n) =>
+        n
+          .trim()
+          .split(/\s+as\s+/)[0]
+          .trim(),
+      )
+      .filter(Boolean);
     imports.push({ specifier: module, importedNames: names });
   }
   for (const m of cleaned.matchAll(PY_IMPORT)) {
-    const modules = m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
+    const modules = m[1]
+      .split(",")
+      .map((n) =>
+        n
+          .trim()
+          .split(/\s+as\s+/)[0]
+          .trim(),
+      )
+      .filter(Boolean);
     for (const mod of modules) imports.push({ specifier: mod, importedNames: [] });
   }
   const lines = cleaned.split("\n");
@@ -204,7 +337,10 @@ function regexParsePythonImports(content: string): RawImport[] {
     for (let j = i + 1; j < lines.length; j++) {
       const line = lines[j];
       const trimmed = line.trimStart();
-      if (!trimmed) { blockLines.push(""); continue; }
+      if (!trimmed) {
+        blockLines.push("");
+        continue;
+      }
       const lineIndent = line.length - trimmed.length;
       if (lineIndent <= guardIndent) break;
       blockLines.push(trimmed);
@@ -213,11 +349,27 @@ function regexParsePythonImports(content: string): RawImport[] {
     const blockContent = blockLines.join("\n");
     for (const m of blockContent.matchAll(PY_FROM_IMPORT)) {
       const module = m[1];
-      const names = m[2].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
+      const names = m[2]
+        .split(",")
+        .map((n) =>
+          n
+            .trim()
+            .split(/\s+as\s+/)[0]
+            .trim(),
+        )
+        .filter(Boolean);
       imports.push({ specifier: module, importedNames: names, isTypeOnly: true });
     }
     for (const m of blockContent.matchAll(PY_IMPORT)) {
-      const modules = m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
+      const modules = m[1]
+        .split(",")
+        .map((n) =>
+          n
+            .trim()
+            .split(/\s+as\s+/)[0]
+            .trim(),
+        )
+        .filter(Boolean);
       for (const mod of modules) imports.push({ specifier: mod, importedNames: [], isTypeOnly: true });
     }
   }
@@ -246,7 +398,10 @@ function regexParseRustImports(content: string): RawImport[] {
     const usePath = m[1];
     const globMatch = usePath.match(/::\{([^}]*)\}$/);
     if (globMatch) {
-      const names = globMatch[1].split(",").map((n) => n.trim()).filter(Boolean);
+      const names = globMatch[1]
+        .split(",")
+        .map((n) => n.trim())
+        .filter(Boolean);
       imports.push({ specifier: usePath, importedNames: names });
     } else {
       const parts = usePath.split("::");
@@ -335,7 +490,10 @@ interface ImportDiff {
   common: number;
 }
 
-function diffImports(regexImports: RawImport[], astImports: RawImport[]): {
+function diffImports(
+  regexImports: RawImport[],
+  astImports: RawImport[],
+): {
   regexOnly: RawImport[];
   astOnly: RawImport[];
   common: number;
@@ -435,10 +593,14 @@ describe("Parser Parity: Regex vs AST", () => {
         for (const d of diffs) {
           console.log(`\n  ${d.file} (${d.common} common)`);
           for (const imp of d.regexOnly) {
-            console.log(`    REGEX-ONLY: ${imp.specifier} [${imp.importedNames.join(", ")}]${imp.isTypeOnly ? " (type)" : ""}${imp.isDynamic ? " (dynamic)" : ""}`);
+            console.log(
+              `    REGEX-ONLY: ${imp.specifier} [${imp.importedNames.join(", ")}]${imp.isTypeOnly ? " (type)" : ""}${imp.isDynamic ? " (dynamic)" : ""}`,
+            );
           }
           for (const imp of d.astOnly) {
-            console.log(`    AST-ONLY:   ${imp.specifier} [${imp.importedNames.join(", ")}]${imp.isTypeOnly ? " (type)" : ""}${imp.isDynamic ? " (dynamic)" : ""}`);
+            console.log(
+              `    AST-ONLY:   ${imp.specifier} [${imp.importedNames.join(", ")}]${imp.isTypeOnly ? " (type)" : ""}${imp.isDynamic ? " (dynamic)" : ""}`,
+            );
           }
         }
       } else {
@@ -501,7 +663,9 @@ describe("Parser Parity: Regex vs AST", () => {
       console.log(`\n── Import Parity: fixtures (multi-language) ──`);
       for (const [lang, stats] of [...langStats.entries()].sort()) {
         const parity = stats.regexOnly === 0 && stats.astOnly === 0 ? "PARITY" : "DIVERGENT";
-        console.log(`  ${lang.padEnd(12)} ${stats.files} files, ${stats.common} common, regex-only=${stats.regexOnly}, ast-only=${stats.astOnly} [${parity}]`);
+        console.log(
+          `  ${lang.padEnd(12)} ${stats.files} files, ${stats.common} common, regex-only=${stats.regexOnly}, ast-only=${stats.astOnly} [${parity}]`,
+        );
       }
 
       if (diffs.length > 0) {
@@ -509,10 +673,14 @@ describe("Parser Parity: Regex vs AST", () => {
         for (const d of diffs) {
           console.log(`\n  ${d.file} (${d.common} common)`);
           for (const imp of d.regexOnly) {
-            console.log(`    REGEX-ONLY: ${imp.specifier} [${imp.importedNames.join(", ")}]${imp.isTypeOnly ? " (type)" : ""}${imp.isDynamic ? " (dynamic)" : ""}`);
+            console.log(
+              `    REGEX-ONLY: ${imp.specifier} [${imp.importedNames.join(", ")}]${imp.isTypeOnly ? " (type)" : ""}${imp.isDynamic ? " (dynamic)" : ""}`,
+            );
           }
           for (const imp of d.astOnly) {
-            console.log(`    AST-ONLY:   ${imp.specifier} [${imp.importedNames.join(", ")}]${imp.isTypeOnly ? " (type)" : ""}${imp.isDynamic ? " (dynamic)" : ""}`);
+            console.log(
+              `    AST-ONLY:   ${imp.specifier} [${imp.importedNames.join(", ")}]${imp.isTypeOnly ? " (type)" : ""}${imp.isDynamic ? " (dynamic)" : ""}`,
+            );
           }
         }
       } else {

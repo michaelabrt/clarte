@@ -145,9 +145,7 @@ describe("buildImportGraph barrel file resolution", () => {
     expect(toFormat!.importedNames).toEqual(["formatDate"]);
 
     // No direct edge to the barrel index.ts itself (since all names were resolved)
-    const toBarrel = internal.find(
-      (e) => e.to === "src/utils/index.ts" && e.from === "src/app.ts",
-    );
+    const toBarrel = internal.find((e) => e.to === "src/utils/index.ts" && e.from === "src/app.ts");
     expect(toBarrel).toBeUndefined();
   });
 
@@ -171,10 +169,7 @@ describe("buildImportGraph barrel file resolution", () => {
     tmpDir = await makeProject({
       "src/mod/alpha.ts": "export const a = 1;",
       "src/mod/beta.ts": "export const b = 2; export const c = 3;",
-      "src/mod/index.ts": [
-        "export { a } from './alpha';",
-        "export * from './beta';",
-      ].join("\n"),
+      "src/mod/index.ts": ["export { a } from './alpha';", "export * from './beta';"].join("\n"),
       "src/consumer.ts": "import { a, b } from './mod';",
     });
 
@@ -212,10 +207,9 @@ describe("buildImportGraph barrel file resolution", () => {
     tmpDir = await makeProject({
       "src/utils/helpers.ts": "export function helperA() {}",
       "src/utils/format.ts": "export function formatDate() {}",
-      "src/utils/index.ts": [
-        "export { helperA } from './helpers';",
-        "export { formatDate } from './format';",
-      ].join("\n"),
+      "src/utils/index.ts": ["export { helperA } from './helpers';", "export { formatDate } from './format';"].join(
+        "\n",
+      ),
       // Two consumers go through the barrel
       "src/app.ts": "import { helperA } from './utils';",
       "src/page.ts": "import { helperA } from './utils';",
@@ -232,15 +226,11 @@ describe("buildImportGraph barrel file resolution", () => {
     expect(graph.directInDegree?.get("src/utils/helpers.ts")).toBe(3);
 
     // Barrel-routed edges should be flagged (app.ts + page.ts)
-    const barrelEdges = graph.edges.filter(
-      (e) => e.to === "src/utils/helpers.ts" && e.isBarrelRouted,
-    );
+    const barrelEdges = graph.edges.filter((e) => e.to === "src/utils/helpers.ts" && e.isBarrelRouted);
     expect(barrelEdges).toHaveLength(2);
 
     // Direct edges: barrel's own re-export (index.ts) + direct.ts
-    const directEdges = graph.edges.filter(
-      (e) => e.to === "src/utils/helpers.ts" && !e.isBarrelRouted,
-    );
+    const directEdges = graph.edges.filter((e) => e.to === "src/utils/helpers.ts" && !e.isBarrelRouted);
     expect(directEdges).toHaveLength(2);
   });
 });

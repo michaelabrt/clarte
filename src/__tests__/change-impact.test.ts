@@ -99,9 +99,7 @@ describe("predictChangeImpact", () => {
 
   it("uses RRF formula correctly with known rankings", () => {
     // Create a simple graph where we can predict exact RRF scores
-    const graph = makeGraph([
-      { from: "a.ts", to: "b.ts" },
-    ]);
+    const graph = makeGraph([{ from: "a.ts", to: "b.ts" }]);
 
     const result = predictChangeImpact("a.ts", graph, null);
 
@@ -116,9 +114,7 @@ describe("predictChangeImpact", () => {
   });
 
   it("returns empty array when file has no connections", () => {
-    const graph = makeGraph([
-      { from: "b.ts", to: "c.ts" },
-    ]);
+    const graph = makeGraph([{ from: "b.ts", to: "c.ts" }]);
 
     const result = predictChangeImpact("unrelated.ts", graph, null);
     expect(result).toEqual([]);

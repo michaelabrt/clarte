@@ -38,18 +38,12 @@ function isExcludedFromUntested(filePath: string): boolean {
 /**
  * E2E path patterns: files in e2e/, playwright/, or cypress/ directories.
  */
-const E2E_PATH_PATTERNS = [
-  /(?:^|\/)e2e\//,
-  /(?:^|\/)playwright\//,
-  /(?:^|\/)cypress\//,
-];
+const E2E_PATH_PATTERNS = [/(?:^|\/)e2e\//, /(?:^|\/)playwright\//, /(?:^|\/)cypress\//];
 
 /**
  * Integration path patterns: files in integration/ directories.
  */
-const INTEGRATION_PATH_PATTERNS = [
-  /(?:^|\/)integration\//,
-];
+const INTEGRATION_PATH_PATTERNS = [/(?:^|\/)integration\//];
 
 /**
  * Classify a test file as unit, integration, or e2e.
@@ -59,10 +53,7 @@ const INTEGRATION_PATH_PATTERNS = [
  * - integration: path contains integration/, or imports 3+ distinct source modules
  * - unit: everything else
  */
-export function classifyTestType(
-  testFile: string,
-  sourceImportCount: number,
-): TestType {
+export function classifyTestType(testFile: string, sourceImportCount: number): TestType {
   // Check e2e path patterns
   for (const pattern of E2E_PATH_PATTERNS) {
     if (pattern.test(testFile)) return "e2e";
@@ -123,10 +114,7 @@ function detectMonorepoPackages(files: Set<string>): boolean {
  * the source files it covers. Builds a reverse map: sourceFile -> testFile[].
  * Also identifies source files with no test coverage.
  */
-export function buildTestMapping(
-  graph: ImportGraph,
-  ctx: DetectedContext,
-): TestMapping | null {
+export function buildTestMapping(graph: ImportGraph, ctx: DetectedContext): TestMapping | null {
   // Collect all files and separate test files from source files
   const allFiles = new Set<string>();
   const testFiles = new Set<string>();
@@ -248,10 +236,7 @@ export function buildTestMapping(
  * Render the test coverage map as a markdown section.
  * Includes per-hub-file directives and untested file warnings.
  */
-export function renderTestMappingSection(
-  mapping: TestMapping,
-  hubFiles?: Array<{ path: string }>,
-): string | null {
+export function renderTestMappingSection(mapping: TestMapping, hubFiles?: Array<{ path: string }>): string | null {
   const lines: string[] = [];
 
   // Hub file test directives
@@ -260,10 +245,12 @@ export function renderTestMappingSection(
     for (const hub of hubFiles) {
       const tests = mapping.sourceToTests.get(hub.path);
       if (tests && tests.length > 0) {
-        const testList = tests.map((t) => {
-          const typeLabel = mapping.testTypes?.get(t);
-          return typeLabel ? `\`${t}\` (${typeLabel})` : `\`${t}\``;
-        }).join(", ");
+        const testList = tests
+          .map((t) => {
+            const typeLabel = mapping.testTypes?.get(t);
+            return typeLabel ? `\`${t}\` (${typeLabel})` : `\`${t}\``;
+          })
+          .join(", ");
         directives.push(`- **Must**: When modifying \`${hub.path}\`, run its tests: ${testList}`);
       }
     }
@@ -284,12 +271,16 @@ export function renderTestMappingSection(
 
   // Exemplar test file hint
   if (mapping.exemplarTestFile) {
-    lines.push(`- **Prefer**: Follow existing test patterns in \`${mapping.exemplarTestFile}\` (most comprehensive test file)`);
+    lines.push(
+      `- **Prefer**: Follow existing test patterns in \`${mapping.exemplarTestFile}\` (most comprehensive test file)`,
+    );
   }
 
   // Test pattern info
   if (mapping.testPattern) {
-    lines.push(`- **Style**: Test convention: ${mapping.testPattern.convention} (\`${mapping.testPattern.filePattern}\`)`);
+    lines.push(
+      `- **Style**: Test convention: ${mapping.testPattern.convention} (\`${mapping.testPattern.filePattern}\`)`,
+    );
   }
 
   if (lines.length === 0) return null;
@@ -299,10 +290,7 @@ export function renderTestMappingSection(
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-function detectTestPattern(
-  testFiles: Set<string>,
-  ctx: DetectedContext,
-): TestMapping["testPattern"] {
+function detectTestPattern(testFiles: Set<string>, ctx: DetectedContext): TestMapping["testPattern"] {
   let testCount = 0;
   let specCount = 0;
   let underscoreCount = 0;

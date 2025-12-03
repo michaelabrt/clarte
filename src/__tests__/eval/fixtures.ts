@@ -154,11 +154,7 @@ const layeredApp: EvalFixture = {
     // types layer should be most foundational (imported by most layers)
     expectedLayerOrder: ["types", "utils", "services"],
     // Route files have many outgoing deps but few incoming; instability > 0.8
-    highInstabilityFiles: [
-      "routes/user-routes.ts",
-      "routes/product-routes.ts",
-      "routes/auth-routes.ts",
-    ],
+    highInstabilityFiles: ["routes/user-routes.ts", "routes/product-routes.ts", "routes/auth-routes.ts"],
     // types/index.ts is a pure sink (no outgoing edges) so directed betweenness = 0
     zeroBetweennessFiles: ["types/index.ts"],
   },
@@ -515,11 +511,6 @@ const monolith: EvalFixture = {
 
 // ── Export all fixtures ───────────────────────────────────────────────
 
-export const EVAL_FIXTURES: EvalFixture[] = [
-  layeredApp,
-  hubAndSpoke,
-  circularMess,
-  monolith,
-];
+export const EVAL_FIXTURES: EvalFixture[] = [layeredApp, hubAndSpoke, circularMess, monolith];
 
 export { layeredApp, hubAndSpoke, circularMess, monolith };
