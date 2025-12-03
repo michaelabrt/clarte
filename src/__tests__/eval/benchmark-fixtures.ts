@@ -328,12 +328,7 @@ export const pythonBackend: EvalFixture = {
     // core/database.py has the most importers (models, services, deps, tasks, routes)
     topAuthorityFiles: ["core/database.py"],
     // Routes have many outgoing deps and only 1 incoming (from main.py): instability > 0.8
-    highInstabilityFiles: [
-      "routes/users.py",
-      "routes/products.py",
-      "routes/orders.py",
-      "routes/auth.py",
-    ],
+    highInstabilityFiles: ["routes/users.py", "routes/products.py", "routes/orders.py", "routes/auth.py"],
     // Core files should be stable
     stableFiles: ["core/config.py", "core/database.py", "models/base.py"],
     // Layer detection recognizes "services/" and "routes/" (as "pages" pattern).
@@ -350,7 +345,4 @@ export const pythonBackend: EvalFixture = {
   },
 };
 
-export const BENCHMARK_FIXTURES: EvalFixture[] = [
-  reactFullstack,
-  pythonBackend,
-];
+export const BENCHMARK_FIXTURES: EvalFixture[] = [reactFullstack, pythonBackend];

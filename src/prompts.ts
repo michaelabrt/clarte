@@ -1,10 +1,5 @@
 import * as p from "@clack/prompts";
-import type {
-  DetectedContext,
-  IDETarget,
-  ProjectConfig,
-  UserAnswers,
-} from "./types.js";
+import type { DetectedContext, IDETarget, ProjectConfig, UserAnswers } from "./types.js";
 import { theme as t } from "./theme.js";
 import { summarizeDetection } from "./detect.js";
 
@@ -91,8 +86,7 @@ export async function runPrompts(
   // 3. Project purpose
   const projectPurpose = await p.text({
     message: t.text("What does this project do? (1-2 sentences)"),
-    placeholder:
-      "e.g. A mobile AI chat app connecting to OpenAI, Anthropic, and Google APIs",
+    placeholder: "e.g. A mobile AI chat app connecting to OpenAI, Anthropic, and Google APIs",
     defaultValue: defaults?.projectPurpose || undefined,
     validate: (value) => {
       if (!value?.trim()) return "Please describe your project briefly.";
@@ -114,10 +108,8 @@ export async function runPrompts(
   }
 
   const keyPatterns = await p.text({
-    message:
-      t.text("Any key patterns, conventions, or gotchas? (optional, press Enter to skip)"),
-    placeholder:
-      "e.g. Zustand for state, never use FadeIn on ternary, angular commit style",
+    message: t.text("Any key patterns, conventions, or gotchas? (optional, press Enter to skip)"),
+    placeholder: "e.g. Zustand for state, never use FadeIn on ternary, angular commit style",
     defaultValue: patternsDefault,
   });
 
@@ -136,8 +128,7 @@ export async function runPrompts(
     if (isReconfigure) {
       // On --reconfigure, let the user choose
       const snapshotChoice = (await p.select({
-        message:
-          t.text("Code snapshot (extracts types, function signatures, class definitions)"),
+        message: t.text("Code snapshot (extracts types, function signatures, class definitions)"),
         options: [
           { value: "auto" as const, label: "Auto-detect key files" },
           { value: "custom" as const, label: "Custom paths" },
@@ -163,10 +154,7 @@ export async function runPrompts(
         const paths = await p.text({
           message: t.text("Paths to scan (comma-separated, relative to project root)"),
           placeholder: "e.g. src/types, src/stores, src/components",
-          defaultValue:
-            defaults?.snapshotPaths.length
-              ? defaults.snapshotPaths.join(", ")
-              : undefined,
+          defaultValue: defaults?.snapshotPaths.length ? defaults.snapshotPaths.join(", ") : undefined,
         });
 
         if (p.isCancel(paths)) {
@@ -194,7 +182,9 @@ export async function runPrompts(
     const pkgNames = mono.packages.map((pkg) => pkg.name).join(", ");
 
     const perPkg = await p.confirm({
-      message: t.text(`Monorepo detected (${mono.type}, ${mono.packages.length} packages: ${pkgNames}). Generate per-package context files?`),
+      message: t.text(
+        `Monorepo detected (${mono.type}, ${mono.packages.length} packages: ${pkgNames}). Generate per-package context files?`,
+      ),
       active: t.soft("Yes"),
       inactive: t.soft("No"),
       initialValue: defaults?.generatePerPackage ?? false,

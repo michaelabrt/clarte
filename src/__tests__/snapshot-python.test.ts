@@ -143,11 +143,11 @@ class Serializable(Protocol):
   it("extracts sync and async function signatures", async () => {
     const pyContent = `
 def process_order(order_id: int, user: User) -> OrderResult:
-    \"\"\"Process an order.\"\"\"
+    """Process an order."""
     pass
 
 async def fetch_data(url: str, timeout: float = 30.0) -> dict[str, Any]:
-    \"\"\"Fetch data from a URL.\"\"\"
+    """Fetch data from a URL."""
     pass
 `;
 
@@ -160,7 +160,9 @@ async def fetch_data(url: str, timeout: float = 30.0) -> dict[str, Any]:
     expect(result.entries[0].category).toBe("function");
     expect(result.entries[0].signature).toContain("def process_order(order_id: int, user: User) -> OrderResult:");
     expect(result.entries[1].category).toBe("function");
-    expect(result.entries[1].signature).toContain("async def fetch_data(url: str, timeout: float = 30.0) -> dict[str, Any]:");
+    expect(result.entries[1].signature).toContain(
+      "async def fetch_data(url: str, timeout: float = 30.0) -> dict[str, Any]:",
+    );
   });
 
   it("skips private functions (starting with _)", async () => {

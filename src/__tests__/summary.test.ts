@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ContextAnalysis, GeneratedFile, CodeSnapshot } from "../types.js";
-import { INSTABILITY_THRESHOLD } from "../graph.js";
 
 // Mock @clack/prompts to capture log calls
 const logCalls: Array<{ method: string; args: unknown[] }> = [];
@@ -116,10 +115,7 @@ describe("printSummary", () => {
 
   it("shows circular dependency findings", () => {
     const analysis = makeAnalysis({
-      circularDeps: [
-        { chain: ["src/a.ts", "src/b.ts", "src/a.ts"] },
-        { chain: ["src/c.ts", "src/d.ts", "src/c.ts"] },
-      ],
+      circularDeps: [{ chain: ["src/a.ts", "src/b.ts", "src/a.ts"] }, { chain: ["src/c.ts", "src/d.ts", "src/c.ts"] }],
     });
     printSummary([makeFile("CLAUDE.md", "content")], null, analysis);
 
@@ -131,9 +127,7 @@ describe("printSummary", () => {
 
   it("shows single circular dependency with file names", () => {
     const analysis = makeAnalysis({
-      circularDeps: [
-        { chain: ["src/a.ts", "src/b.ts", "src/a.ts"] },
-      ],
+      circularDeps: [{ chain: ["src/a.ts", "src/b.ts", "src/a.ts"] }],
     });
     printSummary([makeFile("CLAUDE.md", "content")], null, analysis);
 
@@ -203,10 +197,7 @@ describe("printSummary", () => {
   });
 
   it("shows total bytes and tokens across all files", () => {
-    printSummary([
-      makeFile("CLAUDE.md", "x".repeat(500)),
-      makeFile("AGENTS.md", "y".repeat(500)),
-    ]);
+    printSummary([makeFile("CLAUDE.md", "x".repeat(500)), makeFile("AGENTS.md", "y".repeat(500))]);
 
     const output = allOutput();
     // Total should be ~1000 B

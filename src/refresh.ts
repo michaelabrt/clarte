@@ -31,9 +31,7 @@ const AIDER_END = /^# --- \/Code Snapshot ---$/m;
  * Find the first existing context file in the project root.
  * Also checks for .aider.conf.yml.
  */
-async function findContextFile(
-  rootDir: string,
-): Promise<{ path: string; isAider: boolean } | null> {
+async function findContextFile(rootDir: string): Promise<{ path: string; isAider: boolean } | null> {
   // Check aider first since it has a unique format
   const aiderPath = path.join(rootDir, ".aider.conf.yml");
   if (await fileExists(aiderPath)) {
@@ -62,11 +60,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   // 1. Find context file
   const found = await findContextFile(rootDir);
   if (!found) {
-    p.log.error(
-      t.text("No context file found. Run ") +
-        t.accent("clarte") +
-        t.text(" first to generate one."),
-    );
+    p.log.error(t.text("No context file found. Run ") + t.accent("clarte") + t.text(" first to generate one."));
     process.exit(1);
   }
 
@@ -82,18 +76,22 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   if (found.isAider) {
     if (!AIDER_START.test(content) || !AIDER_END.test(content)) {
       p.log.error(
-        t.text(budgetOmitted
-          ? `Snapshot was omitted from ${found.path} to fit token budget. Run ${t.accent("clarte --full")} to include it.`
-          : `No code snapshot markers found in ${found.path}. Run ${t.accent("clarte")} to regenerate.`),
+        t.text(
+          budgetOmitted
+            ? `Snapshot was omitted from ${found.path} to fit token budget. Run ${t.accent("clarte --full")} to include it.`
+            : `No code snapshot markers found in ${found.path}. Run ${t.accent("clarte")} to regenerate.`,
+        ),
       );
       process.exit(1);
     }
   } else {
     if (!MD_START.test(content) || !MD_END.test(content)) {
       p.log.error(
-        t.text(budgetOmitted
-          ? `Snapshot was omitted from ${found.path} to fit token budget. Run ${t.accent("clarte --full")} to include it.`
-          : `No code snapshot markers found in ${found.path}. Run ${t.accent("clarte")} to regenerate.`),
+        t.text(
+          budgetOmitted
+            ? `Snapshot was omitted from ${found.path} to fit token budget. Run ${t.accent("clarte --full")} to include it.`
+            : `No code snapshot markers found in ${found.path}. Run ${t.accent("clarte")} to regenerate.`,
+        ),
       );
       process.exit(1);
     }
@@ -116,7 +114,9 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   shimmer.stop();
   p.log.step(
     snapshot.entries.length > 0
-      ? t.text(`Found ${t.textBold(String(snapshot.entries.length))} type${snapshot.entries.length === 1 ? "" : "s"}/signature${snapshot.entries.length === 1 ? "" : "s"}.`)
+      ? t.text(
+          `Found ${t.textBold(String(snapshot.entries.length))} type${snapshot.entries.length === 1 ? "" : "s"}/signature${snapshot.entries.length === 1 ? "" : "s"}.`,
+        )
       : t.text("No extractable types found."),
   );
 
@@ -160,8 +160,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
     const startIdx = content.indexOf(startMatch[0]);
     const endIdx = content.indexOf(endMatch[0]) + endMatch[0].length;
 
-    let newBlock =
-      "<!-- CODE SNAPSHOT (auto-generated, update when types/stores/services change) -->";
+    let newBlock = "<!-- CODE SNAPSHOT (auto-generated, update when types/stores/services change) -->";
     if (snapshot.markdown) {
       newBlock += "\n\n" + snapshot.markdown + "\n";
     }

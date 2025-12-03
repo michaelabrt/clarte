@@ -37,10 +37,7 @@ export function edge(
  * and hub scores. The centrality map is set to authority scores for
  * backward compatibility (matching the production buildImportGraph).
  */
-export function buildGraphFromFixture(
-  files: string[],
-  edges: ImportEdge[],
-): ImportGraph {
+export function buildGraphFromFixture(files: string[], edges: ImportEdge[]): ImportGraph {
   // Compute inDegree
   const inDegree = new Map<string, number>();
   for (const f of files) {
@@ -108,11 +105,7 @@ export function containsAll<T>(actual: T[], expected: T[]): boolean {
  * Check that all expected files appear within the top-N entries of a ranked list.
  * Returns the files from `expected` that are missing from the top-N.
  */
-export function missingFromTopN(
-  ranked: string[],
-  expected: string[],
-  n: number,
-): string[] {
+export function missingFromTopN(ranked: string[], expected: string[], n: number): string[] {
   const topN = new Set(ranked.slice(0, n));
   return expected.filter((f) => !topN.has(f));
 }

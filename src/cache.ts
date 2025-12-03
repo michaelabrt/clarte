@@ -77,10 +77,7 @@ export async function loadCache(rootDir: string): Promise<CacheData | null> {
   }
 }
 
-export async function saveCache(
-  rootDir: string,
-  data: CacheData,
-): Promise<void> {
+export async function saveCache(rootDir: string, data: CacheData): Promise<void> {
   const dir = path.join(rootDir, CACHE_DIR);
   await fs.mkdir(dir, { recursive: true });
   const cachePath = path.join(dir, CACHE_FILE);
@@ -129,18 +126,14 @@ export function computeAnalysisCacheKey(
   // Count external edges so adding a new npm dependency invalidates the cache
   const externalCount = graph.edges.filter((e) => e.isExternal).length;
 
-  const layersPart = layersConfig
-    ? JSON.stringify(layersConfig)
-    : "";
+  const layersPart = layersConfig ? JSON.stringify(layersConfig) : "";
 
   return createHash("sha256")
     .update(sortedEdges + `|ext:${externalCount}` + layersPart)
     .digest("hex");
 }
 
-export async function loadAnalysisCache(
-  rootDir: string,
-): Promise<AnalysisCacheData | null> {
+export async function loadAnalysisCache(rootDir: string): Promise<AnalysisCacheData | null> {
   const cachePath = path.join(rootDir, CACHE_DIR, ANALYSIS_CACHE_FILE);
   try {
     const raw = await fs.readFile(cachePath, "utf-8");
@@ -152,10 +145,7 @@ export async function loadAnalysisCache(
   }
 }
 
-export async function saveAnalysisCache(
-  rootDir: string,
-  data: AnalysisCacheData,
-): Promise<void> {
+export async function saveAnalysisCache(rootDir: string, data: AnalysisCacheData): Promise<void> {
   const dir = path.join(rootDir, CACHE_DIR);
   await fs.mkdir(dir, { recursive: true });
   const cachePath = path.join(dir, ANALYSIS_CACHE_FILE);
@@ -164,10 +154,7 @@ export async function saveAnalysisCache(
 
 // ── File hash computation ─────────────────────────────────────────────
 
-export async function computeFileHashes(
-  rootDir: string,
-  language: Language,
-): Promise<Map<string, string>> {
+export async function computeFileHashes(rootDir: string, language: Language): Promise<Map<string, string>> {
   const globs = getSourceGlob(language);
   let files: string[];
   try {
@@ -238,10 +225,7 @@ async function parseFileEdges(
         });
       }
     } else {
-      const aliasResolved =
-        pathAliases.length > 0
-          ? resolveAliasImport(raw.specifier, pathAliases, fileSet)
-          : null;
+      const aliasResolved = pathAliases.length > 0 ? resolveAliasImport(raw.specifier, pathAliases, fileSet) : null;
 
       if (aliasResolved) {
         edges.push({
@@ -273,11 +257,7 @@ async function parseFileEdges(
 
 // ── Graph rebuilding from edges ───────────────────────────────────────
 
-function rebuildGraph(
-  edges: ImportEdge[],
-  allFiles: string[],
-  barrelFiles: Set<string>,
-): ImportGraph {
+function rebuildGraph(edges: ImportEdge[], allFiles: string[], barrelFiles: Set<string>): ImportGraph {
   const inDegree = new Map<string, number>();
   const directInDegree = new Map<string, number>();
   const externalImportCounts = new Map<string, number>();
@@ -294,22 +274,22 @@ function rebuildGraph(
         directInDegree.set(edge.to, (directInDegree.get(edge.to) ?? 0) + 1);
       }
     } else {
-      externalImportCounts.set(
-        edge.to,
-        (externalImportCounts.get(edge.to) ?? 0) + 1,
-      );
+      externalImportCounts.set(edge.to, (externalImportCounts.get(edge.to) ?? 0) + 1);
     }
   }
 
-  const { authority, hub: hubScores } = computeHITS(
-    allFiles,
-    edges,
-    30,
-    1e-6,
-    barrelFiles,
-  );
+  const { authority, hub: hubScores } = computeHITS(allFiles, edges, 30, 1e-6, barrelFiles);
 
-  const betweennessScores = computeBetweenness({ edges, inDegree, directInDegree, centrality: authority, externalImportCounts, authority, hubScores, barrelFiles });
+  const betweennessScores = computeBetweenness({
+    edges,
+    inDegree,
+    directInDegree,
+    centrality: authority,
+    externalImportCounts,
+    authority,
+    hubScores,
+    barrelFiles,
+  });
 
   return {
     edges,
@@ -378,15 +358,12 @@ export async function buildGraphWithCache(
       }
     }
 
-    const totalChanged =
-      changedFiles.length + newFiles.length + deletedFiles.size;
+    const totalChanged = changedFiles.length + newFiles.length + deletedFiles.size;
     const changeRatio = totalChanged / Math.max(currentHashes.size, 1);
 
     // Barrel file changes require full rebuild (re-exports affect many edges)
     const barrelSet = new Set(cache.barrelFiles);
-    const barrelChanged =
-      changedFiles.some((f) => barrelSet.has(f)) ||
-      [...deletedFiles].some((f) => barrelSet.has(f));
+    const barrelChanged = changedFiles.some((f) => barrelSet.has(f)) || [...deletedFiles].some((f) => barrelSet.has(f));
 
     if (totalChanged === 0) {
       // Nothing changed; rebuild graph maps from cached edges
@@ -398,28 +375,18 @@ export async function buildGraphWithCache(
 
     if (!barrelChanged && changeRatio < 0.1) {
       // Incremental rebuild
-      onProgress?.(
-        `Incremental rebuild: ${totalChanged} file${totalChanged === 1 ? "" : "s"} changed`,
-      );
+      onProgress?.(`Incremental rebuild: ${totalChanged} file${totalChanged === 1 ? "" : "s"} changed`);
 
       // Remove stale edges (from changed/deleted files, to deleted files)
       const staleFromFiles = new Set([...changedFiles, ...deletedFiles]);
-      const keptEdges: ImportEdge[] = cache.edges.filter(
-        (e) => !staleFromFiles.has(e.from) && !deletedFiles.has(e.to),
-      );
+      const keptEdges: ImportEdge[] = cache.edges.filter((e) => !staleFromFiles.has(e.from) && !deletedFiles.has(e.to));
 
       // Parse changed/new files
       const isJsTs = language === "typescript" || language === "javascript";
       const pathAliases = isJsTs ? await loadTsconfigPaths(rootDir) : [];
       const newEdges: ImportEdge[] = [];
       for (const file of [...changedFiles, ...newFiles]) {
-        const edges = await parseFileEdges(
-          rootDir,
-          file,
-          language,
-          allCurrentFiles,
-          pathAliases,
-        );
+        const edges = await parseFileEdges(rootDir, file, language, allCurrentFiles, pathAliases);
         newEdges.push(...edges);
       }
 

@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { buildMainContext, buildSections, applyBudget, applyCharBudget, DEFAULT_MAX_CHARS } from "../templates/main-context.js";
+import { buildMainContext, buildSections, applyBudget, applyCharBudget } from "../templates/main-context.js";
 import { trimSnapshotToChars, renderSnapshot } from "../snapshot.js";
-import type { CodeSnapshot, ContextAnalysis, ContextSection, DetectedContext, ImportGraph, SnapshotEntry, UserAnswers } from "../types.js";
+import type {
+  CodeSnapshot,
+  ContextAnalysis,
+  ContextSection,
+  DetectedContext,
+  ImportGraph,
+  SnapshotEntry,
+  UserAnswers,
+} from "../types.js";
 
 function mockCtx(overrides?: Partial<DetectedContext>): DetectedContext {
   return {
@@ -39,27 +47,42 @@ function mockAnswers(overrides?: Partial<UserAnswers>): UserAnswers {
 function mockAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
   return {
     hubFiles: [
-      { path: "src/types.ts", centrality: 1.0, authority: 1.0, hubScore: 0.1, role: "Foundation", importedBy: 20, imports: 0 },
-      { path: "src/utils.ts", centrality: 0.8, authority: 0.8, hubScore: 0.3, role: "Foundation", importedBy: 14, imports: 2 },
+      {
+        path: "src/types.ts",
+        centrality: 1.0,
+        authority: 1.0,
+        hubScore: 0.1,
+        role: "Foundation",
+        importedBy: 20,
+        imports: 0,
+      },
+      {
+        path: "src/utils.ts",
+        centrality: 0.8,
+        authority: 0.8,
+        hubScore: 0.3,
+        role: "Foundation",
+        importedBy: 14,
+        imports: 2,
+      },
     ],
-    circularDeps: [
-      { chain: ["a.ts", "b.ts", "a.ts"], breakHint: "Use type-only import" },
-    ],
+    circularDeps: [{ chain: ["a.ts", "b.ts", "a.ts"], breakHint: "Use type-only import" }],
     layers: [
       { name: "types", files: ["src/types.ts"], importedByLayers: 3, dependsOn: [] },
       { name: "utils", files: ["src/utils.ts"], importedByLayers: 2, dependsOn: ["types"] },
       { name: "graph", files: ["src/graph.ts"], importedByLayers: 1, dependsOn: ["types", "utils"] },
     ],
-    layerEdges: [{ from: "utils", to: "types" }, { from: "graph", to: "utils" }],
+    layerEdges: [
+      { from: "utils", to: "types" },
+      { from: "graph", to: "utils" },
+    ],
     gitActivity: {
       commitCounts: new Map([["src/index.ts", 16]]),
       hotFiles: [
         { path: "src/index.ts", commits: 16, lastChanged: "2 hours ago" },
         { path: "src/types.ts", commits: 12, lastChanged: "6 hours ago" },
       ],
-      changeCoupling: [
-        { fileA: "a.ts", fileB: "b.ts", coChangeCount: 10, support: 0.5, confidence: 0.83 },
-      ],
+      changeCoupling: [{ fileA: "a.ts", fileB: "b.ts", coChangeCount: 10, support: 0.5, confidence: 0.83 }],
     },
     instabilities: [],
     communities: [{ id: 0, files: ["src/types.ts"], label: "types" }],
@@ -67,12 +90,8 @@ function mockAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
     crossCuttingFiles: [
       { file: "src/types.ts", totalImporters: 20, layerSpread: 3, layers: ["types", "utils", "graph"] },
     ],
-    chokepoints: [
-      { file: "src/utils.ts", separates: 2, importedBy: 14 },
-    ],
-    tightCouplings: [
-      { from: "src/index.ts", to: "src/types.ts", importedNames: 15, names: [] },
-    ],
+    chokepoints: [{ file: "src/utils.ts", separates: 2, importedBy: 14 }],
+    tightCouplings: [{ from: "src/index.ts", to: "src/types.ts", importedNames: 15, names: [] }],
     ...overrides,
   };
 }
@@ -117,12 +136,7 @@ describe("buildSections", () => {
   });
 
   it("includes working-guidelines at default priority 2 when multiple IDEs", async () => {
-    const sections = await buildSections(
-      mockCtx(),
-      mockAnswers({ ides: ["claude", "cursor"] }),
-      null,
-      mockAnalysis(),
-    );
+    const sections = await buildSections(mockCtx(), mockAnswers({ ides: ["claude", "cursor"] }), null, mockAnalysis());
     const guidelines = sections.find((s) => s.id === "working-guidelines");
     expect(guidelines).toBeDefined();
     expect(guidelines!.priority).toBe(2);
@@ -383,9 +397,7 @@ describe("trimSnapshotToChars", () => {
 
 describe("buildMainContext character budget integration", () => {
   it("maxChars=0 disables character budget", async () => {
-    const result = await buildMainContext(
-      mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, 0,
-    );
+    const result = await buildMainContext(mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, 0);
     expect(result.length).toBeGreaterThan(0);
     // Should contain all sections with no char trimming
     expect(result).toContain("## Tech Stack");
@@ -394,15 +406,11 @@ describe("buildMainContext character budget integration", () => {
 
   it("tight maxChars drops P3+ sections but keeps P0-P2", async () => {
     // With analysis and --full (budget=0), all sections are included
-    const fullResult = await buildMainContext(
-      mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, 0,
-    );
+    const fullResult = await buildMainContext(mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, 0);
     // Now apply a tight char budget that's smaller than the full output
     // but still larger than P0-P2 mandatory sections
     const tightBudget = 2000;
-    const result = await buildMainContext(
-      mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, tightBudget,
-    );
+    const result = await buildMainContext(mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, tightBudget);
     // Should be shorter than unrestricted full output
     expect(result.length).toBeLessThan(fullResult.length);
     // Should still contain mandatory sections
@@ -416,10 +424,24 @@ describe("buildMainContext character budget integration", () => {
     const reservedChars = 500;
 
     const withoutReserved = await buildMainContext(
-      mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, maxChars, 0,
+      mockCtx(),
+      mockAnswers(),
+      null,
+      mockAnalysis(),
+      0,
+      undefined,
+      maxChars,
+      0,
     );
     const withReserved = await buildMainContext(
-      mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, maxChars, reservedChars,
+      mockCtx(),
+      mockAnswers(),
+      null,
+      mockAnalysis(),
+      0,
+      undefined,
+      maxChars,
+      reservedChars,
     );
     // With reserved chars, the output should be equal or shorter
     expect(withReserved.length).toBeLessThanOrEqual(withoutReserved.length);
@@ -436,9 +458,9 @@ describe("buildSections with graph parameter (betweenness pipeline)", () => {
       authority: new Map(),
       hubScores: new Map(),
       betweennessScores: new Map([
-        ["src/hot-path.ts", 0.75],    // high betweenness, NOT a chokepoint
-        ["src/utils.ts", 0.9],        // high betweenness, IS a chokepoint (excluded)
-        ["src/leaf.ts", 0.1],         // low betweenness (excluded)
+        ["src/hot-path.ts", 0.75], // high betweenness, NOT a chokepoint
+        ["src/utils.ts", 0.9], // high betweenness, IS a chokepoint (excluded)
+        ["src/leaf.ts", 0.1], // low betweenness (excluded)
       ]),
     };
   }
@@ -461,9 +483,7 @@ describe("buildSections with graph parameter (betweenness pipeline)", () => {
 
   it("buildMainContext renders flow bottleneck directive end-to-end", async () => {
     const graph = graphWithBetweenness();
-    const result = await buildMainContext(
-      mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, 0, 0, graph,
-    );
+    const result = await buildMainContext(mockCtx(), mockAnswers(), null, mockAnalysis(), 0, undefined, 0, 0, graph);
     expect(result).toContain("flow bottleneck");
     expect(result).toContain("src/hot-path.ts");
     // src/utils.ts is a chokepoint in mockAnalysis, should not appear as flow bottleneck

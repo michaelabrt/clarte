@@ -244,9 +244,7 @@ describe("buildCursorRules", () => {
 
   it("renders instability warnings when analysis has instabilities", async () => {
     const analysis = makeAnalysis({
-      instabilities: [
-        { path: "src/index.ts", fanIn: 10, fanOut: 8, instability: 0.8 },
-      ],
+      instabilities: [{ path: "src/index.ts", fanIn: 10, fanOut: 8, instability: 0.8 }],
     });
     const rules = await buildCursorRules(makeCtx(), makeAnswers(), analysis);
     const global = rules.find((r) => r.filename === "global.md")!;
@@ -258,9 +256,7 @@ describe("buildCursorRules", () => {
   it("renders change coupling when analysis has coupling data", async () => {
     const analysis = makeAnalysis({
       gitActivity: {
-        changeCoupling: [
-          { fileA: "a.ts", fileB: "b.ts", coChangeCount: 5, support: 0.5, confidence: 0.8 },
-        ],
+        changeCoupling: [{ fileA: "a.ts", fileB: "b.ts", coChangeCount: 5, support: 0.5, confidence: 0.8 }],
         churnFiles: [],
         recentlyActiveFiles: [],
         lagCoupling: [],
@@ -275,9 +271,7 @@ describe("buildCursorRules", () => {
 
   it("renders circular dependency warnings when present", async () => {
     const analysis = makeAnalysis({
-      circularDeps: [
-        { chain: ["a.ts", "b.ts", "a.ts"], severity: 1 },
-      ],
+      circularDeps: [{ chain: ["a.ts", "b.ts", "a.ts"], severity: 1 }],
     });
     const rules = await buildCursorRules(makeCtx(), makeAnswers(), analysis);
     const global = rules.find((r) => r.filename === "global.md")!;
@@ -287,9 +281,7 @@ describe("buildCursorRules", () => {
 
   it("renders type-only suffix for severity 0 circular deps", async () => {
     const analysis = makeAnalysis({
-      circularDeps: [
-        { chain: ["x.ts", "y.ts", "x.ts"], severity: 0 },
-      ],
+      circularDeps: [{ chain: ["x.ts", "y.ts", "x.ts"], severity: 0 }],
     });
     const rules = await buildCursorRules(makeCtx(), makeAnswers(), analysis);
     const global = rules.find((r) => r.filename === "global.md")!;

@@ -40,9 +40,7 @@ export function initTreeSitter(): Promise<void> {
     // Resolve WASM grammars bundled in dist/wasm/ (copied at build time).
     // From src/ (dev): ../dist/wasm/, from dist/ (prod/binary): ./wasm/
     const selfDir = path.dirname(new URL(import.meta.url).pathname);
-    const wasmDir = selfDir.endsWith("src")
-      ? path.join(selfDir, "..", "dist", "wasm")
-      : path.join(selfDir, "wasm");
+    const wasmDir = selfDir.endsWith("src") ? path.join(selfDir, "..", "dist", "wasm") : path.join(selfDir, "wasm");
 
     const langFiles: [string, string][] = [
       ["typescript", "tree-sitter-typescript.wasm"],
@@ -166,10 +164,10 @@ function parseJsImportStatement(node: Node): RawImport | null {
   if (!specifier) return null;
 
   // Check for `type` keyword (import type { ... })
-  const isTypeOnly = node.children.some(c => c.type === "type" && !c.isNamed);
+  const isTypeOnly = node.children.some((c) => c.type === "type" && !c.isNamed);
 
   // Side-effect import: import './style.css' (no import_clause)
-  const importClause = node.namedChildren.find(c => c.type === "import_clause");
+  const importClause = node.namedChildren.find((c) => c.type === "import_clause");
   if (!importClause) {
     return { specifier, importedNames: [], isTypeOnly };
   }
@@ -198,10 +196,10 @@ function parseJsExportReexport(exportNode: Node, source: Node): RawImport | null
   const specifier = extractStringContent(source);
   if (!specifier) return null;
 
-  const isTypeOnly = exportNode.children.some(c => c.type === "type" && !c.isNamed);
+  const isTypeOnly = exportNode.children.some((c) => c.type === "type" && !c.isNamed);
   const names: string[] = [];
 
-  const exportClause = exportNode.namedChildren.find(c => c.type === "export_clause");
+  const exportClause = exportNode.namedChildren.find((c) => c.type === "export_clause");
   if (exportClause) {
     for (const spec of exportClause.namedChildren) {
       if (spec.type === "export_specifier") {
@@ -239,9 +237,7 @@ function collectDynamicImports(node: Node, imports: RawImport[]): void {
 
 function extractStringContent(node: Node): string | null {
   // String nodes have a string_fragment child with the actual content
-  const fragment = node.namedChildren.find(
-    c => c.type === "string_fragment" || c.type === "string_content",
-  );
+  const fragment = node.namedChildren.find((c) => c.type === "string_fragment" || c.type === "string_content");
   if (fragment) return fragment.text;
 
   // For some grammars the text is the full quoted string
@@ -300,7 +296,7 @@ function parsePythonFromImportStmt(node: Node, imports: RawImport[], isTypeOnly:
 
   const specifier = moduleName.text;
   const nameNodes = node.childrenForFieldName("name");
-  const importedNames = nameNodes.map(n => n.text.split(" as ")[0].trim());
+  const importedNames = nameNodes.map((n) => n.text.split(" as ")[0].trim());
 
   imports.push({ specifier, importedNames, isTypeOnly: isTypeOnly || undefined });
 }
@@ -318,9 +314,7 @@ function parseGoImportsAst(root: Node): RawImport[] {
         const pathNode = spec.childForFieldName("path");
         if (pathNode) {
           // Strip quotes from interpreted_string_literal
-          const content = pathNode.namedChildren.find(
-            c => c.type === "interpreted_string_literal_content",
-          );
+          const content = pathNode.namedChildren.find((c) => c.type === "interpreted_string_literal_content");
           const specifier = content ? content.text : pathNode.text.replace(/^"|"$/g, "");
           imports.push({ specifier, importedNames: [] });
         }
@@ -345,7 +339,7 @@ function parseRustImportsAst(root: Node): RawImport[] {
     } else if (node.type === "mod_item") {
       // mod config;
       const name = node.childForFieldName("name");
-      if (name && !node.namedChildren.some(c => c.type === "declaration_list")) {
+      if (name && !node.namedChildren.some((c) => c.type === "declaration_list")) {
         // Only external mod declarations (mod foo;), not inline mod blocks
         // Prefix with "mod::" so resolveImport can distinguish from use declarations
         imports.push({ specifier: `mod::${name.text}`, importedNames: [] });
@@ -397,8 +391,8 @@ function parseJavaImportsAst(root: Node): RawImport[] {
   for (const node of root.namedChildren) {
     if (node.type === "import_declaration") {
       // The import path is the full text minus "import", "static", and ";"
-      const hasAsterisk = node.namedChildren.some(c => c.type === "asterisk");
-      const scopedId = node.namedChildren.find(c => c.type === "scoped_identifier");
+      const hasAsterisk = node.namedChildren.some((c) => c.type === "asterisk");
+      const scopedId = node.namedChildren.find((c) => c.type === "scoped_identifier");
 
       if (scopedId) {
         const fullPath = hasAsterisk ? `${scopedId.text}.*` : scopedId.text;
@@ -452,7 +446,7 @@ function extractJsSnapshot(root: Node, content: string, relPath: string): Snapsh
   const isStore = /stores?[/\\]/.test(relPath);
   const isHook = /hooks?[/\\]/.test(relPath) || relPath.includes("use");
   const isComponent = /components?[/\\]/.test(relPath);
-  const isType = /types?[/\\]/.test(relPath) || relPath.endsWith(".types.ts");
+  const _isType = /types?[/\\]/.test(relPath) || relPath.endsWith(".types.ts");
 
   for (const node of root.namedChildren) {
     if (node.type !== "export_statement") continue;
@@ -460,14 +454,16 @@ function extractJsSnapshot(root: Node, content: string, relPath: string): Snapsh
     const declaration = node.childForFieldName("declaration");
     if (!declaration) continue;
 
-    const isDefault = node.children.some(c => c.type === "default" && !c.isNamed);
+    const isDefault = node.children.some((c) => c.type === "default" && !c.isNamed);
 
     switch (declaration.type) {
       case "interface_declaration": {
         const name = declaration.childForFieldName("name");
-        const category = name?.text.endsWith("Slice") ? "store"
-          : name?.text.endsWith("Props") ? "component"
-          : "interface" as const;
+        const category = name?.text.endsWith("Slice")
+          ? "store"
+          : name?.text.endsWith("Props")
+            ? "component"
+            : ("interface" as const);
         const block = extractNodeBlock(declaration, content, node);
         entries.push({ file: relPath, category, signature: block });
         break;
@@ -475,9 +471,11 @@ function extractJsSnapshot(root: Node, content: string, relPath: string): Snapsh
 
       case "type_alias_declaration": {
         const name = declaration.childForFieldName("name");
-        const category = name?.text.endsWith("Slice") ? "store"
-          : name?.text.endsWith("Props") ? "component"
-          : "type" as const;
+        const category = name?.text.endsWith("Slice")
+          ? "store"
+          : name?.text.endsWith("Props")
+            ? "component"
+            : ("type" as const);
         const block = extractNodeBlock(declaration, content, node);
         entries.push({ file: relPath, category, signature: block });
         break;
@@ -514,23 +512,28 @@ function extractJsSnapshot(root: Node, content: string, relPath: string): Snapsh
 
       case "lexical_declaration": {
         // export const foo = (...) => ...
-        const declarator = declaration.namedChildren.find(c => c.type === "variable_declarator");
+        const declarator = declaration.namedChildren.find((c) => c.type === "variable_declarator");
         if (!declarator) break;
 
         const name = declarator.childForFieldName("name")?.text ?? "";
         const value = declarator.childForFieldName("value");
 
         // Only include function expressions (arrow functions, function expressions)
-        if (!value || (value.type !== "arrow_function" && value.type !== "function" &&
-            value.type !== "function_expression" && value.type !== "call_expression")) {
+        if (
+          !value ||
+          (value.type !== "arrow_function" &&
+            value.type !== "function" &&
+            value.type !== "function_expression" &&
+            value.type !== "call_expression")
+        ) {
           break;
         }
 
         // For call_expression, check if it wraps a function (HOCs, etc.)
         if (value.type === "call_expression") {
           // Only include if the call returns a function-like
-          const hasArrowOrFn = value.descendantsOfType("arrow_function").length > 0 ||
-            value.descendantsOfType("function").length > 0;
+          const hasArrowOrFn =
+            value.descendantsOfType("arrow_function").length > 0 || value.descendantsOfType("function").length > 0;
           if (!hasArrowOrFn) break;
         }
 
@@ -545,7 +548,7 @@ function extractJsSnapshot(root: Node, content: string, relPath: string): Snapsh
       }
 
       case "class_declaration": {
-        const category = isComponent ? "component" : "type" as const;
+        const category = isComponent ? "component" : ("type" as const);
         if (isDefault) {
           const block = extractNodeBlock(declaration, content, node);
           entries.push({ file: relPath, category, signature: block });
@@ -578,11 +581,7 @@ function extractJsSnapshot(root: Node, content: string, relPath: string): Snapsh
  * Extract a full block (type, interface, enum, class) from AST using node spans.
  * Caps at 30 lines to match existing behavior.
  */
-function extractNodeBlock(
-  declaration: Node,
-  content: string,
-  exportNode?: Node,
-): string {
+function extractNodeBlock(declaration: Node, content: string, exportNode?: Node): string {
   // Include the "export" keyword if present
   const startNode = exportNode ?? declaration;
   const text = content.slice(startNode.startIndex, declaration.endIndex);
@@ -599,11 +598,7 @@ function extractNodeBlock(
  * Extract a function signature (everything up to the opening brace).
  * Uses AST to find the statement_block child instead of brace-counting.
  */
-function extractFunctionSignature(
-  funcDecl: Node,
-  content: string,
-  exportNode?: Node,
-): string {
+function extractFunctionSignature(funcDecl: Node, content: string, exportNode?: Node): string {
   const startNode = exportNode ?? funcDecl;
   const body = funcDecl.childForFieldName("body");
 
@@ -628,7 +623,7 @@ function extractConstFunctionSignature(exportNode: Node, content: string): strin
   const declaration = exportNode.childForFieldName("declaration");
   if (!declaration) return exportNode.text.split("\n")[0];
 
-  const declarator = declaration.namedChildren.find(c => c.type === "variable_declarator");
+  const declarator = declaration.namedChildren.find((c) => c.type === "variable_declarator");
   if (!declarator) return content.slice(exportNode.startIndex, declaration.endIndex).trim();
 
   const value = declarator.childForFieldName("value");
@@ -643,7 +638,7 @@ function extractConstFunctionSignature(exportNode: Node, content: string): strin
     // Expression body arrow: include the full signature including =>
     // Slice up to the body start
     if (body) {
-      const arrow = value.children.find(c => c.type === "=>" && !c.isNamed);
+      const arrow = value.children.find((c) => c.type === "=>" && !c.isNamed);
       if (arrow) {
         return content.slice(exportNode.startIndex, arrow.endIndex).trim();
       }
@@ -660,27 +655,23 @@ function extractConstFunctionSignature(exportNode: Node, content: string): strin
 // ── Python snapshot extraction ───────────────────────────────────────────────
 
 /** Bases that indicate a "type" category */
-const PY_TYPE_BASES = new Set([
-  "BaseModel", "TypedDict", "NamedTuple", "Protocol",
-]);
+const PY_TYPE_BASES = new Set(["BaseModel", "TypedDict", "NamedTuple", "Protocol"]);
 
 /** Decorator names that indicate a dataclass-like */
-const PY_DATACLASS_DECORATORS = new Set([
-  "dataclass", "dataclasses.dataclass", "attrs", "attr.s", "define",
-]);
+const PY_DATACLASS_DECORATORS = new Set(["dataclass", "dataclasses.dataclass", "attrs", "attr.s", "define"]);
 
 function extractPythonSnapshot(root: Node, content: string, relPath: string): SnapshotEntry[] {
   const entries: SnapshotEntry[] = [];
 
   for (const node of root.namedChildren) {
     if (node.type === "decorated_definition") {
-      const decorators = node.namedChildren.filter(c => c.type === "decorator");
+      const decorators = node.namedChildren.filter((c) => c.type === "decorator");
       const definition = node.namedChildren.find(
-        c => c.type === "class_definition" || c.type === "function_definition",
+        (c) => c.type === "class_definition" || c.type === "function_definition",
       );
       if (!definition) continue;
 
-      const decoNames = decorators.map(d => {
+      const decoNames = decorators.map((d) => {
         // @decorator or @module.decorator
         const text = d.text.replace(/^@/, "").split("(")[0].trim();
         return text;
@@ -720,7 +711,7 @@ function extractPythonClassEntry(
   entries: SnapshotEntry[],
   decorators: string[],
 ): void {
-  const name = node.childForFieldName("name")?.text ?? "";
+  const _name = node.childForFieldName("name")?.text ?? "";
 
   // Get base classes
   const superclassNode = node.childForFieldName("superclasses");
@@ -733,11 +724,10 @@ function extractPythonClassEntry(
     }
   }
 
-  const isEnum = baseList.some(b => b === "Enum" || b === "IntEnum" || b === "StrEnum");
-  const isProtocol = baseList.some(b => b === "Protocol");
+  const isEnum = baseList.some((b) => b === "Enum" || b === "IntEnum" || b === "StrEnum");
+  const isProtocol = baseList.some((b) => b === "Protocol");
   const isDatalike =
-    baseList.some(b => PY_TYPE_BASES.has(b)) ||
-    decorators.some(d => PY_DATACLASS_DECORATORS.has(d));
+    baseList.some((b) => PY_TYPE_BASES.has(b)) || decorators.some((d) => PY_DATACLASS_DECORATORS.has(d));
 
   let category: SnapshotEntry["category"] = "type";
   if (isProtocol) category = "interface";
@@ -748,7 +738,7 @@ function extractPythonClassEntry(
     entries.push({ file: relPath, category, signature: block });
   } else {
     // Non-data class: extract header + public methods
-    const decoPrefix = decorators.map(d => `@${d}`).join("\n");
+    const decoPrefix = decorators.map((d) => `@${d}`).join("\n");
     const classLine = node.text.split("\n")[0].trimStart();
     let header = decoPrefix ? `${decoPrefix}\n${classLine}` : classLine;
 
@@ -771,9 +761,9 @@ function extractPythonClassEntry(
           funcNode = child;
         } else if (child.type === "decorated_definition") {
           methodDecos = child.namedChildren
-            .filter(c => c.type === "decorator")
-            .map(d => d.text.replace(/^@/, "").split("(")[0].trim());
-          funcNode = child.namedChildren.find(c => c.type === "function_definition") ?? null;
+            .filter((c) => c.type === "decorator")
+            .map((d) => d.text.replace(/^@/, "").split("(")[0].trim());
+          funcNode = child.namedChildren.find((c) => c.type === "function_definition") ?? null;
         }
 
         if (funcNode) {
@@ -804,16 +794,12 @@ function extractPythonFunctionEntry(
   entries.push({ file: relPath, category: "function", signature: sig });
 }
 
-function extractPythonBlock(
-  node: Node,
-  content: string,
-  decorators: string[],
-): string {
+function extractPythonBlock(node: Node, content: string, decorators: string[]): string {
   const maxLines = 30;
-  const decoPrefix = decorators.map(d => `@${d}`).join("\n");
+  const decoPrefix = decorators.map((d) => `@${d}`).join("\n");
 
   // Get the node text and trim leading indentation from each line
-  const lines = node.text.split("\n").map(l => l.trimStart());
+  const lines = node.text.split("\n").map((l) => l.trimStart());
   if (lines.length > maxLines) {
     const trimmed = lines.slice(0, maxLines);
     return decoPrefix ? `${decoPrefix}\n${trimmed.join("\n")}` : trimmed.join("\n");
@@ -825,11 +811,7 @@ function extractPythonBlock(
   return decoPrefix ? `${decoPrefix}\n${lines.join("\n")}` : lines.join("\n");
 }
 
-function extractPythonFuncSignature(
-  node: Node,
-  content: string,
-  decorators: string[],
-): string {
+function extractPythonFuncSignature(node: Node, content: string, decorators: string[]): string {
   const parts: string[] = [];
 
   for (const dec of decorators) {
@@ -837,8 +819,8 @@ function extractPythonFuncSignature(
   }
 
   // Build signature from the def line through the colon
-  const params = node.childForFieldName("parameters");
-  const returnType = node.childForFieldName("return_type");
+  const _params = node.childForFieldName("parameters");
+  const _returnType = node.childForFieldName("return_type");
   const body = node.childForFieldName("body");
 
   // Compute signature end: just before the body (the ":" before the block)
@@ -864,7 +846,10 @@ function extractPythonFuncSignature(
   }
 
   // Collapse multi-line signatures to single line
-  sigText = sigText.split("\n").map(l => l.trim()).join(" ");
+  sigText = sigText
+    .split("\n")
+    .map((l) => l.trim())
+    .join(" ");
 
   parts.push(sigText);
 
@@ -912,12 +897,12 @@ function extractGoSnapshot(root: Node, content: string, relPath: string): Snapsh
   const entries: SnapshotEntry[] = [];
 
   // Check for generated file: first comment contains "Code generated"
-  const firstComment = root.namedChildren.find(c => c.type === "comment");
+  const firstComment = root.namedChildren.find((c) => c.type === "comment");
   if (firstComment && /Code generated/.test(firstComment.text)) return [];
 
   for (const node of root.namedChildren) {
     if (node.type === "type_declaration") {
-      const specs = node.namedChildren.filter(c => c.type === "type_spec");
+      const specs = node.namedChildren.filter((c) => c.type === "type_spec");
       for (const spec of specs) {
         const name = spec.childForFieldName("name")?.text ?? "";
         // Only exported (uppercase)
@@ -949,7 +934,7 @@ function extractGoSnapshot(root: Node, content: string, relPath: string): Snapsh
       entries.push({ file: relPath, category: "function", signature: sig });
     } else if (node.type === "const_declaration") {
       // Const blocks with exported names (enum-like iota patterns)
-      const hasExported = node.descendantsOfType("const_spec").some(spec => {
+      const hasExported = node.descendantsOfType("const_spec").some((spec) => {
         const name = spec.childForFieldName("name")?.text ?? "";
         return name && name[0] === name[0].toUpperCase();
       });
@@ -964,7 +949,7 @@ function extractGoSnapshot(root: Node, content: string, relPath: string): Snapsh
 }
 
 function extractGoNodeBlock(node: Node, content: string): string {
-  const text = node.text.split("\n").map(l => l.trimStart());
+  const text = node.text.split("\n").map((l) => l.trimStart());
   if (text.length > 30) return text.slice(0, 30).join("\n").trim();
   return text.join("\n").trim();
 }
@@ -978,7 +963,7 @@ function extractGoFuncSig(node: Node, content: string): string {
 }
 
 function extractGoMethodSig(node: Node, content: string): string {
-  let sig = extractGoFuncSig(node, content);
+  const sig = extractGoFuncSig(node, content);
 
   // Rewrite method receivers: func (r *Type) Method(... -> (Type).Method(...
   const receiverMatch = sig.match(/^func\s*\(\w+\s+\*?(\w+)\)\s*(\w+)\((.*)$/);
@@ -1009,12 +994,12 @@ function extractRustSnapshot(root: Node, content: string, relPath: string): Snap
     }
 
     // Only process pub items
-    const hasPub = node.namedChildren.some(c => c.type === "visibility_modifier");
+    const hasPub = node.namedChildren.some((c) => c.type === "visibility_modifier");
     if (!hasPub && node.type !== "impl_item") continue;
 
     switch (node.type) {
       case "struct_item": {
-        const body = node.namedChildren.find(c => c.type === "field_declaration_list");
+        const body = node.namedChildren.find((c) => c.type === "field_declaration_list");
         if (body) {
           const block = extractGoNodeBlock(node, content);
           entries.push({ file: relPath, category: "type", signature: block });
@@ -1046,11 +1031,11 @@ function extractRustSnapshot(root: Node, content: string, relPath: string): Snap
       }
       case "impl_item": {
         // Extract pub fn from impl blocks
-        const body = node.namedChildren.find(c => c.type === "declaration_list");
+        const body = node.namedChildren.find((c) => c.type === "declaration_list");
         if (body) {
           for (const child of body.namedChildren) {
             if (child.type === "function_item") {
-              const hasPubFn = child.namedChildren.some(c => c.type === "visibility_modifier");
+              const hasPubFn = child.namedChildren.some((c) => c.type === "visibility_modifier");
               if (hasPubFn) {
                 const sig = extractRustFuncSig(child, content);
                 entries.push({ file: relPath, category: "function", signature: sig });
@@ -1124,22 +1109,22 @@ function extractJavaSnapshot(root: Node, content: string, relPath: string): Snap
 }
 
 function isJavaPublic(node: Node): boolean {
-  const modifiers = node.namedChildren.find(c => c.type === "modifiers");
+  const modifiers = node.namedChildren.find((c) => c.type === "modifiers");
   if (!modifiers) return false;
   return modifiers.text.includes("public");
 }
 
 function hasJavaAnnotation(node: Node, name: string): boolean {
-  const modifiers = node.namedChildren.find(c => c.type === "modifiers");
+  const modifiers = node.namedChildren.find((c) => c.type === "modifiers");
   if (!modifiers) return false;
   return modifiers.namedChildren.some(
-    c => (c.type === "marker_annotation" || c.type === "annotation") && c.text.includes(name),
+    (c) => (c.type === "marker_annotation" || c.type === "annotation") && c.text.includes(name),
   );
 }
 
 function extractJavaBlock(node: Node, content: string): string {
   // Include annotations from modifiers
-  const text = node.text.split("\n").map(l => l.trimStart());
+  const text = node.text.split("\n").map((l) => l.trimStart());
   if (text.length > 30) return text.slice(0, 30).join("\n").trim();
   return text.join("\n").trim();
 }
@@ -1162,9 +1147,17 @@ function extractJavaRecordSig(node: Node, content: string): string {
 
 /** JPA/Spring annotations that indicate a field is structurally significant */
 const JAVA_SIGNIFICANT_FIELD_ANNOTATIONS = new Set([
-  "ManyToOne", "OneToMany", "ManyToMany", "OneToOne",
-  "Column", "JoinColumn", "JoinTable", "Id", "EmbeddedId",
-  "Embedded", "ElementCollection",
+  "ManyToOne",
+  "OneToMany",
+  "ManyToMany",
+  "OneToOne",
+  "Column",
+  "JoinColumn",
+  "JoinTable",
+  "Id",
+  "EmbeddedId",
+  "Embedded",
+  "ElementCollection",
 ]);
 
 function extractJavaClassMethods(body: Node, relPath: string, entries: SnapshotEntry[]): void {
@@ -1177,9 +1170,9 @@ function extractJavaClassMethods(body: Node, relPath: string, entries: SnapshotE
     } else if (child.type === "field_declaration") {
       // Extract public fields with significant annotations (JPA, etc.)
       if (!isJavaPublic(child)) continue;
-      const modifiers = child.namedChildren.find(c => c.type === "modifiers");
+      const modifiers = child.namedChildren.find((c) => c.type === "modifiers");
       if (!modifiers) continue;
-      const hasSignificant = modifiers.namedChildren.some(c => {
+      const hasSignificant = modifiers.namedChildren.some((c) => {
         if (c.type !== "marker_annotation" && c.type !== "annotation") return false;
         const annName = c.text.replace(/^@/, "").split("(")[0];
         return JAVA_SIGNIFICANT_FIELD_ANNOTATIONS.has(annName);
@@ -1193,7 +1186,7 @@ function extractJavaClassMethods(body: Node, relPath: string, entries: SnapshotE
 
 function extractJavaMethodSig(node: Node): string {
   // Get annotations from modifiers
-  const modifiers = node.namedChildren.find(c => c.type === "modifiers");
+  const modifiers = node.namedChildren.find((c) => c.type === "modifiers");
   const annotations: string[] = [];
   if (modifiers) {
     for (const child of modifiers.namedChildren) {
@@ -1222,7 +1215,10 @@ function extractJavaMethodSig(node: Node): string {
 /**
  * Detect if a file is a barrel file (index.ts that re-exports from other modules).
  */
-export function detectBarrelAst(content: string, filePath?: string): {
+export function detectBarrelAst(
+  content: string,
+  filePath?: string,
+): {
   isBarrel: boolean;
   reExportCount: number;
   totalStatements: number;
@@ -1239,10 +1235,16 @@ export function detectBarrelAst(content: string, filePath?: string): {
       if (node.childForFieldName("source")) {
         reExportCount++;
       }
-    } else if (node.type === "import_statement" || node.type === "lexical_declaration" ||
-               node.type === "function_declaration" || node.type === "class_declaration" ||
-               node.type === "interface_declaration" || node.type === "type_alias_declaration" ||
-               node.type === "enum_declaration" || node.type === "expression_statement") {
+    } else if (
+      node.type === "import_statement" ||
+      node.type === "lexical_declaration" ||
+      node.type === "function_declaration" ||
+      node.type === "class_declaration" ||
+      node.type === "interface_declaration" ||
+      node.type === "type_alias_declaration" ||
+      node.type === "enum_declaration" ||
+      node.type === "expression_statement"
+    ) {
       totalStatements++;
     }
   }
@@ -1257,7 +1259,10 @@ export function detectBarrelAst(content: string, filePath?: string): {
 /**
  * Resolve barrel file re-exports to their source modules.
  */
-export function resolveBarrelExportsAst(content: string, filePath?: string): {
+export function resolveBarrelExportsAst(
+  content: string,
+  filePath?: string,
+): {
   namedExports: Map<string, string>;
   starExports: Set<string>;
 } {
@@ -1274,14 +1279,14 @@ export function resolveBarrelExportsAst(content: string, filePath?: string): {
     if (!specifier) continue;
 
     // Check for star export: export * from '...'
-    const hasStar = node.children.some(c => c.type === "*" && !c.isNamed);
+    const hasStar = node.children.some((c) => c.type === "*" && !c.isNamed);
     if (hasStar) {
       starExports.add(specifier);
       continue;
     }
 
     // Named re-exports: export { Foo, Bar } from '...'
-    const exportClause = node.namedChildren.find(c => c.type === "export_clause");
+    const exportClause = node.namedChildren.find((c) => c.type === "export_clause");
     if (exportClause) {
       for (const spec of exportClause.namedChildren) {
         if (spec.type === "export_specifier") {

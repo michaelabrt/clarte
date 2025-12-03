@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 
 // Cache original env values
 const origNoColor = process.env.NO_COLOR;
 const origColorTerm = process.env.COLORTERM;
 const origColorFGBG = process.env.COLORFGBG;
 
-function cleanEnv() {
+function _cleanEnv() {
   delete process.env.NO_COLOR;
   delete process.env.COLORTERM;
 }

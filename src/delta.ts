@@ -31,9 +31,7 @@ export interface ArchitectureDelta {
 
 // ── Snapshot I/O ──────────────────────────────────────────────────────
 
-export async function loadPreviousSnapshot(
-  rootDir: string,
-): Promise<AnalysisSnapshot | null> {
+export async function loadPreviousSnapshot(rootDir: string): Promise<AnalysisSnapshot | null> {
   const filePath = path.join(rootDir, CLARTE_DIR, HISTORY_FILE);
   try {
     const raw = await fs.readFile(filePath, "utf-8");
@@ -43,10 +41,7 @@ export async function loadPreviousSnapshot(
   }
 }
 
-export async function saveSnapshot(
-  rootDir: string,
-  snapshot: AnalysisSnapshot,
-): Promise<void> {
+export async function saveSnapshot(rootDir: string, snapshot: AnalysisSnapshot): Promise<void> {
   const dir = path.join(rootDir, CLARTE_DIR);
   await fs.mkdir(dir, { recursive: true });
   const filePath = path.join(dir, HISTORY_FILE);
@@ -64,9 +59,7 @@ export function extractSnapshot(analysis: ContextAnalysis): AnalysisSnapshot {
 
   const circularDepChains = analysis.circularDeps.map((c) => [...c.chain]);
   const deadFiles = analysis.deadFiles ? [...analysis.deadFiles] : [];
-  const chokepointPaths = analysis.chokepoints
-    ? analysis.chokepoints.map((cp) => cp.file)
-    : [];
+  const chokepointPaths = analysis.chokepoints ? analysis.chokepoints.map((cp) => cp.file) : [];
   const layerViolationCount = analysis.layerConsistency?.violations.length ?? 0;
 
   return {
@@ -87,28 +80,19 @@ function canonicalCycle(chain: string[]): string {
   return [...chain].sort().join("\0");
 }
 
-export function computeDelta(
-  previous: AnalysisSnapshot,
-  current: AnalysisSnapshot,
-): ArchitectureDelta {
+export function computeDelta(previous: AnalysisSnapshot, current: AnalysisSnapshot): ArchitectureDelta {
   const prevHubs = new Set(previous.hubFilePaths);
   const currHubs = new Set(current.hubFilePaths);
 
   const newHubFiles = current.hubFilePaths.filter((f) => !prevHubs.has(f));
-  const demotedHubFiles = previous.hubFilePaths.filter(
-    (f) => !currHubs.has(f),
-  );
+  const demotedHubFiles = previous.hubFilePaths.filter((f) => !currHubs.has(f));
 
   // Circular deps: compare by canonical cycle representation
   const prevCycles = new Set(previous.circularDepChains.map(canonicalCycle));
   const currCycles = new Set(current.circularDepChains.map(canonicalCycle));
 
-  const newCircularDeps = current.circularDepChains.filter(
-    (c) => !prevCycles.has(canonicalCycle(c)),
-  );
-  const resolvedCircularDeps = previous.circularDepChains.filter(
-    (c) => !currCycles.has(canonicalCycle(c)),
-  );
+  const newCircularDeps = current.circularDepChains.filter((c) => !prevCycles.has(canonicalCycle(c)));
+  const resolvedCircularDeps = previous.circularDepChains.filter((c) => !currCycles.has(canonicalCycle(c)));
 
   // Dead files
   const prevDead = new Set(previous.deadFiles);
@@ -121,16 +105,11 @@ export function computeDelta(
   const prevChoke = new Set(previous.chokepointPaths);
   const currChoke = new Set(current.chokepointPaths);
 
-  const newChokepoints = current.chokepointPaths.filter(
-    (f) => !prevChoke.has(f),
-  );
-  const resolvedChokepoints = previous.chokepointPaths.filter(
-    (f) => !currChoke.has(f),
-  );
+  const newChokepoints = current.chokepointPaths.filter((f) => !prevChoke.has(f));
+  const resolvedChokepoints = previous.chokepointPaths.filter((f) => !currChoke.has(f));
 
   // Layer violations
-  const layerViolationDelta =
-    current.layerViolationCount - previous.layerViolationCount;
+  const layerViolationDelta = current.layerViolationCount - previous.layerViolationCount;
 
   return {
     newHubFiles,
@@ -166,9 +145,7 @@ export function isDeltaEmpty(delta: ArchitectureDelta): boolean {
  * Render a "## Architecture Changes" markdown section from a delta.
  * Returns null if the delta has no changes.
  */
-export function renderDeltaSection(
-  delta: ArchitectureDelta,
-): string | null {
+export function renderDeltaSection(delta: ArchitectureDelta): string | null {
   if (isDeltaEmpty(delta)) return null;
 
   const lines: string[] = [];
@@ -176,15 +153,11 @@ export function renderDeltaSection(
   lines.push("");
 
   for (const f of delta.newHubFiles) {
-    lines.push(
-      `- \`${f}\` is a new hub file. Treat as a key dependency; check dependents when modifying.`,
-    );
+    lines.push(`- \`${f}\` is a new hub file. Treat as a key dependency; check dependents when modifying.`);
   }
 
   for (const f of delta.demotedHubFiles) {
-    lines.push(
-      `- \`${f}\` is no longer a top hub file (fewer dependents now).`,
-    );
+    lines.push(`- \`${f}\` is no longer a top hub file (fewer dependents now).`);
   }
 
   for (const chain of delta.newCircularDeps) {
@@ -204,7 +177,10 @@ export function renderDeltaSection(
       }
     } else {
       lines.push(
-        `- ${delta.newDeadFiles.length} new dead files detected: ${delta.newDeadFiles.slice(0, 3).map((f) => `\`${f}\``).join(", ")}, ...`,
+        `- ${delta.newDeadFiles.length} new dead files detected: ${delta.newDeadFiles
+          .slice(0, 3)
+          .map((f) => `\`${f}\``)
+          .join(", ")}, ...`,
       );
     }
   }
@@ -215,22 +191,16 @@ export function renderDeltaSection(
         lines.push(`- \`${f}\` is no longer dead (gained importers).`);
       }
     } else {
-      lines.push(
-        `- ${delta.resurrectedFiles.length} previously dead files now have importers.`,
-      );
+      lines.push(`- ${delta.resurrectedFiles.length} previously dead files now have importers.`);
     }
   }
 
   for (const f of delta.newChokepoints) {
-    lines.push(
-      `- \`${f}\` is a new structural chokepoint. Refactor with care.`,
-    );
+    lines.push(`- \`${f}\` is a new structural chokepoint. Refactor with care.`);
   }
 
   for (const f of delta.resolvedChokepoints) {
-    lines.push(
-      `- \`${f}\` is no longer a chokepoint (alternative paths exist now).`,
-    );
+    lines.push(`- \`${f}\` is no longer a chokepoint (alternative paths exist now).`);
   }
 
   if (delta.layerViolationDelta > 0) {
@@ -250,17 +220,13 @@ export function renderDeltaSection(
  * Build delta directives for inclusion in the Working Guidelines section.
  * Returns an empty array if no delta or no changes.
  */
-export function buildDeltaDirectives(
-  delta: ArchitectureDelta,
-): string[] {
+export function buildDeltaDirectives(delta: ArchitectureDelta): string[] {
   if (isDeltaEmpty(delta)) return [];
 
   const directives: string[] = [];
 
   for (const f of delta.newHubFiles) {
-    directives.push(
-      `\`${f}\` recently became a hub file. Check dependents before modifying.`,
-    );
+    directives.push(`\`${f}\` recently became a hub file. Check dependents before modifying.`);
   }
 
   for (const chain of delta.newCircularDeps) {
@@ -275,9 +241,7 @@ export function buildDeltaDirectives(
   }
 
   for (const f of delta.newChokepoints) {
-    directives.push(
-      `\`${f}\` is a new structural chokepoint. Add alternative import paths to reduce risk.`,
-    );
+    directives.push(`\`${f}\` is a new structural chokepoint. Add alternative import paths to reduce risk.`);
   }
 
   if (delta.layerViolationDelta > 0) {

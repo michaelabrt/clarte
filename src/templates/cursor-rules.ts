@@ -27,20 +27,14 @@ export async function buildCursorRules(
   rules.push(await buildGlobalRule(ctx, answers, analysis));
 
   // Component rule (if components/ directory exists)
-  const hasComponents = ctx.directories.some(
-    (d) => d.endsWith("components") || d.includes("components/"),
-  );
+  const hasComponents = ctx.directories.some((d) => d.endsWith("components") || d.includes("components/"));
   if (hasComponents) {
     rules.push(buildComponentsRule(ctx));
   }
 
   // Services rule (if services/ or api/ exists)
   const hasServices = ctx.directories.some(
-    (d) =>
-      d.endsWith("services") ||
-      d.endsWith("api") ||
-      d.includes("services/") ||
-      d.includes("api/"),
+    (d) => d.endsWith("services") || d.endsWith("api") || d.includes("services/") || d.includes("api/"),
   );
   if (hasServices) {
     rules.push(buildServicesRule(ctx));
@@ -48,11 +42,7 @@ export async function buildCursorRules(
 
   // Stores rule (if stores/ or store/ exists)
   const hasStores = ctx.directories.some(
-    (d) =>
-      d.endsWith("stores") ||
-      d.endsWith("store") ||
-      d.includes("stores/") ||
-      d.includes("store/"),
+    (d) => d.endsWith("stores") || d.endsWith("store") || d.includes("stores/") || d.includes("store/"),
   );
   if (hasStores) {
     rules.push(buildStoresRule(ctx));
@@ -61,7 +51,11 @@ export async function buildCursorRules(
   return rules;
 }
 
-async function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analysis?: ContextAnalysis): Promise<CursorRule> {
+async function buildGlobalRule(
+  ctx: DetectedContext,
+  answers: UserAnswers,
+  analysis?: ContextAnalysis,
+): Promise<CursorRule> {
   const bodyLines: string[] = [
     "# Global Rules",
     "",
@@ -93,7 +87,9 @@ async function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analy
     );
     bodyLines.push("");
     for (const inst of analysis.instabilities) {
-      bodyLines.push(`- \`${inst.path}\`: ${(inst.instability * 100).toFixed(0)}% unstable (${inst.fanIn} dependents, ${inst.fanOut} dependencies)`);
+      bodyLines.push(
+        `- \`${inst.path}\`: ${(inst.instability * 100).toFixed(0)}% unstable (${inst.fanIn} dependents, ${inst.fanOut} dependencies)`,
+      );
     }
     bodyLines.push("");
   }
@@ -102,12 +98,12 @@ async function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analy
   if (analysis?.gitActivity?.changeCoupling && analysis.gitActivity.changeCoupling.length > 0) {
     bodyLines.push("## Change Coupling");
     bodyLines.push("");
-    bodyLines.push(
-      "> These file pairs frequently change together. When modifying one, check the other.",
-    );
+    bodyLines.push("> These file pairs frequently change together. When modifying one, check the other.");
     bodyLines.push("");
     for (const pair of analysis.gitActivity.changeCoupling.slice(0, 5)) {
-      bodyLines.push(`- \`${pair.fileA}\` ↔ \`${pair.fileB}\` (${pair.coChangeCount} co-changes, ${(pair.confidence * 100).toFixed(0)}% confidence)`);
+      bodyLines.push(
+        `- \`${pair.fileA}\` ↔ \`${pair.fileB}\` (${pair.coChangeCount} co-changes, ${(pair.confidence * 100).toFixed(0)}% confidence)`,
+      );
     }
     bodyLines.push("");
   }
@@ -116,14 +112,11 @@ async function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analy
   if (analysis?.circularDeps && analysis.circularDeps.length > 0) {
     bodyLines.push("## Circular Dependencies");
     bodyLines.push("");
-    bodyLines.push(
-      "> These circular import chains may cause unexpected behavior. Avoid adding to them.",
-    );
+    bodyLines.push("> These circular import chains may cause unexpected behavior. Avoid adding to them.");
     bodyLines.push("");
     for (const dep of analysis.circularDeps) {
-      const severity = dep.severity != null
-        ? dep.severity === 0 ? " (type-only)" : dep.severity < 1 ? " (mixed)" : ""
-        : "";
+      const severity =
+        dep.severity != null ? (dep.severity === 0 ? " (type-only)" : dep.severity < 1 ? " (mixed)" : "") : "";
       const hint = dep.breakHint ? ` -- ${dep.breakHint}` : "";
       bodyLines.push(`- ${dep.chain.join(" -> ")}${severity}${hint}`);
     }
@@ -159,15 +152,11 @@ async function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analy
 
   // Linter info
   if (ctx.linter !== "none") {
-    bodyLines.push(
-      `- Linter: **${ctx.linter}**. Run lint before committing.`,
-    );
+    bodyLines.push(`- Linter: **${ctx.linter}**. Run lint before committing.`);
   }
 
   // Keep context files updated
-  bodyLines.push(
-    "- After any architectural or convention change, update the relevant context files.",
-  );
+  bodyLines.push("- After any architectural or convention change, update the relevant context files.");
 
   const ext = getExtGlob(ctx);
 
@@ -180,9 +169,8 @@ async function buildGlobalRule(ctx: DetectedContext, answers: UserAnswers, analy
 }
 
 function buildComponentsRule(ctx: DetectedContext): CursorRule {
-  const compDir = ctx.directories.find(
-    (d) => d.endsWith("components") || d.includes("components/"),
-  ) ?? "src/components";
+  const compDir =
+    ctx.directories.find((d) => d.endsWith("components") || d.includes("components/")) ?? "src/components";
 
   const bodyLines: string[] = [
     "# UI Components",
@@ -194,12 +182,8 @@ function buildComponentsRule(ctx: DetectedContext): CursorRule {
   ];
 
   // Add framework-specific hints
-  const hasReact = ctx.frameworks.some(
-    (f) => f.name === "React" || f.name === "React Native",
-  );
-  const hasTailwind = ctx.frameworks.some(
-    (f) => f.name === "Tailwind CSS" || f.name === "NativeWind",
-  );
+  const hasReact = ctx.frameworks.some((f) => f.name === "React" || f.name === "React Native");
+  const hasTailwind = ctx.frameworks.some((f) => f.name === "Tailwind CSS" || f.name === "NativeWind");
 
   if (hasReact) {
     bodyLines.push("- Functional components with hooks (no class components)");
@@ -207,14 +191,10 @@ function buildComponentsRule(ctx: DetectedContext): CursorRule {
   }
 
   if (hasTailwind) {
-    bodyLines.push(
-      "- Use `className` for layout/styling via Tailwind. Inline `style` only for dynamic/theme values.",
-    );
+    bodyLines.push("- Use `className` for layout/styling via Tailwind. Inline `style` only for dynamic/theme values.");
   }
 
-  bodyLines.push(
-    "- Props interfaces defined adjacent to the component",
-  );
+  bodyLines.push("- Props interfaces defined adjacent to the component");
   bodyLines.push("- Keep components focused -- extract sub-components when complexity grows");
 
   // Also glob the app screens if they exist
@@ -229,13 +209,10 @@ function buildComponentsRule(ctx: DetectedContext): CursorRule {
 }
 
 function buildServicesRule(ctx: DetectedContext): CursorRule {
-  const svcDir = ctx.directories.find(
-    (d) =>
-      d.endsWith("services") ||
-      d.endsWith("api") ||
-      d.includes("services/") ||
-      d.includes("api/"),
-  ) ?? "src/services";
+  const svcDir =
+    ctx.directories.find(
+      (d) => d.endsWith("services") || d.endsWith("api") || d.includes("services/") || d.includes("api/"),
+    ) ?? "src/services";
 
   // Check if hooks dir exists (for useChat-like patterns)
   const hooksGlob = ctx.directories.some((d) => d.endsWith("hooks"))
@@ -263,13 +240,10 @@ function buildServicesRule(ctx: DetectedContext): CursorRule {
 }
 
 function buildStoresRule(ctx: DetectedContext): CursorRule {
-  const storeDir = ctx.directories.find(
-    (d) =>
-      d.endsWith("stores") ||
-      d.endsWith("store") ||
-      d.includes("stores/") ||
-      d.includes("store/"),
-  ) ?? "src/stores";
+  const storeDir =
+    ctx.directories.find(
+      (d) => d.endsWith("stores") || d.endsWith("store") || d.includes("stores/") || d.includes("store/"),
+    ) ?? "src/stores";
 
   const bodyLines: string[] = [
     "# State Management",
@@ -282,15 +256,11 @@ function buildStoresRule(ctx: DetectedContext): CursorRule {
 
   // Detect state management library
   const hasZustand = ctx.frameworks.some((f) => f.name === "Zustand");
-  const hasRedux = ctx.frameworks.some(
-    (f) => f.name === "Redux" || f.name === "Redux Toolkit",
-  );
+  const hasRedux = ctx.frameworks.some((f) => f.name === "Redux" || f.name === "Redux Toolkit");
   const hasPinia = ctx.frameworks.some((f) => f.name === "Pinia");
 
   if (hasZustand) {
-    bodyLines.push(
-      "- **Zustand** slice architecture: each slice is a `StateCreator` accessing full state via `get()`",
-    );
+    bodyLines.push("- **Zustand** slice architecture: each slice is a `StateCreator` accessing full state via `get()`");
     bodyLines.push("- Immutable updates: always spread state");
     bodyLines.push("- Cross-slice access via `get()` (not separate store imports)");
   } else if (hasRedux) {
@@ -339,13 +309,5 @@ function getExtGlob(ctx: DetectedContext): string {
  * Format a CursorRule as the full file content with frontmatter.
  */
 export function renderCursorRule(rule: CursorRule): string {
-  return [
-    "---",
-    `description: ${rule.description}`,
-    `globs: ${rule.globs}`,
-    "---",
-    "",
-    rule.body,
-    "",
-  ].join("\n");
+  return ["---", `description: ${rule.description}`, `globs: ${rule.globs}`, "---", "", rule.body, ""].join("\n");
 }

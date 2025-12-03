@@ -135,8 +135,7 @@ async function askWithContext(
     messages: [
       {
         role: "user",
-        content:
-          `You are an expert developer analyzing the drizzle-orm codebase. Here is the project's CLAUDE.md context file:\n\n<context>\n${context}\n</context>\n\nAnswer this question concisely:\n${question}`,
+        content: `You are an expert developer analyzing the drizzle-orm codebase. Here is the project's CLAUDE.md context file:\n\n<context>\n${context}\n</context>\n\nAnswer this question concisely:\n${question}`,
       },
     ],
   });
@@ -239,7 +238,9 @@ describe.skipIf(SKIP)("Directed Betweenness Value-Add Eval (drizzle)", () => {
       const dPass = iterResults.filter((r) => r.directed.passed).length;
       const total = iterResults.length;
       const delta = (dPass - bPass) / total;
-      lines.push(`  Iteration ${iter + 1}: baseline=${bPass}/${total}, directed=${dPass}/${total}, delta=${delta >= 0 ? "+" : ""}${(delta * 100).toFixed(0)}%`);
+      lines.push(
+        `  Iteration ${iter + 1}: baseline=${bPass}/${total}, directed=${dPass}/${total}, delta=${delta >= 0 ? "+" : ""}${(delta * 100).toFixed(0)}%`,
+      );
     }
     lines.push("");
 
@@ -249,7 +250,9 @@ describe.skipIf(SKIP)("Directed Betweenness Value-Add Eval (drizzle)", () => {
     const total = results.length;
     const aggDelta = (dTotal - bTotal) / total;
 
-    lines.push(`  Aggregate: baseline=${bTotal}/${total} (${(bTotal / total * 100).toFixed(0)}%), directed=${dTotal}/${total} (${(dTotal / total * 100).toFixed(0)}%)`);
+    lines.push(
+      `  Aggregate: baseline=${bTotal}/${total} (${((bTotal / total) * 100).toFixed(0)}%), directed=${dTotal}/${total} (${((dTotal / total) * 100).toFixed(0)}%)`,
+    );
     lines.push(`  Delta: ${aggDelta >= 0 ? "+" : ""}${(aggDelta * 100).toFixed(1)}%`);
     lines.push("");
 
@@ -263,7 +266,9 @@ describe.skipIf(SKIP)("Directed Betweenness Value-Add Eval (drizzle)", () => {
       let flip = "  -";
       if (r.baseline.passed && !r.directed.passed) flip = "  REGRESS";
       else if (!r.baseline.passed && r.directed.passed) flip = "  IMPROVE";
-      lines.push(`    ${r.taskId.padEnd(8)} ${String(r.iteration + 1).padEnd(6)} ${bStr.padEnd(10)} ${dStr.padEnd(10)}${flip}`);
+      lines.push(
+        `    ${r.taskId.padEnd(8)} ${String(r.iteration + 1).padEnd(6)} ${bStr.padEnd(10)} ${dStr.padEnd(10)}${flip}`,
+      );
     }
     lines.push("");
 
@@ -277,7 +282,9 @@ describe.skipIf(SKIP)("Directed Betweenness Value-Add Eval (drizzle)", () => {
     // Verdict
     const valueAdd = aggDelta > 0;
     lines.push("");
-    lines.push(`  Value-add: ${valueAdd ? "YES" : "NO"} (directed delta: ${aggDelta >= 0 ? "+" : ""}${(aggDelta * 100).toFixed(1)}%)`);
+    lines.push(
+      `  Value-add: ${valueAdd ? "YES" : "NO"} (directed delta: ${aggDelta >= 0 ? "+" : ""}${(aggDelta * 100).toFixed(1)}%)`,
+    );
     lines.push(sep);
 
     console.log(lines.join("\n"));

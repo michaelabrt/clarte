@@ -38,9 +38,33 @@ describe("buildDirectives", () => {
   it("generates foundation guards for Foundation-role hub files", () => {
     const analysis = emptyAnalysis({
       hubFiles: [
-        { path: "src/types.ts", centrality: 1.0, authority: 1.0, hubScore: 0.1, role: "Foundation", importedBy: 20, imports: 0 },
-        { path: "src/utils.ts", centrality: 0.8, authority: 0.8, hubScore: 0.3, role: "Foundation", importedBy: 14, imports: 2 },
-        { path: "src/index.ts", centrality: 0.5, authority: 0.2, hubScore: 0.9, role: "Orchestrator", importedBy: 1, imports: 10 },
+        {
+          path: "src/types.ts",
+          centrality: 1.0,
+          authority: 1.0,
+          hubScore: 0.1,
+          role: "Foundation",
+          importedBy: 20,
+          imports: 0,
+        },
+        {
+          path: "src/utils.ts",
+          centrality: 0.8,
+          authority: 0.8,
+          hubScore: 0.3,
+          role: "Foundation",
+          importedBy: 14,
+          imports: 2,
+        },
+        {
+          path: "src/index.ts",
+          centrality: 0.5,
+          authority: 0.2,
+          hubScore: 0.9,
+          role: "Orchestrator",
+          importedBy: 1,
+          imports: 10,
+        },
       ],
     });
     const directives = buildDirectives(analysis, mockCtx());
@@ -69,9 +93,7 @@ describe("buildDirectives", () => {
 
   it("includes circular dep break hints", () => {
     const analysis = emptyAnalysis({
-      circularDeps: [
-        { chain: ["a.ts", "b.ts", "a.ts"], breakHint: "Convert a.ts -> b.ts to type-only import" },
-      ],
+      circularDeps: [{ chain: ["a.ts", "b.ts", "a.ts"], breakHint: "Convert a.ts -> b.ts to type-only import" }],
     });
     const directives = buildDirectives(analysis, mockCtx());
     expect(directives.some((d) => d.includes("type-only import"))).toBe(true);
@@ -79,9 +101,7 @@ describe("buildDirectives", () => {
 
   it("generates fallback message for circular deps without break hints", () => {
     const analysis = emptyAnalysis({
-      circularDeps: [
-        { chain: ["x.ts", "y.ts", "x.ts"] },
-      ],
+      circularDeps: [{ chain: ["x.ts", "y.ts", "x.ts"] }],
     });
     const directives = buildDirectives(analysis, mockCtx());
     expect(directives.some((d) => d.includes("Break circular dependency"))).toBe(true);
@@ -105,9 +125,7 @@ describe("buildDirectives", () => {
 
   it("generates chokepoint caution directives", () => {
     const analysis = emptyAnalysis({
-      chokepoints: [
-        { file: "src/graph.ts", separates: 3, importedBy: 6 },
-      ],
+      chokepoints: [{ file: "src/graph.ts", separates: 3, importedBy: 6 }],
     });
     const directives = buildDirectives(analysis, mockCtx());
     expect(directives.some((d) => d.includes("chokepoint") && d.includes("src/graph.ts"))).toBe(true);
@@ -116,8 +134,24 @@ describe("buildDirectives", () => {
   it("generates test reminders for untested hub files with importedBy >= 2", () => {
     const analysis = emptyAnalysis({
       hubFiles: [
-        { path: "src/core.ts", centrality: 0.9, authority: 0.9, hubScore: 0.1, role: "Foundation", importedBy: 5, imports: 1 },
-        { path: "src/leaf.ts", centrality: 0.1, authority: 0.1, hubScore: 0.0, role: "Leaf", importedBy: 1, imports: 0 },
+        {
+          path: "src/core.ts",
+          centrality: 0.9,
+          authority: 0.9,
+          hubScore: 0.1,
+          role: "Foundation",
+          importedBy: 5,
+          imports: 1,
+        },
+        {
+          path: "src/leaf.ts",
+          centrality: 0.1,
+          authority: 0.1,
+          hubScore: 0.0,
+          role: "Leaf",
+          importedBy: 1,
+          imports: 0,
+        },
       ],
       testMapping: {
         sourceToTests: new Map(),
@@ -155,18 +189,12 @@ describe("buildDirectives", () => {
   });
 
   it("generates tool integration hints for .beads directory", () => {
-    const directives = buildDirectives(
-      emptyAnalysis(),
-      mockCtx({ directories: ["src", ".beads"] }),
-    );
+    const directives = buildDirectives(emptyAnalysis(), mockCtx({ directories: ["src", ".beads"] }));
     expect(directives.some((d) => d.includes("Beads"))).toBe(true);
   });
 
   it("generates tool integration hints for .beans directory", () => {
-    const directives = buildDirectives(
-      emptyAnalysis(),
-      mockCtx({ directories: ["src", ".beans"] }),
-    );
+    const directives = buildDirectives(emptyAnalysis(), mockCtx({ directories: ["src", ".beans"] }));
     expect(directives.some((d) => d.includes("Beans"))).toBe(true);
   });
 
@@ -218,8 +246,24 @@ describe("buildDirectives", () => {
   it("generates complexity directives for hub files with medium/high branch points", () => {
     const analysis = emptyAnalysis({
       hubFiles: [
-        { path: "src/graph.ts", centrality: 0.8, authority: 0.8, hubScore: 0.2, role: "Foundation", importedBy: 6, imports: 2 },
-        { path: "src/simple.ts", centrality: 0.3, authority: 0.3, hubScore: 0.1, role: "Utility", importedBy: 3, imports: 1 },
+        {
+          path: "src/graph.ts",
+          centrality: 0.8,
+          authority: 0.8,
+          hubScore: 0.2,
+          role: "Foundation",
+          importedBy: 6,
+          imports: 2,
+        },
+        {
+          path: "src/simple.ts",
+          centrality: 0.3,
+          authority: 0.3,
+          hubScore: 0.1,
+          role: "Utility",
+          importedBy: 3,
+          imports: 1,
+        },
       ],
     });
     const fileComplexity: FileComplexityInfo[] = [
@@ -242,12 +286,18 @@ describe("buildDirectives", () => {
   it("generates medium complexity directives for branch points 20-50", () => {
     const analysis = emptyAnalysis({
       hubFiles: [
-        { path: "src/mid.ts", centrality: 0.5, authority: 0.5, hubScore: 0.3, role: "Bridge", importedBy: 4, imports: 3 },
+        {
+          path: "src/mid.ts",
+          centrality: 0.5,
+          authority: 0.5,
+          hubScore: 0.3,
+          role: "Bridge",
+          importedBy: 4,
+          imports: 3,
+        },
       ],
     });
-    const fileComplexity: FileComplexityInfo[] = [
-      { path: "src/mid.ts", exports: 10, lines: 500, branchPoints: 30 },
-    ];
+    const fileComplexity: FileComplexityInfo[] = [{ path: "src/mid.ts", exports: 10, lines: 500, branchPoints: 30 }];
     const directives = buildDirectives(analysis, mockCtx(), fileComplexity);
     const complexityDirectives = directives.filter((d) => d.includes("complexity"));
     expect(complexityDirectives).toHaveLength(1);
@@ -258,7 +308,15 @@ describe("buildDirectives", () => {
   it("limits complexity directives to max 3", () => {
     const analysis = emptyAnalysis({
       hubFiles: [
-        { path: "a.ts", centrality: 0.9, authority: 0.9, hubScore: 0.1, role: "Foundation", importedBy: 10, imports: 0 },
+        {
+          path: "a.ts",
+          centrality: 0.9,
+          authority: 0.9,
+          hubScore: 0.1,
+          role: "Foundation",
+          importedBy: 10,
+          imports: 0,
+        },
         { path: "b.ts", centrality: 0.8, authority: 0.8, hubScore: 0.1, role: "Foundation", importedBy: 8, imports: 0 },
         { path: "c.ts", centrality: 0.7, authority: 0.7, hubScore: 0.1, role: "Foundation", importedBy: 6, imports: 0 },
         { path: "d.ts", centrality: 0.6, authority: 0.6, hubScore: 0.1, role: "Foundation", importedBy: 4, imports: 0 },
@@ -278,7 +336,15 @@ describe("buildDirectives", () => {
   it("skips complexity directives when fileComplexity is not provided", () => {
     const analysis = emptyAnalysis({
       hubFiles: [
-        { path: "src/graph.ts", centrality: 0.8, authority: 0.8, hubScore: 0.2, role: "Foundation", importedBy: 6, imports: 2 },
+        {
+          path: "src/graph.ts",
+          centrality: 0.8,
+          authority: 0.8,
+          hubScore: 0.2,
+          role: "Foundation",
+          importedBy: 6,
+          imports: 2,
+        },
       ],
     });
     // No fileComplexity passed
@@ -356,9 +422,7 @@ describe("buildDirectives", () => {
 
   it("generates flow bottleneck directives for high betweenness non-chokepoints", () => {
     const analysis = emptyAnalysis({
-      chokepoints: [
-        { file: "src/bridge.ts", separates: 2, importedBy: 5 },
-      ],
+      chokepoints: [{ file: "src/bridge.ts", separates: 2, importedBy: 5 }],
     });
 
     const graph: ImportGraph = {
@@ -369,9 +433,9 @@ describe("buildDirectives", () => {
       authority: new Map(),
       hubScores: new Map(),
       betweennessScores: new Map([
-        ["src/utils.ts", 0.8],      // high betweenness, NOT a chokepoint
-        ["src/bridge.ts", 0.9],     // high betweenness, IS a chokepoint (should be excluded)
-        ["src/leaf.ts", 0.2],       // low betweenness
+        ["src/utils.ts", 0.8], // high betweenness, NOT a chokepoint
+        ["src/bridge.ts", 0.9], // high betweenness, IS a chokepoint (should be excluded)
+        ["src/leaf.ts", 0.2], // low betweenness
       ]),
     };
 
@@ -415,7 +479,7 @@ describe("buildDirectives", () => {
       authority: new Map(),
       hubScores: new Map(),
       betweennessScores: new Map([
-        ["a.ts", 0.5],   // exactly 0.5, should NOT be included (> 0.5 required)
+        ["a.ts", 0.5], // exactly 0.5, should NOT be included (> 0.5 required)
         ["b.ts", 0.3],
       ]),
     };
@@ -428,8 +492,22 @@ describe("buildDirectives", () => {
   it("generates fitness violation directives for test isolation", () => {
     const analysis = emptyAnalysis({
       archViolations: [
-        { from: "tests/a.test.ts", to: "tests/b.test.ts", rule: "test-isolation", message: "`tests/a.test.ts` imports another test file `tests/b.test.ts`. Extract shared setup to a test utility.", severity: "warning" },
-        { from: "tests/c.test.ts", to: "tests/d.test.ts", rule: "test-isolation", message: "`tests/c.test.ts` imports another test file `tests/d.test.ts`. Extract shared setup to a test utility.", severity: "warning" },
+        {
+          from: "tests/a.test.ts",
+          to: "tests/b.test.ts",
+          rule: "test-isolation",
+          message:
+            "`tests/a.test.ts` imports another test file `tests/b.test.ts`. Extract shared setup to a test utility.",
+          severity: "warning",
+        },
+        {
+          from: "tests/c.test.ts",
+          to: "tests/d.test.ts",
+          rule: "test-isolation",
+          message:
+            "`tests/c.test.ts` imports another test file `tests/d.test.ts`. Extract shared setup to a test utility.",
+          severity: "warning",
+        },
       ],
     });
 
@@ -443,7 +521,14 @@ describe("buildDirectives", () => {
   it("generates fitness violation directives for layer skips", () => {
     const analysis = emptyAnalysis({
       archViolations: [
-        { from: "src/pages/Home.ts", to: "src/types/index.ts", rule: "layer-skip", message: "`src/pages/Home.ts` imports directly from `src/types/index.ts`, skipping 2 intermediate layers. Consider adding an abstraction in an intermediate layer.", severity: "warning" },
+        {
+          from: "src/pages/Home.ts",
+          to: "src/types/index.ts",
+          rule: "layer-skip",
+          message:
+            "`src/pages/Home.ts` imports directly from `src/types/index.ts`, skipping 2 intermediate layers. Consider adding an abstraction in an intermediate layer.",
+          severity: "warning",
+        },
       ],
     });
 
@@ -456,7 +541,14 @@ describe("buildDirectives", () => {
   it("generates fitness violation directives for upward dependencies", () => {
     const analysis = emptyAnalysis({
       archViolations: [
-        { from: "src/types/User.ts", to: "src/components/Form.ts", rule: "no-upward-dep", message: "`src/types/User.ts` (types layer) should not import from `src/components/Form.ts` (components layer). Extract shared logic to a lower layer.", severity: "warning" },
+        {
+          from: "src/types/User.ts",
+          to: "src/components/Form.ts",
+          rule: "no-upward-dep",
+          message:
+            "`src/types/User.ts` (types layer) should not import from `src/components/Form.ts` (components layer). Extract shared logic to a lower layer.",
+          severity: "warning",
+        },
       ],
     });
 
@@ -514,7 +606,15 @@ describe("renderDirectivesSection", () => {
   it("renders markdown section with header and bullets", async () => {
     const analysis = emptyAnalysis({
       hubFiles: [
-        { path: "src/types.ts", centrality: 1.0, authority: 1.0, hubScore: 0.1, role: "Foundation", importedBy: 20, imports: 0 },
+        {
+          path: "src/types.ts",
+          centrality: 1.0,
+          authority: 1.0,
+          hubScore: 0.1,
+          role: "Foundation",
+          importedBy: 20,
+          imports: 0,
+        },
       ],
     });
     const result = await renderDirectivesSection(analysis, mockCtx());
@@ -526,9 +626,7 @@ describe("renderDirectivesSection", () => {
 
   it("includes flow bottleneck directive when graph has high betweenness non-chokepoints", async () => {
     const analysis = emptyAnalysis({
-      chokepoints: [
-        { file: "src/bridge.ts", separates: 2, importedBy: 5 },
-      ],
+      chokepoints: [{ file: "src/bridge.ts", separates: 2, importedBy: 5 }],
     });
     const graph: ImportGraph = {
       edges: [],

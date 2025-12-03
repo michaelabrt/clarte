@@ -1,5 +1,15 @@
 import path from "node:path";
-import type { ArchitecturalLayer, CodeSnapshot, ContextAnalysis, ContextSection, DetectedContext, IDETarget, ImportGraph, LayerEdge, UserAnswers } from "../types.js";
+import type {
+  ArchitecturalLayer,
+  CodeSnapshot,
+  ContextAnalysis,
+  ContextSection,
+  DetectedContext,
+  IDETarget,
+  ImportGraph,
+  LayerEdge,
+  UserAnswers,
+} from "../types.js";
 import { summarizeDetection } from "../detect.js";
 import { estimateTokens, readJsonFile, readFileOr } from "../utils.js";
 import { getFrameworkHintsSection } from "./framework-hints.js";
@@ -26,10 +36,7 @@ export interface SectionFilterOptions {
  * Apply include/exclude filters to sections.
  * Exclude runs first (removes sections), then include promotes survivors to P0.
  */
-function applyFilters(
-  sections: ContextSection[],
-  options?: SectionFilterOptions,
-): ContextSection[] {
+function applyFilters(sections: ContextSection[], options?: SectionFilterOptions): ContextSection[] {
   let result = sections;
 
   if (options?.exclude?.size) {
@@ -80,7 +87,13 @@ export async function buildMainContext(
   if (effectiveBudget <= 0) {
     // --full mode: include all sections, still apply filters
     const filtered = applyFilters(allSections, options);
-    let result = filtered.map((s) => s.content).join("\n\n").trimEnd() + "\n" + generatedComment;
+    let result =
+      filtered
+        .map((s) => s.content)
+        .join("\n\n")
+        .trimEnd() +
+      "\n" +
+      generatedComment;
 
     // Apply character budget even in --full mode
     if (effectiveMaxChars > 0) {
@@ -92,7 +105,11 @@ export async function buildMainContext(
 
   const filtered = applyFilters(allSections, options);
   const { included, omitted, overflowWarning } = applyBudget(filtered, effectiveBudget);
-  let result = included.map((s) => s.content).join("\n\n").trimEnd() + "\n";
+  let result =
+    included
+      .map((s) => s.content)
+      .join("\n\n")
+      .trimEnd() + "\n";
 
   if (overflowWarning) {
     result += `\n<!-- WARNING: ${overflowWarning} -->\n`;
@@ -143,9 +160,7 @@ export async function buildSections(
     "> **This file is your starting point.** Only read additional files when the task requires implementation details not captured here.",
   );
   if (answers.ides.includes("cursor")) {
-    headerLines.push(
-      "> Scoped rules are in `.cursor/rules/` -- update them when conventions change.",
-    );
+    headerLines.push("> Scoped rules are in `.cursor/rules/` -- update them when conventions change.");
   }
   const headerContent = headerLines.join("\n");
   sections.push({ id: "header", priority: 0, content: headerContent, tokens: estimateTokens(headerContent) });
@@ -164,7 +179,12 @@ export async function buildSections(
   if (analysis?.configConstraints) {
     const constraintsSection = renderConstraintsSection(analysis.configConstraints);
     if (constraintsSection) {
-      sections.push({ id: "config-constraints", priority: 1, content: constraintsSection, tokens: estimateTokens(constraintsSection) });
+      sections.push({
+        id: "config-constraints",
+        priority: 1,
+        content: constraintsSection,
+        tokens: estimateTokens(constraintsSection),
+      });
     }
   }
 
@@ -173,7 +193,12 @@ export async function buildSections(
   if (analysis) {
     const directivesSection = await renderDirectivesSection(analysis, ctx, graph);
     if (directivesSection) {
-      sections.push({ id: "working-guidelines", priority: 2, content: directivesSection, tokens: estimateTokens(directivesSection) });
+      sections.push({
+        id: "working-guidelines",
+        priority: 2,
+        content: directivesSection,
+        tokens: estimateTokens(directivesSection),
+      });
     }
   }
 
@@ -193,9 +218,7 @@ export async function buildSections(
     keyLines.push("|------|-------------|-----------|");
     for (const hub of analysis.hubFiles) {
       const inst = instabilityMap.get(hub.path);
-      const stabilityCell = inst != null
-        ? `${(inst * 100).toFixed(0)}% unstable \u26A0\uFE0F`
-        : "stable";
+      const stabilityCell = inst != null ? `${(inst * 100).toFixed(0)}% unstable \u26A0\uFE0F` : "stable";
       const roleTag = hub.role !== "Leaf" ? ` (${hub.role})` : "";
       keyLines.push(
         `| \`${hub.path}\`${roleTag} | ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"} | ${stabilityCell} |`,
@@ -214,9 +237,8 @@ export async function buildSections(
     circLines.push("> These circular import chains may cause unexpected behavior when modified.");
     circLines.push("");
     for (const dep of analysis.circularDeps) {
-      const severity = dep.severity != null
-        ? dep.severity === 0 ? " (type-only)" : dep.severity < 1 ? " (mixed)" : ""
-        : "";
+      const severity =
+        dep.severity != null ? (dep.severity === 0 ? " (type-only)" : dep.severity < 1 ? " (mixed)" : "") : "";
       const hint = dep.breakHint ? ` -- ${dep.breakHint}` : "";
       circLines.push(`- ${dep.chain.map((f) => `\`${f}\``).join(" -> ")}${severity}${hint}`);
     }
@@ -228,9 +250,19 @@ export async function buildSections(
         circLines.push("");
         circLines.push("**Most impactful edges to break:**");
         for (const edge of feedbackEdges) {
-          const shortFrom = edge.from.split("/").pop()?.replace(/\.[^.]+$/, "") ?? edge.from;
-          const shortTo = edge.to.split("/").pop()?.replace(/\.[^.]+$/, "") ?? edge.to;
-          circLines.push(`- Breaking \`${shortFrom}\` -> \`${shortTo}\` would resolve ${edge.cyclesResolved} of ${analysis.circularDeps.length} cycles`);
+          const shortFrom =
+            edge.from
+              .split("/")
+              .pop()
+              ?.replace(/\.[^.]+$/, "") ?? edge.from;
+          const shortTo =
+            edge.to
+              .split("/")
+              .pop()
+              ?.replace(/\.[^.]+$/, "") ?? edge.to;
+          circLines.push(
+            `- Breaking \`${shortFrom}\` -> \`${shortTo}\` would resolve ${edge.cyclesResolved} of ${analysis.circularDeps.length} cycles`,
+          );
         }
       }
     }
@@ -280,7 +312,9 @@ export async function buildSections(
       pkgLines.push("### Encapsulation Violations");
       pkgLines.push("");
       for (const v of mono.encapsulationViolations.slice(0, 10)) {
-        pkgLines.push(`- Import \`${v.toPackage}\` through its public API instead of importing internal file \`${v.to}\` directly (from \`${v.from}\`).`);
+        pkgLines.push(
+          `- Import \`${v.toPackage}\` through its public API instead of importing internal file \`${v.to}\` directly (from \`${v.from}\`).`,
+        );
       }
       if (mono.encapsulationViolations.length > 10) {
         pkgLines.push(`- ... and ${mono.encapsulationViolations.length - 10} more`);
@@ -312,7 +346,12 @@ export async function buildSections(
   if (analysis?.conventions) {
     const conventionsSection = renderConventionsSection(analysis.conventions);
     if (conventionsSection) {
-      sections.push({ id: "conventions", priority: 5, content: conventionsSection, tokens: estimateTokens(conventionsSection) });
+      sections.push({
+        id: "conventions",
+        priority: 5,
+        content: conventionsSection,
+        tokens: estimateTokens(conventionsSection),
+      });
     }
   }
 
@@ -356,7 +395,9 @@ export async function buildSections(
     ccLines.push("| File A | File B | Co-changes | Jaccard |");
     ccLines.push("|--------|--------|------------|---------|");
     for (const pair of analysis.gitActivity.changeCoupling) {
-      ccLines.push(`| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${(pair.confidence * 100).toFixed(0)}% |`);
+      ccLines.push(
+        `| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${(pair.confidence * 100).toFixed(0)}% |`,
+      );
     }
     const ccContent = ccLines.join("\n");
     sections.push({ id: "change-coupling", priority: 7, content: ccContent, tokens: estimateTokens(ccContent) });
@@ -390,9 +431,7 @@ export async function buildSections(
     monoLines.push(`${ctx.monorepo.type} workspace with ${ctx.monorepo.packages.length} packages:`);
     monoLines.push("");
     for (const pkg of ctx.monorepo.packages) {
-      const fws = pkg.frameworks.length > 0
-        ? ` (${pkg.frameworks.map((f) => f.name).join(", ")})`
-        : "";
+      const fws = pkg.frameworks.length > 0 ? ` (${pkg.frameworks.map((f) => f.name).join(", ")})` : "";
       monoLines.push(`- **${pkg.name}** (\`${pkg.path}\`)${fws}`);
     }
     const monoContent = monoLines.join("\n");
@@ -421,12 +460,16 @@ export async function buildSections(
     const ccfLines: string[] = [];
     ccfLines.push("## Cross-Cutting Files");
     ccfLines.push("");
-    ccfLines.push("These files are imported across multiple architectural layers. Changes here have wide blast radius.");
+    ccfLines.push(
+      "These files are imported across multiple architectural layers. Changes here have wide blast radius.",
+    );
     ccfLines.push("");
     ccfLines.push("| File | Imported By | Layers |");
     ccfLines.push("|------|------------|--------|");
     for (const f of analysis.crossCuttingFiles) {
-      ccfLines.push(`| \`${f.file}\` | ${f.totalImporters} file${f.totalImporters === 1 ? "" : "s"} | ${f.layers.join(", ")} |`);
+      ccfLines.push(
+        `| \`${f.file}\` | ${f.totalImporters} file${f.totalImporters === 1 ? "" : "s"} | ${f.layers.join(", ")} |`,
+      );
     }
     const ccfContent = ccfLines.join("\n");
     sections.push({ id: "cross-cutting", priority: 9, content: ccfContent, tokens: estimateTokens(ccfContent) });
@@ -441,7 +484,9 @@ export async function buildSections(
     cpLines.push("| File | Separates | Imported By |");
     cpLines.push("|------|-----------|-------------|");
     for (const cp of analysis.chokepoints.slice(0, 10)) {
-      cpLines.push(`| \`${cp.file}\` | ${cp.separates} component${cp.separates === 1 ? "" : "s"} | ${cp.importedBy} file${cp.importedBy === 1 ? "" : "s"} |`);
+      cpLines.push(
+        `| \`${cp.file}\` | ${cp.separates} component${cp.separates === 1 ? "" : "s"} | ${cp.importedBy} file${cp.importedBy === 1 ? "" : "s"} |`,
+      );
     }
     const cpContent = cpLines.join("\n");
     sections.push({ id: "chokepoints", priority: 9, content: cpContent, tokens: estimateTokens(cpContent) });
@@ -453,7 +498,9 @@ export async function buildSections(
     const tcLines: string[] = [];
     tcLines.push("## Tight Coupling");
     tcLines.push("");
-    tcLines.push("File pairs where one file imports many named exports from another, indicating strong coupling. Consider an intermediate interface if refactoring.");
+    tcLines.push(
+      "File pairs where one file imports many named exports from another, indicating strong coupling. Consider an intermediate interface if refactoring.",
+    );
     tcLines.push("");
     for (const tc of analysis.tightCouplings) {
       tcLines.push(`- \`${tc.from}\` imports ${tc.importedNames} names from \`${tc.to}\``);
@@ -466,13 +513,17 @@ export async function buildSections(
     const smLines: string[] = [];
     smLines.push("## Hidden Coupling");
     smLines.push("");
-    smLines.push("File pairs that frequently change together but have no direct import path. These suggest hidden dependencies (shared schema, duplicated logic, or a missing shared module).");
+    smLines.push(
+      "File pairs that frequently change together but have no direct import path. These suggest hidden dependencies (shared schema, duplicated logic, or a missing shared module).",
+    );
     smLines.push("");
     smLines.push("| File A | File B | Co-changes | Confidence | Graph Distance |");
     smLines.push("|--------|--------|------------|------------|----------------|");
     for (const m of analysis.structuralMismatches) {
       const dist = m.graphDistance === -1 ? "unreachable" : `${m.graphDistance} hops`;
-      smLines.push(`| \`${m.fileA}\` | \`${m.fileB}\` | ${m.coChangeCount} | ${Math.round(m.coChangeConfidence * 100)}% | ${dist} |`);
+      smLines.push(
+        `| \`${m.fileA}\` | \`${m.fileB}\` | ${m.coChangeCount} | ${Math.round(m.coChangeConfidence * 100)}% | ${dist} |`,
+      );
     }
     const smContent = smLines.join("\n");
     sections.push({ id: "hidden-coupling", priority: 10, content: smContent, tokens: estimateTokens(smContent) });
@@ -639,9 +690,7 @@ export function applyBudget(
   included.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
 
   // Check for budget overflow: mandatory sections (p0-2) exceed the budget
-  const mandatoryTokens = included
-    .filter((s) => s.priority <= 2)
-    .reduce((sum, s) => sum + s.tokens, 0);
+  const mandatoryTokens = included.filter((s) => s.priority <= 2).reduce((sum, s) => sum + s.tokens, 0);
   let overflowWarning: string | undefined;
   if (mandatoryTokens > budget) {
     overflowWarning = `Mandatory sections (priority 0-2) use ~${mandatoryTokens} tokens, exceeding the ${budget}-token budget. Consider increasing --budget or reducing project scope.`;
@@ -711,7 +760,11 @@ function enforceCharBudget(
 
   // Level 2: Drop lowest-priority sections (highest priority number first, P3+)
   const { included: charIncluded, dropped } = applyCharBudget(sections, available, generatedComment);
-  let charResult = charIncluded.map((s) => s.content).join("\n\n").trimEnd() + "\n";
+  let charResult =
+    charIncluded
+      .map((s) => s.content)
+      .join("\n\n")
+      .trimEnd() + "\n";
   if (dropped.length > 0) {
     charResult += `\n<!-- Sections omitted to fit char budget: ${dropped.join(", ")}. Run clarte --full for full output. -->\n`;
   }
@@ -800,14 +853,19 @@ export function applyCharBudget(
 ): { included: ContextSection[]; dropped: string[] } {
   // Start with all sections
   const sorted = [...sections].sort((a, b) => a.priority - b.priority);
-  const mandatory = sorted.filter((s) => s.priority <= 2);
+  const _mandatory = sorted.filter((s) => s.priority <= 2);
   const droppable = sorted.filter((s) => s.priority > 2).reverse(); // highest priority number first
 
   const included = [...sorted];
   const dropped: string[] = [];
 
   const measure = () =>
-    included.map((s) => s.content).join("\n\n").trimEnd().length + 1 + generatedComment.length;
+    included
+      .map((s) => s.content)
+      .join("\n\n")
+      .trimEnd().length +
+    1 +
+    generatedComment.length;
 
   while (measure() > maxChars && droppable.length > 0) {
     const toDrop = droppable.shift()!;
@@ -840,15 +898,10 @@ function renderArchitectureDiagram(layers: ArchitecturalLayer[], layerEdges: Lay
   for (let i = 0; i < layers.length - 1; i++) {
     mainFlow.add(`${layers[i].name}->${layers[i + 1].name}`);
   }
-  const crossEdges = layerEdges.filter(
-    (e) => !mainFlow.has(`${e.from}->${e.to}`),
-  );
+  const crossEdges = layerEdges.filter((e) => !mainFlow.has(`${e.from}->${e.to}`));
   if (crossEdges.length > 0) {
     lines.push("");
-    lines.push(
-      "Cross-layer edges: " +
-        crossEdges.map((e) => `${e.from} -> ${e.to}`).join(", "),
-    );
+    lines.push("Cross-layer edges: " + crossEdges.map((e) => `${e.from} -> ${e.to}`).join(", "));
   }
 
   return lines.join("\n");
@@ -923,9 +976,12 @@ function buildTechStackSection(ctx: DetectedContext, summary: string): string {
   if (ctx.frameworks.length > 0) {
     for (const fw of ctx.frameworks) {
       const ver = fw.version ? ` ${fw.version}` : "";
-      const usage = fw.importCount != null
-        ? fw.importCount === 0 ? " (config-only)" : ` (used in ${fw.importCount} file${fw.importCount === 1 ? "" : "s"})`
-        : "";
+      const usage =
+        fw.importCount != null
+          ? fw.importCount === 0
+            ? " (config-only)"
+            : ` (used in ${fw.importCount} file${fw.importCount === 1 ? "" : "s"})`
+          : "";
       lines.push(`- **${fw.name}**${ver}${usage}`);
     }
   }
@@ -985,21 +1041,31 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
 
   const runPrefix = (script: string) => {
     switch (ctx.packageManager) {
-      case "pnpm": return `pnpm ${script}`;
-      case "yarn": return `yarn ${script}`;
-      case "bun": return `bun run ${script}`;
-      case "npm": return `npm run ${script}`;
-      default: return `npm run ${script}`;
+      case "pnpm":
+        return `pnpm ${script}`;
+      case "yarn":
+        return `yarn ${script}`;
+      case "bun":
+        return `bun run ${script}`;
+      case "npm":
+        return `npm run ${script}`;
+      default:
+        return `npm run ${script}`;
     }
   };
 
   const installCmd = (() => {
     switch (ctx.packageManager) {
-      case "pnpm": return "pnpm install";
-      case "yarn": return "yarn install";
-      case "bun": return "bun install";
-      case "npm": return "npm install";
-      default: return null;
+      case "pnpm":
+        return "pnpm install";
+      case "yarn":
+        return "yarn install";
+      case "bun":
+        return "bun install";
+      case "npm":
+        return "npm install";
+      default:
+        return null;
     }
   })();
 
@@ -1032,11 +1098,7 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
     case "poetry": {
       const poetryPrefix = ctx.packageManager === "poetry" ? "poetry run " : "";
       lines.push("```bash");
-      lines.push(
-        ctx.packageManager === "poetry"
-          ? "poetry install"
-          : "pip install -r requirements.txt",
-      );
+      lines.push(ctx.packageManager === "poetry" ? "poetry install" : "pip install -r requirements.txt");
 
       // Framework-aware dev commands
       const fwNames = ctx.frameworks.map((f) => f.name);

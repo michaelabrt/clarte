@@ -4,7 +4,15 @@ import { IGNORE_GLOBS } from "./ignore-patterns.js";
 import { estimateTokens, readFileOr, readJsonFile } from "./utils.js";
 import { findUsedExports } from "./graph-analysis.js";
 import { initTreeSitter, extractSnapshotAst } from "./ast-parse.js";
-import type { CodeSnapshot, DetectedContext, GitAnalysis, ImportGraph, Language, ProgressCallback, SnapshotEntry } from "./types.js";
+import type {
+  CodeSnapshot,
+  DetectedContext,
+  GitAnalysis,
+  ImportGraph,
+  Language,
+  ProgressCallback,
+  SnapshotEntry,
+} from "./types.js";
 
 /**
  * Auto-detect which directories to scan for code snapshots.
@@ -73,8 +81,9 @@ function getDefaultPythonScanPaths(ctx: DetectedContext): string[] {
   for (const d of dirs) {
     const last = d.split("/").pop() ?? d;
     if (
-      ["models", "schemas", "types", "services", "api", "core",
-       "utils", "db", "routes", "routers", "views"].includes(last)
+      ["models", "schemas", "types", "services", "api", "core", "utils", "db", "routes", "routers", "views"].includes(
+        last,
+      )
     ) {
       paths.push(d);
     }
@@ -93,11 +102,16 @@ function getDefaultPythonScanPaths(ctx: DetectedContext): string[] {
  */
 function getDefaultScanPathsForLanguage(lang: Language, ctx: DetectedContext): string[] {
   switch (lang) {
-    case "python": return getDefaultPythonScanPaths(ctx);
-    case "go": return getDefaultGoScanPaths(ctx);
-    case "rust": return getDefaultRustScanPaths(ctx);
-    case "java": return getDefaultJavaScanPaths(ctx);
-    default: return getDefaultJsTsScanPaths(ctx);
+    case "python":
+      return getDefaultPythonScanPaths(ctx);
+    case "go":
+      return getDefaultGoScanPaths(ctx);
+    case "rust":
+      return getDefaultRustScanPaths(ctx);
+    case "java":
+      return getDefaultJavaScanPaths(ctx);
+    default:
+      return getDefaultJsTsScanPaths(ctx);
   }
 }
 
@@ -114,8 +128,17 @@ function getLanguageConfig(lang: Language): {
       return {
         glob: "**/*.py",
         extractor: makeExtractor("python"),
-        ignore: ["**/__pycache__/**", "**/venv/**", "**/.venv/**", "**/env/**",
-                 "**/migrations/**", "**/test_*.py", "**/tests/**", "**/conftest.py", "**/setup.py"],
+        ignore: [
+          "**/__pycache__/**",
+          "**/venv/**",
+          "**/.venv/**",
+          "**/env/**",
+          "**/migrations/**",
+          "**/test_*.py",
+          "**/tests/**",
+          "**/conftest.py",
+          "**/setup.py",
+        ],
       };
     case "go":
       return {
@@ -151,8 +174,9 @@ function getDefaultGoScanPaths(ctx: DetectedContext): string[] {
   for (const d of dirs) {
     const last = d.split("/").pop() ?? d;
     if (
-      ["models", "handlers", "services", "api", "internal", "pkg",
-       "cmd", "server", "domain", "repository"].includes(last)
+      ["models", "handlers", "services", "api", "internal", "pkg", "cmd", "server", "domain", "repository"].includes(
+        last,
+      )
     ) {
       paths.push(d);
     }
@@ -171,9 +195,7 @@ function getDefaultRustScanPaths(ctx: DetectedContext): string[] {
 
   for (const d of dirs) {
     const last = d.split("/").pop() ?? d;
-    if (
-      ["src", "lib", "api", "models", "handlers", "services", "domain"].includes(last)
-    ) {
+    if (["src", "lib", "api", "models", "handlers", "services", "domain"].includes(last)) {
       paths.push(d);
     }
   }
@@ -191,10 +213,7 @@ function getDefaultJavaScanPaths(ctx: DetectedContext): string[] {
 
   for (const d of dirs) {
     const last = d.split("/").pop() ?? d;
-    if (
-      ["controllers", "services", "repositories", "models",
-       "entities", "dto", "domain"].includes(last)
-    ) {
+    if (["controllers", "services", "repositories", "models", "entities", "dto", "domain"].includes(last)) {
       paths.push(d);
     }
   }
@@ -231,9 +250,10 @@ function annotateSignature(entry: SnapshotEntry, commentPrefix = "//"): string {
   if (entry.importedByCount && entry.importedByCount > 2) {
     const total = entry.importedByCount;
     const direct = entry.directImportedByCount ?? total;
-    const annotation = direct < total
-      ? `${commentPrefix} imported by ${direct} files (${total} via barrels)`
-      : `${commentPrefix} imported by ${total} files`;
+    const annotation =
+      direct < total
+        ? `${commentPrefix} imported by ${direct} files (${total} via barrels)`
+        : `${commentPrefix} imported by ${total} files`;
     // Add comment to first line of the signature
     const firstLine = entry.signature.split("\n")[0];
     const rest = entry.signature.split("\n").slice(1);
@@ -399,8 +419,7 @@ export async function generateSnapshot(
   onProgress?: ProgressCallback,
   gitActivity?: GitAnalysis | null,
 ): Promise<CodeSnapshot> {
-  const scanPaths =
-    customPaths.length > 0 ? customPaths : getDefaultScanPaths(ctx);
+  const scanPaths = customPaths.length > 0 ? customPaths : getDefaultScanPaths(ctx);
 
   if (scanPaths.length === 0) {
     return { entries: [], markdown: "" };
@@ -439,12 +458,7 @@ export async function generateSnapshot(
   }
   const patterns = scanPaths.map((p) => `${p}/${fileGlob}`);
 
-  const ignorePatterns = [
-    ...IGNORE_GLOBS,
-    "**/*.test.*",
-    "**/*.spec.*",
-    "**/__tests__/**",
-  ];
+  const ignorePatterns = [...IGNORE_GLOBS, "**/*.test.*", "**/*.spec.*", "**/__tests__/**"];
 
   // Language-specific ignore patterns
   switch (ctx.language) {
@@ -462,27 +476,13 @@ export async function generateSnapshot(
       );
       break;
     case "go":
-      ignorePatterns.push(
-        "**/*_test.go",
-        "**/vendor/**",
-        "**/testdata/**",
-      );
+      ignorePatterns.push("**/*_test.go", "**/vendor/**", "**/testdata/**");
       break;
     case "rust":
-      ignorePatterns.push(
-        "**/target/**",
-        "**/tests/**",
-        "**/*.pb.rs",
-      );
+      ignorePatterns.push("**/target/**", "**/tests/**", "**/*.pb.rs");
       break;
     case "java":
-      ignorePatterns.push(
-        "**/target/**",
-        "**/build/**",
-        "**/src/test/**",
-        "**/*Test.java",
-        "**/*Spec.java",
-      );
+      ignorePatterns.push("**/target/**", "**/build/**", "**/src/test/**", "**/*Test.java", "**/*Spec.java");
       break;
   }
 
@@ -499,9 +499,7 @@ export async function generateSnapshot(
     const chunk = files.slice(i, i + chunkSize);
     onProgress?.(`Extracting signatures... ${Math.min(i + chunkSize, files.length)}/${files.length} files`);
     const results = await Promise.all(
-      chunk.map((file) =>
-        extractor(path.join(ctx.rootDir, file), file).catch(() => [] as SnapshotEntry[]),
-      ),
+      chunk.map((file) => extractor(path.join(ctx.rootDir, file), file).catch(() => [] as SnapshotEntry[])),
     );
     for (const entries of results) allEntries.push(...entries);
   }
@@ -522,9 +520,7 @@ export async function generateSnapshot(
       for (let si = 0; si < secFiles.length; si += chunkSize) {
         const secChunk = secFiles.slice(si, si + chunkSize);
         const secResults = await Promise.all(
-          secChunk.map((file) =>
-            secExtractor(path.join(ctx.rootDir, file), file).catch(() => [] as SnapshotEntry[]),
-          ),
+          secChunk.map((file) => secExtractor(path.join(ctx.rootDir, file), file).catch(() => [] as SnapshotEntry[])),
         );
         for (const entries of secResults) allEntries.push(...entries);
       }
@@ -560,9 +556,7 @@ export async function generateSnapshot(
   const liveEntries = isLibrary ? allEntries : filterDeadExports(allEntries, graph);
 
   // Apply token budget if graph is available
-  const budget =
-    maxTokens ??
-    Math.min(20000, 4000 + Math.floor(Math.sqrt(ctx.sourceFileCount) * 400));
+  const budget = maxTokens ?? Math.min(20000, 4000 + Math.floor(Math.sqrt(ctx.sourceFileCount) * 400));
   onProgress?.(`Applying token budget (${budget.toLocaleString()} tokens)...`);
   const { selected, excluded } = applyTokenBudget(liveEntries, budget, graph, gitActivity);
 
@@ -621,9 +615,7 @@ function extractNameFromSignature(sig: string): string | null {
   if (jsMatch) return jsMatch[1];
 
   // Python: "class Foo:" or "class Foo(Base):" or "def foo(" or "async def foo("
-  const pyMatch = sig.match(
-    /(?:class|(?:async\s+)?def)\s+(\w+)/,
-  );
+  const pyMatch = sig.match(/(?:class|(?:async\s+)?def)\s+(\w+)/);
   if (pyMatch) return pyMatch[1];
 
   // Go: "type Foo struct" or "func FooBar(" or "func (r *R) FooBar("
@@ -637,7 +629,9 @@ function extractNameFromSignature(sig: string): string | null {
   if (rustMatch) return rustMatch[1];
 
   // Java: "public class Foo" or "public void foo("
-  const javaMatch = sig.match(/public\s+(?:static\s+|abstract\s+|final\s+)?(?:class|interface|enum|record|\S+)\s+(\w+)/);
+  const javaMatch = sig.match(
+    /public\s+(?:static\s+|abstract\s+|final\s+)?(?:class|interface|enum|record|\S+)\s+(\w+)/,
+  );
   if (javaMatch) return javaMatch[1];
 
   return null;
@@ -654,10 +648,7 @@ function isEntryPoint(filePath: string): boolean {
  * Filter out exports that are never imported anywhere in the project.
  * Entry-point files and barrel re-exports are always kept.
  */
-function filterDeadExports(
-  entries: SnapshotEntry[],
-  graph?: ImportGraph,
-): SnapshotEntry[] {
+function filterDeadExports(entries: SnapshotEntry[], graph?: ImportGraph): SnapshotEntry[] {
   if (!graph || graph.edges.length === 0) return entries;
 
   const usedExports = findUsedExports(graph.edges);

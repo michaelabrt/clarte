@@ -128,12 +128,7 @@ function pick(key: PaletteKey): (text: string) => string {
  * Apply a per-character color gradient across `text`.
  * Falls back to `fallbackFn` on non-truecolor terminals.
  */
-export function gradient(
-  text: string,
-  from: RGB,
-  to: RGB,
-  fallbackFn?: (text: string) => string,
-): string {
+export function gradient(text: string, from: RGB, to: RGB, fallbackFn?: (text: string) => string): string {
   if (noColor || !isTTY) return text;
   if (!trueColor) return fallbackFn ? fallbackFn(text) : text;
 

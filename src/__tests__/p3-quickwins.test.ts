@@ -51,9 +51,7 @@ describe("tech debt flags (§3.4)", () => {
         sourceToTests: new Map(),
         untestedFiles: ["src/graph.ts"],
       },
-      circularDeps: [
-        { chain: ["src/graph.ts", "src/utils.ts", "src/graph.ts"] },
-      ],
+      circularDeps: [{ chain: ["src/graph.ts", "src/utils.ts", "src/graph.ts"] }],
     });
 
     const directives = buildDirectives(analysis, mockCtx());
@@ -108,12 +106,8 @@ describe("tech debt flags (§3.4)", () => {
 
   it("includes instability and tight coupling advice", () => {
     const analysis = emptyAnalysis({
-      instabilities: [
-        { path: "src/api.ts", fanIn: 5, fanOut: 20, instability: 0.8 },
-      ],
-      tightCouplings: [
-        { from: "src/api.ts", to: "src/db.ts", importedNames: 10, names: [] },
-      ],
+      instabilities: [{ path: "src/api.ts", fanIn: 5, fanOut: 20, instability: 0.8 }],
+      tightCouplings: [{ from: "src/api.ts", to: "src/db.ts", importedNames: 10, names: [] }],
     });
 
     const directives = buildDirectives(analysis, mockCtx());

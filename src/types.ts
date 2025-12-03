@@ -46,37 +46,13 @@ export type IDETarget =
   | "generic";
 
 /** Detected programming language */
-export type Language =
-  | "typescript"
-  | "javascript"
-  | "python"
-  | "go"
-  | "rust"
-  | "java"
-  | "other";
+export type Language = "typescript" | "javascript" | "python" | "go" | "rust" | "java" | "other";
 
 /** Detected package manager */
-export type PackageManager =
-  | "npm"
-  | "pnpm"
-  | "yarn"
-  | "bun"
-  | "pip"
-  | "poetry"
-  | "cargo"
-  | "go"
-  | "none";
+export type PackageManager = "npm" | "pnpm" | "yarn" | "bun" | "pip" | "poetry" | "cargo" | "go" | "none";
 
 /** Detected linter/formatter */
-export type Linter =
-  | "biome"
-  | "eslint"
-  | "prettier"
-  | "ruff"
-  | "black"
-  | "rustfmt"
-  | "gofmt"
-  | "none";
+export type Linter = "biome" | "eslint" | "prettier" | "ruff" | "black" | "rustfmt" | "gofmt" | "none";
 
 /** A detected framework or major library */
 export interface DetectedFramework {

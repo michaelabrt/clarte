@@ -35,21 +35,26 @@ function mockGraph(): ImportGraph {
 function mockAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
   return {
     hubFiles: [
-      { path: "src/types.ts", centrality: 1.0, authority: 1.0, hubScore: 0.1, role: "Foundation", importedBy: 20, imports: 0 },
+      {
+        path: "src/types.ts",
+        centrality: 1.0,
+        authority: 1.0,
+        hubScore: 0.1,
+        role: "Foundation",
+        importedBy: 20,
+        imports: 0,
+      },
     ],
     circularDeps: [],
-    layers: [
-      { name: "types", files: ["src/types.ts"], importedByLayers: 3, dependsOn: [] },
-    ],
+    layers: [{ name: "types", files: ["src/types.ts"], importedByLayers: 3, dependsOn: [] }],
     layerEdges: [{ from: "utils", to: "types" }],
     gitActivity: {
-      commitCounts: new Map([["src/index.ts", 16], ["src/types.ts", 12]]),
-      hotFiles: [
-        { path: "src/index.ts", commits: 16, lastChanged: "2 hours ago" },
-      ],
-      changeCoupling: [
-        { fileA: "a.ts", fileB: "b.ts", coChangeCount: 10, support: 0.5, confidence: 0.83 },
-      ],
+      commitCounts: new Map([
+        ["src/index.ts", 16],
+        ["src/types.ts", 12],
+      ]),
+      hotFiles: [{ path: "src/index.ts", commits: 16, lastChanged: "2 hours ago" }],
+      changeCoupling: [{ fileA: "a.ts", fileB: "b.ts", coChangeCount: 10, support: 0.5, confidence: 0.83 }],
     },
     instabilities: [],
     communities: [{ id: 0, files: ["src/types.ts"], label: "types" }],

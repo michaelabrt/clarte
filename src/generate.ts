@@ -6,25 +6,14 @@ import type {
   ContextAnalysis,
   DetectedContext,
   GeneratedFile,
-  IDETarget,
   ImportGraph,
   ProgressCallback,
   UserAnswers,
 } from "./types.js";
 import { fileExists, readFileOr, readJsonFile, writeFileSafe } from "./utils.js";
-import {
-  buildMainContext,
-  getMainContextFilename,
-  type SectionFilterOptions,
-} from "./templates/main-context.js";
-import {
-  buildCursorRules,
-  renderCursorRule,
-} from "./templates/cursor-rules.js";
-import {
-  buildClaudeSkills,
-  renderClaudeSkill,
-} from "./templates/claude-skills.js";
+import { buildMainContext, getMainContextFilename, type SectionFilterOptions } from "./templates/main-context.js";
+import { buildCursorRules, renderCursorRule } from "./templates/cursor-rules.js";
+import { buildClaudeSkills, renderClaudeSkill } from "./templates/claude-skills.js";
 import { buildAiderContext } from "./templates/aider-context.js";
 import { detectContext } from "./detect.js";
 import { generateSnapshot } from "./snapshot.js";
@@ -67,8 +56,13 @@ export async function generateFiles(
   if (maxChars !== 0) {
     for (const ide of answers.ides) {
       const mainFilename = getMainContextFilename(ide);
-      if (!mainFilename.endsWith(".md") && !mainFilename.startsWith(".windsurfrules") &&
-          !mainFilename.startsWith(".clinerules") && !mainFilename.startsWith(".continuerules")) continue;
+      if (
+        !mainFilename.endsWith(".md") &&
+        !mainFilename.startsWith(".windsurfrules") &&
+        !mainFilename.startsWith(".clinerules") &&
+        !mainFilename.startsWith(".continuerules")
+      )
+        continue;
       const absPath = path.join(ctx.rootDir, mainFilename);
       const existing = await readFileOr(absPath);
       if (existing) {
@@ -87,7 +81,17 @@ export async function generateFiles(
     const mainContent =
       ide === "aider"
         ? await buildAiderContext(ctx, answers, snapshot, analysis)
-        : await buildMainContext(ctx, answers, snapshot, analysis, budget, sectionFilter, maxChars, reservedChars, graph);
+        : await buildMainContext(
+            ctx,
+            answers,
+            snapshot,
+            analysis,
+            budget,
+            sectionFilter,
+            maxChars,
+            reservedChars,
+            graph,
+          );
     await addFile(mainFilename, mainContent);
 
     // 2. Cursor-specific scoped rules
@@ -123,11 +127,7 @@ export async function generateFiles(
   }
 
   // Monorepo per-package context files
-  if (
-    answers.generatePerPackage &&
-    ctx.monorepo &&
-    ctx.monorepo.packages.length > 0
-  ) {
+  if (answers.generatePerPackage && ctx.monorepo && ctx.monorepo.packages.length > 0) {
     for (const pkg of ctx.monorepo.packages) {
       const pkgRootDir = path.join(ctx.rootDir, pkg.path);
 
@@ -149,8 +149,7 @@ export async function generateFiles(
       };
 
       for (const ide of answers.ides) {
-        const pkgMainFilename =
-          ide === "aider" ? ".aider.conf.yml" : getMainContextFilename(ide);
+        const pkgMainFilename = ide === "aider" ? ".aider.conf.yml" : getMainContextFilename(ide);
 
         const pkgContent =
           ide === "aider"
@@ -170,7 +169,13 @@ export async function generateFiles(
   for (const file of files) {
     if (!file.existed) continue;
     // Only preserve in markdown-based context files (not YAML, not skills)
-    if (!file.path.endsWith(".md") && !file.path.startsWith(".windsurfrules") && !file.path.startsWith(".clinerules") && !file.path.startsWith(".continuerules")) continue;
+    if (
+      !file.path.endsWith(".md") &&
+      !file.path.startsWith(".windsurfrules") &&
+      !file.path.startsWith(".clinerules") &&
+      !file.path.startsWith(".continuerules")
+    )
+      continue;
 
     const absPath = path.join(ctx.rootDir, file.path);
     const existingContent = await readFileOr(absPath);
@@ -186,7 +191,9 @@ export async function generateFiles(
 
   if (preservedCount > 0) {
     p.log.info(
-      t.text(`Preserved ${t.textBold(String(preservedCount))} custom section${preservedCount === 1 ? "" : "s"} (clarte:user markers)`),
+      t.text(
+        `Preserved ${t.textBold(String(preservedCount))} custom section${preservedCount === 1 ? "" : "s"} (clarte:user markers)`,
+      ),
     );
   }
 
@@ -199,7 +206,8 @@ export async function generateFiles(
   const existingFiles = files.filter((f) => f.existed);
   if (existingFiles.length > 0 && !force) {
     p.log.warn(
-      t.warn("The following files already exist:") + "\n" +
+      t.warn("The following files already exist:") +
+        "\n" +
         existingFiles.map((f) => t.text(`  - ${f.path}`)).join("\n"),
     );
 

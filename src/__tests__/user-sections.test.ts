@@ -69,12 +69,7 @@ describe("extractUserSections", () => {
   });
 
   it("skips unclosed markers", () => {
-    const content = [
-      "## Key Files",
-      "",
-      "<!-- clarte:user-start -->",
-      "Unclosed section",
-    ].join("\n");
+    const content = ["## Key Files", "", "<!-- clarte:user-start -->", "Unclosed section"].join("\n");
 
     expect(extractUserSections(content)).toHaveLength(0);
   });

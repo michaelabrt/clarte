@@ -53,11 +53,7 @@ function buildScriptSkills(ctx: DetectedContext, scripts: Record<string, string>
       name: skillName,
       description: config.description,
       disableModelInvocation: true,
-      body: [
-        `# ${config.description}`,
-        "",
-        `Run: \`${command}\``,
-      ].join("\n"),
+      body: [`# ${config.description}`, "", `Run: \`${command}\``].join("\n"),
     });
   }
 
@@ -66,13 +62,20 @@ function buildScriptSkills(ctx: DetectedContext, scripts: Record<string, string>
 
 function getRunCommand(ctx: DetectedContext): string {
   switch (ctx.packageManager) {
-    case "pnpm": return "pnpm";
-    case "yarn": return "yarn";
-    case "bun": return "bun run";
-    case "npm": return "npm run";
-    case "cargo": return "cargo";
-    case "go": return "go";
-    default: return "npm run";
+    case "pnpm":
+      return "pnpm";
+    case "yarn":
+      return "yarn";
+    case "bun":
+      return "bun run";
+    case "npm":
+      return "npm run";
+    case "cargo":
+      return "cargo";
+    case "go":
+      return "go";
+    default:
+      return "npm run";
   }
 }
 
@@ -93,7 +96,9 @@ async function buildArchitectureSkill(analysis?: ContextAnalysis, ctx?: Detected
     bodyLines.push("## Key Files (by HITS analysis)");
     bodyLines.push("");
     for (const hub of analysis.hubFiles) {
-      bodyLines.push(`- \`${hub.path}\` — ${hub.role} (imported by ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"})`);
+      bodyLines.push(
+        `- \`${hub.path}\` — ${hub.role} (imported by ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"})`,
+      );
     }
     bodyLines.push("");
   }
@@ -111,9 +116,8 @@ async function buildArchitectureSkill(analysis?: ContextAnalysis, ctx?: Detected
     bodyLines.push("## Circular Dependencies");
     bodyLines.push("");
     for (const dep of analysis.circularDeps) {
-      const severity = dep.severity != null
-        ? dep.severity === 0 ? " (type-only)" : dep.severity < 1 ? " (mixed)" : ""
-        : "";
+      const severity =
+        dep.severity != null ? (dep.severity === 0 ? " (type-only)" : dep.severity < 1 ? " (mixed)" : "") : "";
       const hint = dep.breakHint ? ` -- ${dep.breakHint}` : "";
       bodyLines.push(`- ${dep.chain.map((f) => `\`${f}\``).join(" -> ")}${severity}${hint}`);
     }
@@ -158,8 +162,7 @@ function buildClarteSkills(): ClaudeSkill[] {
   return [
     {
       name: "clarte-refresh",
-      description:
-        "Refresh the code snapshot in the context file to reflect recent source changes.",
+      description: "Refresh the code snapshot in the context file to reflect recent source changes.",
       disableModelInvocation: true,
       allowedTools: "Bash",
       body: [
@@ -220,10 +223,7 @@ function buildClarteSkills(): ClaudeSkill[] {
  * Render a ClaudeSkill as YAML frontmatter + markdown body.
  */
 export function renderClaudeSkill(skill: ClaudeSkill): string {
-  const lines: string[] = [
-    "---",
-    `description: ${skill.description}`,
-  ];
+  const lines: string[] = ["---", `description: ${skill.description}`];
 
   if (skill.disableModelInvocation) {
     lines.push("disable-model-invocation: true");

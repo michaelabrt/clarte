@@ -264,9 +264,7 @@ export type Baz = string;
     const constraints: ConfigConstraints = {
       linter: {
         tool: "ESLint",
-        keyRules: [
-          { rule: "import/order", setting: "error", impact: "keep imports sorted" },
-        ],
+        keyRules: [{ rule: "import/order", setting: "error", impact: "keep imports sorted" }],
       },
     };
 
@@ -342,9 +340,7 @@ export type UserCardProps = {};
     // Global file naming should be mixed (camelCase from utils, PascalCase from components)
     // Directory overrides should capture the local patterns
     if (result!.directoryOverrides) {
-      const componentOverride = result!.directoryOverrides.find(
-        (o) => o.directory === "src/components",
-      );
+      const componentOverride = result!.directoryOverrides.find((o) => o.directory === "src/components");
       // Components should have PascalCase files if it differs from global
       if (componentOverride?.naming.files) {
         expect(componentOverride.naming.files).toBe("PascalCase");
@@ -412,9 +408,7 @@ export function ProcessData() {}
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
     // src/tiny/ has only 1 file with 1 function + 1 filename = 2 samples, below 5
-    const tinyOverride = result!.directoryOverrides?.find(
-      (o) => o.directory === "src/tiny",
-    );
+    const tinyOverride = result!.directoryOverrides?.find((o) => o.directory === "src/tiny");
     expect(tinyOverride).toBeUndefined();
   });
 });

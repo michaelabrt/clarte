@@ -141,8 +141,7 @@ async function askWithContext(
     messages: [
       {
         role: "user",
-        content:
-          `You are an expert developer analyzing a codebase. Here is the project's CLAUDE.md context file:\n\n<context>\n${context}\n</context>\n\nAnswer this question concisely:\n${question}`,
+        content: `You are an expert developer analyzing a codebase. Here is the project's CLAUDE.md context file:\n\n<context>\n${context}\n</context>\n\nAnswer this question concisely:\n${question}`,
       },
     ],
   });
@@ -202,17 +201,13 @@ async function scoreTask(context: string, task: EvalTask): Promise<CallResult> {
 
 // ── Report formatting ────────────────────────────────────────────────────────
 
-function formatReport(
-  results: TaskResult[],
-  baselineBytes: number,
-  directedBytes: number,
-): string {
+function formatReport(results: TaskResult[], baselineBytes: number, directedBytes: number): string {
   const sep = "=".repeat(72);
   const lines: string[] = [];
 
   const baselineTokensEst = estimateTokens(baselineContext);
   const directedTokensEst = estimateTokens(directedContext);
-  const sizeDelta = ((directedBytes - baselineBytes) / baselineBytes * 100).toFixed(1);
+  const sizeDelta = (((directedBytes - baselineBytes) / baselineBytes) * 100).toFixed(1);
 
   lines.push("");
   lines.push(sep);
@@ -220,8 +215,12 @@ function formatReport(
   lines.push(sep);
   lines.push("");
   lines.push("  Context Sizes:");
-  lines.push(`    Baseline (undirected): ${baselineBytes.toLocaleString()} bytes  (~${baselineTokensEst.toLocaleString()} tokens)`);
-  lines.push(`    Directed:              ${directedBytes.toLocaleString()} bytes  (~${directedTokensEst.toLocaleString()} tokens)`);
+  lines.push(
+    `    Baseline (undirected): ${baselineBytes.toLocaleString()} bytes  (~${baselineTokensEst.toLocaleString()} tokens)`,
+  );
+  lines.push(
+    `    Directed:              ${directedBytes.toLocaleString()} bytes  (~${directedTokensEst.toLocaleString()} tokens)`,
+  );
   lines.push(`    Delta:                 ${sizeDelta}%`);
   lines.push("");
 
@@ -247,8 +246,12 @@ function formatReport(
   const totalCost = baselineCost + directedCost;
 
   lines.push("  Token Usage:");
-  lines.push(`    Baseline: ${baselineInputTotal.toLocaleString()} in / ${baselineOutputTotal.toLocaleString()} out  ($${baselineCost.toFixed(3)})`);
-  lines.push(`    Directed: ${directedInputTotal.toLocaleString()} in / ${directedOutputTotal.toLocaleString()} out  ($${directedCost.toFixed(3)})`);
+  lines.push(
+    `    Baseline: ${baselineInputTotal.toLocaleString()} in / ${baselineOutputTotal.toLocaleString()} out  ($${baselineCost.toFixed(3)})`,
+  );
+  lines.push(
+    `    Directed: ${directedInputTotal.toLocaleString()} in / ${directedOutputTotal.toLocaleString()} out  ($${directedCost.toFixed(3)})`,
+  );
   lines.push(`    Total:    $${totalCost.toFixed(3)}`);
   lines.push("");
 
@@ -268,7 +271,7 @@ function formatReport(
   }
   lines.push("");
 
-  const nonInferior = delta >= -0.10;
+  const nonInferior = delta >= -0.1;
   lines.push(`  Verdict: ${nonInferior ? "PASS" : "FAIL"} (non-inferiority gate: delta >= -10%)`);
   lines.push(sep);
 
@@ -326,6 +329,6 @@ describe.skipIf(SKIP)("Directed Betweenness A/B Eval (E.2)", () => {
     const delta = (directedPasses - baselinePasses) / results.length;
 
     // Non-inferiority: directed should not regress more than 10%
-    expect(delta).toBeGreaterThanOrEqual(-0.10);
+    expect(delta).toBeGreaterThanOrEqual(-0.1);
   }, 600_000); // 10 min timeout
 });

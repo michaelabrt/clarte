@@ -82,9 +82,7 @@ export function migrateConfig(
  * Returns null if the file doesn't exist or is invalid.
  * Automatically runs migrations when the config version is behind.
  */
-export async function loadConfig(
-  rootDir: string,
-): Promise<ProjectConfig | null> {
+export async function loadConfig(rootDir: string): Promise<ProjectConfig | null> {
   const configPath = path.join(rootDir, CONFIG_FILENAME);
   const raw = await readJsonFile(configPath);
   if (!raw) return null;
@@ -96,14 +94,12 @@ export async function loadConfig(
   if (fileVersion > CONFIG_VERSION) {
     console.error(
       `[clarte] Config version ${fileVersion} is newer than supported version ${CONFIG_VERSION}. ` +
-      `Ignoring config and using defaults. Consider upgrading clarte.`,
+        `Ignoring config and using defaults. Consider upgrading clarte.`,
     );
     return null;
   }
 
-  const migrated = fileVersion < CONFIG_VERSION
-    ? migrateConfig(raw, fileVersion, CONFIG_VERSION)
-    : raw;
+  const migrated = fileVersion < CONFIG_VERSION ? migrateConfig(raw, fileVersion, CONFIG_VERSION) : raw;
 
   const cfg = migrated as Partial<ConfigFile>;
 
@@ -125,9 +121,7 @@ export async function loadConfig(
     snapshotGeneratedAt: cfg.snapshotGeneratedAt,
     language: cfg.language,
     staleDays: cfg.staleDays,
-    colorScheme: cfg.colorScheme === "dark" || cfg.colorScheme === "light"
-      ? cfg.colorScheme
-      : undefined,
+    colorScheme: cfg.colorScheme === "dark" || cfg.colorScheme === "light" ? cfg.colorScheme : undefined,
     layers: validateLayers(cfg.layers),
     analysisDays: cfg.analysisDays,
     sectionOrder: Array.isArray(cfg.sectionOrder) ? cfg.sectionOrder : undefined,
@@ -146,7 +140,7 @@ export async function saveConfig(
 ): Promise<void> {
   const configPath = path.join(rootDir, CONFIG_FILENAME);
   // Preserve user-editable fields from existing config
-  const existing = await readJsonFile(configPath) as Partial<ConfigFile> | null;
+  const existing = (await readJsonFile(configPath)) as Partial<ConfigFile> | null;
   const cfg: ConfigFile = {
     _version: CONFIG_VERSION,
     ides: answers.ides,
@@ -157,9 +151,7 @@ export async function saveConfig(
     snapshotPaths: answers.snapshotPaths,
     stackCorrections: answers.stackCorrections,
     generatePerPackage: answers.generatePerPackage,
-    ...(snapshotHash
-      ? { snapshotHash, snapshotGeneratedAt: Date.now() }
-      : {}),
+    ...(snapshotHash ? { snapshotHash, snapshotGeneratedAt: Date.now() } : {}),
     ...(language ? { language } : {}),
     ...(existing?.staleDays != null ? { staleDays: existing.staleDays } : {}),
     ...(existing?.colorScheme ? { colorScheme: existing.colorScheme } : {}),
@@ -191,7 +183,6 @@ export function configToAnswers(config: ProjectConfig): UserAnswers {
   };
 }
 
-
 /** Map of language to the project manifest filename(s) to include in the hash */
 const MANIFEST_FILES: Record<string, string[]> = {
   typescript: ["package.json"],
@@ -209,10 +200,7 @@ const MANIFEST_FILES: Record<string, string[]> = {
  * so that dependency changes make the snapshot stale even if no source files changed.
  * Returns a 16-char hex string.
  */
-export async function computeSnapshotHash(
-  rootDir: string,
-  language: Language,
-): Promise<string> {
+export async function computeSnapshotHash(rootDir: string, language: Language): Promise<string> {
   const extMap: Record<string, string[]> = {
     typescript: ["**/*.{ts,tsx}"],
     javascript: ["**/*.{js,jsx,mjs}"],
@@ -225,14 +213,7 @@ export async function computeSnapshotHash(
 
   const files = await glob(extMap[language] ?? extMap.other, {
     cwd: rootDir,
-    ignore: [
-      "**/node_modules/**",
-      "**/dist/**",
-      "**/build/**",
-      "**/.next/**",
-      "**/target/**",
-      "**/vendor/**",
-    ],
+    ignore: ["**/node_modules/**", "**/dist/**", "**/build/**", "**/.next/**", "**/target/**", "**/vendor/**"],
     absolute: false,
   });
 
@@ -256,11 +237,7 @@ export async function computeSnapshotHash(
     }
   }
 
-  const hash = createHash("sha256")
-    .update(entries.join("\n"))
-    .update(manifestContent)
-    .digest("hex")
-    .slice(0, 16);
+  const hash = createHash("sha256").update(entries.join("\n")).update(manifestContent).digest("hex").slice(0, 16);
 
   return hash;
 }

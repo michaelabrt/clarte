@@ -171,8 +171,7 @@ async function askWithContext(
     messages: [
       {
         role: "user",
-        content:
-          `You are an expert developer analyzing a codebase. Here is the project's CLAUDE.md context file:\n\n<context>\n${context}\n</context>\n\nAnswer this question concisely:\n${question}`,
+        content: `You are an expert developer analyzing a codebase. Here is the project's CLAUDE.md context file:\n\n<context>\n${context}\n</context>\n\nAnswer this question concisely:\n${question}`,
       },
     ],
   });
@@ -224,17 +223,13 @@ async function scoreTask(context: string, task: EvalTask): Promise<CallResult> {
 
 // -- Report formatting --------------------------------------------------------
 
-function formatReport(
-  results: TaskResult[],
-  baselineBytes: number,
-  dedupedBytes: number,
-): string {
+function formatReport(results: TaskResult[], baselineBytes: number, dedupedBytes: number): string {
   const sep = "=".repeat(72);
   const lines: string[] = [];
 
   const baselineTokensEst = estimateTokens(baselineContext);
   const dedupedTokensEst = estimateTokens(dedupedContext);
-  const sizeDelta = ((dedupedBytes - baselineBytes) / baselineBytes * 100).toFixed(1);
+  const sizeDelta = (((dedupedBytes - baselineBytes) / baselineBytes) * 100).toFixed(1);
 
   lines.push("");
   lines.push(sep);
@@ -244,8 +239,12 @@ function formatReport(
   lines.push(`  Config: model=${MODEL}, temp=${TEMPERATURE}, iters=${N_ITERS}`);
   lines.push("");
   lines.push("  Context Sizes:");
-  lines.push(`    Baseline (no dedup):  ${baselineBytes.toLocaleString()} bytes  (~${baselineTokensEst.toLocaleString()} tokens)`);
-  lines.push(`    Deduped:              ${dedupedBytes.toLocaleString()} bytes  (~${dedupedTokensEst.toLocaleString()} tokens)`);
+  lines.push(
+    `    Baseline (no dedup):  ${baselineBytes.toLocaleString()} bytes  (~${baselineTokensEst.toLocaleString()} tokens)`,
+  );
+  lines.push(
+    `    Deduped:              ${dedupedBytes.toLocaleString()} bytes  (~${dedupedTokensEst.toLocaleString()} tokens)`,
+  );
   lines.push(`    Delta:                ${sizeDelta}%`);
   lines.push(`    Token savings:        ~${(baselineTokensEst - dedupedTokensEst).toLocaleString()} tokens`);
   lines.push("");
@@ -257,7 +256,9 @@ function formatReport(
     const dPass = iterResults.filter((r) => r.deduped.passed).length;
     const total = iterResults.length;
     const delta = (dPass - bPass) / total;
-    lines.push(`  Iteration ${iter + 1}: baseline=${bPass}/${total}, deduped=${dPass}/${total}, delta=${delta >= 0 ? "+" : ""}${(delta * 100).toFixed(0)}%`);
+    lines.push(
+      `  Iteration ${iter + 1}: baseline=${bPass}/${total}, deduped=${dPass}/${total}, delta=${delta >= 0 ? "+" : ""}${(delta * 100).toFixed(0)}%`,
+    );
   }
   lines.push("");
 
@@ -267,7 +268,9 @@ function formatReport(
   const total = results.length;
   const aggDelta = (dTotal - bTotal) / total;
 
-  lines.push(`  Aggregate: baseline=${bTotal}/${total} (${(bTotal / total * 100).toFixed(0)}%), deduped=${dTotal}/${total} (${(dTotal / total * 100).toFixed(0)}%)`);
+  lines.push(
+    `  Aggregate: baseline=${bTotal}/${total} (${((bTotal / total) * 100).toFixed(0)}%), deduped=${dTotal}/${total} (${((dTotal / total) * 100).toFixed(0)}%)`,
+  );
   lines.push(`  Delta: ${aggDelta >= 0 ? "+" : ""}${(aggDelta * 100).toFixed(1)}%`);
   lines.push("");
 
@@ -284,16 +287,16 @@ function formatReport(
     const catDelta = catDeduped - catBaseline;
     const deltaStr = catDelta === 0 ? "  0" : catDelta > 0 ? ` +${catDelta}` : ` ${catDelta}`;
     lines.push(
-      `    ${cat.padEnd(18)} ${catBaseline}/${catTotal}`.padEnd(34) +
-      `${catDeduped}/${catTotal}`.padEnd(10) +
-      deltaStr,
+      `    ${cat.padEnd(18)} ${catBaseline}/${catTotal}`.padEnd(34) + `${catDeduped}/${catTotal}`.padEnd(10) + deltaStr,
     );
   }
   lines.push("");
 
   // Per-task detail
   lines.push("  Per-Task Detail:");
-  lines.push(`    ${"Task".padEnd(10)} ${"Cat".padEnd(18)} ${"Iter".padEnd(6)} ${"Baseline".padEnd(10)} ${"Deduped".padEnd(10)} Flip`);
+  lines.push(
+    `    ${"Task".padEnd(10)} ${"Cat".padEnd(18)} ${"Iter".padEnd(6)} ${"Baseline".padEnd(10)} ${"Deduped".padEnd(10)} Flip`,
+  );
   lines.push(`    ${"-".repeat(64)}`);
   for (const r of results) {
     const bStr = r.baseline.passed ? "PASS" : "FAIL";
@@ -315,13 +318,17 @@ function formatReport(
   const totalCost = costFromTokens(bIn, bOut) + costFromTokens(dIn, dOut);
 
   lines.push("  Token Usage:");
-  lines.push(`    Baseline: ${bIn.toLocaleString()} in / ${bOut.toLocaleString()} out  ($${costFromTokens(bIn, bOut).toFixed(3)})`);
-  lines.push(`    Deduped:  ${dIn.toLocaleString()} in / ${dOut.toLocaleString()} out  ($${costFromTokens(dIn, dOut).toFixed(3)})`);
+  lines.push(
+    `    Baseline: ${bIn.toLocaleString()} in / ${bOut.toLocaleString()} out  ($${costFromTokens(bIn, bOut).toFixed(3)})`,
+  );
+  lines.push(
+    `    Deduped:  ${dIn.toLocaleString()} in / ${dOut.toLocaleString()} out  ($${costFromTokens(dIn, dOut).toFixed(3)})`,
+  );
   lines.push(`    Total:    $${totalCost.toFixed(3)}`);
   lines.push("");
 
   // Verdict
-  const nonInferior = aggDelta >= -0.10;
+  const nonInferior = aggDelta >= -0.1;
   lines.push(`  Verdict: ${nonInferior ? "PASS" : "FAIL"} (non-inferiority gate: delta >= -10%)`);
   lines.push(sep);
 
@@ -380,6 +387,6 @@ describe.skipIf(SKIP)("Content Dedup A/B Eval (E.2)", () => {
     expect(
       delta,
       `Deduped regressed by ${(Math.abs(delta) * 100).toFixed(1)}% (non-inferiority gate: -10%)`,
-    ).toBeGreaterThanOrEqual(-0.10);
+    ).toBeGreaterThanOrEqual(-0.1);
   }, 600_000); // 10 min timeout
 });

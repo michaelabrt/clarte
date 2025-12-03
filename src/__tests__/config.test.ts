@@ -14,11 +14,7 @@ async function cleanup(dir: string) {
 }
 
 async function writeConfig(dir: string, obj: Record<string, unknown>) {
-  await fs.writeFile(
-    path.join(dir, ".clarte.json"),
-    JSON.stringify(obj, null, 2),
-    "utf-8",
-  );
+  await fs.writeFile(path.join(dir, ".clarte.json"), JSON.stringify(obj, null, 2), "utf-8");
 }
 
 const sampleAnswers: UserAnswers = {
@@ -196,9 +192,7 @@ describe("layers config", () => {
     tmpDir = await makeTmpDir();
 
     await saveConfig(tmpDir, sampleAnswers);
-    const raw = JSON.parse(
-      await fs.readFile(path.join(tmpDir, ".clarte.json"), "utf-8"),
-    );
+    const raw = JSON.parse(await fs.readFile(path.join(tmpDir, ".clarte.json"), "utf-8"));
 
     expect(raw.layers).toBeUndefined();
   });
@@ -310,10 +304,7 @@ describe("computeSnapshotHash", () => {
     tmpDir = await makeTmpDir();
     await fs.mkdir(path.join(tmpDir, "src"), { recursive: true });
     await fs.writeFile(path.join(tmpDir, "src/index.ts"), "export const x = 1;");
-    await fs.writeFile(
-      path.join(tmpDir, "package.json"),
-      JSON.stringify({ dependencies: { react: "^18.0.0" } }),
-    );
+    await fs.writeFile(path.join(tmpDir, "package.json"), JSON.stringify({ dependencies: { react: "^18.0.0" } }));
 
     const hash1 = await computeSnapshotHash(tmpDir, "typescript");
 

@@ -19,7 +19,7 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { existsSync } from "node:fs";
-import { buildImportGraph, findChokepoints, computeBetweenness } from "../../graph.js";
+import { buildImportGraph, findChokepoints } from "../../graph.js";
 import { initTreeSitter } from "../../ast-parse.js";
 import { buildDirectives, renderDirectivesSection } from "../../templates/directives.js";
 import type { ImportGraph, ContextAnalysis, DetectedContext } from "../../types.js";
@@ -90,9 +90,7 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
           rootDir: project.dir,
         } as DetectedContext;
         const directives = buildDirectives(mockAnalysis, mockCtx, undefined, graph);
-        const flowBottleneckDirectives = directives.filter((d) =>
-          d.includes("flow bottleneck"),
-        );
+        const flowBottleneckDirectives = directives.filter((d) => d.includes("flow bottleneck"));
 
         // Render full pipeline output (Gap 1)
         const renderedSection = await renderDirectivesSection(mockAnalysis, mockCtx, graph);
@@ -100,9 +98,7 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
         // Summary statistics
         const allScores = entries.map(([, s]) => s);
         const sorted = [...allScores].sort((a, b) => a - b);
-        const medianBetweenness = sorted.length > 0
-          ? sorted[Math.floor(sorted.length / 2)]
-          : 0;
+        const medianBetweenness = sorted.length > 0 ? sorted[Math.floor(sorted.length / 2)] : 0;
         const maxBetweenness = sorted.length > 0 ? sorted[sorted.length - 1] : 0;
         const countAbove03 = allScores.filter((s) => s > 0.3).length;
 
@@ -116,12 +112,8 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
             score,
             isChokepoint: chokepoints.has(file),
           })),
-          above05NotChokepoint: entries.filter(
-            ([f, s]) => s > 0.5 && !chokepoints.has(f),
-          ).length,
-          above03NotChokepoint: entries.filter(
-            ([f, s]) => s > 0.3 && !chokepoints.has(f),
-          ).length,
+          above05NotChokepoint: entries.filter(([f, s]) => s > 0.5 && !chokepoints.has(f)).length,
+          above03NotChokepoint: entries.filter(([f, s]) => s > 0.3 && !chokepoints.has(f)).length,
           pureZeroSinks,
           flowBottleneckDirectives,
           renderedSection,
@@ -147,7 +139,9 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
             console.log(`    ${f}`);
           }
         }
-        console.log(`\n  Summary: median=${result.medianBetweenness.toFixed(4)}, max=${result.maxBetweenness.toFixed(4)}, count>0.3=${result.countAbove03}`);
+        console.log(
+          `\n  Summary: median=${result.medianBetweenness.toFixed(4)}, max=${result.maxBetweenness.toFixed(4)}, count>0.3=${result.countAbove03}`,
+        );
         console.log(`  Flow bottleneck directives: ${result.flowBottleneckDirectives.length}`);
         for (const d of result.flowBottleneckDirectives) {
           console.log(`    ${d}`);
@@ -212,9 +206,7 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
         rootDir: "/tmp/clarte-test-drizzle",
       } as DetectedContext;
       const directives = buildDirectives(mockAnalysis, mockCtx, undefined, graph);
-      const flowBottleneckDirectives = directives.filter((d) =>
-        d.includes("flow bottleneck"),
-      );
+      const flowBottleneckDirectives = directives.filter((d) => d.includes("flow bottleneck"));
 
       const renderedSection = await renderDirectivesSection(mockAnalysis, mockCtx, graph);
 
@@ -231,12 +223,8 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
           score,
           isChokepoint: chokepoints.has(file),
         })),
-        above05NotChokepoint: entries.filter(
-          ([f, s]) => s > 0.5 && !chokepoints.has(f),
-        ).length,
-        above03NotChokepoint: entries.filter(
-          ([f, s]) => s > 0.3 && !chokepoints.has(f),
-        ).length,
+        above05NotChokepoint: entries.filter(([f, s]) => s > 0.5 && !chokepoints.has(f)).length,
+        above03NotChokepoint: entries.filter(([f, s]) => s > 0.3 && !chokepoints.has(f)).length,
         pureZeroSinks,
         flowBottleneckDirectives,
         renderedSection,
@@ -261,9 +249,7 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
     });
 
     it("no chokepoint file appears in a flow bottleneck directive", () => {
-      const chokepointFiles = drizzleResult.topScores
-        .filter((t) => t.isChokepoint)
-        .map((t) => t.file);
+      const chokepointFiles = drizzleResult.topScores.filter((t) => t.isChokepoint).map((t) => t.file);
       for (const d of drizzleResult.flowBottleneckDirectives) {
         for (const cp of chokepointFiles) {
           expect(d, `chokepoint ${cp} should not appear in flow bottleneck directive`).not.toContain(cp);

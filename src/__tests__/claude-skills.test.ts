@@ -87,12 +87,7 @@ describe("buildClaudeSkills", () => {
 
   it("uses correct run command for pnpm", async () => {
     const scripts = { test: "vitest run" };
-    const skills = await buildClaudeSkills(
-      mockCtx({ packageManager: "pnpm" }),
-      mockAnswers(),
-      undefined,
-      scripts,
-    );
+    const skills = await buildClaudeSkills(mockCtx({ packageManager: "pnpm" }), mockAnswers(), undefined, scripts);
     const testSkill = skills.find((s) => s.name === "test");
     expect(testSkill?.body).toContain("pnpm test");
   });
@@ -126,11 +121,7 @@ describe("buildClaudeSkills", () => {
     const skills = await buildClaudeSkills(mockCtx(), mockAnswers());
     const clarteSkills = skills.filter((s) => s.name.startsWith("clarte-"));
     expect(clarteSkills).toHaveLength(3);
-    expect(clarteSkills.map((s) => s.name)).toEqual([
-      "clarte-refresh",
-      "clarte-file",
-      "clarte-impact",
-    ]);
+    expect(clarteSkills.map((s) => s.name)).toEqual(["clarte-refresh", "clarte-file", "clarte-impact"]);
   });
 });
 

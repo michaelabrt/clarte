@@ -19,16 +19,10 @@ let tmpDir: string;
 
 async function createTestFiles(dir: string, count: number): Promise<void> {
   // f0.ts is the foundation file
-  await fs.writeFile(
-    path.join(dir, "f0.ts"),
-    "export const x = 1;\n",
-  );
+  await fs.writeFile(path.join(dir, "f0.ts"), "export const x = 1;\n");
   // f1..f(count-1) each import from f0
   for (let i = 1; i < count; i++) {
-    await fs.writeFile(
-      path.join(dir, `f${i}.ts`),
-      `import { x } from './f0';\nexport const y${i} = x;\n`,
-    );
+    await fs.writeFile(path.join(dir, `f${i}.ts`), `import { x } from './f0';\nexport const y${i} = x;\n`);
   }
 }
 
@@ -131,9 +125,7 @@ describe("buildGraphWithCache", () => {
 
   it("does full rebuild when no cache exists", async () => {
     const messages: string[] = [];
-    const graph = await buildGraphWithCache(tmpDir, "typescript", (msg) =>
-      messages.push(msg),
-    );
+    const graph = await buildGraphWithCache(tmpDir, "typescript", (msg) => messages.push(msg));
 
     expect(messages.some((m) => m.includes("Full graph rebuild"))).toBe(true);
 
@@ -148,9 +140,7 @@ describe("buildGraphWithCache", () => {
     await buildGraphWithCache(tmpDir, "typescript");
 
     const messages: string[] = [];
-    const graph = await buildGraphWithCache(tmpDir, "typescript", (msg) =>
-      messages.push(msg),
-    );
+    const graph = await buildGraphWithCache(tmpDir, "typescript", (msg) => messages.push(msg));
 
     expect(messages.some((m) => m.includes("No files changed"))).toBe(true);
     const internalEdges = graph.edges.filter((e) => !e.isExternal);
@@ -161,15 +151,10 @@ describe("buildGraphWithCache", () => {
     await buildGraphWithCache(tmpDir, "typescript");
 
     // Modify 1 file out of 12 (8.3% < 10%)
-    await fs.writeFile(
-      path.join(tmpDir, "f1.ts"),
-      `import { x } from './f0';\nexport const z = x + 1;\n`,
-    );
+    await fs.writeFile(path.join(tmpDir, "f1.ts"), `import { x } from './f0';\nexport const z = x + 1;\n`);
 
     const messages: string[] = [];
-    const graph = await buildGraphWithCache(tmpDir, "typescript", (msg) =>
-      messages.push(msg),
-    );
+    const graph = await buildGraphWithCache(tmpDir, "typescript", (msg) => messages.push(msg));
 
     expect(messages.some((m) => m.includes("Incremental rebuild"))).toBe(true);
     const internalEdges = graph.edges.filter((e) => !e.isExternal);
@@ -181,16 +166,11 @@ describe("buildGraphWithCache", () => {
 
     // Modify 3 files out of 12 (25% > 10%)
     for (let i = 1; i <= 3; i++) {
-      await fs.writeFile(
-        path.join(tmpDir, `f${i}.ts`),
-        `import { x } from './f0';\nexport const z${i} = x;\n`,
-      );
+      await fs.writeFile(path.join(tmpDir, `f${i}.ts`), `import { x } from './f0';\nexport const z${i} = x;\n`);
     }
 
     const messages: string[] = [];
-    await buildGraphWithCache(tmpDir, "typescript", (msg) =>
-      messages.push(msg),
-    );
+    await buildGraphWithCache(tmpDir, "typescript", (msg) => messages.push(msg));
 
     expect(messages.some((m) => m.includes("Full graph rebuild"))).toBe(true);
   });
@@ -199,9 +179,7 @@ describe("buildGraphWithCache", () => {
     await buildGraphWithCache(tmpDir, "typescript");
 
     const messages: string[] = [];
-    await buildGraphWithCache(tmpDir, "python", (msg) =>
-      messages.push(msg),
-    );
+    await buildGraphWithCache(tmpDir, "python", (msg) => messages.push(msg));
 
     expect(messages.some((m) => m.includes("Full graph rebuild"))).toBe(true);
   });
@@ -213,16 +191,12 @@ describe("buildGraphWithCache", () => {
     await fs.unlink(path.join(tmpDir, "f11.ts"));
 
     const messages: string[] = [];
-    const graph = await buildGraphWithCache(tmpDir, "typescript", (msg) =>
-      messages.push(msg),
-    );
+    const graph = await buildGraphWithCache(tmpDir, "typescript", (msg) => messages.push(msg));
 
     expect(messages.some((m) => m.includes("Incremental rebuild"))).toBe(true);
 
     // Deleted file's edges should be gone
-    const f11Edges = graph.edges.filter(
-      (e) => e.from === "f11.ts" || e.to === "f11.ts",
-    );
+    const f11Edges = graph.edges.filter((e) => e.from === "f11.ts" || e.to === "f11.ts");
     expect(f11Edges.length).toBe(0);
 
     const internalEdges = graph.edges.filter((e) => !e.isExternal);
@@ -233,21 +207,14 @@ describe("buildGraphWithCache", () => {
     await buildGraphWithCache(tmpDir, "typescript");
 
     // Add 1 file (1/13 = 7.7% < 10%)
-    await fs.writeFile(
-      path.join(tmpDir, "f12.ts"),
-      `import { x } from './f0';\nexport const w = x;\n`,
-    );
+    await fs.writeFile(path.join(tmpDir, "f12.ts"), `import { x } from './f0';\nexport const w = x;\n`);
 
     const messages: string[] = [];
-    const graph = await buildGraphWithCache(tmpDir, "typescript", (msg) =>
-      messages.push(msg),
-    );
+    const graph = await buildGraphWithCache(tmpDir, "typescript", (msg) => messages.push(msg));
 
     expect(messages.some((m) => m.includes("Incremental rebuild"))).toBe(true);
 
-    const f12Edges = graph.edges.filter(
-      (e) => e.from === "f12.ts" && !e.isExternal,
-    );
+    const f12Edges = graph.edges.filter((e) => e.from === "f12.ts" && !e.isExternal);
     expect(f12Edges.length).toBe(1);
     expect(f12Edges[0].to).toBe("f0.ts");
 
@@ -275,7 +242,17 @@ describe("analysis cache I/O", () => {
     const data: AnalysisCacheData = {
       version: 2,
       cacheKey: "abc123",
-      hubFiles: [{ path: "src/a.ts", centrality: 0.8, authority: 0.8, hubScore: 0.2, role: "Foundation", importedBy: 5, imports: 1 }],
+      hubFiles: [
+        {
+          path: "src/a.ts",
+          centrality: 0.8,
+          authority: 0.8,
+          hubScore: 0.2,
+          role: "Foundation",
+          importedBy: 5,
+          imports: 1,
+        },
+      ],
       circularDeps: [],
       layers: [],
       layerEdges: [],
@@ -285,7 +262,13 @@ describe("analysis cache I/O", () => {
       crossCuttingFiles: [],
       chokepoints: [],
       tightCouplings: [],
-      graphTopology: { componentCount: 1, componentSizes: [10], approximateDiameter: 3, reachability: 1, isFragmented: false },
+      graphTopology: {
+        componentCount: 1,
+        componentSizes: [10],
+        approximateDiameter: 3,
+        reachability: 1,
+        isFragmented: false,
+      },
     };
     await saveAnalysisCache(tmpDir, data);
     const loaded = await loadAnalysisCache(tmpDir);
@@ -306,7 +289,13 @@ describe("analysis cache I/O", () => {
       crossCuttingFiles: [],
       chokepoints: [],
       tightCouplings: [],
-      graphTopology: { componentCount: 1, componentSizes: [1], approximateDiameter: 0, reachability: 1, isFragmented: false },
+      graphTopology: {
+        componentCount: 1,
+        componentSizes: [1],
+        approximateDiameter: 0,
+        reachability: 1,
+        isFragmented: false,
+      },
     };
     await saveAnalysisCache(tmpDir, data);
     expect(await loadAnalysisCache(tmpDir)).toBeNull();
@@ -385,9 +374,7 @@ describe("computeAnalysisCacheKey", () => {
       hubScores: new Map(),
     };
     const graph2: ImportGraph = {
-      edges: [
-        { from: "a.ts", to: "b.ts", isExternal: false, specifier: "./b", importedNames: [] },
-      ],
+      edges: [{ from: "a.ts", to: "b.ts", isExternal: false, specifier: "./b", importedNames: [] }],
       inDegree: new Map(),
       centrality: new Map(),
       externalImportCounts: new Map(),

@@ -11,10 +11,22 @@ const IMPACTFUL_RULES: Array<{
   impact: string;
 }> = [
   { eslint: "prefer-const", biome: "style.useConst", impact: "use const for variables that are never reassigned" },
-  { eslint: "@typescript-eslint/consistent-type-imports", biome: "style.useImportType", impact: "use type-only imports for types" },
-  { eslint: "@typescript-eslint/no-explicit-any", biome: "suspicious.noExplicitAny", impact: "avoid explicit any types" },
+  {
+    eslint: "@typescript-eslint/consistent-type-imports",
+    biome: "style.useImportType",
+    impact: "use type-only imports for types",
+  },
+  {
+    eslint: "@typescript-eslint/no-explicit-any",
+    biome: "suspicious.noExplicitAny",
+    impact: "avoid explicit any types",
+  },
   { eslint: "import/order", biome: "nursery.useSortedImports", impact: "keep imports sorted" },
-  { eslint: "@typescript-eslint/no-unused-vars", biome: "correctness.noUnusedVariables", impact: "no unused variables" },
+  {
+    eslint: "@typescript-eslint/no-unused-vars",
+    biome: "correctness.noUnusedVariables",
+    impact: "no unused variables",
+  },
   { eslint: "no-console", biome: "suspicious.noConsole", impact: "no console.log in production code" },
   { eslint: "eqeqeq", biome: "suspicious.noDoubleEquals", impact: "use strict equality (===)" },
   { eslint: "@typescript-eslint/naming-convention", biome: "", impact: "enforce naming conventions" },
@@ -44,10 +56,7 @@ const TS_STRICT_OPTIONS = [
  * Scan project config files (tsconfig, ESLint, Biome, Prettier) and extract
  * constraints that affect how an LLM should generate code.
  */
-export async function scanConfigConstraints(
-  rootDir: string,
-  ctx: DetectedContext,
-): Promise<ConfigConstraints> {
+export async function scanConfigConstraints(rootDir: string, ctx: DetectedContext): Promise<ConfigConstraints> {
   const constraints: ConfigConstraints = {};
 
   // TypeScript config
@@ -145,7 +154,11 @@ async function scanTsConfig(rootDir: string) {
       result.otherStrict.push(opt);
     } else if (mergedOptions[opt] === true && result.strict) {
       // If strict is on, only note options that go *beyond* what strict enables
-      if (opt === "exactOptionalPropertyTypes" || opt === "noUncheckedIndexedAccess" || opt === "noPropertyAccessFromIndexSignature") {
+      if (
+        opt === "exactOptionalPropertyTypes" ||
+        opt === "noUncheckedIndexedAccess" ||
+        opt === "noPropertyAccessFromIndexSignature"
+      ) {
         result.otherStrict.push(opt);
       }
     }
@@ -236,7 +249,9 @@ async function scanBiomeFormatter(rootDir: string) {
   if (!config) return undefined;
 
   const formatter = config.formatter as Record<string, unknown> | undefined;
-  const jsFormatter = (config.javascript as Record<string, unknown> | undefined)?.formatter as Record<string, unknown> | undefined;
+  const jsFormatter = (config.javascript as Record<string, unknown> | undefined)?.formatter as
+    | Record<string, unknown>
+    | undefined;
 
   if (!formatter && !jsFormatter) return undefined;
 
@@ -261,9 +276,7 @@ async function readBiomeConfig(rootDir: string): Promise<Record<string, unknown>
   if (biomeJsonc) {
     try {
       // Strip single-line comments and trailing commas for JSONC
-      const cleaned = biomeJsonc
-        .replace(/\/\/.*$/gm, "")
-        .replace(/,\s*([\]}])/g, "$1");
+      const cleaned = biomeJsonc.replace(/\/\/.*$/gm, "").replace(/,\s*([\]}])/g, "$1");
       return JSON.parse(cleaned);
     } catch {
       return null;
@@ -353,7 +366,9 @@ async function scanRustConfig(rootDir: string): Promise<{ edition: string; clipp
 
 // ── Python scanning ──────────────────────────────────────────────────
 
-async function scanPythonConfig(rootDir: string): Promise<{ version?: string; ruff?: string[]; mypy?: { strict: boolean } } | undefined> {
+async function scanPythonConfig(
+  rootDir: string,
+): Promise<{ version?: string; ruff?: string[]; mypy?: { strict: boolean } } | undefined> {
   const pyproject = await readFileOr(path.join(rootDir, "pyproject.toml"));
   if (!pyproject) return undefined;
 

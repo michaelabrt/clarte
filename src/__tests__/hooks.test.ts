@@ -39,9 +39,7 @@ describe("initPreCommitHook", () => {
     // tmpDir has no .git directory
     await expect(initPreCommitHook(tmpDir)).rejects.toThrow("process.exit called");
     expect(exitSpy).toHaveBeenCalledWith(1);
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Not a git repository"),
-    );
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Not a git repository"));
   });
 
   it("prints Husky instructions with auto-refresh command", async () => {
@@ -101,18 +99,11 @@ describe("initPreCommitHook", () => {
   it("appends auto-refresh snippet to existing pre-commit hook", async () => {
     const hooksDir = path.join(tmpDir, ".git", "hooks");
     await fs.mkdir(hooksDir, { recursive: true });
-    await fs.writeFile(
-      path.join(hooksDir, "pre-commit"),
-      "#!/bin/sh\nnpm run lint\n",
-      "utf-8",
-    );
+    await fs.writeFile(path.join(hooksDir, "pre-commit"), "#!/bin/sh\nnpm run lint\n", "utf-8");
 
     await initPreCommitHook(tmpDir);
 
-    const content = await fs.readFile(
-      path.join(hooksDir, "pre-commit"),
-      "utf-8",
-    );
+    const content = await fs.readFile(path.join(hooksDir, "pre-commit"), "utf-8");
     expect(content).toContain("npm run lint");
     expect(content).toContain("--refresh-snapshot");
     expect(content).toContain("git add");
@@ -121,18 +112,11 @@ describe("initPreCommitHook", () => {
   it("does not duplicate when clarte already present in hook", async () => {
     const hooksDir = path.join(tmpDir, ".git", "hooks");
     await fs.mkdir(hooksDir, { recursive: true });
-    await fs.writeFile(
-      path.join(hooksDir, "pre-commit"),
-      "#!/bin/sh\nnpx clarte --check\n",
-      "utf-8",
-    );
+    await fs.writeFile(path.join(hooksDir, "pre-commit"), "#!/bin/sh\nnpx clarte --check\n", "utf-8");
 
     await initPreCommitHook(tmpDir);
 
-    const content = await fs.readFile(
-      path.join(hooksDir, "pre-commit"),
-      "utf-8",
-    );
+    const content = await fs.readFile(path.join(hooksDir, "pre-commit"), "utf-8");
     // Content should be unchanged
     expect(content).toBe("#!/bin/sh\nnpx clarte --check\n");
 

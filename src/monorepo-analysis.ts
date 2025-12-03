@@ -1,11 +1,5 @@
 import path from "node:path";
-import type {
-  CrossPackageEdge,
-  ImportEdge,
-  ImportGraph,
-  MonorepoAnalysis,
-  MonorepoInfo,
-} from "./types.js";
+import type { CrossPackageEdge, ImportEdge, ImportGraph, MonorepoAnalysis, MonorepoInfo } from "./types.js";
 import { readJsonFile } from "./utils.js";
 import { computeHITS } from "./centrality.js";
 
@@ -14,10 +8,7 @@ import { computeHITS } from "./centrality.js";
  * Checks the package.json for `main` or `exports` fields first,
  * then falls back to standard index file locations.
  */
-async function getPublicEntryPoints(
-  rootDir: string,
-  pkgPath: string,
-): Promise<Set<string>> {
+async function getPublicEntryPoints(rootDir: string, pkgPath: string): Promise<Set<string>> {
   const entryPoints = new Set<string>();
   const pkgJsonPath = path.join(rootDir, pkgPath, "package.json");
   const pkgJson = await readJsonFile(pkgJsonPath);
@@ -71,13 +62,9 @@ function normalizePath(filePath: string): string {
  * Find which package a file belongs to.
  * Returns null if the file is not in any known package.
  */
-function buildPackageFinder(
-  monorepo: MonorepoInfo,
-): (filePath: string) => { name: string; path: string } | null {
+function buildPackageFinder(monorepo: MonorepoInfo): (filePath: string) => { name: string; path: string } | null {
   // Sort by path length descending so longer (more specific) paths match first
-  const sortedPackages = [...monorepo.packages].sort(
-    (a, b) => b.path.length - a.path.length,
-  );
+  const sortedPackages = [...monorepo.packages].sort((a, b) => b.path.length - a.path.length);
 
   return (filePath: string) => {
     const normalized = normalizePath(filePath);
@@ -95,10 +82,7 @@ function buildPackageFinder(
  * Annotate import edges that cross monorepo package boundaries.
  * Mutates the graph's edges by setting `crossPackage: true` on cross-boundary edges.
  */
-export function annotateCrossPackageEdges(
-  graph: ImportGraph,
-  monorepo: MonorepoInfo,
-): void {
+export function annotateCrossPackageEdges(graph: ImportGraph, monorepo: MonorepoInfo): void {
   const findPackage = buildPackageFinder(monorepo);
 
   for (const edge of graph.edges) {
@@ -216,9 +200,7 @@ export async function analyzeMonorepoGraph(
     }
   }
 
-  const encapsulationViolations = crossPackageEdges.filter(
-    (e) => e.isEncapsulationViolation,
-  );
+  const encapsulationViolations = crossPackageEdges.filter((e) => e.isEncapsulationViolation);
 
   return {
     crossPackageEdges,

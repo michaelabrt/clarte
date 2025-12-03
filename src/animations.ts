@@ -19,11 +19,11 @@ const ICON_FRAME_DIVISOR = 3;
 
 /** Breathing star cycle */
 const SUN_FRAMES = [
-  " \u273b ",  //  ✻
-  " \u2732 ",  //  ✲
-  " \u273d ",  //  ✽
-  " \u274b ",  //  ❋
-  " \u273d ",  //  ✽
+  " \u273b ", //  ✻
+  " \u2732 ", //  ✲
+  " \u273d ", //  ✽
+  " \u274b ", //  ❋
+  " \u273d ", //  ✽
 ];
 
 // ── Shimmer core ────────────────────────────────────────────────────────────
@@ -34,13 +34,7 @@ const SUN_FRAMES = [
  * highlight color, those far away get the base color, with smooth
  * interpolation in between.
  */
-function renderShimmerFrame(
-  text: string,
-  cursorPos: number,
-  base: RGB,
-  highlight: RGB,
-  width: number,
-): string {
+function renderShimmerFrame(text: string, cursorPos: number, base: RGB, highlight: RGB, width: number): string {
   if (!trueColor) return text;
 
   let result = "";
@@ -108,7 +102,9 @@ export function startShimmer(
     // Non-interactive: just print the text and return a no-op handle
     process.stdout.write(`${options?.indent ?? "    "}${text}\n`);
     return {
-      stop: () => { process.stdout.write("\x1b[A\x1b[2K"); },
+      stop: () => {
+        process.stdout.write("\x1b[A\x1b[2K");
+      },
       message: () => {},
     };
   }
@@ -156,4 +152,3 @@ export function startShimmer(
     },
   };
 }
-

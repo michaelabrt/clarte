@@ -34,9 +34,7 @@ const graph500 = generateGraph(500, 3, 600);
  */
 function runFullPipeline(graph: ReturnType<typeof generateGraph>) {
   // Extract file list for HITS
-  const files = [...new Set(
-    graph.edges.filter((e) => !e.isExternal).flatMap((e) => [e.from, e.to]),
-  )];
+  const files = [...new Set(graph.edges.filter((e) => !e.isExternal).flatMap((e) => [e.from, e.to]))];
 
   // 1. HITS centrality
   computeHITS(files, graph.edges);
@@ -72,11 +70,19 @@ function runFullPipeline(graph: ReturnType<typeof generateGraph>) {
 // ── Full pipeline benchmarks ────────────────────────────────────────
 
 describe("full analysis pipeline", () => {
-  bench("100 nodes", () => {
-    runFullPipeline(graph100);
-  }, { time: 10000 });
+  bench(
+    "100 nodes",
+    () => {
+      runFullPipeline(graph100);
+    },
+    { time: 10000 },
+  );
 
-  bench("500 nodes", () => {
-    runFullPipeline(graph500);
-  }, { time: 10000 });
+  bench(
+    "500 nodes",
+    () => {
+      runFullPipeline(graph500);
+    },
+    { time: 10000 },
+  );
 });

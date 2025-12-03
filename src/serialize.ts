@@ -1,10 +1,4 @@
-import type {
-  CodeSnapshot,
-  ContextAnalysis,
-  DetectedContext,
-  ImportGraph,
-} from "./types.js";
-import { buildDirectives } from "./templates/directives.js";
+import type { CodeSnapshot, ContextAnalysis, DetectedContext, ImportGraph } from "./types.js";
 
 /** Structured JSON output for clarte --format=json */
 export interface ClarteJsonOutput {
@@ -54,7 +48,9 @@ export interface ClarteJsonOutput {
       commitCounts: Record<string, number>;
       hotFiles: Array<{ path: string; commits: number; lastChanged: string }>;
       changeCoupling: ContextAnalysis["gitActivity"] extends infer G
-        ? G extends { changeCoupling: infer C } ? C : never
+        ? G extends { changeCoupling: infer C }
+          ? C
+          : never
         : never;
     };
     graphTopology?: ContextAnalysis["graphTopology"];
@@ -173,11 +169,7 @@ export function serializeAnalysis(
             crossPackageEdges: analysis.monorepoAnalysis.crossPackageEdges,
             encapsulationViolations: analysis.monorepoAnalysis.encapsulationViolations,
             packageDependencies: mapToRecord(
-              new Map(
-                [...analysis.monorepoAnalysis.packageDependencies.entries()].map(
-                  ([k, v]) => [k, [...v]],
-                ),
-              ),
+              new Map([...analysis.monorepoAnalysis.packageDependencies.entries()].map(([k, v]) => [k, [...v]])),
             ),
             packageHubFiles: analysis.monorepoAnalysis.packageHubFiles
               ? mapToRecord(analysis.monorepoAnalysis.packageHubFiles)

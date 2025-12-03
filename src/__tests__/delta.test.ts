@@ -1,33 +1,42 @@
 import { describe, expect, it } from "vitest";
-import {
-  extractSnapshot,
-  computeDelta,
-  isDeltaEmpty,
-  renderDeltaSection,
-  buildDeltaDirectives,
-} from "../delta.js";
+import { extractSnapshot, computeDelta, isDeltaEmpty, renderDeltaSection, buildDeltaDirectives } from "../delta.js";
 import type { AnalysisSnapshot } from "../delta.js";
 import type { ContextAnalysis } from "../types.js";
 
 function mockAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
   return {
     hubFiles: [
-      { path: "src/types.ts", centrality: 1.0, authority: 1.0, hubScore: 0.1, role: "Foundation", importedBy: 10, imports: 0 },
-      { path: "src/utils.ts", centrality: 0.8, authority: 0.8, hubScore: 0.2, role: "Utility", importedBy: 8, imports: 2 },
+      {
+        path: "src/types.ts",
+        centrality: 1.0,
+        authority: 1.0,
+        hubScore: 0.1,
+        role: "Foundation",
+        importedBy: 10,
+        imports: 0,
+      },
+      {
+        path: "src/utils.ts",
+        centrality: 0.8,
+        authority: 0.8,
+        hubScore: 0.2,
+        role: "Utility",
+        importedBy: 8,
+        imports: 2,
+      },
     ],
-    circularDeps: [
-      { chain: ["src/a.ts", "src/b.ts", "src/a.ts"] },
-    ],
-    layers: [
-      { name: "types", files: ["src/types.ts"], importedByLayers: 2, dependsOn: [] },
-    ],
+    circularDeps: [{ chain: ["src/a.ts", "src/b.ts", "src/a.ts"] }],
+    layers: [{ name: "types", files: ["src/types.ts"], importedByLayers: 2, dependsOn: [] }],
     layerEdges: [],
     gitActivity: null,
     instabilities: [],
     communities: [],
     deadFiles: ["src/dead.ts"],
     chokepoints: [{ file: "src/utils.ts", separates: 2, importedBy: 8 }],
-    layerConsistency: { consistency: 0.9, violations: [{ from: "src/x.ts", to: "src/y.ts", fromLayer: "hooks", toLayer: "types" }] },
+    layerConsistency: {
+      consistency: 0.9,
+      violations: [{ from: "src/x.ts", to: "src/y.ts", fromLayer: "hooks", toLayer: "types" }],
+    },
     ...overrides,
   };
 }
@@ -72,11 +81,13 @@ describe("extractSnapshot", () => {
   });
 
   it("handles missing optional fields", () => {
-    const snapshot = extractSnapshot(mockAnalysis({
-      deadFiles: undefined,
-      chokepoints: undefined,
-      layerConsistency: undefined,
-    }));
+    const snapshot = extractSnapshot(
+      mockAnalysis({
+        deadFiles: undefined,
+        chokepoints: undefined,
+        layerConsistency: undefined,
+      }),
+    );
     expect(snapshot.deadFiles).toEqual([]);
     expect(snapshot.chokepointPaths).toEqual([]);
     expect(snapshot.layerViolationCount).toBe(0);
@@ -176,31 +187,35 @@ describe("computeDelta", () => {
 
 describe("isDeltaEmpty", () => {
   it("returns true for empty delta", () => {
-    expect(isDeltaEmpty({
-      newHubFiles: [],
-      demotedHubFiles: [],
-      newCircularDeps: [],
-      resolvedCircularDeps: [],
-      newDeadFiles: [],
-      resurrectedFiles: [],
-      newChokepoints: [],
-      resolvedChokepoints: [],
-      layerViolationDelta: 0,
-    })).toBe(true);
+    expect(
+      isDeltaEmpty({
+        newHubFiles: [],
+        demotedHubFiles: [],
+        newCircularDeps: [],
+        resolvedCircularDeps: [],
+        newDeadFiles: [],
+        resurrectedFiles: [],
+        newChokepoints: [],
+        resolvedChokepoints: [],
+        layerViolationDelta: 0,
+      }),
+    ).toBe(true);
   });
 
   it("returns false when delta has changes", () => {
-    expect(isDeltaEmpty({
-      newHubFiles: ["src/new.ts"],
-      demotedHubFiles: [],
-      newCircularDeps: [],
-      resolvedCircularDeps: [],
-      newDeadFiles: [],
-      resurrectedFiles: [],
-      newChokepoints: [],
-      resolvedChokepoints: [],
-      layerViolationDelta: 0,
-    })).toBe(false);
+    expect(
+      isDeltaEmpty({
+        newHubFiles: ["src/new.ts"],
+        demotedHubFiles: [],
+        newCircularDeps: [],
+        resolvedCircularDeps: [],
+        newDeadFiles: [],
+        resurrectedFiles: [],
+        newChokepoints: [],
+        resolvedChokepoints: [],
+        layerViolationDelta: 0,
+      }),
+    ).toBe(false);
   });
 });
 

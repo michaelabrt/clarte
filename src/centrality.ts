@@ -1,5 +1,5 @@
 import type { FileRole, ImportEdge, ImportGraph } from "./types.js";
-import { buildAdjacency, getOrSet } from "./utils.js";
+import { buildAdjacency } from "./utils.js";
 
 // ── Algorithm constants ──────────────────────────────────────────────
 
@@ -88,9 +88,10 @@ export function computeHITS(
     const typeOnlyDiscount = edge.isTypeOnly ? HITS.TYPE_ONLY_DISCOUNT : 0;
     const dynamicDiscount = edge.isDynamic ? HITS.DYNAMIC_MULTIPLIER : 1.0;
     const nameCount = edge.importedNames.length;
-    const specificity = nameCount > 0
-      ? Math.max(HITS.MIN_SPECIFICITY, Math.log2(nameCount + 1) / Math.log2(HITS.SPECIFICITY_LOG_BASE))
-      : HITS.MIN_SPECIFICITY;
+    const specificity =
+      nameCount > 0
+        ? Math.max(HITS.MIN_SPECIFICITY, Math.log2(nameCount + 1) / Math.log2(HITS.SPECIFICITY_LOG_BASE))
+        : HITS.MIN_SPECIFICITY;
     let weight = (1 - typeOnlyDiscount) * dynamicDiscount * specificity;
 
     // Barrel file authority discount: edges targeting barrels contribute less
@@ -167,8 +168,10 @@ export function computeHITS(
   }
 
   // Min-max normalize to 0-1
-  let authMin = Infinity, authMax = -Infinity;
-  let hubMin = Infinity, hubMax = -Infinity;
+  let authMin = Infinity,
+    authMax = -Infinity;
+  let hubMin = Infinity,
+    hubMax = -Infinity;
   for (let i = 0; i < n; i++) {
     if (auth[i] < authMin) authMin = auth[i];
     if (auth[i] > authMax) authMax = auth[i];
@@ -201,9 +204,15 @@ export function computeHITS(
 export function deriveRole(authority: number, hubScore: number, isBarrel = false): FileRole {
   if (isBarrel) return "Barrel";
   if (authority > ROLE_THRESHOLDS.FOUNDATION_AUTH && hubScore < ROLE_THRESHOLDS.FOUNDATION_HUB_MAX) return "Foundation";
-  if (hubScore > ROLE_THRESHOLDS.ORCHESTRATOR_HUB && authority < ROLE_THRESHOLDS.ORCHESTRATOR_AUTH_MAX) return "Orchestrator";
+  if (hubScore > ROLE_THRESHOLDS.ORCHESTRATOR_HUB && authority < ROLE_THRESHOLDS.ORCHESTRATOR_AUTH_MAX)
+    return "Orchestrator";
   if (authority > ROLE_THRESHOLDS.BRIDGE_MIN && hubScore > ROLE_THRESHOLDS.BRIDGE_MIN) return "Bridge";
-  if (authority >= ROLE_THRESHOLDS.UTILITY_AUTH_MIN && authority <= ROLE_THRESHOLDS.UTILITY_AUTH_MAX && hubScore < ROLE_THRESHOLDS.UTILITY_HUB_MAX) return "Utility";
+  if (
+    authority >= ROLE_THRESHOLDS.UTILITY_AUTH_MIN &&
+    authority <= ROLE_THRESHOLDS.UTILITY_AUTH_MAX &&
+    hubScore < ROLE_THRESHOLDS.UTILITY_HUB_MAX
+  )
+    return "Utility";
   return "Leaf";
 }
 
@@ -244,10 +253,7 @@ export function seededRandom(seed: number): () => number {
  * Results are normalized to 0-1 range (divided by max score).
  * Uses a seeded random for deterministic results across runs.
  */
-export function computeBetweenness(
-  graph: ImportGraph,
-  k = 50,
-): Map<string, number> {
+export function computeBetweenness(graph: ImportGraph, k = 50): Map<string, number> {
   // Build directed adjacency from internal edges.
   // We follow the actual import direction (importer -> imported) so betweenness
   // measures how many directed dependency chains pass through a file. A true

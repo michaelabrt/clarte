@@ -39,17 +39,7 @@ import type { ContextAnalysis, ProgressCallback } from "./types.js";
 const IGNORE_DIRS = IGNORE_DIRS_SET;
 
 /** File extensions that trigger a rebuild. */
-const SOURCE_EXTENSIONS = new Set([
-  ".ts",
-  ".tsx",
-  ".js",
-  ".jsx",
-  ".mjs",
-  ".py",
-  ".go",
-  ".rs",
-  ".java",
-]);
+const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".py", ".go", ".rs", ".java"]);
 
 /** Files to ignore (lock files, etc.). */
 const IGNORE_FILES = new Set([
@@ -136,21 +126,14 @@ function timeStamp(): string {
 
 // ── Main watch mode ───────────────────────────────────────────────────
 
-export async function runWatchMode(
-  rootDir: string,
-  verbose: boolean,
-): Promise<void> {
+export async function runWatchMode(rootDir: string, verbose: boolean): Promise<void> {
   const noopProgress: ProgressCallback = () => {};
-  const verboseLog: ProgressCallback = verbose
-    ? (msg) => console.log(`  ${msg}`)
-    : noopProgress;
+  const verboseLog: ProgressCallback = verbose ? (msg) => console.log(`  ${msg}`) : noopProgress;
 
   // 1. Load config (required for watch mode)
   const config = await loadConfig(rootDir);
   if (!config) {
-    console.error(
-      "[clarte] No .clarte.json found. Run `npx clarte` first to configure your project.",
-    );
+    console.error("[clarte] No .clarte.json found. Run `npx clarte` first to configure your project.");
     process.exit(1);
   }
 
@@ -247,11 +230,7 @@ async function runAnalysis(
   const detected = await detectContext(rootDir, verbose ? verboseLog : noopProgress);
 
   // Build import graph (with cache for incremental updates)
-  const graph = await buildGraphWithCache(
-    rootDir,
-    detected.language,
-    verbose ? verboseLog : noopProgress,
-  );
+  const graph = await buildGraphWithCache(rootDir, detected.language, verbose ? verboseLog : noopProgress);
 
   // Merge secondary language graphs
   if (detected.secondaryLanguages) {
@@ -262,10 +241,7 @@ async function runAnalysis(
   }
 
   // Enrich frameworks
-  detected.frameworks = enrichFrameworksWithUsage(
-    detected.frameworks,
-    graph.externalImportCounts,
-  );
+  detected.frameworks = enrichFrameworksWithUsage(detected.frameworks, graph.externalImportCounts);
 
   // Full analysis pipeline
   const hubFiles = getHubFiles(graph);
@@ -273,15 +249,10 @@ async function runAnalysis(
   const { layers, layerEdges } = detectArchitecturalLayers(graph, answers.layers);
   const instabilities = computeInstability(graph);
   const communities = detectCommunities(graph);
-  const gitActivity = detected.isGitRepo
-    ? analyzeGitActivity(rootDir, noopProgress)
-    : null;
+  const gitActivity = detected.isGitRepo ? analyzeGitActivity(rootDir, noopProgress) : null;
   const deadFiles = findDeadFiles(graph);
   const crossCuttingFiles = findCrossCuttingFiles(graph, layers);
-  const layerConsistency =
-    layers.length >= 2
-      ? computeLayerConsistency(graph, layers, layerEdges)
-      : undefined;
+  const layerConsistency = layers.length >= 2 ? computeLayerConsistency(graph, layers, layerEdges) : undefined;
   const chokepoints = findChokepoints(graph);
   const configConstraints = await scanConfigConstraints(rootDir, detected);
   const conventions = await inferConventions(rootDir, graph, configConstraints);
@@ -308,9 +279,7 @@ async function runAnalysis(
     conventions: conventions ?? undefined,
     testMapping: testMapping ?? undefined,
     graphTopology,
-    structuralMismatches: structuralMismatches?.length
-      ? structuralMismatches
-      : undefined,
+    structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined,
     tightCouplings: tightCouplings.length ? tightCouplings : undefined,
   };
 
@@ -349,9 +318,7 @@ async function runAnalysis(
         const sign = delta.layerViolationDelta > 0 ? "+" : "";
         changes.push(`${sign}${delta.layerViolationDelta} violations`);
       }
-      console.log(
-        `[clarte] ${timeStamp()} - delta: ${changes.join(", ")}`,
-      );
+      console.log(`[clarte] ${timeStamp()} - delta: ${changes.join(", ")}`);
     }
   }
 
