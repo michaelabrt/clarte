@@ -82,6 +82,9 @@ export function findStructuralTemporalMismatches(
   }
 
   // Sort by confidence descending (strongest hidden coupling first), alphabetical tiebreaker
-  results.sort((a, b) => b.coChangeConfidence - a.coChangeConfidence || a.fileA.localeCompare(b.fileA) || a.fileB.localeCompare(b.fileB));
+  results.sort(
+    (a, b) =>
+      b.coChangeConfidence - a.coChangeConfidence || a.fileA.localeCompare(b.fileA) || a.fileB.localeCompare(b.fileB),
+  );
   return results.slice(0, topN);
 }

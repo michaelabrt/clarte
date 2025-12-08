@@ -148,7 +148,7 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     const dir = getDeepestDir(file);
     if (!dirOnlyCommunities.has(dir)) dirOnlyCommunities.set(dir, dirNextLabel++);
   }
-  const ari = computeARI(files, fileToCommunity, file => dirOnlyCommunities.get(getDeepestDir(file))!);
+  const ari = computeARI(files, fileToCommunity, (file) => dirOnlyCommunities.get(getDeepestDir(file))!);
   if (ari > COMMUNITY.ARI_NOVELTY_THRESHOLD) {
     // Communities just restate directory tree; no novel insight
     return [];
@@ -185,11 +185,7 @@ function groupByCommunity(fileToCommunity: Map<string, number>): Map<number, str
  * Compute Adjusted Rand Index between two clusterings of the same files.
  * Returns a value between -1 and 1, where 1 means identical clusterings.
  */
-function computeARI(
-  files: string[],
-  labelingA: Map<string, number>,
-  getLabelB: (file: string) => number,
-): number {
+function computeARI(files: string[], labelingA: Map<string, number>, getLabelB: (file: string) => number): number {
   const n = files.length;
   if (n < 2) return 1;
 

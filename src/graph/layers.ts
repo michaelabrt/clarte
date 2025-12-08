@@ -1,10 +1,4 @@
-import type {
-  ArchitecturalLayer,
-  ImportGraph,
-  LayerConsistency,
-  LayerEdge,
-  LayerViolation,
-} from "../types.js";
+import type { ArchitecturalLayer, ImportGraph, LayerConsistency, LayerEdge, LayerViolation } from "../types.js";
 
 /** Layer consistency parameters */
 const LAYER_CONSISTENCY = {
@@ -111,10 +105,7 @@ export function detectArchitecturalLayers(
  * Returns layers ordered from most foundational to most consumer.
  * Falls back to input order for cycles.
  */
-function topologicalSortLayers(
-  layers: ArchitecturalLayer[],
-  layerEdges: LayerEdge[],
-): string[] {
+function topologicalSortLayers(layers: ArchitecturalLayer[], layerEdges: LayerEdge[]): string[] {
   const layerNames = new Set(layers.map((l) => l.name));
   const inDeg = new Map<string, number>();
   const adj = new Map<string, string[]>();

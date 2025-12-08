@@ -1,9 +1,4 @@
-import type {
-  ArchitecturalLayer,
-  ArchViolation,
-  ImportGraph,
-  LayerEdge,
-} from "../types.js";
+import type { ArchitecturalLayer, ArchViolation, ImportGraph, LayerEdge } from "../types.js";
 
 /** Layer consistency parameters used by fitness checks */
 const LAYER_CONSISTENCY = {
@@ -18,10 +13,7 @@ const LAYER_CONSISTENCY = {
  * Returns a map of layer name to its depth (0 = lowest/most foundational).
  * Uses Kahn's algorithm; layers in cycles get the same depth.
  */
-function computeLayerOrdering(
-  layers: ArchitecturalLayer[],
-  layerEdges: LayerEdge[],
-): Map<string, number> {
+function computeLayerOrdering(layers: ArchitecturalLayer[], layerEdges: LayerEdge[]): Map<string, number> {
   const layerNames = new Set(layers.map((l) => l.name));
   const inDegree = new Map<string, number>();
   const adj = new Map<string, string[]>();

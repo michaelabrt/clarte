@@ -9,11 +9,7 @@ import type { ImportGraph, TightCoupling } from "../types.js";
  * file may be too tightly coupled and could benefit from an intermediate
  * interface or facade.
  */
-export function findTightCouplings(
-  graph: ImportGraph,
-  minNames = 5,
-  topN = 10,
-): TightCoupling[] {
+export function findTightCouplings(graph: ImportGraph, minNames = 5, topN = 10): TightCoupling[] {
   // Aggregate named imports per (from, to) pair
   const pairNames = new Map<string, { from: string; to: string; names: Set<string> }>();
 
