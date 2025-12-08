@@ -191,7 +191,7 @@ export function buildDirectives(
       const role = hubRoleMap.get(hub.path) ?? "Leaf";
       const lineDesc = fc.lines >= 1000 ? `${Math.floor(fc.lines / 100) * 100}+` : `${fc.lines}`;
       directives.push(
-        `\`${hub.path}\` is a ${role} file with ${band} complexity (${fc.exports} exports, ${lineDesc} lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.`,
+        `\`${hub.path}\` is ${"aeiouAEIOU".includes(role[0]) ? "an" : "a"} ${role} file with ${band} complexity (${fc.exports} exports, ${lineDesc} lines). Read thoroughly before modifying; changes are likely to have non-obvious side effects.`,
       );
       complexCount++;
     }
