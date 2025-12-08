@@ -402,11 +402,12 @@ export function computeChangeCoupling(
   // Sort by weighted score descending (primary), then by confidence (secondary),
   // with alphabetical tiebreaker for deterministic output
   const indices = results.map((_, i) => i);
-  indices.sort((a, b) =>
-    (resultWeights.get(b)! - resultWeights.get(a)!)
-    || (results[b].confidence - results[a].confidence)
-    || results[a].fileA.localeCompare(results[b].fileA)
-    || results[a].fileB.localeCompare(results[b].fileB),
+  indices.sort(
+    (a, b) =>
+      resultWeights.get(b)! - resultWeights.get(a)! ||
+      results[b].confidence - results[a].confidence ||
+      results[a].fileA.localeCompare(results[b].fileA) ||
+      results[a].fileB.localeCompare(results[b].fileB),
   );
   const sorted = indices.map((i) => results[i]);
 

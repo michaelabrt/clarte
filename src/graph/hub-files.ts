@@ -54,7 +54,9 @@ export function getHubFiles(graph: ImportGraph, limit = 8): HubFile[] {
 
   // Sort by max(authority, hubScore) descending -- captures both foundations and orchestrators
   // Alphabetical tiebreaker for deterministic output
-  files.sort((a, b) => Math.max(b.authority, b.hubScore) - Math.max(a.authority, a.hubScore) || a.path.localeCompare(b.path));
+  files.sort(
+    (a, b) => Math.max(b.authority, b.hubScore) - Math.max(a.authority, a.hubScore) || a.path.localeCompare(b.path),
+  );
 
   return files.slice(0, limit);
 }

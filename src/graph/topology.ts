@@ -58,11 +58,7 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
 
   if (largest.length > 1) {
     // Sample up to 3 nodes deterministically (first, middle, last)
-    const samples = [
-      largest[0],
-      largest[Math.floor(largest.length / 2)],
-      largest[largest.length - 1],
-    ];
+    const samples = [largest[0], largest[Math.floor(largest.length / 2)], largest[largest.length - 1]];
 
     for (const start of samples) {
       // BFS to find max distance from start

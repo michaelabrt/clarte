@@ -52,6 +52,8 @@ export function findCrossCuttingFiles(
   }
 
   // Sort by layer spread descending, then by total importers descending, alphabetical tiebreaker
-  results.sort((a, b) => b.layerSpread - a.layerSpread || b.totalImporters - a.totalImporters || a.file.localeCompare(b.file));
+  results.sort(
+    (a, b) => b.layerSpread - a.layerSpread || b.totalImporters - a.totalImporters || a.file.localeCompare(b.file),
+  );
   return results;
 }
