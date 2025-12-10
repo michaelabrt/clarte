@@ -8,287 +8,34 @@ import {
   resetTerminalColors,
   detectTerminalBackground,
 } from "./theme.js";
-import { fileExists } from "./utils.js";
+import { fileExists, formatBytes } from "./utils.js";
 import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "./detect.js";
 import { runPrompts } from "./prompts.js";
 import { generateSnapshot } from "./snapshot.js";
 import { generateFiles } from "./generate.js";
-import type { SectionFilterOptions } from "./templates/main-context.js";
 import { printSummary } from "./summary.js";
 import type { UserAnswers } from "./types.js";
 import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "./config.js";
 import { refreshSnapshot } from "./refresh.js";
-import { validateContextPaths } from "./check.js";
 import { initPreCommitHook } from "./hooks.js";
 import { runDiffMode } from "./diff.js";
 import { runWatchMode } from "./watch.js";
-import {
-  buildGraphWithCache,
-  computeAnalysisCacheKey,
-  loadAnalysisCache,
-  saveAnalysisCache,
-  ANALYSIS_CACHE_VERSION,
-} from "./cache.js";
+import { buildGraphWithCache } from "./cache.js";
 import { buildImportGraph, mergeGraph } from "./graph-build.js";
-import { findCircularDeps } from "./graph-cycles.js";
 import { getHubFiles } from "./graph/hub-files.js";
-import { detectArchitecturalLayers, computeLayerConsistency } from "./graph/layers.js";
-import { computeInstability, INSTABILITY_THRESHOLD } from "./graph/instability.js";
-import { detectCommunities } from "./graph/communities.js";
-import { findDeadFiles } from "./graph/dead-files.js";
-import { findCrossCuttingFiles } from "./graph/cross-cutting.js";
-import { findChokepoints } from "./graph/chokepoints.js";
-import { computeGraphTopology } from "./graph/topology.js";
-import { findStructuralTemporalMismatches } from "./graph/mismatches.js";
-import { findTightCouplings } from "./graph/tight-coupling.js";
-import { analyzeGitActivity } from "./git-analysis.js";
-import { analyzeMonorepoGraph, computePackageCentrality } from "./monorepo-analysis.js";
-import { scanConfigConstraints } from "./config-scan.js";
-import { inferConventions } from "./conventions.js";
-import { buildTestMapping } from "./test-map.js";
-import { predictChangeImpact } from "./change-impact.js";
-import { formatBytes } from "./utils.js";
 import { startShimmer } from "./animations.js";
-import type {
-  ContextAnalysis,
-  DetectedContext,
-  GeneratedFile,
-  HubFile,
-  ImportGraph,
-  PackageHubFile,
-  ProgressCallback,
-} from "./types.js";
+import type { DetectedContext, HubFile, ImportGraph, ProgressCallback } from "./types.js";
 import { serializeAnalysis } from "./serialize.js";
 import { buildDirectives } from "./templates/directives.js";
-import {
-  extractSnapshot,
-  loadPreviousSnapshot,
-  saveSnapshot,
-  computeDelta,
-  isDeltaEmpty,
-  renderDeltaSection,
-} from "./delta.js";
-
-declare const PKG_VERSION: string;
-declare const PKG_NAME: string;
-declare const PKG_DESCRIPTION: string;
-
-const VERSION = typeof PKG_VERSION !== "undefined" ? PKG_VERSION : "0.0.0-dev";
-const NAME = typeof PKG_NAME !== "undefined" ? PKG_NAME : "clarte";
-const DESCRIPTION = typeof PKG_DESCRIPTION !== "undefined" ? PKG_DESCRIPTION : "";
-
-// Patch @clack/prompts colors before any output
-patchClackColors();
-
-function printHelp(): void {
-  console.log("");
-  console.log(t.textBold("Clart") + t.brandBold("\u00e9"));
-  console.log(t.muted("  " + DESCRIPTION));
-  console.log("");
-  console.log(`  ${t.textBold("Usage:")}  ${t.text(`npx ${NAME} [directory] [options]`)}`);
-  console.log("");
-  console.log(`  ${t.textBold("Options:")}`);
-  console.log(`    ${t.accent("-h, --help")}              ${t.text("Show this help message")}`);
-  console.log(`    ${t.accent("-V, --version")}           ${t.text("Show version number")}`);
-  console.log(`    ${t.accent("--force")}                 ${t.text("Overwrite existing files without asking")}`);
-  console.log(`    ${t.accent("--dry-run")}               ${t.text("Preview what would be generated")}`);
-  console.log(
-    `    ${t.accent("--diff[=REF] [FILES]")}    ${t.text("Generate focused context for changed files (vs HEAD or REF)")}`,
-  );
-  console.log(`    ${t.accent("--diff-file=PATH")}        ${t.text("Write diff context to file instead of stdout")}`);
-  console.log(`    ${t.accent("--reconfigure")}           ${t.text("Re-prompt even if .clarte.json exists")}`);
-  console.log(
-    `    ${t.accent("--refresh-snapshot")}      ${t.text("Re-scan source files, update code snapshot only")}`,
-  );
-  console.log(
-    `    ${t.accent("--check")}                 ${t.text("Exit 0 if snapshot is fresh, 1 if stale (hash-based)")}`,
-  );
-  console.log(
-    `    ${t.accent("--check=timestamp")}       ${t.text("Exit 0/1 based on age only (no Node.js needed in shell hooks)")}`,
-  );
-  console.log(
-    `    ${t.accent("--ci")}                    ${t.text("Machine-readable output (use with --check for CI pipelines)")}`,
-  );
-  console.log(`    ${t.accent("--max-tokens=N")}          ${t.text("Set the token budget for the code snapshot")}`);
-  console.log(
-    `    ${t.accent("--format=json")}           ${t.text("Output full analysis as structured JSON to stdout")}`,
-  );
-  console.log(
-    `    ${t.accent("--budget=N")}              ${t.text("Set token budget for the context file (prioritized sections)")}`,
-  );
-  console.log(`    ${t.accent("--full")}                  ${t.text("Disable token budget (include all sections)")}`);
-  console.log(
-    `    ${t.accent("--max-chars=N")}           ${t.text("Set character budget (default: 39500, 0 to disable)")}`,
-  );
-  console.log(
-    `    ${t.accent("--include=a,b")}           ${t.text("Always include these sections (comma-separated IDs)")}`,
-  );
-  console.log(`    ${t.accent("--exclude=a,b")}           ${t.text("Exclude these sections entirely")}`);
-  console.log(`    ${t.accent("--generate-skills")}       ${t.text("Generate Claude Code skill files")}`);
-  console.log(
-    `    ${t.accent("--init-hook")}             ${t.text("Install git pre-commit hook for auto-refresh on commit")}`,
-  );
-  console.log(
-    `    ${t.accent("--watch")}                 ${t.text("Watch for file changes and re-analyze continuously")}`,
-  );
-  console.log(`    ${t.accent("-v, --verbose")}           ${t.text("Show detailed progress output")}`);
-  console.log("");
-  console.log(`  ${t.textBold("Examples:")}`);
-  console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME}`)}                   ${t.muted("# analyze current directory")}`,
-  );
-  console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME} ./my-project`)}      ${t.muted("# analyze a specific project")}`,
-  );
-  console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME} --diff`)}             ${t.muted("# focused context for uncommitted changes")}`,
-  );
-  console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME} --diff=main`)}        ${t.muted("# focused context vs main branch")}`,
-  );
-  console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME} --diff src/foo.ts`)}  ${t.muted("# diff context for a specific file")}`,
-  );
-  console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME} --dry-run`)}          ${t.muted("# preview without writing files")}`,
-  );
-  console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME} --refresh-snapshot`)} ${t.muted("# update code snapshot only")}`,
-  );
-  console.log("");
-}
-
-interface CliArgs {
-  rootDir: string;
-  force: boolean;
-  dryRun: boolean;
-  refresh: boolean;
-  reconfigure: boolean;
-  diffMode: boolean;
-  diffRef: string | undefined;
-  diffFilterFiles: string[];
-  diffFile: string | undefined;
-  check: boolean;
-  checkTimestamp: boolean;
-  ciMode: boolean;
-  verbose: boolean;
-  watchMode: boolean;
-  generateSkills: boolean;
-  maxTokens: number | undefined;
-  jsonMode: boolean;
-  effectiveBudget: number | undefined;
-  sectionFilter: SectionFilterOptions | undefined;
-  maxChars: number | undefined;
-  initHook: boolean;
-}
-
-function parseCliArgs(rawArgs: string[]): CliArgs {
-  const force = rawArgs.includes("--force");
-  const dryRun = rawArgs.includes("--dry-run");
-  const refresh = rawArgs.includes("--refresh-snapshot");
-  const reconfigure = rawArgs.includes("--reconfigure");
-  const diffArg = rawArgs.find((a) => a === "--diff" || a.startsWith("--diff="));
-  const diffMode = !!diffArg;
-  const diffRef = diffArg?.startsWith("--diff=") ? diffArg.split("=")[1] : undefined;
-  const diffFilterFiles: string[] = [];
-  if (diffMode) {
-    const diffIdx = rawArgs.indexOf(diffArg!);
-    for (let i = diffIdx + 1; i < rawArgs.length; i++) {
-      const a = rawArgs[i];
-      if (a.startsWith("-")) break;
-      diffFilterFiles.push(a);
-    }
-  }
-  const checkArg = rawArgs.find((a) => a === "--check" || a.startsWith("--check="));
-  const check = !!checkArg;
-  const checkTimestamp = checkArg === "--check=timestamp";
-  const ciMode = rawArgs.includes("--ci");
-  const verbose = rawArgs.includes("--verbose") || rawArgs.includes("-v");
-  const watchMode = rawArgs.includes("--watch");
-  const generateSkills = rawArgs.includes("--generate-skills");
-  const maxTokensArg = rawArgs.find((a) => a.startsWith("--max-tokens="));
-  const maxTokensRaw = maxTokensArg ? parseInt(maxTokensArg.split("=").slice(1).join("="), 10) : undefined;
-  if (maxTokensRaw !== undefined && Number.isNaN(maxTokensRaw)) {
-    console.error(`Invalid --max-tokens value: ${maxTokensArg?.split("=").slice(1).join("=")}`);
-    process.exit(1);
-  }
-  const maxTokens = maxTokensRaw;
-  const formatArg = rawArgs.find((a) => a.startsWith("--format="));
-  const jsonMode = formatArg?.split("=")[1] === "json";
-  const budgetArg = rawArgs.find((a) => a.startsWith("--budget="));
-  const budgetRaw = budgetArg ? parseInt(budgetArg.split("=").slice(1).join("="), 10) : undefined;
-  if (budgetRaw !== undefined && Number.isNaN(budgetRaw)) {
-    console.error(`Invalid --budget value: ${budgetArg?.split("=").slice(1).join("=")}`);
-    process.exit(1);
-  }
-  const fullMode = rawArgs.includes("--full");
-  const includeArg = rawArgs.find((a) => a.startsWith("--include="));
-  const excludeArg = rawArgs.find((a) => a.startsWith("--exclude="));
-  const sectionFilter: SectionFilterOptions | undefined =
-    includeArg || excludeArg
-      ? {
-          include: includeArg ? new Set(includeArg.split("=").slice(1).join("=").split(",")) : undefined,
-          exclude: excludeArg ? new Set(excludeArg.split("=").slice(1).join("=").split(",")) : undefined,
-        }
-      : undefined;
-  const effectiveBudget = fullMode ? 0 : budgetRaw;
-  const maxCharsArg = rawArgs.find((a) => a.startsWith("--max-chars="));
-  const maxCharsRaw = maxCharsArg ? parseInt(maxCharsArg.split("=").slice(1).join("="), 10) : undefined;
-  if (maxCharsRaw !== undefined && Number.isNaN(maxCharsRaw)) {
-    console.error(`Invalid --max-chars value: ${maxCharsArg?.split("=").slice(1).join("=")}`);
-    process.exit(1);
-  }
-  const initHook = rawArgs.includes("--init-hook");
-  const diffFileArg = rawArgs.find((a) => a.startsWith("--diff-file="));
-  const diffFile = diffFileArg?.split("=").slice(1).join("=");
-  const diffFilterSet = new Set(diffFilterFiles);
-  const targetDir = rawArgs.find((a) => !a.startsWith("-") && !diffFilterSet.has(a)) ?? process.cwd();
-  const rootDir = path.resolve(targetDir);
-
-  if (diffFile && !diffMode) {
-    console.error("[clarte] --diff-file requires --diff mode; ignoring.");
-  }
-
-  return {
-    rootDir,
-    force,
-    dryRun,
-    refresh,
-    reconfigure,
-    diffMode,
-    diffRef,
-    diffFilterFiles,
-    diffFile,
-    check,
-    checkTimestamp,
-    ciMode,
-    verbose,
-    watchMode,
-    generateSkills,
-    maxTokens,
-    jsonMode,
-    effectiveBudget,
-    sectionFilter,
-    maxChars: maxCharsRaw,
-    initHook,
-  };
-}
+import { handleEarlyExits, parseCliArgs } from "./cli-args.js";
+import { runCheckMode } from "./cli-check.js";
+import { runAnalysis } from "./run-analysis.js";
 
 async function main() {
   const startTime = performance.now();
   const rawArgs = process.argv.slice(2);
 
-  if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
-    initTheme("dark");
-    printHelp();
-    resetTerminalColors();
-    process.exit(0);
-  }
-
-  if (rawArgs.includes("--version") || rawArgs.includes("-V")) {
-    console.log(VERSION);
-    process.exit(0);
-  }
+  handleEarlyExits(rawArgs);
 
   const {
     rootDir,
@@ -319,7 +66,6 @@ async function main() {
     process.exit(0);
   }
 
-  // Early validation: ensure this looks like a project directory
   const PROJECT_MARKERS = [
     "package.json",
     "go.mod",
@@ -351,10 +97,9 @@ async function main() {
 
   if (watchMode) {
     await runWatchMode(rootDir, verbose);
-    return; // runWatchMode never returns, but just in case
+    return;
   }
 
-  // Verbose logger: persists messages on screen (not swallowed by spinner)
   const noopProgress: ProgressCallback = () => {};
   const verboseLog: ProgressCallback = jsonMode
     ? noopProgress
@@ -362,106 +107,12 @@ async function main() {
         if (verbose) p.log.info(t.muted(msg));
       };
 
-  // --check: fast path for shell integration (silent, exit code only)
-  // With --ci: machine-readable output, exit codes: 0=fresh, 1=stale, 2=error
   if (check) {
-    try {
-      const config = await loadConfig(rootDir);
-
-      if (checkTimestamp) {
-        // Timestamp-only check: no file globbing or hashing
-        if (!config) {
-          if (ciMode) {
-            console.log("none");
-          } else {
-            console.log("clarte: no context file found. Run npx clarte to generate.");
-          }
-          process.exit(2);
-        }
-        if (!config.snapshotGeneratedAt) {
-          if (ciMode) console.log("fresh");
-          process.exit(0); // Config exists but no timestamp: nothing to check
-        }
-        const staleDays = config.staleDays ?? 7;
-        const daysSince = Math.floor((Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24));
-        if (daysSince > staleDays) {
-          if (ciMode) {
-            console.log(`stale: snapshot is ${daysSince}d old`);
-          } else {
-            console.log(`clarte: snapshot is ${daysSince}d old. Run: npx clarte --refresh-snapshot`);
-          }
-          process.exit(1);
-        }
-        if (config) {
-          const pathResult = await validateContextPaths(rootDir, config);
-          if (pathResult && pathResult.broken.length > 0) {
-            if (ciMode) {
-              console.log(`stale: ${pathResult.broken.length} broken file reference(s)`);
-            } else {
-              console.log(
-                `clarte: ${pathResult.broken.length} broken file reference(s) in ${pathResult.file}: ${pathResult.broken.join(", ")}`,
-              );
-            }
-            process.exit(1);
-          }
-        }
-        if (ciMode) console.log("fresh");
-        process.exit(0);
-      }
-
-      // Hash-based check (original behavior)
-      if (!config) {
-        if (ciMode) {
-          console.log("none");
-        } else {
-          console.log("clarte: no context file found. Run npx clarte to generate.");
-        }
-        process.exit(2);
-      }
-      if (!config.snapshotHash) {
-        if (ciMode) console.log("fresh");
-        process.exit(0); // Config exists but no hash: nothing to check
-      }
-      const lang = config.language ?? "other";
-      const currentHash = await computeSnapshotHash(rootDir, lang);
-      if (currentHash !== config.snapshotHash) {
-        const daysSince = config.snapshotGeneratedAt
-          ? Math.floor((Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24))
-          : 0;
-        const staleMsg = daysSince > 0 ? ` (last generated ${daysSince}d ago)` : "";
-        if (ciMode) {
-          console.log(`stale: hash mismatch${staleMsg}`);
-        } else {
-          console.log(`clarte: snapshot is stale${staleMsg}. Run npx clarte --refresh-snapshot`);
-        }
-        process.exit(1);
-      }
-
-      const pathResult = await validateContextPaths(rootDir, config);
-      if (pathResult && pathResult.broken.length > 0) {
-        if (ciMode) {
-          console.log(`stale: ${pathResult.broken.length} broken file reference(s)`);
-        } else {
-          console.log(
-            `clarte: ${pathResult.broken.length} broken file reference(s) in ${pathResult.file}: ${pathResult.broken.join(", ")}`,
-          );
-        }
-        process.exit(1);
-      }
-      if (ciMode) console.log("fresh");
-      process.exit(0);
-    } catch (err: unknown) {
-      if (ciMode) {
-        console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
-        process.exit(2);
-      }
-      throw err;
-    }
+    await runCheckMode(rootDir, checkTimestamp, ciMode);
   }
 
   const savedConfig = await loadConfig(rootDir);
 
-  // Determine color scheme: env var > saved config > interactive prompt
   let colorScheme: "dark" | "light" = "dark";
   if (jsonMode) {
     initTheme("dark");
@@ -474,7 +125,6 @@ async function main() {
       if (savedConfig?.colorScheme) {
         colorScheme = savedConfig.colorScheme;
       } else {
-        // Detect terminal background from COLORFGBG before defaulting to dark
         const detected = detectTerminalBackground();
         if (detected) colorScheme = detected;
       }
@@ -525,7 +175,6 @@ async function main() {
   try {
     graph = await buildGraphWithCache(rootDir, detected.language, verbose ? verboseLog : (msg) => shimmer.message(msg));
 
-    // Merge secondary language graphs if present
     if (detected.secondaryLanguages) {
       for (const secLang of detected.secondaryLanguages) {
         shimmer.message(`Building ${secLang} import graph...`);
@@ -585,389 +234,16 @@ async function main() {
     }
   }
 
-  // Step 1.7: Structural analysis (progressive reveal via shimmer)
-  const fileCount = graph.centrality.size;
-
-  const analysisCacheKey = computeAnalysisCacheKey(graph, savedConfig?.layers);
-  const analysisCache = await loadAnalysisCache(rootDir);
-  const useAnalysisCache = analysisCache !== null && analysisCache.cacheKey === analysisCacheKey;
-
-  // Key files (HITS analysis)
-  const hubFiles = useAnalysisCache ? analysisCache.hubFiles : getHubFiles(graph);
-  if (!jsonMode) {
-    const topHubName = hubFiles[0]?.path ?? "";
-    p.log.step(
-      hubFiles.length > 0
-        ? `${t.brand("Key files")}      found ${t.textBold(String(hubFiles.length))} key files` +
-            (topHubName ? t.muted(` (top: ${topHubName})`) : "")
-        : `${t.brand("Key files")}      ${t.muted("no key files detected")}`,
-    );
-    if (verbose && hubFiles.length > 0) {
-      for (const h of hubFiles.slice(0, 5)) {
-        p.log.info(
-          t.muted(`  ${h.path} (auth: ${h.authority.toFixed(3)}, hub: ${h.hubScore.toFixed(3)}, role: ${h.role})`),
-        );
-      }
-    }
-    var analysisHubFiles = hubFiles;
-  }
-
-  // Circular dependency detection (Tarjan SCC)
-  const circularDeps = useAnalysisCache ? analysisCache.circularDeps : findCircularDeps(graph);
-  if (!jsonMode) {
-    p.log.step(
-      circularDeps.length === 0
-        ? `${t.brand("Circular deps")}  no cycles found ${t.check()}`
-        : `${t.brand("Circular deps")}  ${t.textBold(String(circularDeps.length))} cycle${circularDeps.length === 1 ? "" : "s"} found ${t.warn("\u26A0")}`,
-    );
-    if (verbose && circularDeps.length > 0) {
-      for (const c of circularDeps.slice(0, 3)) {
-        p.log.info(t.muted(`  ${c.chain.join(" → ")}`));
-      }
-    }
-    var analysisCircularDeps = circularDeps;
-  }
-
-  const { layers, layerEdges } = useAnalysisCache
-    ? { layers: analysisCache.layers, layerEdges: analysisCache.layerEdges }
-    : detectArchitecturalLayers(graph, savedConfig?.layers);
-  if (!jsonMode) {
-    p.log.step(
-      layers.length > 0
-        ? `${t.brand("Layers")}         ${layers.map((l) => l.name).join(" \u2192 ")}`
-        : `${t.brand("Layers")}         ${t.muted("no clear layers detected")}`,
-    );
-    if (verbose && layers.length > 0) {
-      for (const l of layers) {
-        p.log.info(t.muted(`  ${l.name}: ${l.files.length} files, depends on: ${l.dependsOn.join(", ") || "none"}`));
-      }
-    }
-    var analysisLayers = layers;
-    var analysisLayerEdges = layerEdges;
-  }
-
-  // Instability metrics (no dedicated animation, fast computation)
-  const instabilities = useAnalysisCache ? analysisCache.instabilities : computeInstability(graph);
-  if (!jsonMode) {
-    const highInstability = instabilities.filter((f) => f.instability > INSTABILITY_THRESHOLD);
-    p.log.step(
-      highInstability.length > 0
-        ? `${t.brand("Instability")}    ${t.textBold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"} ${t.warn("\u26A0")}`
-        : `${t.brand("Instability")}    ${t.muted("all files within healthy range")} ${t.check()}`,
-    );
-    if (verbose && highInstability.length > 0) {
-      for (const f of highInstability.slice(0, 5)) {
-        p.log.info(t.muted(`  ${f.path} (I=${f.instability.toFixed(2)}, fan-in=${f.fanIn}, fan-out=${f.fanOut})`));
-      }
-    }
-    var analysisInstabilities = instabilities;
-  }
-
-  // Module clusters (community detection)
-  const communities = useAnalysisCache ? analysisCache.communities : detectCommunities(graph);
-  if (!jsonMode) {
-    p.log.step(
-      communities.length > 0
-        ? `${t.brand("Clusters")}       ${t.textBold(String(communities.length))} module cluster${communities.length === 1 ? "" : "s"}`
-        : `${t.brand("Clusters")}       ${t.muted("single cohesive module")}`,
-    );
-    if (verbose && communities.length > 0) {
-      for (const c of communities.slice(0, 5)) {
-        p.log.info(t.muted(`  ${c.label} (${c.files.length} files)`));
-      }
-    }
-    var analysisCommunities = communities;
-  }
-
-  const analysisDays = savedConfig?.analysisDays ?? 90;
-  const gitActivity = detected.isGitRepo
-    ? await analyzeGitActivity(rootDir, verbose ? verboseLog : noopProgress, analysisDays)
-    : null;
-
-  // Filter deleted files from git-derived data (files may have been deleted
-  // within the analysis window but still appear in git log output)
-  if (gitActivity) {
-    const filesToCheck = new Set<string>();
-    for (const h of gitActivity.hotFiles) filesToCheck.add(h.path);
-    for (const c of gitActivity.changeCoupling) {
-      filesToCheck.add(c.fileA);
-      filesToCheck.add(c.fileB);
-    }
-    if (gitActivity.lagCouplings) {
-      for (const c of gitActivity.lagCouplings) {
-        filesToCheck.add(c.fileA);
-        filesToCheck.add(c.fileB);
-      }
-    }
-    const checks = await Promise.all(
-      [...filesToCheck].map(async (f) => [f, await fileExists(path.join(rootDir, f))] as const),
-    );
-    const alive = new Set(checks.filter(([, ok]) => ok).map(([f]) => f));
-    gitActivity.hotFiles = gitActivity.hotFiles.filter((h) => alive.has(h.path));
-    gitActivity.changeCoupling = gitActivity.changeCoupling.filter((c) => alive.has(c.fileA) && alive.has(c.fileB));
-    if (gitActivity.lagCouplings) {
-      gitActivity.lagCouplings = gitActivity.lagCouplings.filter((c) => alive.has(c.fileA) && alive.has(c.fileB));
-    }
-  }
-
-  if (!jsonMode) {
-    if (gitActivity) {
-      const coupledPairs = gitActivity.changeCoupling.length;
-      p.log.step(
-        `${t.brand(`Git (${analysisDays}d)`)}      ${t.textBold(String(gitActivity.hotFiles.length))} active file${gitActivity.hotFiles.length === 1 ? "" : "s"}, ${t.textBold(String(coupledPairs))} coupled pair${coupledPairs === 1 ? "" : "s"}`,
-      );
-      if (verbose) {
-        for (const h of gitActivity.hotFiles.slice(0, 5)) {
-          p.log.info(t.muted(`  ${h.path} (${h.commits} commits, last: ${h.lastChanged})`));
-        }
-      }
-    } else {
-      p.log.step(`${t.brand("Git")}            ${t.muted("not a git repo, skipped")}`);
-    }
-  }
-
-  // Dead files (zero in-degree, excluding entry points and tests)
-  const deadFiles = useAnalysisCache ? analysisCache.deadFiles : findDeadFiles(graph);
-  if (!jsonMode && deadFiles.length > 0) {
-    p.log.step(
-      `${t.brand("Dead files")}     ${t.textBold(String(deadFiles.length))} file${deadFiles.length === 1 ? "" : "s"} not imported by anything ${t.warn("\u26A0")}`,
-    );
-    if (verbose) {
-      for (const f of deadFiles.slice(0, 5)) {
-        p.log.info(t.muted(`  ${f}`));
-      }
-    }
-  }
-
-  const crossCuttingFiles = useAnalysisCache ? analysisCache.crossCuttingFiles : findCrossCuttingFiles(graph, layers);
-  if (!jsonMode && crossCuttingFiles.length > 0) {
-    p.log.step(
-      `${t.brand("Cross-cutting")}  ${t.textBold(String(crossCuttingFiles.length))} file${crossCuttingFiles.length === 1 ? "" : "s"} span ${t.textBold("3+")} layers`,
-    );
-    if (verbose) {
-      for (const f of crossCuttingFiles.slice(0, 5)) {
-        p.log.info(t.muted(`  ${f.file} (${f.layerSpread} layers: ${f.layers.join(", ")})`));
-      }
-    }
-  }
-
-  const layerConsistency = useAnalysisCache
-    ? analysisCache.layerConsistency
-    : layers.length >= 2
-      ? computeLayerConsistency(graph, layers, layerEdges)
-      : undefined;
-  if (!jsonMode && layerConsistency) {
-    const pct = (layerConsistency.consistency * 100).toFixed(0);
-    const violationCount = layerConsistency.violations.length;
-    p.log.step(
-      violationCount === 0
-        ? `${t.brand("Layer order")}    ${pct}% consistent ${t.check()}`
-        : `${t.brand("Layer order")}    ${pct}% consistent, ${t.textBold(String(violationCount))} violation${violationCount === 1 ? "" : "s"} ${t.warn("\u26A0")}`,
-    );
-    if (verbose && violationCount > 0) {
-      for (const v of layerConsistency.violations.slice(0, 3)) {
-        p.log.info(t.muted(`  ${v.from} (${v.fromLayer}) imports ${v.to} (${v.toLayer})`));
-      }
-    }
-  }
-
-  // Chokepoints (articulation points)
-  const chokepoints = useAnalysisCache ? analysisCache.chokepoints : findChokepoints(graph);
-  if (!jsonMode && chokepoints.length > 0) {
-    p.log.step(
-      `${t.brand("Chokepoints")}    ${t.textBold(String(chokepoints.length))} structural chokepoint${chokepoints.length === 1 ? "" : "s"}`,
-    );
-    if (verbose) {
-      for (const cp of chokepoints.slice(0, 5)) {
-        p.log.info(t.muted(`  ${cp.file} (separates ${cp.separates} components, ${cp.importedBy} importers)`));
-      }
-    }
-  }
-
-  const configConstraints = await scanConfigConstraints(rootDir, detected);
-  if (!jsonMode) {
-    const hasConstraints = configConstraints.typescript || configConstraints.linter || configConstraints.formatter;
-    if (hasConstraints) {
-      const parts: string[] = [];
-      if (configConstraints.typescript) parts.push("tsconfig");
-      if (configConstraints.linter) parts.push(configConstraints.linter.tool.toLowerCase());
-      if (configConstraints.formatter && !configConstraints.linter)
-        parts.push(configConstraints.formatter.tool.toLowerCase());
-      p.log.step(`${t.brand("Config")}         extracted constraints from ${parts.join(", ")}`);
-    }
-  }
-
-  // Convention inference (fills gaps not covered by config constraints)
-  const conventions = await inferConventions(rootDir, graph, configConstraints);
-  if (!jsonMode && conventions) {
-    const parts: string[] = [];
-    if (Object.values(conventions.naming).some((v) => v !== "mixed")) parts.push("naming");
-    if (conventions.exportStyle.preferNamed) parts.push("exports");
-    if (conventions.importOrdering) parts.push("imports");
-    if (parts.length > 0) {
-      p.log.step(`${t.brand("Conventions")}    inferred ${parts.join(", ")} patterns`);
-    }
-  }
-
-  const testMapping = buildTestMapping(graph, detected);
-  if (!jsonMode && testMapping) {
-    const coveredCount = testMapping.sourceToTests.size;
-    const untestedCount = testMapping.untestedFiles.length;
-    p.log.step(
-      `${t.brand("Test map")}       ${t.textBold(String(coveredCount))} source file${coveredCount === 1 ? "" : "s"} with tests` +
-        (untestedCount > 0 ? `, ${t.warn(String(untestedCount))} untested` : ` ${t.check()}`),
-    );
-    if (verbose && untestedCount > 0) {
-      for (const f of testMapping.untestedFiles.slice(0, 5)) {
-        p.log.info(t.muted(`  untested: ${f}`));
-      }
-    }
-  }
-
-  const graphTopology = useAnalysisCache ? analysisCache.graphTopology : computeGraphTopology(graph);
-  if (!jsonMode) {
-    if (graphTopology.isFragmented) {
-      p.log.step(
-        `${t.brand("Topology")}       ${t.textBold(String(graphTopology.componentCount))} connected component${graphTopology.componentCount === 1 ? "" : "s"} (fragmented) ${t.warn("\u26A0")}`,
-      );
-      if (verbose) {
-        const sizes = graphTopology.componentSizes.slice(0, 5).join(", ");
-        p.log.info(t.muted(`  Component sizes: ${sizes}${graphTopology.componentSizes.length > 5 ? ", ..." : ""}`));
-        p.log.info(t.muted(`  Approximate diameter: ${graphTopology.approximateDiameter} hops`));
-      }
-    } else if (verbose) {
-      p.log.step(
-        `${t.brand("Topology")}       single connected graph, diameter ~${graphTopology.approximateDiameter} hops`,
-      );
-    }
-  }
-
-  const structuralMismatches = gitActivity
-    ? findStructuralTemporalMismatches(graph, gitActivity.changeCoupling)
-    : undefined;
-
-  const tightCouplings = useAnalysisCache ? analysisCache.tightCouplings : findTightCouplings(graph);
-
-  const monorepoAnalysis = detected.monorepo
-    ? await analyzeMonorepoGraph(rootDir, graph, detected.monorepo)
-    : undefined;
-  if (monorepoAnalysis && detected.monorepo) {
-    const packageHubFiles = new Map<string, PackageHubFile[]>();
-    for (const pkg of detected.monorepo.packages) {
-      const { authority } = computePackageCentrality(graph, pkg.path);
-      const topFiles = [...authority.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .filter(([, score]) => score > 0)
-        .map(([filePath, score]) => ({ path: filePath, authority: score }));
-      if (topFiles.length > 0) {
-        packageHubFiles.set(pkg.name, topFiles);
-      }
-    }
-    monorepoAnalysis.packageHubFiles = packageHubFiles;
-  }
-  if (!jsonMode && monorepoAnalysis) {
-    const edgeCount = monorepoAnalysis.crossPackageEdges.length;
-    const violationCount = monorepoAnalysis.encapsulationViolations.length;
-    if (edgeCount > 0) {
-      p.log.step(
-        `${t.brand("Packages")}       ${t.textBold(String(edgeCount))} cross-package edge${edgeCount === 1 ? "" : "s"}` +
-          (violationCount > 0
-            ? `, ${t.warn(String(violationCount))} encapsulation violation${violationCount === 1 ? "" : "s"}`
-            : ` ${t.check()}`),
-      );
-      if (verbose && violationCount > 0) {
-        for (const v of monorepoAnalysis.encapsulationViolations.slice(0, 5)) {
-          p.log.info(t.muted(`  ${v.from} -> ${v.to} (${v.fromPackage} -> ${v.toPackage})`));
-        }
-      }
-    }
-  }
-
-  let changeImpact: Map<string, Array<{ file: string; score: number }>> | undefined;
-  if (hubFiles.length > 0) {
-    const topHubs = hubFiles
-      .slice()
-      .sort((a, b) => b.authority - a.authority || a.path.localeCompare(b.path))
-      .slice(0, 5);
-    const impactMap = new Map<string, Array<{ file: string; score: number }>>();
-    for (const hub of topHubs) {
-      const predictions = predictChangeImpact(hub.path, graph, gitActivity);
-      if (predictions.length > 0) {
-        impactMap.set(hub.path, predictions);
-      }
-    }
-    if (impactMap.size > 0) changeImpact = impactMap;
-  }
-
-  const analysis: ContextAnalysis = {
-    hubFiles,
-    circularDeps,
-    layers,
-    layerEdges,
-    gitActivity,
-    instabilities,
-    communities,
-    deadFiles,
-    configConstraints,
-    crossCuttingFiles,
-    layerConsistency,
-    chokepoints,
-    conventions: conventions ?? undefined,
-    testMapping: testMapping ?? undefined,
-    graphTopology,
-    structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined,
-    tightCouplings: tightCouplings.length ? tightCouplings : undefined,
-    monorepoAnalysis,
-    changeImpact,
-    analysisDays,
-  };
-
-  if (!useAnalysisCache) {
-    try {
-      await saveAnalysisCache(rootDir, {
-        version: ANALYSIS_CACHE_VERSION,
-        cacheKey: analysisCacheKey,
-        hubFiles,
-        circularDeps,
-        layers,
-        layerEdges,
-        instabilities,
-        communities,
-        deadFiles,
-        crossCuttingFiles: crossCuttingFiles ?? [],
-        layerConsistency,
-        chokepoints,
-        tightCouplings,
-        graphTopology,
-      });
-    } catch {
-      // Cache save failed; non-critical
-    }
-  }
-
-  const currentAnalysisSnapshot = extractSnapshot(analysis);
-  const prevSnapshot = await loadPreviousSnapshot(rootDir);
-  let deltaSection: string | null = null;
-  if (prevSnapshot) {
-    const delta = computeDelta(prevSnapshot, currentAnalysisSnapshot);
-    if (!isDeltaEmpty(delta)) {
-      deltaSection = renderDeltaSection(delta);
-      if (!jsonMode && deltaSection) {
-        p.log.step(`${t.brand("Delta")}          architecture changes detected since last run`);
-        if (verbose) {
-          for (const line of deltaSection.split("\n").filter((l) => l.startsWith("- "))) {
-            p.log.info(t.muted(`  ${line.slice(2)}`));
-          }
-        }
-      }
-    }
-  }
-  try {
-    await saveSnapshot(rootDir, currentAnalysisSnapshot);
-  } catch {
-    // Snapshot save failed; non-critical
-  }
+  const { analysis, deltaSection } = await runAnalysis(
+    rootDir,
+    graph,
+    detected,
+    savedConfig,
+    verbose,
+    jsonMode,
+    verboseLog,
+    noopProgress,
+  );
 
   if (jsonMode) {
     let snapshot = null;
@@ -978,7 +254,7 @@ async function main() {
         graph,
         maxTokens,
         undefined,
-        gitActivity,
+        analysis.gitActivity,
       );
       if (snapshot.entries.length === 0) snapshot = null;
     }
@@ -991,31 +267,32 @@ async function main() {
   }
 
   {
+    const fileCount = graph.centrality.size;
     const reportLines: string[] = [];
     reportLines.push(`  ${"Files analyzed"}  ${t.textBold(String(fileCount))}`);
     reportLines.push(`  ${"Import edges"}    ${t.textBold(String(graph.edges.length))}`);
     reportLines.push(`  ${"External pkgs"}   ${t.textBold(String(graph.externalImportCounts.size))}`);
-    if (hubFiles.length > 0) {
+    if (analysis.hubFiles.length > 0) {
       reportLines.push(
-        `  ${"Hub files"}       ${t.textBold(String(hubFiles.length))}` +
-          (hubFiles[0] ? ` ${t.text(`(most connected: ${hubFiles[0].path})`)}` : ""),
+        `  ${"Hub files"}       ${t.textBold(String(analysis.hubFiles.length))}` +
+          (analysis.hubFiles[0] ? ` ${t.text(`(most connected: ${analysis.hubFiles[0].path})`)}` : ""),
       );
     }
-    if (layers.length > 0) {
-      reportLines.push(`  ${"Architecture"}    ${t.textBold(layers.map((l) => l.name).join(" → "))}`);
+    if (analysis.layers.length > 0) {
+      reportLines.push(`  ${"Architecture"}    ${t.textBold(analysis.layers.map((l) => l.name).join(" \u2192 "))}`);
     }
     reportLines.push(
-      `  ${"Circular deps"}   ${circularDeps.length === 0 ? t.textBold("none") : t.text(`${circularDeps.length} chain${circularDeps.length === 1 ? "" : "s"}`)}`,
+      `  ${"Circular deps"}   ${analysis.circularDeps.length === 0 ? t.textBold("none") : t.text(`${analysis.circularDeps.length} chain${analysis.circularDeps.length === 1 ? "" : "s"}`)}`,
     );
-    if (gitActivity) {
-      reportLines.push(`  ${"Hot files (" + analysisDays + "d)"} ${t.textBold(String(gitActivity.hotFiles.length))}`);
+    if (analysis.gitActivity) {
+      reportLines.push(`  ${"Hot files (" + analysis.analysisDays + "d)"} ${t.textBold(String(analysis.gitActivity.hotFiles.length))}`);
     }
     p.note(reportLines.join("\n"), "Analysis Report");
 
-    if (circularDeps.length > 0) {
-      for (const c of circularDeps.slice(0, 2)) {
+    if (analysis.circularDeps.length > 0) {
+      for (const c of analysis.circularDeps.slice(0, 2)) {
         const shortChain = c.chain.map((f) => f.split("/").pop() ?? f);
-        p.log.warn(t.text(`Cycle: ${shortChain.join(" \u2192 ")}`));
+        p.log.warn(t.warn(`Cycle: ${shortChain.join(" \u2192 ")}`));
       }
     }
   }
@@ -1043,7 +320,6 @@ async function main() {
     );
     answers = configToAnswers(savedConfig);
 
-    // Re-check monorepo (structure may have changed)
     if (detected.monorepo && detected.monorepo.packages.length > 0 && !savedConfig.generatePerPackage) {
       // Monorepo exists but wasn't configured, keep saved value
     }
@@ -1056,7 +332,6 @@ async function main() {
       p.log.info(t.muted("Saved config to .clarte.json for future runs."));
     }
   } else {
-    // Zero-config: build answers from auto-detected values
     const detectedIDEs = await detectIDEs(rootDir);
     const detectedDescription = await detectProjectDescription(rootDir);
 
@@ -1098,7 +373,7 @@ async function main() {
         graph,
         maxTokens,
         verbose ? verboseLog : (msg) => shimmer.message(msg),
-        gitActivity,
+        analysis.gitActivity,
       );
     } finally {
       shimmer.stop();
@@ -1118,7 +393,7 @@ async function main() {
 
   shimmer = startShimmer(dryRun ? "Preparing context files..." : "Generating context files...");
   const shouldGenerateSkills = generateSkills || answers.ides.includes("claude");
-  let files: GeneratedFile[];
+  let files;
   try {
     files = await generateFiles(
       detected,
