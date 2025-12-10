@@ -5,7 +5,6 @@ import { findFeedbackEdges } from "../../graph-cycles.js";
 export function renderDependencySections(analysis: ContextAnalysis): ContextSection[] {
   const sections: ContextSection[] = [];
 
-  // Circular Dependencies (P3)
   if (analysis.circularDeps && analysis.circularDeps.length > 0) {
     const circLines: string[] = [];
     circLines.push("## Circular Dependencies");
@@ -19,7 +18,6 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
       circLines.push(`- ${dep.chain.map((f) => `\`${f}\``).join(" -> ")}${severity}${hint}`);
     }
 
-    // Add feedback edge suggestions when multiple cycles exist
     if (analysis.circularDeps.length > 1) {
       const feedbackEdges = findFeedbackEdges(analysis.circularDeps);
       if (feedbackEdges.length > 0) {
@@ -46,7 +44,6 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
     sections.push({ id: "circular-deps", priority: 3, content: circContent, tokens: estimateTokens(circContent) });
   }
 
-  // Dead Files (P9)
   if (analysis.deadFiles && analysis.deadFiles.length > 0) {
     const deadLines: string[] = [];
     deadLines.push("## Dead Files");
@@ -60,10 +57,9 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
       deadLines.push(`- ... and ${analysis.deadFiles.length - 15} more`);
     }
     const deadContent = deadLines.join("\n");
-    sections.push({ id: "dead-files", priority: 9, content: deadContent, tokens: estimateTokens(deadContent) });
+    sections.push({ id: "dead-files", priority: 50 /* full-only: migrated to code-health skill */, content: deadContent, tokens: estimateTokens(deadContent) });
   }
 
-  // Cross-Cutting Files (P9)
   if (analysis.crossCuttingFiles && analysis.crossCuttingFiles.length > 0) {
     const ccfLines: string[] = [];
     ccfLines.push("## Cross-Cutting Files");
@@ -83,7 +79,6 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
     sections.push({ id: "cross-cutting", priority: 9, content: ccfContent, tokens: estimateTokens(ccfContent) });
   }
 
-  // Chokepoints (P9)
   if (analysis.chokepoints && analysis.chokepoints.length > 0) {
     const cpLines: string[] = [];
     cpLines.push("## Architectural Chokepoints");
@@ -98,10 +93,9 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
       );
     }
     const cpContent = cpLines.join("\n");
-    sections.push({ id: "chokepoints", priority: 9, content: cpContent, tokens: estimateTokens(cpContent) });
+    sections.push({ id: "chokepoints", priority: 50 /* full-only: migrated to code-health skill */, content: cpContent, tokens: estimateTokens(cpContent) });
   }
 
-  // Tight Coupling (P10)
   if (analysis.tightCouplings && analysis.tightCouplings.length > 0) {
     const tcLines: string[] = [];
     tcLines.push("## Tight Coupling");
@@ -114,10 +108,9 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
       tcLines.push(`- \`${tc.from}\` imports ${tc.importedNames} names from \`${tc.to}\``);
     }
     const tcContent = tcLines.join("\n");
-    sections.push({ id: "tight-coupling", priority: 10, content: tcContent, tokens: estimateTokens(tcContent) });
+    sections.push({ id: "tight-coupling", priority: 50 /* full-only: migrated to code-health skill */, content: tcContent, tokens: estimateTokens(tcContent) });
   }
 
-  // Hidden Coupling (P10)
   if (analysis.structuralMismatches && analysis.structuralMismatches.length > 0) {
     const smLines: string[] = [];
     smLines.push("## Hidden Coupling");
@@ -135,7 +128,7 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
       );
     }
     const smContent = smLines.join("\n");
-    sections.push({ id: "hidden-coupling", priority: 10, content: smContent, tokens: estimateTokens(smContent) });
+    sections.push({ id: "hidden-coupling", priority: 50 /* full-only: migrated to code-health skill */, content: smContent, tokens: estimateTokens(smContent) });
   }
 
   return sections;

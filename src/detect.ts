@@ -43,7 +43,6 @@ const KNOWN_DIRS = [
 
 /** Framework detection rules: dependency name -> framework info */
 const FRAMEWORK_MAP: Record<string, string> = {
-  // JS/TS
   expo: "Expo",
   "react-native": "React Native",
   next: "Next.js",
@@ -61,7 +60,6 @@ const FRAMEWORK_MAP: Record<string, string> = {
   "@nestjs/core": "NestJS",
   electron: "Electron",
   tauri: "Tauri",
-  // State management
   zustand: "Zustand",
   redux: "Redux",
   "@reduxjs/toolkit": "Redux Toolkit",
@@ -69,31 +67,25 @@ const FRAMEWORK_MAP: Record<string, string> = {
   mobx: "MobX",
   jotai: "Jotai",
   recoil: "Recoil",
-  // Testing
   jest: "Jest",
   vitest: "Vitest",
   playwright: "Playwright",
   cypress: "Cypress",
-  // Styling
   tailwindcss: "Tailwind CSS",
   nativewind: "NativeWind",
   "styled-components": "styled-components",
   "@emotion/react": "Emotion",
-  // ORM/DB
   prisma: "Prisma",
   "@prisma/client": "Prisma",
   drizzle: "Drizzle",
   "drizzle-orm": "Drizzle",
   typeorm: "TypeORM",
   mongoose: "Mongoose",
-  // Meta-frameworks
   "@remix-run/node": "Remix",
   "@remix-run/react": "Remix",
   astro: "Astro",
-  // API
   "@trpc/server": "tRPC",
   "@trpc/client": "tRPC",
-  // BaaS
   "@supabase/supabase-js": "Supabase",
 };
 
@@ -129,7 +121,6 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     monorepo: null,
   };
 
-  // Parallel checks for common project markers
   onProgress?.("Checking project markers...");
   const [
     hasGit,
@@ -172,28 +163,22 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
   const hasBunLock = hasBunLockBin || hasBunLockText;
 
   ctx.isGitRepo = hasGit;
-
-  // -- Detect language + package manager --
-
   if (packageJson) {
     const pkg = packageJson;
     ctx.language = hasTsConfig ? "typescript" : "javascript";
     ctx.hasTypeScript = hasTsConfig;
 
-    // Package manager
     if (hasPnpmLock) ctx.packageManager = "pnpm";
     else if (hasYarnLock) ctx.packageManager = "yarn";
     else if (hasBunLock) ctx.packageManager = "bun";
     else ctx.packageManager = "npm";
 
-    // Collect all dependency names
     const deps = {
       ...(pkg.dependencies as Record<string, string> | undefined),
       ...(pkg.devDependencies as Record<string, string> | undefined),
     };
     ctx.dependencies = Object.keys(deps);
 
-    // Detect frameworks
     const seen = new Set<string>();
     for (const dep of ctx.dependencies) {
       const framework = FRAMEWORK_MAP[dep];
@@ -204,7 +189,6 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
       }
     }
 
-    // Detect linter
     if (hasBiome) {
       ctx.linter = "biome";
     } else {
@@ -214,7 +198,6 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
       else if (hasPrettier) ctx.linter = "prettier";
     }
 
-    // Detect Bun-specific configuration
     if (hasBunfigToml && !seen.has("Bun")) {
       seen.add("Bun");
       ctx.frameworks.push({ name: "Bun" });
@@ -229,11 +212,9 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     ctx.linter = "rustfmt";
   } else if (hasPyproject || hasRequirements) {
     ctx.language = "python";
-    // Try to detect pip vs poetry
     if (topEntries.includes("poetry.lock")) ctx.packageManager = "poetry";
     else ctx.packageManager = "pip";
 
-    // Detect Python frameworks from requirements.txt and/or pyproject.toml
     const allPyDeps: string[] = [];
     const seenFw = new Set<string>();
 
@@ -269,7 +250,6 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     }
     ctx.dependencies = allPyDeps;
 
-    // Detect Python linter
     const hasRuffConfig = topEntries.includes("ruff.toml") || topEntries.includes(".ruff.toml");
     if (!hasRuffConfig && topEntries.includes("pyproject.toml")) {
       // Check for [tool.ruff] section in pyproject.toml
@@ -315,10 +295,7 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
         ctx.frameworks.push({ name: "flake8" });
       }
     }
-  }
-
-  // -- Detect Java build tools (Maven / Gradle) --
-  if (pomXmlContent) {
+  }  if (pomXmlContent) {
     if (ctx.language === "other") ctx.language = "java";
     const mavenVersion = extractMavenVersion(pomXmlContent);
     ctx.frameworks.push({ name: "Maven", version: mavenVersion });
@@ -327,16 +304,12 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     ctx.frameworks.push({ name: "Gradle" });
   }
 
-  // Report detected stack
   if (ctx.frameworks.length > 0) {
     const fwNames = ctx.frameworks.map((f) => f.name).join(", ");
     const lang = ctx.hasTypeScript ? "TypeScript" : ctx.language !== "other" ? ctx.language : "";
     const parts = [lang, fwNames].filter(Boolean);
     onProgress?.(`Detected: ${parts.join(" + ")}`);
-  }
-
-  // -- Detect directories --
-  onProgress?.("Scanning directories...");
+  }  onProgress?.("Scanning directories...");
 
   for (const dir of KNOWN_DIRS) {
     if (topEntries.includes(dir)) {
@@ -344,7 +317,6 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     }
   }
 
-  // Also check inside src/ for nested structure
   if (topEntries.includes("src")) {
     const srcEntries = await readDirSafe(path.join(rootDir, "src"));
     for (const entry of srcEntries) {
@@ -352,10 +324,7 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
         ctx.directories.push(`src/${entry}`);
       }
     }
-  }
-
-  // -- Detect secondary languages and count source files in a single traversal --
-  // detectLanguageBreakdown scans all source extensions; we reuse its file list
+  }  // detectLanguageBreakdown scans all source extensions; we reuse its file list
   // to derive the primary language count, avoiding a second glob.
   const allSourceFiles = await detectLanguageBreakdown(ctx, rootDir);
 
@@ -382,16 +351,7 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     }
   } catch (err: unknown) {
     warnings.push(`Source file counting failed: ${err instanceof Error ? err.message : String(err)}`);
-  }
-
-  // -- Detect testing framework --
-  ctx.testFramework = detectTestFramework(ctx.dependencies);
-
-  // -- Detect CI provider --
-  ctx.ciProvider = await detectCiProvider(rootDir, topEntries);
-
-  // -- Detect monorepo --
-  ctx.monorepo = await detectMonorepo(rootDir, topEntries);
+  }  ctx.testFramework = detectTestFramework(ctx.dependencies);  ctx.ciProvider = await detectCiProvider(rootDir, topEntries);  ctx.monorepo = await detectMonorepo(rootDir, topEntries);
 
   if (warnings.length > 0) {
     ctx.warnings = warnings;
@@ -437,7 +397,6 @@ const CI_PATTERNS: Array<{ path: string; name: string; isDir?: boolean }> = [
 async function detectCiProvider(rootDir: string, topEntries: string[]): Promise<string | undefined> {
   for (const ci of CI_PATTERNS) {
     if (ci.isDir) {
-      // Check if directory exists
       if (await fileExists(path.join(rootDir, ci.path))) return ci.name;
     } else {
       if (topEntries.includes(ci.path)) return ci.name;
@@ -511,7 +470,6 @@ async function detectLanguageBreakdown(ctx: DetectedContext, rootDir: string): P
 
     if (allSourceFiles.length === 0) return [];
 
-    // Count files per language
     const counts: Record<string, number> = {};
     for (const file of allSourceFiles) {
       const ext = path.extname(file).toLowerCase();
@@ -529,7 +487,6 @@ async function detectLanguageBreakdown(ctx: DetectedContext, rootDir: string): P
 
     ctx.languageBreakdown = counts;
 
-    // Find secondary languages above the threshold
     const totalFiles = allSourceFiles.length;
     const threshold = totalFiles * SECONDARY_LANGUAGE_THRESHOLD;
     const secondary: Language[] = [];
@@ -555,7 +512,6 @@ async function detectLanguageBreakdown(ctx: DetectedContext, rootDir: string): P
  * Detect monorepo tooling and enumerate packages.
  */
 async function detectMonorepo(rootDir: string, topEntries: string[]): Promise<MonorepoInfo | null> {
-  // Determine monorepo type
   const hasTurboJson = topEntries.includes("turbo.json");
   const hasNxJson = topEntries.includes("nx.json");
   const hasPnpmWorkspace = topEntries.includes("pnpm-workspace.yaml");
@@ -565,7 +521,6 @@ async function detectMonorepo(rootDir: string, topEntries: string[]): Promise<Mo
   else if (hasNxJson) type = "nx";
   else if (hasPnpmWorkspace) type = "pnpm-workspaces";
 
-  // Check for npm native workspaces (no pnpm/turbo/nx)
   if (!type) {
     const pkg = await readJsonFile(path.join(rootDir, "package.json"));
     if (pkg) {
@@ -581,7 +536,6 @@ async function detectMonorepo(rootDir: string, topEntries: string[]): Promise<Mo
 
   if (!type) return null;
 
-  // Resolve workspace package globs
   let packageGlobs: string[] = [];
 
   if (hasPnpmWorkspace || hasTurboJson) {
@@ -617,7 +571,6 @@ async function detectMonorepo(rootDir: string, topEntries: string[]): Promise<Mo
     }
   }
 
-  // Fallback: try workspaces field from package.json
   if (packageGlobs.length === 0) {
     const pkg = await readJsonFile(path.join(rootDir, "package.json"));
     if (pkg) {
@@ -636,7 +589,6 @@ async function detectMonorepo(rootDir: string, topEntries: string[]): Promise<Mo
 
   if (packageGlobs.length === 0) return null;
 
-  // Resolve globs to actual directories
   const resolvedDirs = await glob(packageGlobs, {
     cwd: rootDir,
     onlyDirectories: true,
@@ -644,13 +596,12 @@ async function detectMonorepo(rootDir: string, topEntries: string[]): Promise<Mo
     absolute: false,
   });
 
-  // Build package info for each directory
   const packages: MonorepoPackage[] = [];
 
   for (const dir of resolvedDirs) {
     const pkgJsonPath = path.join(rootDir, dir, "package.json");
     const pkgJson = await readJsonFile(pkgJsonPath);
-    if (!pkgJson) continue; // Not a valid package
+    if (!pkgJson) continue;
 
     const deps = {
       ...(pkgJson.dependencies as Record<string, string> | undefined),
@@ -658,7 +609,6 @@ async function detectMonorepo(rootDir: string, topEntries: string[]): Promise<Mo
     };
     const depNames = Object.keys(deps);
 
-    // Detect frameworks for this package
     const frameworks: DetectedFramework[] = [];
     const seen = new Set<string>();
     for (const dep of depNames) {
@@ -798,9 +748,6 @@ export function enrichFrameworksWithUsage(
 }
 
 /**
- * Produce a short human-readable summary of the detected stack.
- */
-/**
  * Auto-detect which AI coding tools are in use by checking for filesystem markers.
  * Falls back to ["claude"] if nothing is detected.
  */
@@ -828,13 +775,11 @@ export async function detectIDEs(rootDir: string): Promise<IDETarget[]> {
  * Returns null if no description is found.
  */
 export async function detectProjectDescription(rootDir: string): Promise<string | null> {
-  // 1. package.json description
   const pkg = await readJsonFile(path.join(rootDir, "package.json"));
   if (pkg?.description && typeof pkg.description === "string" && pkg.description.trim()) {
     return pkg.description.trim();
   }
 
-  // 2. Cargo.toml [package].description
   const cargoContent = await readFileOr(path.join(rootDir, "Cargo.toml"));
   if (cargoContent) {
     try {
@@ -848,7 +793,6 @@ export async function detectProjectDescription(rootDir: string): Promise<string 
     }
   }
 
-  // 3. pyproject.toml [project].description
   const pyContent = await readFileOr(path.join(rootDir, "pyproject.toml"));
   if (pyContent) {
     try {

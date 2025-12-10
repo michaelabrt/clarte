@@ -15,7 +15,7 @@ import {
   SOURCE_IGNORE,
   type PathAlias,
 } from "./import-resolution.js";
-import { initTreeSitter } from "./ast-parse.js";
+import { initTreeSitter } from "./parsers/init.js";
 import { readFileOr } from "./utils.js";
 import type {
   ArchitecturalLayer,
@@ -35,13 +35,9 @@ import type {
   TightCoupling,
 } from "./types.js";
 
-// ── Constants ─────────────────────────────────────────────────────────
-
 const CACHE_VERSION = 2;
 const CACHE_DIR = ".clarte";
 const CACHE_FILE = "cache.json";
-
-// ── Types ─────────────────────────────────────────────────────────────
 
 interface SerializedEdge {
   from: string;
@@ -63,8 +59,6 @@ export interface CacheData {
   barrelFiles: string[];
 }
 
-// ── Cache I/O ─────────────────────────────────────────────────────────
-
 export async function loadCache(rootDir: string): Promise<CacheData | null> {
   const cachePath = path.join(rootDir, CACHE_DIR, CACHE_FILE);
   try {
@@ -83,8 +77,6 @@ export async function saveCache(rootDir: string, data: CacheData): Promise<void>
   const cachePath = path.join(dir, CACHE_FILE);
   await fs.writeFile(cachePath, JSON.stringify(data), "utf-8");
 }
-
-// ── Analysis Cache ────────────────────────────────────────────────────
 
 export const ANALYSIS_CACHE_VERSION = 2;
 const ANALYSIS_CACHE_FILE = "analysis-cache.json";
@@ -152,8 +144,6 @@ export async function saveAnalysisCache(rootDir: string, data: AnalysisCacheData
   await fs.writeFile(cachePath, JSON.stringify(data), "utf-8");
 }
 
-// ── File hash computation ─────────────────────────────────────────────
-
 export async function computeFileHashes(rootDir: string, language: Language): Promise<Map<string, string>> {
   const globs = getSourceGlob(language);
   let files: string[];
@@ -172,7 +162,6 @@ export async function computeFileHashes(rootDir: string, language: Language): Pr
   const HASH_CONCURRENCY = 32;
   const hashes = new Map<string, string>();
 
-  // Process in chunks of HASH_CONCURRENCY
   for (let i = 0; i < files.length; i += HASH_CONCURRENCY) {
     const chunk = files.slice(i, i + HASH_CONCURRENCY);
     const results = await Promise.all(
@@ -193,8 +182,6 @@ export async function computeFileHashes(rootDir: string, language: Language): Pr
   }
   return hashes;
 }
-
-// ── Incremental edge parsing ──────────────────────────────────────────
 
 async function parseFileEdges(
   rootDir: string,
@@ -254,8 +241,6 @@ async function parseFileEdges(
 
   return edges;
 }
-
-// ── Graph rebuilding from edges ───────────────────────────────────────
 
 function rebuildGraph(edges: ImportEdge[], allFiles: string[], barrelFiles: Set<string>): ImportGraph {
   const inDegree = new Map<string, number>();
@@ -317,29 +302,22 @@ function serializeEdges(edges: ImportEdge[]): SerializedEdge[] {
   }));
 }
 
-// ── Main entry point ──────────────────────────────────────────────────
-
 export async function buildGraphWithCache(
   rootDir: string,
   language: Language,
   onProgress?: ProgressCallback,
 ): Promise<ImportGraph> {
-  // Ensure tree-sitter is ready for AST-based parsing
   await initTreeSitter();
 
-  // 1. Compute current file hashes
   onProgress?.("Computing file hashes...");
   const currentHashes = await computeFileHashes(rootDir, language);
 
-  // 2. Load existing cache
   const cache = await loadCache(rootDir);
 
-  // 3. Attempt incremental rebuild
   if (cache && cache.language === language) {
     const cachedHashes = new Map(Object.entries(cache.fileHashes));
     const allCurrentFiles = new Set(currentHashes.keys());
 
-    // Identify changed, new, and deleted files
     const changedFiles: string[] = [];
     const newFiles: string[] = [];
     const deletedFiles = new Set<string>();
@@ -374,14 +352,11 @@ export async function buildGraphWithCache(
     }
 
     if (!barrelChanged && changeRatio < 0.1) {
-      // Incremental rebuild
       onProgress?.(`Incremental rebuild: ${totalChanged} file${totalChanged === 1 ? "" : "s"} changed`);
 
-      // Remove stale edges (from changed/deleted files, to deleted files)
       const staleFromFiles = new Set([...changedFiles, ...deletedFiles]);
       const keptEdges: ImportEdge[] = cache.edges.filter((e) => !staleFromFiles.has(e.from) && !deletedFiles.has(e.to));
 
-      // Parse changed/new files
       const isJsTs = language === "typescript" || language === "javascript";
       const pathAliases = isJsTs ? await loadTsconfigPaths(rootDir) : [];
       const newEdges: ImportEdge[] = [];
@@ -395,7 +370,6 @@ export async function buildGraphWithCache(
       const detectedBarrels = await detectBarrelFiles(rootDir, allCurrentFiles);
       const graph = rebuildGraph(mergedEdges, allFiles, detectedBarrels);
 
-      // Save updated cache
       try {
         const hashRecord: Record<string, string> = {};
         for (const [k, v] of currentHashes) hashRecord[k] = v;
@@ -419,7 +393,6 @@ export async function buildGraphWithCache(
   onProgress?.("Full graph rebuild...");
   const graph = await buildImportGraph(rootDir, language, onProgress);
 
-  // 5. Save cache
   try {
     const hashRecord: Record<string, string> = {};
     for (const [k, v] of currentHashes) hashRecord[k] = v;

@@ -4,7 +4,6 @@ import { estimateTokens } from "../../utils.js";
 export function renderGitActivitySections(analysis: ContextAnalysis): ContextSection[] {
   const sections: ContextSection[] = [];
 
-  // Hot Files (P7)
   if (analysis.gitActivity && analysis.gitActivity.hotFiles.length > 0) {
     const hotLines: string[] = [];
     hotLines.push("## Recently Active Files");
@@ -19,7 +18,6 @@ export function renderGitActivitySections(analysis: ContextAnalysis): ContextSec
     sections.push({ id: "hot-files", priority: 7, content: hotContent, tokens: estimateTokens(hotContent) });
   }
 
-  // Change Coupling (P7)
   if (analysis.gitActivity?.changeCoupling && analysis.gitActivity.changeCoupling.length > 0) {
     const ccLines: string[] = [];
     ccLines.push("## Change Coupling");
@@ -34,7 +32,7 @@ export function renderGitActivitySections(analysis: ContextAnalysis): ContextSec
       );
     }
     const ccContent = ccLines.join("\n");
-    sections.push({ id: "change-coupling", priority: 7, content: ccContent, tokens: estimateTokens(ccContent) });
+    sections.push({ id: "change-coupling", priority: 50 /* full-only: migrated to code-health skill */, content: ccContent, tokens: estimateTokens(ccContent) });
   }
 
   return sections;

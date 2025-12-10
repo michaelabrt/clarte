@@ -1,8 +1,6 @@
 import { isTTY, noColor, trueColor, getShimmerColors } from "./theme.js";
 import type { RGB } from "./theme.js";
 
-// ── Constants ───────────────────────────────────────────────────────────────
-
 const HIDE_CURSOR = "\x1b[?25l";
 const SHOW_CURSOR = "\x1b[?25h";
 
@@ -15,8 +13,6 @@ const FRAME_INTERVAL = 75;
 /** Icon advances every 3 render frames (~225ms per icon frame) */
 const ICON_FRAME_DIVISOR = 3;
 
-// ── Sun icon frames ─────────────────────────────────────────────────────────
-
 /** Breathing star cycle */
 const SUN_FRAMES = [
   " \u273b ", //  ✻
@@ -25,8 +21,6 @@ const SUN_FRAMES = [
   " \u274b ", //  ❋
   " \u273d ", //  ✽
 ];
-
-// ── Shimmer core ────────────────────────────────────────────────────────────
 
 /**
  * Render a single shimmer frame: each character is colored by its distance
@@ -73,8 +67,6 @@ function renderSunIcon(frameIndex: number, renderFrame: number, base: RGB, highl
   const b = Math.round(base[2] + (highlight[2] - base[2]) * brightness);
   return `\x1b[38;2;${r};${g};${b}m${icon}\x1b[39m`;
 }
-
-// ── Public API ──────────────────────────────────────────────────────────────
 
 export interface ShimmerHandle {
   /** Stop the shimmer and clear the line */

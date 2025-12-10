@@ -1,8 +1,6 @@
 import { execSync } from "node:child_process";
 import type { ChangeCoupling, GitAnalysis, LagCoupling, ProgressCallback } from "./types.js";
 
-// ── Algorithm constants ──────────────────────────────────────────────
-
 /** Adaptive decay half-lives (in decay-constant units, where halfLife = decayConst * ln(2)) */
 const DECAY = {
   /** Fast repos (>30 commits/month): ~20-day half-life */
@@ -138,7 +136,6 @@ export function analyzeGitActivity(
 
     onProgress?.(`Parsed ${commits.length} commits`);
 
-    // Build commit counts and last-changed dates from the single parse
     const commitCounts = new Map<string, number>();
     const lastChanged = new Map<string, string>();
 
@@ -156,7 +153,6 @@ export function analyzeGitActivity(
 
     onProgress?.(`Found activity in ${commitCounts.size} files`);
 
-    // Build hot files list (top 15 by commit count)
     const sorted = [...commitCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     const hotFiles: GitAnalysis["hotFiles"] = sorted.slice(0, 15).map(([filePath, commitCount]) => ({
       path: filePath,
@@ -164,14 +160,11 @@ export function analyzeGitActivity(
       lastChanged: lastChanged.get(filePath) ?? "",
     }));
 
-    // Analyze change coupling using the same parsed commits
     onProgress?.("Analyzing change coupling...");
     const changeCoupling = computeChangeCoupling(commits, analysisDays);
 
-    // Compute lag coupling for pairs with high same-commit coupling
     const lagCouplings = computeLagCoupling(commits, changeCoupling);
 
-    // Compute per-file code churn (optional, fail gracefully)
     const fileChurn = computeFileChurn(rootDir, window);
 
     return {
@@ -310,11 +303,8 @@ export function computeChangeCoupling(
   windowDays: number = 90,
   referenceMs?: number,
 ): ChangeCoupling[] {
-  // Track which commits each file appears in (for Jaccard)
   const fileCommitSets = new Map<string, Set<number>>();
-  // Weighted co-change scores
   const weightedCoChanges = new Map<string, number>();
-  // Raw co-change counts (for display)
   const rawCoChanges = new Map<string, number>();
 
   const MAX_COUPLING_FILES = COUPLING.MAX_FILES_PER_COMMIT;
@@ -326,19 +316,16 @@ export function computeChangeCoupling(
     const files = commit.files;
     if (files.length < 2 || files.length > MAX_COUPLING_FILES) continue;
 
-    // Track file → commit set membership
     for (const file of files) {
       if (!fileCommitSets.has(file)) fileCommitSets.set(file, new Set());
       fileCommitSets.get(file)!.add(ci);
     }
 
-    // Compute per-pair weight for this commit
     const pairWeight = 1 / (files.length - 1); // Inverse commit size
     const decay = temporalDecay(commitAgeDays(commit.date, referenceMs), decayConst);
     const noise = noiseDiscount(commit.message);
     const weight = pairWeight * decay * noise;
 
-    // Build co-occurrence pairs with weight
     for (let i = 0; i < files.length; i++) {
       for (let j = i + 1; j < files.length; j++) {
         const key = [files[i], files[j]].sort().join("||");
@@ -348,7 +335,6 @@ export function computeChangeCoupling(
     }
   }
 
-  // Compute coupling metrics
   const results: ChangeCoupling[] = [];
   const totalMultiFileCommits = commits.filter((c) => c.files.length >= 2).length;
 
@@ -467,7 +453,6 @@ export function computeLagCoupling(commits: ParsedCommit[], couplingResults: Cha
     }
   }
 
-  // Sort by lagScore descending, alphabetical tiebreaker
   results.sort((a, b) => b.lagScore - a.lagScore || a.fileA.localeCompare(b.fileA) || a.fileB.localeCompare(b.fileB));
 
   return results;

@@ -2,8 +2,6 @@ import path from "node:path";
 import type { DetectedContext, ImportGraph, TestMapping, TestType } from "./types.js";
 import { getOrSet, isTestFile } from "./utils.js";
 
-// ── Files to exclude from "untested" ──────────────────────────────────
-
 function isExcludedFromUntested(filePath: string): boolean {
   const basename = path.basename(filePath);
 
@@ -33,8 +31,6 @@ function isExcludedFromUntested(filePath: string): boolean {
   return false;
 }
 
-// ── Test type classification ──────────────────────────────────────────
-
 /**
  * E2E path patterns: files in e2e/, playwright/, or cypress/ directories.
  */
@@ -54,12 +50,10 @@ const INTEGRATION_PATH_PATTERNS = [/(?:^|\/)integration\//];
  * - unit: everything else
  */
 export function classifyTestType(testFile: string, sourceImportCount: number): TestType {
-  // Check e2e path patterns
   for (const pattern of E2E_PATH_PATTERNS) {
     if (pattern.test(testFile)) return "e2e";
   }
 
-  // Check integration path patterns
   for (const pattern of INTEGRATION_PATH_PATTERNS) {
     if (pattern.test(testFile)) return "integration";
   }
@@ -69,8 +63,6 @@ export function classifyTestType(testFile: string, sourceImportCount: number): T
 
   return "unit";
 }
-
-// ── Monorepo package prefix detection ─────────────────────────────────
 
 const MONOREPO_PREFIX_PATTERNS = [
   /^(packages\/[^/]+)\//,
@@ -105,8 +97,6 @@ function detectMonorepoPackages(files: Set<string>): boolean {
   return false;
 }
 
-// ── Public API ────────────────────────────────────────────────────────
-
 /**
  * Build a mapping from source files to their test files by analyzing the import graph.
  *
@@ -115,7 +105,6 @@ function detectMonorepoPackages(files: Set<string>): boolean {
  * Also identifies source files with no test coverage.
  */
 export function buildTestMapping(graph: ImportGraph, ctx: DetectedContext): TestMapping | null {
-  // Collect all files and separate test files from source files
   const allFiles = new Set<string>();
   const testFiles = new Set<string>();
   const sourceFiles = new Set<string>();
@@ -133,7 +122,6 @@ export function buildTestMapping(graph: ImportGraph, ctx: DetectedContext): Test
     return null;
   }
 
-  // Build adjacency list for test file imports (outgoing edges from test files)
   const testImports = new Map<string, Set<string>>();
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
@@ -143,10 +131,8 @@ export function buildTestMapping(graph: ImportGraph, ctx: DetectedContext): Test
     getOrSet(testImports, edge.from, () => new Set<string>()).add(edge.to);
   }
 
-  // Detect if monorepo package structure exists
   const isMonorepo = detectMonorepoPackages(allFiles);
 
-  // Build reverse map: sourceFile -> testFile[]
   // In monorepo mode, only count tests from the same package as coverage
   const sourceToTests = new Map<string, string[]>();
 
@@ -156,7 +142,6 @@ export function buildTestMapping(graph: ImportGraph, ctx: DetectedContext): Test
     for (const sourceFile of imports) {
       if (isMonorepo) {
         const sourcePkg = getPackagePrefix(sourceFile);
-        // In monorepo mode, only count same-package tests as coverage
         if (testPkg !== null && sourcePkg !== null && testPkg !== sourcePkg) {
           continue;
         }
@@ -230,8 +215,6 @@ export function buildTestMapping(graph: ImportGraph, ctx: DetectedContext): Test
   };
 }
 
-// ── Rendering ─────────────────────────────────────────────────────────
-
 /**
  * Render the test coverage map as a markdown section.
  * Includes per-hub-file directives and untested file warnings.
@@ -239,7 +222,6 @@ export function buildTestMapping(graph: ImportGraph, ctx: DetectedContext): Test
 export function renderTestMappingSection(mapping: TestMapping, hubFiles?: Array<{ path: string }>): string | null {
   const lines: string[] = [];
 
-  // Hub file test directives
   if (hubFiles && hubFiles.length > 0) {
     const directives: string[] = [];
     for (const hub of hubFiles) {
@@ -259,7 +241,6 @@ export function renderTestMappingSection(mapping: TestMapping, hubFiles?: Array<
     }
   }
 
-  // Untested files warning
   if (mapping.untestedFiles.length > 0) {
     const displayed = mapping.untestedFiles.slice(0, 15);
     const fileList = displayed.map((f) => `\`${f}\``).join(", ");
@@ -269,14 +250,12 @@ export function renderTestMappingSection(mapping: TestMapping, hubFiles?: Array<
     }
   }
 
-  // Exemplar test file hint
   if (mapping.exemplarTestFile) {
     lines.push(
       `- **Prefer**: Follow existing test patterns in \`${mapping.exemplarTestFile}\` (most comprehensive test file)`,
     );
   }
 
-  // Test pattern info
   if (mapping.testPattern) {
     lines.push(
       `- **Style**: Test convention: ${mapping.testPattern.convention} (\`${mapping.testPattern.filePattern}\`)`,
@@ -287,8 +266,6 @@ export function renderTestMappingSection(mapping: TestMapping, hubFiles?: Array<
 
   return "## Test Coverage Map\n\n" + lines.join("\n");
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────
 
 function detectTestPattern(testFiles: Set<string>, ctx: DetectedContext): TestMapping["testPattern"] {
   let testCount = 0;

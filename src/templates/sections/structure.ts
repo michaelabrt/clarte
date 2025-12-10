@@ -11,13 +11,11 @@ export function renderStructureSections(
 ): ContextSection[] {
   const sections: ContextSection[] = [];
 
-  // Framework Hints (P5)
   const fwHints = getFrameworkHintsSection(ctx);
   if (fwHints) {
     sections.push({ id: "framework-hints", priority: 5, content: fwHints, tokens: estimateTokens(fwHints) });
   }
 
-  // Conventions (P5)
   if (analysis?.conventions) {
     const conventionsSection = renderConventionsSection(analysis.conventions);
     if (conventionsSection) {
@@ -30,7 +28,6 @@ export function renderStructureSections(
     }
   }
 
-  // Code Snapshot (P6)
   if (snapshot?.markdown) {
     const snapLines: string[] = [];
     snapLines.push("## Code Snapshot");
@@ -44,7 +41,6 @@ export function renderStructureSections(
     sections.push({ id: "code-snapshot", priority: 6, content: snapContent, tokens: estimateTokens(snapContent) });
   }
 
-  // Test Mapping (P8)
   if (analysis?.testMapping) {
     const testSection = renderTestMappingSection(analysis.testMapping, analysis.hubFiles);
     if (testSection) {
@@ -52,7 +48,6 @@ export function renderStructureSections(
     }
   }
 
-  // Project Structure (P8)
   if (ctx.directories.length > 0) {
     const structLines: string[] = [];
     structLines.push("## Project Structure");
@@ -64,7 +59,6 @@ export function renderStructureSections(
     sections.push({ id: "structure", priority: 8, content: structContent, tokens: estimateTokens(structContent) });
   }
 
-  // Monorepo structure (P8)
   if (ctx.monorepo && ctx.monorepo.packages.length > 0) {
     const monoLines: string[] = [];
     monoLines.push("## Monorepo Structure");

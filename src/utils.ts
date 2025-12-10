@@ -1,8 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-// ── Test file detection ────────────────────────────────────────────────
-
 const TEST_FILE_PATTERNS = [
   /\.(test|spec)\.[jt]sx?$/,
   /\.(test|spec)\.(ts|js)$/,

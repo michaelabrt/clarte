@@ -1,8 +1,6 @@
 import type { FileRole, ImportEdge, ImportGraph } from "./types.js";
 import { buildAdjacency } from "./utils.js";
 
-// ── Algorithm constants ──────────────────────────────────────────────
-
 /** HITS edge-weighting parameters */
 const HITS = {
   /** Teleportation smoothing factor (prevents extreme score distributions in star graphs) */
@@ -40,8 +38,6 @@ const ROLE_THRESHOLDS = {
   /** Maximum hub score for Utility role */
   UTILITY_HUB_MAX: 0.3,
 } as const;
-
-// ── HITS (Kleinberg) centrality ───────────────────────────────────────
 
 /**
  * Compute HITS authority and hub scores for all files.
@@ -108,13 +104,11 @@ export function computeHITS(
     reverse.get(edge.to)!.push({ from: edge.from, weight });
   }
 
-  // Initialize
   let auth = new Float64Array(n).fill(1);
   let hub = new Float64Array(n).fill(1);
   const fileIndex = new Map<string, number>();
   for (let i = 0; i < n; i++) fileIndex.set(files[i], i);
 
-  // Iterate
   for (let iter = 0; iter < maxIterations; iter++) {
     const newAuth = new Float64Array(n);
     const newHub = new Float64Array(n);
@@ -216,8 +210,6 @@ export function deriveRole(authority: number, hubScore: number, isBarrel = false
   return "Leaf";
 }
 
-// ── Approximate Betweenness Centrality (sampled Brandes) ──────────────
-
 /**
  * Compute a simple deterministic hash from a string.
  * Used to seed the random sampler for reproducible betweenness results.
@@ -265,7 +257,6 @@ export function computeBetweenness(graph: ImportGraph, k = 50): Map<string, numb
   const n = files.length;
   if (n === 0) return new Map();
 
-  // Initialize betweenness scores
   const betweenness = new Map<string, number>();
   for (const f of files) betweenness.set(f, 0);
 
@@ -273,7 +264,6 @@ export function computeBetweenness(graph: ImportGraph, k = 50): Map<string, numb
   const seedStr = files.join(",");
   const rng = seededRandom(simpleHash(seedStr));
 
-  // Sample min(k, n) source nodes
   const sampleSize = Math.min(k, n);
   let sources: string[];
 
@@ -291,7 +281,6 @@ export function computeBetweenness(graph: ImportGraph, k = 50): Map<string, numb
 
   // Brandes single-source BFS for each sampled source
   for (const s of sources) {
-    // BFS from source s
     const stack: string[] = [];
     const pred = new Map<string, string[]>();
     const sigma = new Map<string, number>();
@@ -342,7 +331,6 @@ export function computeBetweenness(graph: ImportGraph, k = 50): Map<string, numb
     }
   }
 
-  // Normalize to 0-1 range (divide by max score)
   let maxScore = 0;
   for (const score of betweenness.values()) {
     if (score > maxScore) maxScore = score;

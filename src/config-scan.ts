@@ -2,8 +2,6 @@ import path from "node:path";
 import { readFileOr, readJsonFile } from "./utils.js";
 import type { ConfigConstraints, DetectedContext } from "./types.js";
 
-// ── Impactful linter rules to extract ─────────────────────────────────
-
 /** ESLint rule name -> Biome equivalent */
 const IMPACTFUL_RULES: Array<{
   eslint: string;
@@ -34,8 +32,6 @@ const IMPACTFUL_RULES: Array<{
   { eslint: "react/jsx-no-leaked-render", biome: "", impact: "avoid leaked renders in JSX (use ternary, not &&)" },
 ];
 
-// ── TypeScript strict options that impact code generation ─────────────
-
 const TS_STRICT_OPTIONS = [
   "noImplicitAny",
   "exactOptionalPropertyTypes",
@@ -50,8 +46,6 @@ const TS_STRICT_OPTIONS = [
   "alwaysStrict",
 ] as const;
 
-// ── Public API ────────────────────────────────────────────────────────
-
 /**
  * Scan project config files (tsconfig, ESLint, Biome, Prettier) and extract
  * constraints that affect how an LLM should generate code.
@@ -59,19 +53,16 @@ const TS_STRICT_OPTIONS = [
 export async function scanConfigConstraints(rootDir: string, ctx: DetectedContext): Promise<ConfigConstraints> {
   const constraints: ConfigConstraints = {};
 
-  // TypeScript config
   if (ctx.language === "typescript" || ctx.hasTypeScript) {
     constraints.typescript = await scanTsConfig(rootDir);
   }
 
-  // Linter config
   if (ctx.linter === "eslint") {
     constraints.linter = await scanEslintConfig(rootDir);
   } else if (ctx.linter === "biome") {
     constraints.linter = await scanBiomeRules(rootDir);
   }
 
-  // Formatter config
   if (ctx.linter === "biome") {
     const biomeFormatter = await scanBiomeFormatter(rootDir);
     if (biomeFormatter) constraints.formatter = biomeFormatter;
@@ -81,19 +72,16 @@ export async function scanConfigConstraints(rootDir: string, ctx: DetectedContex
     if (prettierFormatter) constraints.formatter = prettierFormatter;
   }
 
-  // Go config
   if (ctx.language === "go") {
     const goConstraints = await scanGoConfig(rootDir);
     if (goConstraints) constraints.go = goConstraints;
   }
 
-  // Rust config
   if (ctx.language === "rust") {
     const rustConstraints = await scanRustConfig(rootDir);
     if (rustConstraints) constraints.rust = rustConstraints;
   }
 
-  // Python config
   if (ctx.language === "python") {
     const pythonConstraints = await scanPythonConfig(rootDir);
     if (pythonConstraints) constraints.python = pythonConstraints;
@@ -101,8 +89,6 @@ export async function scanConfigConstraints(rootDir: string, ctx: DetectedContex
 
   return constraints;
 }
-
-// ── tsconfig scanning ─────────────────────────────────────────────────
 
 async function scanTsConfig(rootDir: string) {
   const result = {
@@ -112,7 +98,6 @@ async function scanTsConfig(rootDir: string) {
     otherStrict: [] as string[],
   };
 
-  // Walk extends chain (up to 5 levels), child wins
   const mergedOptions: Record<string, unknown> = {};
   let configPath = path.join(rootDir, "tsconfig.json");
 
@@ -137,13 +122,11 @@ async function scanTsConfig(rootDir: string) {
     if (!configPath.endsWith(".json")) configPath += ".json";
   }
 
-  // Extract key options
   result.strict = mergedOptions.strict === true;
   if (typeof mergedOptions.target === "string") {
     result.target = mergedOptions.target;
   }
 
-  // Path aliases
   if (mergedOptions.paths && typeof mergedOptions.paths === "object") {
     result.pathAliases = mergedOptions.paths as Record<string, string[]>;
   }
@@ -167,12 +150,9 @@ async function scanTsConfig(rootDir: string) {
   return result;
 }
 
-// ── ESLint scanning ───────────────────────────────────────────────────
-
 async function scanEslintConfig(rootDir: string) {
   let rules: Record<string, unknown> | null = null;
 
-  // Try JSON configs (skip .js/.cjs — not reliably parseable)
   for (const filename of [".eslintrc.json", ".eslintrc"]) {
     const config = await readJsonFile(path.join(rootDir, filename));
     if (config?.rules && typeof config.rules === "object") {
@@ -181,7 +161,6 @@ async function scanEslintConfig(rootDir: string) {
     }
   }
 
-  // Try eslintConfig in package.json
   if (!rules) {
     const pkg = await readJsonFile(path.join(rootDir, "package.json"));
     const eslintConfig = pkg?.eslintConfig as Record<string, unknown> | undefined;
@@ -209,8 +188,6 @@ async function scanEslintConfig(rootDir: string) {
 
   return { tool: "ESLint", keyRules };
 }
-
-// ── Biome scanning ────────────────────────────────────────────────────
 
 async function scanBiomeRules(rootDir: string) {
   const config = await readBiomeConfig(rootDir);
@@ -286,18 +263,14 @@ async function readBiomeConfig(rootDir: string): Promise<Record<string, unknown>
   return null;
 }
 
-// ── Prettier scanning ─────────────────────────────────────────────────
-
 async function scanPrettierConfig(rootDir: string) {
   let config: Record<string, unknown> | null = null;
 
-  // Try .prettierrc / .prettierrc.json
   for (const filename of [".prettierrc", ".prettierrc.json"]) {
     config = await readJsonFile(path.join(rootDir, filename));
     if (config) break;
   }
 
-  // Try prettier field in package.json
   if (!config) {
     const pkg = await readJsonFile(path.join(rootDir, "package.json"));
     if (pkg?.prettier && typeof pkg.prettier === "object") {
@@ -319,8 +292,6 @@ async function scanPrettierConfig(rootDir: string) {
   return { tool: "Prettier", indent, quotes, semicolons: semi };
 }
 
-// ── Go scanning ──────────────────────────────────────────────────────
-
 async function scanGoConfig(rootDir: string): Promise<{ version: string } | undefined> {
   const goMod = await readFileOr(path.join(rootDir, "go.mod"));
   if (!goMod) return undefined;
@@ -332,13 +303,10 @@ async function scanGoConfig(rootDir: string): Promise<{ version: string } | unde
   return { version: match[1] };
 }
 
-// ── Rust scanning ────────────────────────────────────────────────────
-
 async function scanRustConfig(rootDir: string): Promise<{ edition: string; clippy?: string[] } | undefined> {
   const cargoToml = await readFileOr(path.join(rootDir, "Cargo.toml"));
   if (!cargoToml) return undefined;
 
-  // Extract edition = "2021"
   const editionMatch = cargoToml.match(/^edition\s*=\s*"(\d{4})"/m);
   if (!editionMatch) return undefined;
 
@@ -346,7 +314,6 @@ async function scanRustConfig(rootDir: string): Promise<{ edition: string; clipp
     edition: editionMatch[1],
   };
 
-  // Extract [lints.clippy] deny rules
   const clippySection = cargoToml.match(/\[lints\.clippy\]\s*\n([\s\S]*?)(?=\n\[|$)/);
   if (clippySection) {
     const denyRules: string[] = [];
@@ -364,8 +331,6 @@ async function scanRustConfig(rootDir: string): Promise<{ edition: string; clipp
   return result;
 }
 
-// ── Python scanning ──────────────────────────────────────────────────
-
 async function scanPythonConfig(
   rootDir: string,
 ): Promise<{ version?: string; ruff?: string[]; mypy?: { strict: boolean } } | undefined> {
@@ -375,7 +340,6 @@ async function scanPythonConfig(
   const result: { version?: string; ruff?: string[]; mypy?: { strict: boolean } } = {};
   let hasData = false;
 
-  // Extract requires-python = ">=3.9"
   const versionMatch = pyproject.match(/requires-python\s*=\s*"([^"]+)"/);
   if (versionMatch) {
     result.version = versionMatch[1];
@@ -399,7 +363,6 @@ async function scanPythonConfig(
     }
   }
 
-  // Extract [tool.mypy] strict mode
   const mypySection = pyproject.match(/\[tool\.mypy\]\s*\n([\s\S]*?)(?=\n\[|$)/);
   if (mypySection) {
     const strictMatch = mypySection[1].match(/strict\s*=\s*(true|false)/i);
@@ -411,8 +374,6 @@ async function scanPythonConfig(
 
   return hasData ? result : undefined;
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────
 
 function normalizeRuleSetting(value: unknown): string {
   if (typeof value === "string") return value;
@@ -443,15 +404,12 @@ function normalizeBiomeRuleSetting(value: unknown): string {
   return "on";
 }
 
-// ── Rendering ─────────────────────────────────────────────────────────
-
 /**
  * Render config constraints as a markdown section with actionable directives.
  */
 export function renderConstraintsSection(constraints: ConfigConstraints): string | null {
   const lines: string[] = [];
 
-  // TypeScript constraints
   if (constraints.typescript) {
     const ts = constraints.typescript;
 
@@ -486,7 +444,6 @@ export function renderConstraintsSection(constraints: ConfigConstraints): string
     }
   }
 
-  // Linter constraints
   if (constraints.linter) {
     for (const rule of constraints.linter.keyRules) {
       const prefix = rule.setting === "error" ? "**Must**" : "**Prefer**";
@@ -494,7 +451,6 @@ export function renderConstraintsSection(constraints: ConfigConstraints): string
     }
   }
 
-  // Formatter constraints
   if (constraints.formatter) {
     const f = constraints.formatter;
     const parts: string[] = [];
@@ -504,12 +460,10 @@ export function renderConstraintsSection(constraints: ConfigConstraints): string
     lines.push(`- **Style**: ${parts.join(", ")} (${f.tool})`);
   }
 
-  // Go constraints
   if (constraints.go) {
     lines.push(`- **Must**: Target Go ${constraints.go.version} or later.`);
   }
 
-  // Rust constraints
   if (constraints.rust) {
     lines.push(`- **Must**: Use Rust edition ${constraints.rust.edition}.`);
     if (constraints.rust.clippy?.length) {
@@ -519,7 +473,6 @@ export function renderConstraintsSection(constraints: ConfigConstraints): string
     }
   }
 
-  // Python constraints
   if (constraints.python) {
     if (constraints.python.version) {
       lines.push(`- **Must**: Support Python ${constraints.python.version}.`);

@@ -7,7 +7,7 @@
  */
 
 import type { ImportEdge, ImportGraph } from "../../types.js";
-import { computeHITS } from "../../graph.js";
+import { computeHITS } from "../../centrality.js";
 
 // ── Seeded PRNG (xorshift32) ────────────────────────────────────────
 

@@ -31,20 +31,16 @@ import {
 } from "./cache.js";
 import { buildImportGraph, mergeGraph } from "./graph-build.js";
 import { findCircularDeps } from "./graph-cycles.js";
-import {
-  getHubFiles,
-  detectArchitecturalLayers,
-  computeInstability,
-  INSTABILITY_THRESHOLD,
-  detectCommunities,
-  findDeadFiles,
-  findCrossCuttingFiles,
-  computeLayerConsistency,
-  findChokepoints,
-  computeGraphTopology,
-  findStructuralTemporalMismatches,
-  findTightCouplings,
-} from "./graph-analysis.js";
+import { getHubFiles } from "./graph/hub-files.js";
+import { detectArchitecturalLayers, computeLayerConsistency } from "./graph/layers.js";
+import { computeInstability, INSTABILITY_THRESHOLD } from "./graph/instability.js";
+import { detectCommunities } from "./graph/communities.js";
+import { findDeadFiles } from "./graph/dead-files.js";
+import { findCrossCuttingFiles } from "./graph/cross-cutting.js";
+import { findChokepoints } from "./graph/chokepoints.js";
+import { computeGraphTopology } from "./graph/topology.js";
+import { findStructuralTemporalMismatches } from "./graph/mismatches.js";
+import { findTightCouplings } from "./graph/tight-coupling.js";
 import { analyzeGitActivity } from "./git-analysis.js";
 import { analyzeMonorepoGraph, computePackageCentrality } from "./monorepo-analysis.js";
 import { scanConfigConstraints } from "./config-scan.js";
@@ -194,7 +190,6 @@ function parseCliArgs(rawArgs: string[]): CliArgs {
   const diffArg = rawArgs.find((a) => a === "--diff" || a.startsWith("--diff="));
   const diffMode = !!diffArg;
   const diffRef = diffArg?.startsWith("--diff=") ? diffArg.split("=")[1] : undefined;
-  // Collect positional args after --diff as file filters
   const diffFilterFiles: string[] = [];
   if (diffMode) {
     const diffIdx = rawArgs.indexOf(diffArg!);
@@ -250,7 +245,6 @@ function parseCliArgs(rawArgs: string[]): CliArgs {
   const targetDir = rawArgs.find((a) => !a.startsWith("-") && !diffFilterSet.has(a)) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
-  // Warn if --diff-file is used without --diff
   if (diffFile && !diffMode) {
     console.error("[clarte] --diff-file requires --diff mode; ignoring.");
   }
@@ -284,7 +278,6 @@ async function main() {
   const startTime = performance.now();
   const rawArgs = process.argv.slice(2);
 
-  // Early-exit flags (before any project validation)
   if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
     initTheme("dark");
     printHelp();
@@ -321,7 +314,6 @@ async function main() {
     initHook,
   } = parseCliArgs(rawArgs);
 
-  // --init-hook: install git pre-commit hook
   if (initHook) {
     await initPreCommitHook(rootDir);
     process.exit(0);
@@ -357,7 +349,6 @@ async function main() {
     process.exit(1);
   }
 
-  // --watch: continuous analysis mode
   if (watchMode) {
     await runWatchMode(rootDir, verbose);
     return; // runWatchMode never returns, but just in case
@@ -401,7 +392,6 @@ async function main() {
           }
           process.exit(1);
         }
-        // Path validation (also runs for timestamp checks)
         if (config) {
           const pathResult = await validateContextPaths(rootDir, config);
           if (pathResult && pathResult.broken.length > 0) {
@@ -447,7 +437,6 @@ async function main() {
         process.exit(1);
       }
 
-      // Path validation: check for broken file references in context file
       const pathResult = await validateContextPaths(rootDir, config);
       if (pathResult && pathResult.broken.length > 0) {
         if (ciMode) {
@@ -470,13 +459,11 @@ async function main() {
     }
   }
 
-  // Load saved config once for theme detection + later analysis steps
   const savedConfig = await loadConfig(rootDir);
 
   // Determine color scheme: env var > saved config > interactive prompt
   let colorScheme: "dark" | "light" = "dark";
   if (jsonMode) {
-    // JSON mode: skip theme selection, use default
     initTheme("dark");
     patchPicocolors();
   } else {
@@ -502,7 +489,6 @@ async function main() {
     p.log.info(t.muted("pre-built codebase context for AI agents"));
   }
 
-  // --refresh-snapshot: fast path, update snapshot in existing context file
   if (refresh) {
     await refreshSnapshot(rootDir);
     p.outro(t.success("Snapshot refreshed!"));
@@ -511,7 +497,6 @@ async function main() {
     return;
   }
 
-  // --diff: focused context for changed files
   if (diffMode) {
     p.log.info(t.muted("diff-aware context"));
     await runDiffMode(rootDir, diffRef, verbose, diffFile, diffFilterFiles);
@@ -524,7 +509,6 @@ async function main() {
 
   if (!jsonMode) p.log.info(t.text(`Analyzing ${t.accent(rootDir)}`));
 
-  // Step 1: Auto-detect
   const noopShimmer = { message: (_: string) => {}, stop: () => {} };
   let shimmer = jsonMode ? noopShimmer : startShimmer("Detecting stack...");
   let detected: DetectedContext;
@@ -535,7 +519,6 @@ async function main() {
   }
   if (!jsonMode) p.log.step(t.text("Detection complete."));
 
-  // Step 1.5: Build import graph (including secondary languages)
   shimmer = jsonMode ? noopShimmer : startShimmer(`Building import graph (${detected.sourceFileCount} files)...`);
   let graph: ImportGraph;
   let topHub: HubFile | undefined;
@@ -562,10 +545,8 @@ async function main() {
     );
   }
 
-  // Step 1.6: Enrich framework detection with actual import usage
   detected.frameworks = enrichFrameworksWithUsage(detected.frameworks, graph.externalImportCounts);
 
-  // Discovery log (enhanced stack box)
   if (!jsonMode) {
     const lines: string[] = [];
     const lang = detected.hasTypeScript
@@ -607,7 +588,6 @@ async function main() {
   // Step 1.7: Structural analysis (progressive reveal via shimmer)
   const fileCount = graph.centrality.size;
 
-  // Check analysis cache for graph-derived results
   const analysisCacheKey = computeAnalysisCacheKey(graph, savedConfig?.layers);
   const analysisCache = await loadAnalysisCache(rootDir);
   const useAnalysisCache = analysisCache !== null && analysisCache.cacheKey === analysisCacheKey;
@@ -648,7 +628,6 @@ async function main() {
     var analysisCircularDeps = circularDeps;
   }
 
-  // Architecture layers
   const { layers, layerEdges } = useAnalysisCache
     ? { layers: analysisCache.layers, layerEdges: analysisCache.layerEdges }
     : detectArchitecturalLayers(graph, savedConfig?.layers);
@@ -700,7 +679,6 @@ async function main() {
     var analysisCommunities = communities;
   }
 
-  // Git history
   const analysisDays = savedConfig?.analysisDays ?? 90;
   const gitActivity = detected.isGitRepo
     ? await analyzeGitActivity(rootDir, verbose ? verboseLog : noopProgress, analysisDays)
@@ -761,7 +739,6 @@ async function main() {
     }
   }
 
-  // Cross-cutting files (imported across multiple layers)
   const crossCuttingFiles = useAnalysisCache ? analysisCache.crossCuttingFiles : findCrossCuttingFiles(graph, layers);
   if (!jsonMode && crossCuttingFiles.length > 0) {
     p.log.step(
@@ -774,7 +751,6 @@ async function main() {
     }
   }
 
-  // Layer consistency score
   const layerConsistency = useAnalysisCache
     ? analysisCache.layerConsistency
     : layers.length >= 2
@@ -808,7 +784,6 @@ async function main() {
     }
   }
 
-  // Config constraint extraction
   const configConstraints = await scanConfigConstraints(rootDir, detected);
   if (!jsonMode) {
     const hasConstraints = configConstraints.typescript || configConstraints.linter || configConstraints.formatter;
@@ -834,7 +809,6 @@ async function main() {
     }
   }
 
-  // Test-source mapping
   const testMapping = buildTestMapping(graph, detected);
   if (!jsonMode && testMapping) {
     const coveredCount = testMapping.sourceToTests.size;
@@ -850,7 +824,6 @@ async function main() {
     }
   }
 
-  // Graph topology (connected components, diameter)
   const graphTopology = useAnalysisCache ? analysisCache.graphTopology : computeGraphTopology(graph);
   if (!jsonMode) {
     if (graphTopology.isFragmented) {
@@ -869,20 +842,16 @@ async function main() {
     }
   }
 
-  // Structural-temporal mismatch detection
   const structuralMismatches = gitActivity
     ? findStructuralTemporalMismatches(graph, gitActivity.changeCoupling)
     : undefined;
 
-  // Tight coupling detection
   const tightCouplings = useAnalysisCache ? analysisCache.tightCouplings : findTightCouplings(graph);
 
-  // Monorepo graph analysis
   const monorepoAnalysis = detected.monorepo
     ? await analyzeMonorepoGraph(rootDir, graph, detected.monorepo)
     : undefined;
   if (monorepoAnalysis && detected.monorepo) {
-    // Compute per-package hub files (top 3 by authority)
     const packageHubFiles = new Map<string, PackageHubFile[]>();
     for (const pkg of detected.monorepo.packages) {
       const { authority } = computePackageCentrality(graph, pkg.path);
@@ -915,7 +884,6 @@ async function main() {
     }
   }
 
-  // Compute change impact predictions for top hub files (by authority)
   let changeImpact: Map<string, Array<{ file: string; score: number }>> | undefined;
   if (hubFiles.length > 0) {
     const topHubs = hubFiles
@@ -955,7 +923,6 @@ async function main() {
     analysisDays,
   };
 
-  // Save analysis cache for graph-derived results
   if (!useAnalysisCache) {
     try {
       await saveAnalysisCache(rootDir, {
@@ -979,7 +946,6 @@ async function main() {
     }
   }
 
-  // Architecture delta tracking
   const currentAnalysisSnapshot = extractSnapshot(analysis);
   const prevSnapshot = await loadPreviousSnapshot(rootDir);
   let deltaSection: string | null = null;
@@ -1003,7 +969,6 @@ async function main() {
     // Snapshot save failed; non-critical
   }
 
-  // --format=json: output full analysis as structured JSON and exit
   if (jsonMode) {
     let snapshot = null;
     if (savedConfig?.generateSnapshot !== false) {
@@ -1025,7 +990,6 @@ async function main() {
     process.exit(0);
   }
 
-  // Analysis report box
   {
     const reportLines: string[] = [];
     reportLines.push(`  ${"Files analyzed"}  ${t.textBold(String(fileCount))}`);
@@ -1048,16 +1012,14 @@ async function main() {
     }
     p.note(reportLines.join("\n"), "Analysis Report");
 
-    // Show cycle chains inline below the box (max 2)
-    if (analysisCircularDeps.length > 0) {
-      for (const c of analysisCircularDeps.slice(0, 2)) {
+    if (circularDeps.length > 0) {
+      for (const c of circularDeps.slice(0, 2)) {
         const shortChain = c.chain.map((f) => f.split("/").pop() ?? f);
         p.log.warn(t.text(`Cycle: ${shortChain.join(" \u2192 ")}`));
       }
     }
   }
 
-  // Step 1.8: Check for staleness
   if (savedConfig?.snapshotHash) {
     const currentHash = await computeSnapshotHash(rootDir, detected.language);
     if (currentHash !== savedConfig.snapshotHash && savedConfig.snapshotGeneratedAt) {
@@ -1074,7 +1036,6 @@ async function main() {
   let answers: UserAnswers;
 
   if (savedConfig && !reconfigure) {
-    // Use saved config, skip prompts
     p.log.info(
       t.text(`Using saved config from ${t.accent(".clarte.json")}`) +
         " " +
@@ -1087,10 +1048,8 @@ async function main() {
       // Monorepo exists but wasn't configured, keep saved value
     }
   } else if (reconfigure) {
-    // Step 2: Interactive prompts (with defaults from saved config)
     answers = await runPrompts(detected, savedConfig, true);
 
-    // Save config for future runs
     if (!dryRun) {
       const hash = await computeSnapshotHash(rootDir, detected.language);
       await saveConfig(rootDir, answers, hash, detected.language);
@@ -1122,7 +1081,6 @@ async function main() {
       );
     }
 
-    // Save config for future runs
     if (!dryRun) {
       const hash = await computeSnapshotHash(rootDir, detected.language);
       await saveConfig(rootDir, answers, hash, detected.language);
@@ -1130,7 +1088,6 @@ async function main() {
     }
   }
 
-  // Step 3: Code snapshot (if requested)
   let snapshot = null;
   if (answers.generateSnapshot) {
     shimmer = startShimmer("Scanning source files for code snapshot...");
@@ -1159,7 +1116,6 @@ async function main() {
     }
   }
 
-  // Step 4: Generate files
   shimmer = startShimmer(dryRun ? "Preparing context files..." : "Generating context files...");
   const shouldGenerateSkills = generateSkills || answers.ides.includes("claude");
   let files: GeneratedFile[];
@@ -1192,10 +1148,8 @@ async function main() {
     return;
   }
 
-  // Step 5: Summary + token estimate
   printSummary(files, snapshot, analysis, !savedConfig);
 
-  // Step 5.5: First-run hook prompt
   if (!savedConfig && !dryRun) {
     const gitDir = path.join(rootDir, ".git");
     if (await fileExists(gitDir)) {
@@ -1211,7 +1165,6 @@ async function main() {
     }
   }
 
-  // Elapsed time
   const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
 
   if (dryRun) {
@@ -1223,7 +1176,6 @@ async function main() {
     return;
   }
 
-  // Step 6: Done!
   p.outro(
     t.success(`Done in ${elapsed}s!`) +
       "\n\n" +

@@ -10,16 +10,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import {
-  findSCCs,
-  findCircularDeps,
-  getHubFiles,
-  computeInstability,
-  detectCommunities,
-  detectArchitecturalLayers,
-  findDeadFiles,
-  findChokepoints,
-} from "../../graph.js";
+import { findSCCs, findCircularDeps } from "../../graph-cycles.js";
+import { getHubFiles } from "../../graph/hub-files.js";
+import { computeInstability } from "../../graph/instability.js";
+import { detectCommunities } from "../../graph/communities.js";
+import { detectArchitecturalLayers } from "../../graph/layers.js";
+import { findDeadFiles } from "../../graph/dead-files.js";
+import { findChokepoints } from "../../graph/chokepoints.js";
 import { buildGraphFromFixture, missingFromTopN } from "./helpers.js";
 import { reactFullstack, pythonBackend, BENCHMARK_FIXTURES } from "./benchmark-fixtures.js";
 

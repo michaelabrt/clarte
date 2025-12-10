@@ -1,5 +1,8 @@
 import type { ClaudeSkill, ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
 import { buildDirectives, computeFileComplexity } from "./directives.js";
+import { renderDependencySections } from "./sections/dependencies.js";
+import { renderGitActivitySections } from "./sections/git-activity.js";
+import { renderLayerConsistencySection } from "./sections/architecture.js";
 
 /**
  * Build Claude Code skills based on detected project context.
@@ -21,6 +24,11 @@ export async function buildClaudeSkills(
   // Architecture exploration skill
   const archSkill = await buildArchitectureSkill(analysis, ctx);
   if (archSkill) skills.push(archSkill);
+
+  // Code health skill (migrated sections from CLAUDE.md)
+  if (analysis) {
+    skills.push(...buildAnalysisSkills(analysis));
+  }
 
   // CLI-invoking skills (always generated, they invoke clarte at runtime)
   skills.push(...buildClarteSkills());
@@ -217,6 +225,49 @@ function buildClarteSkills(): ClaudeSkill[] {
       ].join("\n"),
     },
   ];
+}
+
+/**
+ * Build analysis skills from sections migrated out of the default CLAUDE.md.
+ * Split into two skills so the agent has clear invocation signals:
+ *   - coupling: file relationships (tight, hidden, change coupling)
+ *   - code-health: structural risk (dead files, chokepoints, layer consistency)
+ */
+function buildAnalysisSkills(analysis: ContextAnalysis): ClaudeSkill[] {
+  const COUPLING_IDS = new Set(["tight-coupling", "hidden-coupling", "change-coupling"]);
+  const HEALTH_IDS = new Set(["dead-files", "chokepoints", "layer-consistency"]);
+
+  const depSections = renderDependencySections(analysis);
+  const gitSections = renderGitActivitySections(analysis);
+  const lcSection = renderLayerConsistencySection(analysis);
+  const allSections = [...depSections, ...gitSections, ...(lcSection ? [lcSection] : [])];
+
+  const couplingSections = allSections.filter((s) => COUPLING_IDS.has(s.id));
+  const healthSections = allSections.filter((s) => HEALTH_IDS.has(s.id));
+
+  const skills: ClaudeSkill[] = [];
+
+  if (couplingSections.length > 0) {
+    skills.push({
+      name: "coupling",
+      description:
+        "Analyze file coupling: which files frequently change together, which share many imports, and which have hidden dependencies",
+      disableModelInvocation: false,
+      body: couplingSections.map((s) => s.content).join("\n\n"),
+    });
+  }
+
+  if (healthSections.length > 0) {
+    skills.push({
+      name: "code-health",
+      description:
+        "Analyze structural health: dead files that can be removed, architectural chokepoints, and layer consistency violations",
+      disableModelInvocation: false,
+      body: healthSections.map((s) => s.content).join("\n\n"),
+    });
+  }
+
+  return skills;
 }
 
 /**

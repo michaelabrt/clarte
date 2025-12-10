@@ -17,7 +17,6 @@ export async function renderArchitectureSections(
 ): Promise<ContextSection[]> {
   const sections: ContextSection[] = [];
 
-  // Config constraints (P1)
   if (analysis.configConstraints) {
     const constraintsSection = renderConstraintsSection(analysis.configConstraints);
     if (constraintsSection) {
@@ -30,7 +29,6 @@ export async function renderArchitectureSections(
     }
   }
 
-  // Working guidelines (P2)
   const directivesSection = await renderDirectivesSection(analysis, ctx, graph);
   if (directivesSection) {
     sections.push({
@@ -41,7 +39,6 @@ export async function renderArchitectureSections(
     });
   }
 
-  // Key files (P2)
   if (analysis.hubFiles && analysis.hubFiles.length > 0) {
     const instabilityMap = new Map<string, number>();
     if (analysis.instabilities) {
@@ -68,7 +65,6 @@ export async function renderArchitectureSections(
     sections.push({ id: "key-files", priority: 2, content: keyContent, tokens: estimateTokens(keyContent) });
   }
 
-  // Architecture diagram (P4)
   if (analysis.layers && analysis.layers.length > 1) {
     const archLines: string[] = [];
     archLines.push("## Architecture");
@@ -78,14 +74,12 @@ export async function renderArchitectureSections(
     sections.push({ id: "architecture", priority: 4, content: archContent, tokens: estimateTokens(archContent) });
   }
 
-  // Package Dependencies (P4, monorepo)
   if (analysis.monorepoAnalysis && analysis.monorepoAnalysis.crossPackageEdges.length > 0) {
     const mono = analysis.monorepoAnalysis;
     const pkgLines: string[] = [];
     pkgLines.push("## Package Dependencies");
     pkgLines.push("");
 
-    // Build summary table: group by (fromPackage, toPackage)
     const pairMap = new Map<string, { edges: number; violations: number }>();
     for (const edge of mono.crossPackageEdges) {
       const key = `${edge.fromPackage}|${edge.toPackage}`;
@@ -102,7 +96,6 @@ export async function renderArchitectureSections(
       pkgLines.push(`| \`${fromPkg}\` | \`${toPkg}\` | ${val.edges} | ${val.violations} |`);
     }
 
-    // Encapsulation violations as directives
     if (mono.encapsulationViolations.length > 0) {
       pkgLines.push("");
       pkgLines.push("### Encapsulation Violations");
@@ -117,7 +110,6 @@ export async function renderArchitectureSections(
       }
     }
 
-    // Per-package top hub files
     if (mono.packageHubFiles && mono.packageHubFiles.size > 0) {
       pkgLines.push("");
       pkgLines.push("### Key Files by Package");
@@ -132,29 +124,37 @@ export async function renderArchitectureSections(
     sections.push({ id: "package-dependencies", priority: 4, content: pkgContent, tokens: estimateTokens(pkgContent) });
   }
 
-  // Layer Consistency (P10)
-  if (analysis.layerConsistency && analysis.layers && analysis.layers.length > 1) {
-    const lc = analysis.layerConsistency;
-    if (lc.violations.length > 0) {
-      const lcLines: string[] = [];
-      lcLines.push("## Layer Consistency");
-      lcLines.push("");
-      lcLines.push(`Dependency direction consistency: ${(lc.consistency * 100).toFixed(0)}% (imports flow downward)`);
-      lcLines.push("");
-      lcLines.push("Violations (imports flowing upward):");
-      lcLines.push("");
-      for (const v of lc.violations.slice(0, 5)) {
-        lcLines.push(`- \`${v.from}\` imports from \`${v.to}\` (${v.fromLayer} -> ${v.toLayer})`);
-      }
-      if (lc.violations.length > 5) {
-        lcLines.push(`- ... and ${lc.violations.length - 5} more`);
-      }
-      const lcContent = lcLines.join("\n");
-      sections.push({ id: "layer-consistency", priority: 10, content: lcContent, tokens: estimateTokens(lcContent) });
-    }
-  }
+  // Layer Consistency (full-only: migrated to code-health skill)
+  const lcSection = renderLayerConsistencySection(analysis);
+  if (lcSection) sections.push(lcSection);
 
   return sections;
+}
+
+/**
+ * Render the layer-consistency section as a standalone export.
+ * Used by both renderArchitectureSections and the code-health skill.
+ */
+export function renderLayerConsistencySection(analysis: ContextAnalysis): ContextSection | null {
+  if (!analysis.layerConsistency || !analysis.layers || analysis.layers.length <= 1) return null;
+  const lc = analysis.layerConsistency;
+  if (lc.violations.length === 0) return null;
+
+  const lcLines: string[] = [];
+  lcLines.push("## Layer Consistency");
+  lcLines.push("");
+  lcLines.push(`Dependency direction consistency: ${(lc.consistency * 100).toFixed(0)}% (imports flow downward)`);
+  lcLines.push("");
+  lcLines.push("Violations (imports flowing upward):");
+  lcLines.push("");
+  for (const v of lc.violations.slice(0, 5)) {
+    lcLines.push(`- \`${v.from}\` imports from \`${v.to}\` (${v.fromLayer} -> ${v.toLayer})`);
+  }
+  if (lc.violations.length > 5) {
+    lcLines.push(`- ... and ${lc.violations.length - 5} more`);
+  }
+  const lcContent = lcLines.join("\n");
+  return { id: "layer-consistency", priority: 50 /* full-only: migrated to code-health skill */, content: lcContent, tokens: estimateTokens(lcContent) };
 }
 
 function renderArchitectureDiagram(layers: ArchitecturalLayer[], layerEdges: LayerEdge[]): string {
