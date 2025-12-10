@@ -1,7 +1,5 @@
 import pc from "picocolors";
 
-// ── Environment detection ────────────────────────────────────────────────────
-
 export const isTTY = !!process.stdout.isTTY;
 export const noColor = !!process.env.NO_COLOR;
 
@@ -35,18 +33,9 @@ export const trueColor =
     ["iTerm.app", "WezTerm", "Hyper", "vscode"].includes(process.env.TERM_PROGRAM ?? "") ||
     (process.env.TERM ?? "").includes("256color"));
 
-// ── 24-bit ANSI helpers ──────────────────────────────────────────────────────
-
 export type RGB = [number, number, number];
 
 type ColorMode = "dark" | "light";
-
-// ── Palettes ─────────────────────────────────────────────────────────────────
-//
-// Each palette defines raw RGB triples for every semantic role.
-// Dark: light text on dark background (current aesthetic)
-// Light: dark text on light background (inverted brightness, same accent family)
-//
 
 interface PaletteRGB {
   boneWhite: RGB;
@@ -78,8 +67,6 @@ const lightPalette: PaletteRGB = {
   ghostWhite: [180, 180, 186],
 };
 
-// ── Mutable state ────────────────────────────────────────────────────────────
-
 let currentPalette: PaletteRGB = darkPalette;
 const RESET_FG = "\x1b[39m";
 
@@ -98,8 +85,6 @@ function rgbAnsi(r: number, g: number, b: number): (text: string) => string {
   const close = "\x1b[39m";
   return (text: string) => `${open}${text}${close}`;
 }
-
-// ── Fallback mapping (basic ANSI via picocolors) ─────────────────────────────
 
 const fallback = {
   boneWhite: pc.white,
@@ -121,8 +106,6 @@ function pick(key: PaletteKey): (text: string) => string {
   const [r, g, b] = currentPalette[colorKey];
   return rgb(r, g, b);
 }
-
-// ── Gradient ─────────────────────────────────────────────────────────────────
 
 /**
  * Apply a per-character color gradient across `text`.
@@ -149,8 +132,6 @@ export function gradient(text: string, from: RGB, to: RGB, fallbackFn?: (text: s
   return result + close;
 }
 
-// ── Theme init ───────────────────────────────────────────────────────────────
-
 /**
  * Initialize the theme for the given color mode.
  * Sets the active palette. Call patchPicocolors() separately
@@ -159,8 +140,6 @@ export function gradient(text: string, from: RGB, to: RGB, fallbackFn?: (text: s
 export function initTheme(mode: ColorMode): void {
   currentPalette = mode === "light" ? lightPalette : darkPalette;
 }
-
-// ── Picocolors patching ─────────────────────────────────────────────────────
 
 let savedPicocolors: Record<string, unknown> | null = null;
 
@@ -223,8 +202,6 @@ export function resetTerminalColors(): void {
   }
 }
 
-// ── Shimmer color accessor ───────────────────────────────────────────────────
-
 /**
  * Return the current palette's shimmer base and highlight colors.
  * Used by animations.ts to avoid hardcoded RGB values.
@@ -245,8 +222,6 @@ export function getGradientBarColors(): { from: RGB; to: RGB } {
   }
   return { from: [220, 198, 185], to: [235, 218, 208] };
 }
-
-// ── Exported theme ───────────────────────────────────────────────────────────
 
 export const theme = {
   /** Off-white -- regular body text (also auto-applied after any themed segment) */

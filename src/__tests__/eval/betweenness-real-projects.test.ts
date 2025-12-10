@@ -19,8 +19,9 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { existsSync } from "node:fs";
-import { buildImportGraph, findChokepoints } from "../../graph.js";
-import { initTreeSitter } from "../../ast-parse.js";
+import { buildImportGraph } from "../../graph-build.js";
+import { findChokepoints } from "../../graph/chokepoints.js";
+import { initTreeSitter } from "../../parsers/init.js";
 import { buildDirectives, renderDirectivesSection } from "../../templates/directives.js";
 import type { ImportGraph, ContextAnalysis, DetectedContext } from "../../types.js";
 

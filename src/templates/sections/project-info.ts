@@ -76,7 +76,6 @@ export async function renderProjectInfoSections(
     ? summarizeDetection(ctx)
     : answers.stackCorrections || summarizeDetection(ctx);
 
-  // Header + maintenance directive
   const headerLines: string[] = [];
   headerLines.push(`# ${projectName}`);
   headerLines.push("");
@@ -98,11 +97,9 @@ export async function renderProjectInfoSections(
     sections.push({ id: "what-is-this", priority: 0, content: whatContent, tokens: estimateTokens(whatContent) });
   }
 
-  // Tech Stack
   const techContent = `## Tech Stack\n\n${buildTechStackSection(ctx, stackSummary)}`;
   sections.push({ id: "tech-stack", priority: 1, content: techContent, tokens: estimateTokens(techContent) });
 
-  // Key Patterns
   if (answers.keyPatterns) {
     const patLines: string[] = [];
     patLines.push("## Key Patterns");
@@ -118,7 +115,6 @@ export async function renderProjectInfoSections(
     sections.push({ id: "key-patterns", priority: 0, content: patContent, tokens: estimateTokens(patContent) });
   }
 
-  // Gotchas
   if (answers.gotchas) {
     const gotLines: string[] = [];
     gotLines.push("## Gotchas");
@@ -134,7 +130,6 @@ export async function renderProjectInfoSections(
     sections.push({ id: "gotchas", priority: 0, content: gotContent, tokens: estimateTokens(gotContent) });
   }
 
-  // Development
   const devContent = `## Development\n\n${await buildDevSection(ctx)}`;
   sections.push({ id: "development", priority: 0, content: devContent, tokens: estimateTokens(devContent) });
 
@@ -244,7 +239,6 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
       lines.push("```bash");
       lines.push(ctx.packageManager === "poetry" ? "poetry install" : "pip install -r requirements.txt");
 
-      // Framework-aware dev commands
       const fwNames = ctx.frameworks.map((f) => f.name);
       if (fwNames.includes("Django")) {
         lines.push(`${poetryPrefix}python manage.py runserver`);
@@ -256,7 +250,6 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
 
       lines.push("```");
 
-      // pytest test command
       if (fwNames.includes("pytest")) {
         lines.push("");
         lines.push("```bash");

@@ -6,20 +6,15 @@
  */
 
 import { bench, describe } from "vitest";
-import {
-  computeHITS,
-  computeBetweenness,
-  detectCommunities,
-  findChokepoints,
-  computeInstability,
-  findCircularDeps,
-  findDeadFiles,
-  detectArchitecturalLayers,
-  getHubFiles,
-  findSCCs,
-  findCrossCuttingFiles,
-  computeLayerConsistency,
-} from "../../graph.js";
+import { computeHITS, computeBetweenness } from "../../centrality.js";
+import { detectCommunities } from "../../graph/communities.js";
+import { findChokepoints } from "../../graph/chokepoints.js";
+import { computeInstability } from "../../graph/instability.js";
+import { findCircularDeps, findSCCs } from "../../graph-cycles.js";
+import { findDeadFiles } from "../../graph/dead-files.js";
+import { detectArchitecturalLayers, computeLayerConsistency } from "../../graph/layers.js";
+import { getHubFiles } from "../../graph/hub-files.js";
+import { findCrossCuttingFiles } from "../../graph/cross-cutting.js";
 import { generateGraph } from "./graph-generator.js";
 
 // ── Pre-generate graphs ─────────────────────────────────────────────

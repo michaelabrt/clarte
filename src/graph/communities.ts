@@ -20,7 +20,6 @@ const COMMUNITY = {
  * Phase 4: Validate novelty (skip if communities just mirror directories).
  */
 export function detectCommunities(graph: ImportGraph): Community[] {
-  // Build undirected adjacency from internal edges
   const adj = new Map<string, Set<string>>();
   const allFiles = new Set<string>();
 
@@ -59,7 +58,6 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     for (const [label, members] of groups) {
       if (members.length >= COMMUNITY.MIN_SIZE) continue;
 
-      // Find neighboring community with most edges
       const neighborCounts = new Map<number, number>();
       for (const file of members) {
         for (const neighbor of adj.get(file) ?? []) {
@@ -72,7 +70,6 @@ export function detectCommunities(graph: ImportGraph): Community[] {
 
       if (neighborCounts.size === 0) continue;
 
-      // Merge into most-connected neighbor
       let bestNeighbor = label;
       let bestCount = 0;
       for (const [nLabel, count] of neighborCounts) {
@@ -102,7 +99,6 @@ export function detectCommunities(graph: ImportGraph): Community[] {
       const neighbors = adj.get(file);
       if (!neighbors || neighbors.size === 0) continue;
 
-      // Count which communities neighbors belong to
       const communityEdges = new Map<number, number>();
       for (const neighbor of neighbors) {
         const nLabel = fileToCommunity.get(neighbor);
@@ -111,7 +107,6 @@ export function detectCommunities(graph: ImportGraph): Community[] {
         }
       }
 
-      // If majority of edges go to a different community, reassign
       let bestCommunity = currentLabel;
       let bestEdges = communityEdges.get(currentLabel) ?? 0;
       for (const [cLabel, count] of communityEdges) {
@@ -129,7 +124,6 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     if (!changed) break;
   }
 
-  // Build final communities
   const finalGroups = groupByCommunity(fileToCommunity);
   const communities: Community[] = [];
   let id = 0;
@@ -154,7 +148,6 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     return [];
   }
 
-  // Sort by size descending, alphabetical tiebreaker on first file
   communities.sort((a, b) => b.files.length - a.files.length || (a.files[0] ?? "").localeCompare(b.files[0] ?? ""));
   return communities;
 }
@@ -236,7 +229,6 @@ function deriveLabel(files: string[]): string {
     return parts.slice(0, -1).join("/");
   });
 
-  // Find common prefix
   const first = dirs[0];
   let prefixLen = first.length;
   for (const dir of dirs) {

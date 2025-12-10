@@ -8,7 +8,6 @@ import type { Chokepoint, ImportGraph } from "../types.js";
  * Runs in O(V + E), same complexity as SCC detection.
  */
 export function findChokepoints(graph: ImportGraph): Chokepoint[] {
-  // Build undirected adjacency from internal edges
   const adj = new Map<string, Set<string>>();
   const allFiles = new Set<string>();
 
@@ -101,7 +100,6 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
     }
   }
 
-  // For each articulation point, find components without it and disconnected files
   const results: Chokepoint[] = [];
   for (const cp of articulationPoints) {
     const { componentCount, disconnected } = analyzeComponentsWithout(adj, allFiles, cp);
@@ -113,7 +111,6 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
     });
   }
 
-  // Sort by separates descending, then importedBy descending, alphabetical tiebreaker
   results.sort((a, b) => b.separates - a.separates || b.importedBy - a.importedBy || a.file.localeCompare(b.file));
   return results;
 }
@@ -150,7 +147,6 @@ function analyzeComponentsWithout(
     componentMembers.push(component);
   }
 
-  // Find the largest component; all other files are "disconnected"
   componentMembers.sort((a, b) => b.length - a.length);
   const disconnected: string[] = [];
   for (let i = 1; i < componentMembers.length; i++) {

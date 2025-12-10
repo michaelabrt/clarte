@@ -12,21 +12,18 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import {
-  buildImportGraph,
-  getHubFiles,
-  findCircularDeps,
-  detectArchitecturalLayers,
-  computeInstability,
-  detectCommunities,
-  findDeadFiles,
-  findCrossCuttingFiles,
-  computeLayerConsistency,
-  findChokepoints,
-  findTightCouplings,
-  computeGraphTopology,
-  computeBetweenness,
-} from "../../graph.js";
+import { buildImportGraph } from "../../graph-build.js";
+import { getHubFiles } from "../../graph/hub-files.js";
+import { findCircularDeps } from "../../graph-cycles.js";
+import { detectArchitecturalLayers, computeLayerConsistency } from "../../graph/layers.js";
+import { computeInstability } from "../../graph/instability.js";
+import { detectCommunities } from "../../graph/communities.js";
+import { findDeadFiles } from "../../graph/dead-files.js";
+import { findCrossCuttingFiles } from "../../graph/cross-cutting.js";
+import { findChokepoints } from "../../graph/chokepoints.js";
+import { findTightCouplings } from "../../graph/tight-coupling.js";
+import { computeGraphTopology } from "../../graph/topology.js";
+import { computeBetweenness } from "../../centrality.js";
 import type { ImportGraph } from "../../types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

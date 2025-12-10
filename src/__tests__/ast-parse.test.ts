@@ -1,11 +1,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import {
-  initTreeSitter,
-  parseImportsAst,
-  extractSnapshotAst,
-  detectBarrelAst,
-  resolveBarrelExportsAst,
-} from "../ast-parse.js";
+import { initTreeSitter } from "../parsers/init.js";
+import { parseImportsAst } from "../parsers/parse-imports.js";
+import { extractSnapshotAst } from "../parsers/extract-snapshot.js";
+import { detectBarrelAst, resolveBarrelExportsAst } from "../parsers/barrel.js";
 
 beforeAll(async () => {
   await initTreeSitter();

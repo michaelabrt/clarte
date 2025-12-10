@@ -5,19 +5,16 @@ import { loadConfig, configToAnswers } from "./config.js";
 import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import { buildImportGraph, mergeGraph } from "./graph-build.js";
 import { findCircularDeps } from "./graph-cycles.js";
-import {
-  getHubFiles,
-  detectArchitecturalLayers,
-  computeInstability,
-  detectCommunities,
-  findDeadFiles,
-  findCrossCuttingFiles,
-  computeLayerConsistency,
-  findChokepoints,
-  computeGraphTopology,
-  findStructuralTemporalMismatches,
-  findTightCouplings,
-} from "./graph-analysis.js";
+import { getHubFiles } from "./graph/hub-files.js";
+import { detectArchitecturalLayers, computeLayerConsistency } from "./graph/layers.js";
+import { computeInstability } from "./graph/instability.js";
+import { detectCommunities } from "./graph/communities.js";
+import { findDeadFiles } from "./graph/dead-files.js";
+import { findCrossCuttingFiles } from "./graph/cross-cutting.js";
+import { findChokepoints } from "./graph/chokepoints.js";
+import { computeGraphTopology } from "./graph/topology.js";
+import { findStructuralTemporalMismatches } from "./graph/mismatches.js";
+import { findTightCouplings } from "./graph/tight-coupling.js";
 import { buildGraphWithCache } from "./cache.js";
 import { analyzeGitActivity } from "./git-analysis.js";
 import { scanConfigConstraints } from "./config-scan.js";
@@ -32,8 +29,6 @@ import {
   type AnalysisSnapshot,
 } from "./delta.js";
 import type { ContextAnalysis, ProgressCallback } from "./types.js";
-
-// ── Ignore patterns ───────────────────────────────────────────────────
 
 /** Directories and patterns to ignore in fs.watch events. */
 const IGNORE_DIRS = IGNORE_DIRS_SET;
@@ -51,8 +46,6 @@ const IGNORE_FILES = new Set([
   "go.sum",
   "poetry.lock",
 ]);
-
-// ── File filtering ────────────────────────────────────────────────────
 
 /**
  * Check whether a file change event should trigger a rebuild.
@@ -78,8 +71,6 @@ export function shouldRebuild(filePath: string): boolean {
   const ext = path.extname(filePath);
   return SOURCE_EXTENSIONS.has(ext);
 }
-
-// ── Debounce utility ──────────────────────────────────────────────────
 
 /**
  * Create a debounced function that collects items and fires after a delay.
@@ -113,8 +104,6 @@ export function createDebounce<T>(
   return { add, flush };
 }
 
-// ── Time formatting ───────────────────────────────────────────────────
-
 function timeStamp(): string {
   const now = new Date();
   return [
@@ -123,8 +112,6 @@ function timeStamp(): string {
     String(now.getSeconds()).padStart(2, "0"),
   ].join(":");
 }
-
-// ── Main watch mode ───────────────────────────────────────────────────
 
 export async function runWatchMode(rootDir: string, verbose: boolean): Promise<void> {
   const noopProgress: ProgressCallback = () => {};
@@ -213,8 +200,6 @@ export async function runWatchMode(rootDir: string, verbose: boolean): Promise<v
     // Never resolves; process exits via signal handlers
   });
 }
-
-// ── Analysis pipeline ─────────────────────────────────────────────────
 
 async function runAnalysis(
   rootDir: string,

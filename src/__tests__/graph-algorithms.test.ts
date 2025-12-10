@@ -1,15 +1,10 @@
 import { describe, expect, it } from "vitest";
-import {
-  findSCCs,
-  findCircularDeps,
-  getHubFiles,
-  computeHITS,
-  deriveRole,
-  findStructuralTemporalMismatches,
-  findTightCouplings,
-  computeBetweenness,
-  checkArchitecturalFitness,
-} from "../graph.js";
+import { findSCCs, findCircularDeps } from "../graph-cycles.js";
+import { getHubFiles } from "../graph/hub-files.js";
+import { computeHITS, deriveRole, computeBetweenness } from "../centrality.js";
+import { findStructuralTemporalMismatches } from "../graph/mismatches.js";
+import { findTightCouplings } from "../graph/tight-coupling.js";
+import { checkArchitecturalFitness } from "../graph/fitness.js";
 import type { ArchitecturalLayer, ImportEdge, LayerEdge } from "../types.js";
 import { makeGraph, edge } from "./eval/helpers.js";
 

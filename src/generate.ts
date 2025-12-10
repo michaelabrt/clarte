@@ -51,7 +51,6 @@ export async function generateFiles(
     onVerbose?.(`Prepared ${filePath} (${content.length} bytes)`);
   }
 
-  // Pre-measure user sections for character budget reservation
   let reservedChars = 0;
   if (maxChars !== 0) {
     for (const ide of answers.ides) {
@@ -74,9 +73,7 @@ export async function generateFiles(
     }
   }
 
-  // Generate files for each selected IDE
   for (const ide of answers.ides) {
-    // 1. Main context file
     const mainFilename = getMainContextFilename(ide);
     const mainContent =
       ide === "aider"
@@ -94,7 +91,6 @@ export async function generateFiles(
           );
     await addFile(mainFilename, mainContent);
 
-    // 2. Cursor-specific scoped rules
     if (ide === "cursor") {
       const rules = await buildCursorRules(ctx, answers, analysis);
       for (const rule of rules) {
@@ -104,7 +100,6 @@ export async function generateFiles(
       }
     }
 
-    // 3. Claude Code skills
     if (generateSkills && ide === "claude") {
       const pkgJson = await readJsonFile(path.join(ctx.rootDir, "package.json"));
       const scripts = (pkgJson?.scripts as Record<string, string>) ?? undefined;
@@ -126,7 +121,6 @@ export async function generateFiles(
     }
   }
 
-  // Monorepo per-package context files
   if (answers.generatePerPackage && ctx.monorepo && ctx.monorepo.packages.length > 0) {
     for (const pkg of ctx.monorepo.packages) {
       const pkgRootDir = path.join(ctx.rootDir, pkg.path);
@@ -164,7 +158,6 @@ export async function generateFiles(
 
   const files = Array.from(fileMap.values());
 
-  // Preserve user sections from existing files before overwriting
   let preservedCount = 0;
   for (const file of files) {
     if (!file.existed) continue;
@@ -197,12 +190,10 @@ export async function generateFiles(
     );
   }
 
-  // Dry run: return files without writing anything
   if (dryRun) {
     return files;
   }
 
-  // Check for existing files and ask before overwriting
   const existingFiles = files.filter((f) => f.existed);
   if (existingFiles.length > 0 && !force) {
     p.log.warn(
@@ -218,7 +209,6 @@ export async function generateFiles(
     });
 
     if (p.isCancel(overwrite) || !overwrite) {
-      // Only write new files
       const newFiles = files.filter((f) => !f.existed);
       if (newFiles.length === 0) {
         p.log.info(t.text("No new files to write. Exiting."));
@@ -232,7 +222,6 @@ export async function generateFiles(
     }
   }
 
-  // Write all files
   for (const file of files) {
     await writeFileSafe(path.join(ctx.rootDir, file.path), file.content);
     onVerbose?.(`Wrote ${file.path}`);
@@ -240,8 +229,6 @@ export async function generateFiles(
 
   return files;
 }
-
-// ── User section preservation ────────────────────────────────────────────────
 
 const USER_START = "<!-- clarte:user-start -->";
 const USER_END = "<!-- clarte:user-end -->";

@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import { buildDirectives } from "../templates/directives.js";
-import { parsePythonImports } from "../graph.js";
-import { initTreeSitter } from "../ast-parse.js";
+import { parsePythonImports } from "../import-resolution.js";
+import { initTreeSitter } from "../parsers/init.js";
 import type { ContextAnalysis, DetectedContext } from "../types.js";
 
 beforeAll(async () => {

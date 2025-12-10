@@ -5,8 +5,6 @@ import type { ContextAnalysis } from "./types.js";
 const CLARTE_DIR = ".clarte";
 const HISTORY_FILE = "history.json";
 
-// ── Types ─────────────────────────────────────────────────────────────
-
 export interface AnalysisSnapshot {
   timestamp: string;
   hubFilePaths: string[];
@@ -29,8 +27,6 @@ export interface ArchitectureDelta {
   layerViolationDelta: number;
 }
 
-// ── Snapshot I/O ──────────────────────────────────────────────────────
-
 export async function loadPreviousSnapshot(rootDir: string): Promise<AnalysisSnapshot | null> {
   const filePath = path.join(rootDir, CLARTE_DIR, HISTORY_FILE);
   try {
@@ -47,8 +43,6 @@ export async function saveSnapshot(rootDir: string, snapshot: AnalysisSnapshot):
   const filePath = path.join(dir, HISTORY_FILE);
   await fs.writeFile(filePath, JSON.stringify(snapshot, null, 2), "utf-8");
 }
-
-// ── Snapshot extraction ───────────────────────────────────────────────
 
 export function extractSnapshot(analysis: ContextAnalysis): AnalysisSnapshot {
   const hubFilePaths = analysis.hubFiles.map((h) => h.path);
@@ -73,8 +67,6 @@ export function extractSnapshot(analysis: ContextAnalysis): AnalysisSnapshot {
   };
 }
 
-// ── Delta computation ─────────────────────────────────────────────────
-
 /** Serialize a cycle chain for comparison (sorted canonical form). */
 function canonicalCycle(chain: string[]): string {
   return [...chain].sort().join("\0");
@@ -87,28 +79,24 @@ export function computeDelta(previous: AnalysisSnapshot, current: AnalysisSnapsh
   const newHubFiles = current.hubFilePaths.filter((f) => !prevHubs.has(f));
   const demotedHubFiles = previous.hubFilePaths.filter((f) => !currHubs.has(f));
 
-  // Circular deps: compare by canonical cycle representation
   const prevCycles = new Set(previous.circularDepChains.map(canonicalCycle));
   const currCycles = new Set(current.circularDepChains.map(canonicalCycle));
 
   const newCircularDeps = current.circularDepChains.filter((c) => !prevCycles.has(canonicalCycle(c)));
   const resolvedCircularDeps = previous.circularDepChains.filter((c) => !currCycles.has(canonicalCycle(c)));
 
-  // Dead files
   const prevDead = new Set(previous.deadFiles);
   const currDead = new Set(current.deadFiles);
 
   const newDeadFiles = current.deadFiles.filter((f) => !prevDead.has(f));
   const resurrectedFiles = previous.deadFiles.filter((f) => !currDead.has(f));
 
-  // Chokepoints
   const prevChoke = new Set(previous.chokepointPaths);
   const currChoke = new Set(current.chokepointPaths);
 
   const newChokepoints = current.chokepointPaths.filter((f) => !prevChoke.has(f));
   const resolvedChokepoints = previous.chokepointPaths.filter((f) => !currChoke.has(f));
 
-  // Layer violations
   const layerViolationDelta = current.layerViolationCount - previous.layerViolationCount;
 
   return {
@@ -123,8 +111,6 @@ export function computeDelta(previous: AnalysisSnapshot, current: AnalysisSnapsh
     layerViolationDelta,
   };
 }
-
-// ── Delta rendering ───────────────────────────────────────────────────
 
 /** Check whether a delta contains any changes. */
 export function isDeltaEmpty(delta: ArchitectureDelta): boolean {

@@ -239,11 +239,11 @@ describe("buildMainContext with budget", () => {
     expect(result).not.toContain("<!-- Sections omitted");
   });
 
-  it("no budget param includes all sections", async () => {
+  it("no budget param includes budgeted sections but omits full-only sections", async () => {
     const result = await buildMainContext(mockCtx(), mockAnswers(), null, mockAnalysis());
     expect(result).toContain("## Tech Stack");
-    expect(result).toContain("## Dead Files");
-    expect(result).not.toContain("<!-- Sections omitted");
+    expect(result).not.toContain("## Dead Files"); // full-only (priority 50)
+    expect(result).toContain("<!-- Sections omitted");
   });
 
   it("very small budget omits low-priority sections and adds note", async () => {

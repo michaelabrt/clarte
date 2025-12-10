@@ -6,7 +6,6 @@ import type { GraphTopology, ImportGraph } from "../types.js";
  * subsystems or is a tightly connected monolith.
  */
 export function computeGraphTopology(graph: ImportGraph): GraphTopology {
-  // Build undirected adjacency from internal edges
   const adj = new Map<string, Set<string>>();
   const allFiles = new Set<string>();
 
@@ -26,7 +25,6 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
     return { componentCount: 0, componentSizes: [], approximateDiameter: 0, reachability: 0, isFragmented: false };
   }
 
-  // 1. Find connected components via BFS
   const visited = new Set<string>();
   const components: string[][] = [];
 
@@ -85,7 +83,6 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
     }
   }
 
-  // 3. Reachability: fraction of files in the largest component
   const reachability = totalFiles > 0 ? largest.length / totalFiles : 0;
 
   // 4. Fragmentation: more than one component with 5+ files

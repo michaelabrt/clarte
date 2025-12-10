@@ -6,15 +6,12 @@
  */
 
 import { bench, describe } from "vitest";
-import {
-  computeHITS,
-  computeBetweenness,
-  detectCommunities,
-  findChokepoints,
-  computeInstability,
-  findCircularDeps,
-  findDeadFiles,
-} from "../../graph.js";
+import { computeHITS, computeBetweenness } from "../../centrality.js";
+import { detectCommunities } from "../../graph/communities.js";
+import { findChokepoints } from "../../graph/chokepoints.js";
+import { computeInstability } from "../../graph/instability.js";
+import { findCircularDeps } from "../../graph-cycles.js";
+import { findDeadFiles } from "../../graph/dead-files.js";
 import { generateGraph } from "./graph-generator.js";
 
 // ── Pre-generate graphs (excluded from benchmark timing) ────────────

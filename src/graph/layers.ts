@@ -29,14 +29,12 @@ export function detectArchitecturalLayers(
   graph: ImportGraph,
   customLayers?: Array<{ name: string; pattern: string }>,
 ): { layers: ArchitecturalLayer[]; layerEdges: LayerEdge[] } {
-  // Build the effective pattern list: user patterns first, then built-in defaults
   const userPatterns: Array<{ name: string; pattern: RegExp }> = (customLayers ?? []).map((l) => ({
     name: l.name,
     pattern: new RegExp(l.pattern),
   }));
   const effectivePatterns = [...userPatterns, ...LAYER_PATTERNS];
 
-  // Classify each internal file into a layer
   const layerFiles = new Map<string, string[]>();
   const fileToLayer = new Map<string, string>();
 
@@ -70,7 +68,6 @@ export function detectArchitecturalLayers(
     }
   }
 
-  // Build layer edges from dependsOn data
   const layerEdges: LayerEdge[] = [];
   const edgeSet = new Set<string>();
   for (const [from, deps] of layerDependsOn) {
@@ -83,7 +80,6 @@ export function detectArchitecturalLayers(
     }
   }
 
-  // Build result sorted by importedByLayers descending (most foundational first)
   const layers: ArchitecturalLayer[] = [];
   for (const [name, files] of layerFiles) {
     layers.push({
@@ -94,7 +90,6 @@ export function detectArchitecturalLayers(
     });
   }
 
-  // Sort: most imported layers first (foundational), then by name
   layers.sort((a, b) => b.importedByLayers - a.importedByLayers || a.name.localeCompare(b.name));
 
   return { layers, layerEdges };

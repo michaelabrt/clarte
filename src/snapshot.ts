@@ -2,8 +2,9 @@ import path from "node:path";
 import { glob } from "tinyglobby";
 import { IGNORE_GLOBS } from "./ignore-patterns.js";
 import { estimateTokens, readFileOr, readJsonFile } from "./utils.js";
-import { findUsedExports } from "./graph-analysis.js";
-import { initTreeSitter, extractSnapshotAst } from "./ast-parse.js";
+import { findUsedExports } from "./graph/hub-files.js";
+import { initTreeSitter } from "./parsers/init.js";
+import { extractSnapshotAst } from "./parsers/extract-snapshot.js";
 import type {
   CodeSnapshot,
   DetectedContext,
@@ -14,9 +15,6 @@ import type {
   SnapshotEntry,
 } from "./types.js";
 
-/**
- * Auto-detect which directories to scan for code snapshots.
- */
 function getDefaultScanPaths(ctx: DetectedContext): string[] {
   switch (ctx.language) {
     case "python":
@@ -36,37 +34,30 @@ function getDefaultJsTsScanPaths(ctx: DetectedContext): string[] {
   const paths: string[] = [];
   const dirs = ctx.directories;
 
-  // Types directories
   for (const d of dirs) {
     if (d.endsWith("types") || d.endsWith("typings")) paths.push(d);
   }
 
-  // Store directories
   for (const d of dirs) {
     if (d.endsWith("stores") || d.endsWith("store")) paths.push(d);
   }
 
-  // Service/API directories
   for (const d of dirs) {
     if (d.endsWith("services") || d.endsWith("api")) paths.push(d);
   }
 
-  // Hook directories
   for (const d of dirs) {
     if (d.endsWith("hooks")) paths.push(d);
   }
 
-  // Component directories
   for (const d of dirs) {
     if (d.endsWith("components")) paths.push(d);
   }
 
-  // Lib/utils
   for (const d of dirs) {
     if (d.endsWith("lib") || d.endsWith("utils")) paths.push(d);
   }
 
-  // Fallback: scan common type file patterns at root
   if (paths.length === 0) {
     paths.push("src", "app", "lib");
   }
@@ -89,7 +80,6 @@ function getDefaultPythonScanPaths(ctx: DetectedContext): string[] {
     }
   }
 
-  // Fallback: common Python project roots
   if (paths.length === 0) {
     paths.push("src", "app", "lib", ".");
   }
@@ -97,9 +87,6 @@ function getDefaultPythonScanPaths(ctx: DetectedContext): string[] {
   return paths;
 }
 
-/**
- * Get default scan paths for a specific language (used by multi-language support).
- */
 function getDefaultScanPathsForLanguage(lang: Language, ctx: DetectedContext): string[] {
   switch (lang) {
     case "python":
@@ -115,9 +102,6 @@ function getDefaultScanPathsForLanguage(lang: Language, ctx: DetectedContext): s
   }
 }
 
-/**
- * Get glob, extractor, and ignore patterns for a specific language.
- */
 function getLanguageConfig(lang: Language): {
   glob: string;
   extractor: (filePath: string, relPath: string) => Promise<SnapshotEntry[]>;
@@ -230,9 +214,6 @@ function getDefaultJavaScanPaths(ctx: DetectedContext): string[] {
   return paths;
 }
 
-/**
- * Extract snapshot entries from a file using tree-sitter AST parsing.
- */
 function makeExtractor(lang: Language) {
   return async (filePath: string, relPath: string): Promise<SnapshotEntry[]> => {
     const content = await readFileOr(filePath);
@@ -241,11 +222,6 @@ function makeExtractor(lang: Language) {
   };
 }
 
-// Regex-based extractors deleted (replaced by AST in ast-parse.ts)
-
-/**
- * Append an "imported by N files" comment to signatures of highly-imported entries.
- */
 function annotateSignature(entry: SnapshotEntry, commentPrefix = "//"): string {
   if (entry.importedByCount && entry.importedByCount > 2) {
     const total = entry.importedByCount;
@@ -254,7 +230,6 @@ function annotateSignature(entry: SnapshotEntry, commentPrefix = "//"): string {
       direct < total
         ? `${commentPrefix} imported by ${direct} files (${total} via barrels)`
         : `${commentPrefix} imported by ${total} files`;
-    // Add comment to first line of the signature
     const firstLine = entry.signature.split("\n")[0];
     const rest = entry.signature.split("\n").slice(1);
     const annotated = `${firstLine}  ${annotation}`;
@@ -263,10 +238,6 @@ function annotateSignature(entry: SnapshotEntry, commentPrefix = "//"): string {
   return entry.signature;
 }
 
-/**
- * Condense snapshot entries into a readable markdown block.
- */
-/** Map language to code fence identifier */
 const LANG_FENCE_MAP: Record<string, string> = {
   python: "python",
   go: "go",
@@ -274,12 +245,10 @@ const LANG_FENCE_MAP: Record<string, string> = {
   java: "java",
 };
 
-/** Map language to comment prefix */
 const LANG_COMMENT_MAP: Record<string, string> = {
   python: "#",
 };
 
-/** Infer language from file extension */
 function inferLanguageFromPath(filePath: string): Language {
   if (filePath.endsWith(".py")) return "python";
   if (filePath.endsWith(".go")) return "go";
@@ -298,7 +267,6 @@ export function renderSnapshot(entries: SnapshotEntry[], language: Language = "t
 
   let md = "";
 
-  // Group by category for cleaner output
   const types = entries.filter((e) => e.category === "type" || e.category === "interface");
   const stores = entries.filter((e) => e.category === "store");
   const hooks = entries.filter((e) => e.category === "hook");
@@ -338,14 +306,9 @@ export function renderSnapshot(entries: SnapshotEntry[], language: Language = "t
   return md.trimEnd();
 }
 
-/**
- * Render snapshot entries from a multi-language project.
- * Groups entries by language and renders each group in the appropriate code fence.
- */
 function renderMultiLangSnapshot(entries: SnapshotEntry[], primaryLang: Language): string {
   if (entries.length === 0) return "";
 
-  // Group entries by their file's language
   const byLang = new Map<Language, SnapshotEntry[]>();
   for (const entry of entries) {
     const lang = inferLanguageFromPath(entry.file);
@@ -355,7 +318,6 @@ function renderMultiLangSnapshot(entries: SnapshotEntry[], primaryLang: Language
     byLang.set(effective, existing);
   }
 
-  // Render primary language first, then secondary (sorted for determinism)
   const parts: string[] = [];
   const primaryEntries = byLang.get(primaryLang);
   if (primaryEntries && primaryEntries.length > 0) {
@@ -408,9 +370,6 @@ export function trimSnapshotToChars(
   return { markdown, trimmedCount: entries.length - kept };
 }
 
-/**
- * Generate a code snapshot for the project.
- */
 export async function generateSnapshot(
   ctx: DetectedContext,
   customPaths: string[],
@@ -425,13 +384,11 @@ export async function generateSnapshot(
     return { entries: [], markdown: "" };
   }
 
-  // Report which directories we're scanning
   const dirNames = scanPaths.map((p) => p.split("/").pop() ?? p);
   onProgress?.(`Scanning ${scanPaths.length} directories: ${dirNames.join(", ")}...`);
 
   await initTreeSitter();
 
-  // File patterns and extractor based on language
   let fileGlob: string;
   let extractor: (filePath: string, relPath: string) => Promise<SnapshotEntry[]>;
   switch (ctx.language) {
@@ -460,7 +417,6 @@ export async function generateSnapshot(
 
   const ignorePatterns = [...IGNORE_GLOBS, "**/*.test.*", "**/*.spec.*", "**/__tests__/**"];
 
-  // Language-specific ignore patterns
   switch (ctx.language) {
     case "python":
       ignorePatterns.push(
@@ -504,7 +460,6 @@ export async function generateSnapshot(
     for (const entries of results) allEntries.push(...entries);
   }
 
-  // Multi-language support: also scan secondary languages
   if (ctx.secondaryLanguages && customPaths.length === 0) {
     for (const secLang of ctx.secondaryLanguages) {
       const secScanPaths = getDefaultScanPathsForLanguage(secLang, ctx);
@@ -527,7 +482,6 @@ export async function generateSnapshot(
     }
   }
 
-  // Populate importedByCount from graph
   if (graph) {
     for (const entry of allEntries) {
       const count = graph.inDegree.get(entry.file) ?? 0;
@@ -551,16 +505,13 @@ export async function generateSnapshot(
     }
   }
 
-  // Filter dead exports using import graph (skip for library projects)
   onProgress?.("Filtering dead exports...");
   const liveEntries = isLibrary ? allEntries : filterDeadExports(allEntries, graph);
 
-  // Apply token budget if graph is available
   const budget = maxTokens ?? Math.min(20000, 4000 + Math.floor(Math.sqrt(ctx.sourceFileCount) * 400));
   onProgress?.(`Applying token budget (${budget.toLocaleString()} tokens)...`);
   const { selected, excluded } = applyTokenBudget(liveEntries, budget, graph, gitActivity);
 
-  // For multi-language projects, render each language group separately
   const hasMultiLang = ctx.secondaryLanguages && ctx.secondaryLanguages.length > 0;
   let markdown: string;
   if (hasMultiLang) {
@@ -577,7 +528,6 @@ export async function generateSnapshot(
   };
 }
 
-/** Entry-point patterns: files that are never filtered as dead exports */
 const ENTRY_POINT_PATTERNS = [
   /(?:^|\/)index\.[jt]sx?$/,
   /(?:^|\/)App\.[jt]sx?$/,
@@ -603,32 +553,23 @@ const ENTRY_POINT_PATTERNS = [
   /(?:^|\/)Application\.java$/,
 ];
 
-/**
- * Extract the identifier name from a signature string.
- * Handles both JS/TS and Python signatures.
- */
 function extractNameFromSignature(sig: string): string | null {
-  // JS/TS: "export interface Foo {" -> "Foo"
   const jsMatch = sig.match(
     /export\s+(?:default\s+)?(?:async\s+)?(?:interface|type|function|const|let|var|class|enum)\s+(\w+)/,
   );
   if (jsMatch) return jsMatch[1];
 
-  // Python: "class Foo:" or "class Foo(Base):" or "def foo(" or "async def foo("
   const pyMatch = sig.match(/(?:class|(?:async\s+)?def)\s+(\w+)/);
   if (pyMatch) return pyMatch[1];
 
-  // Go: "type Foo struct" or "func FooBar(" or "func (r *R) FooBar("
   const goTypeMatch = sig.match(/^type\s+(\w+)/);
   if (goTypeMatch) return goTypeMatch[1];
   const goFuncMatch = sig.match(/^func\s+(?:\([^)]+\)\s+)?(\w+)/);
   if (goFuncMatch) return goFuncMatch[1];
 
-  // Rust: "pub struct Foo" or "pub fn foo" or "pub trait Foo"
   const rustMatch = sig.match(/^pub(?:\(crate\))?\s+(?:async\s+)?(?:struct|enum|trait|fn|type)\s+(\w+)/);
   if (rustMatch) return rustMatch[1];
 
-  // Java: "public class Foo" or "public void foo("
   const javaMatch = sig.match(
     /public\s+(?:static\s+|abstract\s+|final\s+)?(?:class|interface|enum|record|\S+)\s+(\w+)/,
   );
@@ -637,31 +578,21 @@ function extractNameFromSignature(sig: string): string | null {
   return null;
 }
 
-/**
- * Check if a file is an entry point (never filtered).
- */
 function isEntryPoint(filePath: string): boolean {
   return ENTRY_POINT_PATTERNS.some((p) => p.test(filePath));
 }
 
-/**
- * Filter out exports that are never imported anywhere in the project.
- * Entry-point files and barrel re-exports are always kept.
- */
 function filterDeadExports(entries: SnapshotEntry[], graph?: ImportGraph): SnapshotEntry[] {
   if (!graph || graph.edges.length === 0) return entries;
 
   const usedExports = findUsedExports(graph.edges);
 
   return entries.filter((entry) => {
-    // Always keep entry-point files
     if (isEntryPoint(entry.file)) return true;
 
-    // Extract the export name from the signature
     const name = extractNameFromSignature(entry.signature);
     if (!name) return true; // Can't determine name, keep it
 
-    // Check if this export is used somewhere
     return usedExports.has(`${entry.file}::${name}`);
   });
 }
@@ -677,7 +608,6 @@ function applyTokenBudget(
 ): { selected: SnapshotEntry[]; excluded: number } {
   if (entries.length === 0) return { selected: [], excluded: 0 };
 
-  // Score each entry
   const scored = entries.map((entry) => {
     const tokens = Math.max(1, estimateTokens(entry.signature));
     const centrality = graph?.centrality.get(entry.file) ?? 0.5;

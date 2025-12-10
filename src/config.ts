@@ -87,7 +87,6 @@ export async function loadConfig(rootDir: string): Promise<ProjectConfig | null>
   const raw = await readJsonFile(configPath);
   if (!raw) return null;
 
-  // Run migrations if the config version is behind the current version
   const fileVersion = typeof raw._version === "number" ? raw._version : 1;
 
   // Forward-compatibility guard: config from a newer version of clarte

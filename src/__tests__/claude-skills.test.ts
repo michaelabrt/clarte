@@ -125,6 +125,77 @@ describe("buildClaudeSkills", () => {
   });
 });
 
+describe("coupling skill", () => {
+  it("generates coupling skill with tight, hidden, and change coupling", async () => {
+    const analysis = mockAnalysis({
+      tightCouplings: [{ from: "src/a.ts", to: "src/b.ts", importedNames: 12 }],
+      structuralMismatches: [
+        { fileA: "src/x.ts", fileB: "src/y.ts", coChangeCount: 5, coChangeConfidence: 0.7, graphDistance: -1 },
+      ],
+      gitActivity: {
+        hotFiles: [],
+        changeCoupling: [{ fileA: "src/a.ts", fileB: "src/b.ts", coChangeCount: 10, confidence: 0.5 }],
+      },
+    });
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers(), analysis);
+    const coupling = skills.find((s) => s.name === "coupling");
+    expect(coupling).toBeDefined();
+    expect(coupling!.disableModelInvocation).toBe(false);
+    expect(coupling!.body).toContain("Tight Coupling");
+    expect(coupling!.body).toContain("Hidden Coupling");
+    expect(coupling!.body).toContain("Change Coupling");
+  });
+
+  it("is NOT generated when no coupling data exists", async () => {
+    const analysis = mockAnalysis({
+      tightCouplings: [],
+      structuralMismatches: [],
+    });
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers(), analysis);
+    const coupling = skills.find((s) => s.name === "coupling");
+    expect(coupling).toBeUndefined();
+  });
+});
+
+describe("code-health skill", () => {
+  it("generates code-health skill with dead files and chokepoints", async () => {
+    const analysis = mockAnalysis({
+      deadFiles: ["src/unused.ts"],
+      chokepoints: [{ file: "src/core.ts", separates: 3, importedBy: 5 }],
+    });
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers(), analysis);
+    const codeHealth = skills.find((s) => s.name === "code-health");
+    expect(codeHealth).toBeDefined();
+    expect(codeHealth!.disableModelInvocation).toBe(false);
+    expect(codeHealth!.body).toContain("Dead Files");
+    expect(codeHealth!.body).toContain("Chokepoints");
+  });
+
+  it("is NOT generated when no health data exists", async () => {
+    const analysis = mockAnalysis({
+      deadFiles: [],
+      chokepoints: [],
+    });
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers(), analysis);
+    const codeHealth = skills.find((s) => s.name === "code-health");
+    expect(codeHealth).toBeUndefined();
+  });
+
+  it("includes layer-consistency when analysis has violations", async () => {
+    const analysis = mockAnalysis({
+      deadFiles: ["src/unused.ts"],
+      layerConsistency: {
+        consistency: 0.8,
+        violations: [{ from: "src/a.ts", to: "src/b.ts", fromLayer: "services", toLayer: "types" }],
+      },
+    });
+    const skills = await buildClaudeSkills(mockCtx(), mockAnswers(), analysis);
+    const codeHealth = skills.find((s) => s.name === "code-health");
+    expect(codeHealth).toBeDefined();
+    expect(codeHealth!.body).toContain("Layer Consistency");
+  });
+});
+
 describe("renderClaudeSkill", () => {
   it("produces valid YAML frontmatter", () => {
     const skill: ClaudeSkill = {

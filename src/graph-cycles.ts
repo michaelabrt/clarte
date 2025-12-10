@@ -6,7 +6,6 @@ import { getOrSet } from "./utils.js";
  * Returns SCCs with size > 1 (i.e. actual cycles).
  */
 export function findSCCs(graph: ImportGraph): string[][] {
-  // Build adjacency list from internal edges only
   const adj = new Map<string, string[]>();
   const allFiles = new Set<string>();
   for (const edge of graph.edges) {
@@ -97,9 +96,7 @@ export function findCircularDeps(graph: ImportGraph, maxCycles = 10): CircularDe
   // Sort SCCs by size (smallest first, more actionable)
   sccs.sort((a, b) => a.length - b.length);
 
-  // Build adjacency restricted to internal edges
   const adj = new Map<string, Set<string>>();
-  // Build edge lookup for type-only info: "from->to" -> ImportEdge
   const edgeLookup = new Map<string, ImportEdge>();
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
@@ -192,7 +189,6 @@ export function findFeedbackEdges(
 ): Array<{ from: string; to: string; cyclesResolved: number }> {
   if (cycles.length === 0) return [];
 
-  // Count how many cycles each directed edge participates in
   const edgeCounts = new Map<string, number>();
   for (const cycle of cycles) {
     for (let i = 0; i < cycle.chain.length - 1; i++) {
@@ -201,7 +197,6 @@ export function findFeedbackEdges(
     }
   }
 
-  // Sort by count descending and return top N
   const sorted = [...edgeCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN);
 
   return sorted.map(([key, count]) => {
@@ -231,7 +226,6 @@ function canonicalizeCycle(cycle: string[]): string {
 function findActualCycles(scc: string[], adj: Map<string, Set<string>>, maxCycles: number): CircularDependency[] {
   const sccSet = new Set(scc);
 
-  // Build SCC-restricted adjacency
   const sccAdj = new Map<string, Set<string>>();
   for (const node of scc) {
     const neighbors = adj.get(node);

@@ -2,8 +2,6 @@ import path from "node:path";
 import { isTestFile, readFileOr } from "./utils.js";
 import type { ConfigConstraints, ImportGraph, InferredConventions } from "./types.js";
 
-// ── Naming pattern classifiers ─────────────────────────────────────────
-
 const CAMEL_CASE = /^[a-z][a-zA-Z0-9]*$/;
 const PASCAL_CASE = /^[A-Z][a-zA-Z0-9]*$/;
 const SNAKE_CASE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
@@ -21,7 +19,6 @@ function classifyName(name: string): NamingStyle | null {
 }
 
 function classifyFilename(name: string): string | null {
-  // Strip extension
   const base = name.replace(/\.[^.]+$/, "");
   if (!base || base.length < 2) return null;
   if (KEBAB_CASE.test(base)) return "kebab-case";
@@ -47,18 +44,10 @@ function majorityStyle(counts: Map<string, number>, threshold = 0.6): string {
   return best;
 }
 
-// ── Export patterns ────────────────────────────────────────────────────
-
-/** Regex to match export default */
 const EXPORT_DEFAULT = /^export\s+default\s/m;
-/** Regex to match named exports */
 const NAMED_EXPORT = /^export\s+(?:async\s+)?(?:function|const|let|var|class|interface|type|enum)\s+/m;
-/** Regex to detect barrel/re-export files */
 const RE_EXPORT = /^export\s+(?:\{[^}]*\}\s+from|type\s+\{[^}]*\}\s+from|\*\s+from)\s+['"][^'"]+['"]/m;
 
-// ── Exported identifier extraction ─────────────────────────────────────
-
-/** Regexes for extracting exported identifiers by category */
 const EXPORT_FUNCTION = /^export\s+(?:async\s+)?function\s+(\w+)/gm;
 const EXPORT_CONST_FN = /^export\s+const\s+(\w+)\s*=\s*(?:async\s+)?(?:\([^)]*\)|[a-zA-Z_$]\w*)\s*(?:=>|:\s*\w)/gm;
 const EXPORT_TYPE = /^export\s+(?:type|interface|enum)\s+(\w+)/gm;
@@ -76,7 +65,6 @@ function extractExportedIdentifiers(content: string): IdentifierSample {
   const constants: string[] = [];
   const seenFunctions = new Set<string>();
 
-  // Extract function names
   for (const m of content.matchAll(EXPORT_FUNCTION)) {
     functions.push(m[1]);
     seenFunctions.add(m[1]);
@@ -88,12 +76,10 @@ function extractExportedIdentifiers(content: string): IdentifierSample {
     }
   }
 
-  // Extract type/interface/enum names
   for (const m of content.matchAll(EXPORT_TYPE)) {
     types.push(m[1]);
   }
 
-  // Extract const names (excluding those already captured as functions)
   for (const m of content.matchAll(EXPORT_CONST)) {
     if (!seenFunctions.has(m[1])) {
       constants.push(m[1]);
@@ -102,8 +88,6 @@ function extractExportedIdentifiers(content: string): IdentifierSample {
 
   return { functions, types, constants };
 }
-
-// ── Naming prefix detection ───────────────────────────────────────────
 
 interface PrefixPattern {
   prefix: string;
@@ -145,8 +129,6 @@ function detectNamingPrefixes(functions: string[]): InferredConventions["namingP
   results.sort((a, b) => b.count - a.count || a.prefix.localeCompare(b.prefix));
   return results;
 }
-
-// ── Import ordering detection ──────────────────────────────────────────
 
 type ImportGroupKind = "external" | "internal" | "relative" | "node-builtin";
 
@@ -288,8 +270,6 @@ function _detectImportOrdering(content: string): string | null {
   return detectImportOrderingDetailed(content).ordering;
 }
 
-// ── Per-directory convention detection ─────────────────────────────────
-
 interface DirectoryIdentifiers {
   functions: string[];
   types: string[];
@@ -304,10 +284,8 @@ interface DirectoryIdentifiers {
  */
 function getTopLevelDir(filePath: string): string {
   const parts = filePath.split("/");
-  // Strip the filename (last segment), keep only directory segments
   const dirParts = parts.slice(0, -1);
   if (dirParts.length === 0) return ".";
-  // Return up to 2 directory levels
   return dirParts.slice(0, 2).join("/");
 }
 
@@ -316,7 +294,6 @@ function detectDirectoryOverrides(
   fileNames: Map<string, string[]>,
   globalNaming: InferredConventions["naming"],
 ): InferredConventions["directoryOverrides"] {
-  // Group files by top-level directory
   const dirIdentifiers = new Map<string, DirectoryIdentifiers>();
 
   for (const [file, sample] of fileIdentifiers) {
@@ -412,8 +389,6 @@ function detectDirectoryOverrides(
   return overrides.length > 0 ? overrides : undefined;
 }
 
-// ── Public API ────────────────────────────────────────────────────────
-
 /**
  * Infer coding conventions by sampling source files from the import graph.
  * Skips conventions already enforced by config constraints.
@@ -423,7 +398,6 @@ export async function inferConventions(
   graph: ImportGraph,
   configConstraints?: ConfigConstraints,
 ): Promise<InferredConventions | null> {
-  // Collect all internal files from the graph
   const internalFiles = new Set<string>();
   for (const [file] of graph.inDegree) {
     internalFiles.add(file);
@@ -431,7 +405,6 @@ export async function inferConventions(
 
   if (internalFiles.size === 0) return null;
 
-  // Sample up to 50 files for identifier analysis, preferring high-centrality files
   const sortedFiles = [...internalFiles]
     .filter((f) => !isTestFile(f) && !isConfigFile(f))
     .sort((a, b) => (graph.centrality.get(b) ?? 0) - (graph.centrality.get(a) ?? 0) || a.localeCompare(b))
@@ -439,7 +412,6 @@ export async function inferConventions(
 
   if (sortedFiles.length === 0) return null;
 
-  // Collect identifiers from sampled files
   const allFunctions: string[] = [];
   const allTypes: string[] = [];
   const allConstants: string[] = [];
@@ -447,10 +419,8 @@ export async function inferConventions(
   let namedExportCount = 0;
   let barrelFileCount = 0;
 
-  // Import ordering: sample up to 20 files
   const importOrderingSamples: string[] = [];
 
-  // Per-directory tracking
   const fileIdentifiers = new Map<string, IdentifierSample>();
 
   for (const file of sortedFiles) {
@@ -463,17 +433,13 @@ export async function inferConventions(
     allTypes.push(...identifiers.types);
     allConstants.push(...identifiers.constants);
 
-    // Track per-file identifiers for directory analysis
     fileIdentifiers.set(file, identifiers);
 
-    // Count export styles
     if (EXPORT_DEFAULT.test(content)) defaultExportCount++;
     if (NAMED_EXPORT.test(content)) namedExportCount++;
 
-    // Count barrel files (>50% of non-empty lines are re-exports)
     if (isBarrelFile(content)) barrelFileCount++;
 
-    // Collect import ordering samples
     if (importOrderingSamples.length < 20) {
       importOrderingSamples.push(content);
     }
@@ -482,7 +448,6 @@ export async function inferConventions(
   const totalIdentifiers = allFunctions.length + allTypes.length + allConstants.length;
   if (totalIdentifiers === 0) return null;
 
-  // Classify naming patterns
   const functionCounts = new Map<string, number>();
   for (const name of allFunctions) {
     const style = classifyName(name);
@@ -501,7 +466,6 @@ export async function inferConventions(
     if (style) constantCounts.set(style, (constantCounts.get(style) ?? 0) + 1);
   }
 
-  // File naming: extract basenames from all internal files
   const fileCounts = new Map<string, number>();
   const fileNamesByFile = new Map<string, string[]>();
   for (const file of internalFiles) {
@@ -515,11 +479,9 @@ export async function inferConventions(
     }
   }
 
-  // Export style
   const totalExportFiles = defaultExportCount + namedExportCount;
   const defaultPercent = totalExportFiles > 0 ? Math.round((defaultExportCount / totalExportFiles) * 100) : 0;
 
-  // Import ordering (majority vote across sampled files, enhanced)
   const orderingCounts = new Map<string, number>();
   let alphabeticalCount = 0;
   let nodeBuiltinSepCount = 0;
@@ -556,10 +518,8 @@ export async function inferConventions(
     files: majorityStyle(fileCounts),
   };
 
-  // Detect per-directory overrides
   const directoryOverrides = detectDirectoryOverrides(fileIdentifiers, fileNamesByFile, globalNaming);
 
-  // Detect naming prefixes
   const namingPrefixes = detectNamingPrefixes(allFunctions);
 
   const conventions: InferredConventions = {
@@ -574,11 +534,8 @@ export async function inferConventions(
     namingPrefixes,
   };
 
-  // Filter out conventions already covered by config constraints
   return filterCoveredConventions(conventions, configConstraints);
 }
-
-// ── Rendering ─────────────────────────────────────────────────────────
 
 /**
  * Render inferred conventions as a markdown section with directives.
@@ -586,7 +543,6 @@ export async function inferConventions(
 export function renderConventionsSection(conventions: InferredConventions): string | null {
   const lines: string[] = [];
 
-  // Naming conventions
   const namingParts: string[] = [];
   if (conventions.naming.functions !== "mixed") {
     namingParts.push(`${conventions.naming.functions} for functions`);
@@ -605,7 +561,6 @@ export function renderConventionsSection(conventions: InferredConventions): stri
     lines.push(`- **Prefer**: ${namingParts.join(", ")}`);
   }
 
-  // Directory overrides
   if (conventions.directoryOverrides && conventions.directoryOverrides.length > 0) {
     for (const override of conventions.directoryOverrides) {
       const overrideParts: string[] = [];
@@ -631,7 +586,6 @@ export function renderConventionsSection(conventions: InferredConventions): stri
     }
   }
 
-  // Naming prefix directives (max 3)
   if (conventions.namingPrefixes && conventions.namingPrefixes.length > 0) {
     const prefixMap: Record<string, string> = {
       use: "hooks",
@@ -689,7 +643,6 @@ export function renderConventionsSection(conventions: InferredConventions): stri
     }
   }
 
-  // Export style
   if (conventions.exportStyle.defaultExportPercent <= 10) {
     lines.push("- **Prefer**: Named exports (no default exports)");
   } else if (conventions.exportStyle.preferNamed) {
@@ -701,7 +654,6 @@ export function renderConventionsSection(conventions: InferredConventions): stri
     lines.push(`- **Style**: Uses barrel files (${conventions.exportStyle.barrelFileCount} index re-export files)`);
   }
 
-  // Import ordering
   if (conventions.importOrdering) {
     lines.push(`- **Style**: Import ordering: ${conventions.importOrdering}`);
   }
@@ -710,8 +662,6 @@ export function renderConventionsSection(conventions: InferredConventions): stri
 
   return "## Inferred Conventions\n\n" + lines.join("\n");
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────
 
 function isConfigFile(filePath: string): boolean {
   const basename = path.basename(filePath);
@@ -746,14 +696,12 @@ function filterCoveredConventions(
 
   const result = { ...conventions };
 
-  // If linter enforces naming conventions, clear naming
   const hasNamingRule = configConstraints.linter?.keyRules.some((r) => r.rule.includes("naming-convention"));
   if (hasNamingRule) {
     result.naming = { functions: "mixed", types: "mixed", constants: "mixed", files: "mixed" };
     result.directoryOverrides = undefined;
   }
 
-  // If linter enforces import ordering, clear import ordering
   const hasImportOrder = configConstraints.linter?.keyRules.some(
     (r) => r.rule.includes("import/order") || r.rule.includes("useSortedImports"),
   );
@@ -761,14 +709,11 @@ function filterCoveredConventions(
     result.importOrdering = undefined;
   }
 
-  // If linter enforces type-only imports, skip that aspect
   const hasTypeImport = configConstraints.linter?.keyRules.some(
     (r) => r.rule.includes("consistent-type-imports") || r.rule.includes("useImportType"),
   );
-  // (No specific convention to clear for this, but noted for future)
   void hasTypeImport;
 
-  // Check if anything meaningful remains
   const hasNaming = Object.values(result.naming).some((v) => v !== "mixed");
   const hasExport = result.exportStyle.defaultExportPercent < 90;
   const hasImport = !!result.importOrdering;

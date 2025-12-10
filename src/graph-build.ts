@@ -1,7 +1,8 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
 import { readFileOr } from "./utils.js";
-import { initTreeSitter, detectBarrelAst } from "./ast-parse.js";
+import { initTreeSitter } from "./parsers/init.js";
+import { detectBarrelAst } from "./parsers/barrel.js";
 import { computeHITS, computeBetweenness } from "./centrality.js";
 import {
   getSourceGlob,
@@ -86,14 +87,12 @@ export async function buildImportGraph(
   const directInDegree = new Map<string, number>();
   const externalImportCounts = new Map<string, number>();
 
-  // Load path aliases for TS/JS projects
   const isJsTs = language === "typescript" || language === "javascript";
   const pathAliases = isJsTs ? await loadTsconfigPaths(rootDir) : [];
   if (pathAliases.length > 0) {
     onProgress?.(`Loaded ${pathAliases.length} path alias(es) from tsconfig`);
   }
 
-  // Load language-specific resolution context
   const resolveCtx: ResolveContext = {};
   if (language === "go") {
     resolveCtx.goModulePath = await loadGoModule(rootDir);
@@ -110,7 +109,6 @@ export async function buildImportGraph(
     }
   }
 
-  // Resolve barrel file re-exports for JS/TS projects
   let barrelMap: BarrelExportMap = { namedExports: new Map(), starExports: new Map() };
   if (isJsTs) {
     barrelMap = await resolveBarrelFiles(rootDir, fileSet);
@@ -123,7 +121,6 @@ export async function buildImportGraph(
   // Build set of barrel file paths so we can exclude their outgoing edges from directInDegree
   const barrelFilePaths = new Set([...barrelMap.namedExports.keys(), ...barrelMap.starExports.keys()]);
 
-  // Init in-degree
   for (const file of files) {
     inDegree.set(file, 0);
     directInDegree.set(file, 0);
@@ -167,7 +164,6 @@ export async function buildImportGraph(
               }
             }
 
-            // Create edges to resolved source files (barrel-routed)
             for (const [source, names] of routedNames) {
               edges.push({
                 from: file,
@@ -221,7 +217,6 @@ export async function buildImportGraph(
               inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
             }
           } else {
-            // Non-barrel import: direct edge
             edges.push({
               from: file,
               to: resolved,
@@ -255,7 +250,6 @@ export async function buildImportGraph(
           externalImportCounts.set(pkgName, (externalImportCounts.get(pkgName) ?? 0) + 1);
         }
       } else {
-        // Try path alias resolution before treating as external
         const aliasResolved = pathAliases.length > 0 ? resolveAliasImport(raw.specifier, pathAliases, fileSet) : null;
 
         if (aliasResolved) {
@@ -273,8 +267,6 @@ export async function buildImportGraph(
             directInDegree.set(aliasResolved, (directInDegree.get(aliasResolved) ?? 0) + 1);
           }
         } else {
-          // External package
-          // Normalize specifier to package name (e.g. @scope/pkg/path -> @scope/pkg)
           const pkgName = getPackageName(raw.specifier, language);
           edges.push({
             from: file,
@@ -291,7 +283,6 @@ export async function buildImportGraph(
     }
   }
 
-  // Detect barrel files for HITS accuracy correction
   let detectedBarrels = new Set<string>();
   if (isJsTs) {
     detectedBarrels = await detectBarrelFiles(rootDir, fileSet);

@@ -7,7 +7,10 @@ import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
 import { buildGraphWithCache } from "./cache.js";
 import { buildImportGraph, mergeGraph } from "./graph-build.js";
 import { findCircularDeps } from "./graph-cycles.js";
-import { getHubFiles, detectArchitecturalLayers, computeInstability, detectCommunities } from "./graph-analysis.js";
+import { getHubFiles } from "./graph/hub-files.js";
+import { detectArchitecturalLayers } from "./graph/layers.js";
+import { computeInstability } from "./graph/instability.js";
+import { detectCommunities } from "./graph/communities.js";
 import { analyzeGitActivity } from "./git-analysis.js";
 import { loadConfig } from "./config.js";
 import { buildTestMapping } from "./test-map.js";
@@ -27,7 +30,6 @@ export async function runDiffMode(
     if (verbose) p.log.info(t.muted(msg));
   };
 
-  // 1. Get changed files from git
   let changedFiles: string[];
   let diffStat: Map<string, { added: number; removed: number }> | null = null;
   try {
@@ -39,7 +41,6 @@ export async function runDiffMode(
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
 
-    // Also include staged + unstaged changes if no ref
     if (!ref) {
       const staged = execSync("git diff --name-only --cached", {
         cwd: rootDir,
@@ -52,13 +53,11 @@ export async function runDiffMode(
 
     changedFiles = [...new Set(output.split("\n").filter(Boolean))];
 
-    // Filter to specific files if provided
     if (filterFiles.length > 0) {
       const filterSet = new Set(filterFiles.map((f) => path.normalize(f)));
       changedFiles = changedFiles.filter((f) => filterSet.has(path.normalize(f)));
     }
 
-    // Get line change counts
     try {
       const statCmd = ref ? `git diff --numstat ${ref}...HEAD` : "git diff --numstat HEAD";
       let statOutput = execSync(statCmd, { cwd: rootDir, encoding: "utf-8", timeout: 10000 }).trim();
@@ -110,12 +109,10 @@ export async function runDiffMode(
 
   p.log.step(t.text(`${changedFiles.length} changed file${changedFiles.length === 1 ? "" : "s"}`));
 
-  // 2. Detect context and build import graph
   const shimmer = startShimmer("Building import graph...");
   const detected = await detectContext(rootDir, verboseLog);
   const graph = await buildGraphWithCache(rootDir, detected.language, verboseLog);
 
-  // Merge secondary language graphs
   if (detected.secondaryLanguages) {
     for (const secLang of detected.secondaryLanguages) {
       const secGraph = await buildImportGraph(rootDir, secLang, verboseLog);
@@ -123,19 +120,15 @@ export async function runDiffMode(
     }
   }
 
-  // Enrich frameworks
   detected.frameworks = enrichFrameworksWithUsage(detected.frameworks, graph.externalImportCounts);
 
   shimmer.stop();
 
-  // 3. Expand to 2-hop neighbors in the import graph
   const changedSet = new Set(changedFiles);
   const { hop1: hop1Set, hop2: hop2Set } = computeNeighborhood(changedSet, graph.edges);
 
-  // Combined neighbor set for backward-compatible usage
   const neighborSet = new Set([...hop1Set, ...hop2Set]);
 
-  // 4. Find test files using test mapping
   const testMapping = buildTestMapping(graph, detected);
   const testFiles = new Set<string>();
   for (const f of changedSet) {
@@ -144,7 +137,6 @@ export async function runDiffMode(
       for (const tf of tests) testFiles.add(tf);
     }
   }
-  // Also find tests via direct imports (fallback)
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
     if (changedSet.has(edge.to) && isDiffTestFile(edge.from)) {
@@ -152,7 +144,6 @@ export async function runDiffMode(
     }
   }
 
-  // 5. Run structural analysis for risk annotations
   const diffConfig = await loadConfig(rootDir);
   const customLayers = diffConfig?.layers;
   const allHubFiles = getHubFiles(graph);
@@ -163,7 +154,6 @@ export async function runDiffMode(
   const communities = detectCommunities(graph);
   const gitActivity = detected.isGitRepo ? analyzeGitActivity(rootDir, verboseLog) : null;
 
-  // Scope analysis to the neighborhood for focused output
   const relevantHub = scopeHubFiles(allHubFiles, changedSet, hop1Set, hop2Set);
   const relevantCycles = scopeCircularDeps(allCircularDeps, changedSet, hop1Set);
 
@@ -177,7 +167,6 @@ export async function runDiffMode(
     communities,
   };
 
-  // 6. Load snapshot entries for changed + neighbor files
   const snapshot = await generateSnapshot(detected, [], graph);
   const entryIndex = new Map<string, typeof snapshot.entries>();
   if (snapshot) {
@@ -196,12 +185,10 @@ export async function runDiffMode(
     ),
   );
 
-  // 7. Build markdown output
   const sections: string[] = [];
   const isSingleFile = changedFiles.length === 1;
 
   if (isSingleFile) {
-    // Compact single-file format: inline description instead of a table
     const f = changedFiles[0];
     const hub = hubFileMap.get(f);
     const importedBy = graph.inDegree.get(f) ?? 0;
@@ -223,7 +210,6 @@ export async function runDiffMode(
       sections.push("");
     }
   } else {
-    // Multi-file format: tables
     sections.push("# Diff Context");
     sections.push("");
     sections.push(
@@ -256,7 +242,6 @@ export async function runDiffMode(
     }
     sections.push("");
 
-    // Per-file risk annotations
     const riskNotes: string[] = [];
     for (const f of changedFiles) {
       const hub = hubFileMap.get(f);
@@ -276,7 +261,6 @@ export async function runDiffMode(
     }
   }
 
-  // Temporal coupling suggestions (>= 50% confidence, not in current diff)
   if (gitActivity?.changeCoupling) {
     const suggestions: string[] = [];
     for (const f of changedFiles) {
@@ -307,7 +291,6 @@ export async function runDiffMode(
     }
   }
 
-  // Cycle context: cycles involving changed or hop1 files
   const cycleNotes: string[] = [];
   for (const dep of relevantCycles) {
     const chainStr = dep.chain.map((f) => `\`${f}\``).join(" -> ");
@@ -328,7 +311,6 @@ export async function runDiffMode(
     sections.push("");
   }
 
-  // Neighbor files (hop1 and hop2)
   if (hop1Set.size > 0 || hop2Set.size > 0) {
     sections.push("## Neighbors");
     sections.push("");
@@ -363,7 +345,6 @@ export async function runDiffMode(
     }
   }
 
-  // Test files
   if (testFiles.size > 0) {
     sections.push("## Related Tests");
     sections.push("");
@@ -375,7 +356,6 @@ export async function runDiffMode(
     sections.push("");
   }
 
-  // Snapshot entries for changed files
   const filesWithEntries = [...changedSet, ...neighborSet]
     .filter((f) => entryIndex.has(f))
     .sort((a, b) => (graph.centrality.get(b) ?? 0) - (graph.centrality.get(a) ?? 0));
@@ -399,7 +379,6 @@ export async function runDiffMode(
     sections.push("");
   }
 
-  // Scoped directives: filter buildDirectives to only include ones mentioning changed files
   const allDirectives = buildDirectives(analysis, detected);
   const scopedDirectives = allDirectives.filter((d) => changedFiles.some((f) => d.includes(f)));
   if (scopedDirectives.length > 0) {
@@ -421,7 +400,6 @@ export async function runDiffMode(
 
   const content = sections.join("\n");
 
-  // 8. Output: stdout by default, file if --diff-file specified
   if (outputFile) {
     const outPath = path.resolve(rootDir, outputFile);
     await writeFileSafe(outPath, content);
@@ -442,8 +420,6 @@ function isDiffTestFile(filePath: string): boolean {
     /\/tests\//.test(filePath)
   );
 }
-
-// ── Exported helpers for testing diff-mode logic ──────────────────────
 
 /**
  * Compute 2-hop neighborhoods from a set of changed files in an import graph.

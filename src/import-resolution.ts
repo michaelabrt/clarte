@@ -1,14 +1,12 @@
 import path from "node:path";
 import { IGNORE_GLOBS } from "./ignore-patterns.js";
 import { readFileOr, readJsonFile } from "./utils.js";
-import { parseImportsAst, resolveBarrelExportsAst } from "./ast-parse.js";
+import { parseImportsAst } from "./parsers/parse-imports.js";
+import { resolveBarrelExportsAst } from "./parsers/barrel.js";
 import type { Language } from "./types.js";
 
-// Re-export RawImport from ast-parse for backward compatibility
-export type { RawImport } from "./ast-parse.js";
-type RawImport = import("./ast-parse.js").RawImport;
-
-// ── File extensions to try when resolving relative imports ────────────
+export type { RawImport } from "./parsers/types.js";
+type RawImport = import("./parsers/types.js").RawImport;
 
 /**
  * Resolution priority: .ts > .tsx > .js > .jsx > .mjs
@@ -20,8 +18,6 @@ export const INDEX_FILES = JS_EXTENSIONS.map((e) => `/index${e}`);
 
 /** Ignore patterns matching buildImportGraph in graph.ts */
 export const SOURCE_IGNORE = IGNORE_GLOBS;
-
-// ── tsconfig path alias resolution ─────────────────────────────────────
 
 export interface PathAlias {
   /** The alias prefix (e.g. "@/", "@components/") */
@@ -58,12 +54,10 @@ export async function loadTsconfigPaths(rootDir: string): Promise<PathAlias[]> {
     const ext = config.extends as string | undefined;
     if (!ext) break;
 
-    // Resolve relative extends paths
     configPath = path.resolve(path.dirname(configPath), ext);
     if (!configPath.endsWith(".json")) configPath += ".json";
   }
 
-  // Convert to PathAlias array
   const aliases: PathAlias[] = [];
   for (const [pattern, mappings] of Object.entries(paths)) {
     if (!mappings || mappings.length === 0) continue;
@@ -90,7 +84,6 @@ export function resolveAliasImport(specifier: string, aliases: PathAlias[], allF
     if (specifier.startsWith(alias.prefix)) {
       const remainder = specifier.slice(alias.prefix.length);
       const raw = (alias.replacement + remainder).replace(/\\/g, "/");
-      // Try the same resolution as relative imports
       const stripped = raw.replace(/\.(jsx?|mjs)$/, "");
       const bases = stripped !== raw ? [raw, stripped] : [raw];
 
@@ -107,8 +100,6 @@ export function resolveAliasImport(specifier: string, aliases: PathAlias[], allF
   }
   return null;
 }
-
-// ── Language-specific source file globs ───────────────────────────────
 
 export function getSourceGlob(lang: Language): string[] {
   switch (lang) {
@@ -127,8 +118,6 @@ export function getSourceGlob(lang: Language): string[] {
       return ["**/*.{ts,tsx,js,jsx,py,go,rs,java}"];
   }
 }
-
-// ── Parse imports from a single file (delegated to ast-parse.ts) ─────
 
 /** Re-export individual language parsers for backward compatibility with tests */
 export function parseJsImports(content: string): RawImport[] {
@@ -154,8 +143,6 @@ export function parseJavaImports(content: string): RawImport[] {
 export function parseImports(content: string, lang: Language, filePath?: string): RawImport[] {
   return parseImportsAst(content, lang, filePath);
 }
-
-// ── Resolve relative imports to file paths ────────────────────────────
 
 export function isRelativeSpecifier(spec: string, lang: Language): boolean {
   if (lang === "typescript" || lang === "javascript") {
@@ -251,7 +238,6 @@ function resolveGoImport(specifier: string, goModulePath: string, allFiles: Set<
 function resolvePythonImport(specifier: string, fromFile: string, allFiles: Set<string>): string | null {
   if (!specifier.startsWith(".")) return null;
   const dir = path.dirname(fromFile);
-  // Count leading dots
   let dots = 0;
   while (specifier[dots] === ".") dots++;
   const modulePath = specifier.slice(dots).replace(/\./g, "/");
@@ -261,9 +247,7 @@ function resolvePythonImport(specifier: string, fromFile: string, allFiles: Set<
   }
   const base = modulePath ? path.join(baseDir, modulePath).replace(/\\/g, "/") : baseDir;
 
-  // Try as file
   if (allFiles.has(base + ".py")) return base + ".py";
-  // Try as package
   if (allFiles.has(base + "/__init__.py")) return base + "/__init__.py";
 
   return null;
@@ -440,8 +424,6 @@ export function resolveImport(
   }
 }
 
-// ── Barrel file (re-export) resolution ────────────────────────────────
-
 /** Barrel file export mapping: tracks which names come from which source files */
 export interface BarrelExportMap {
   /** barrel file -> { exportedName -> source file } */
@@ -526,7 +508,6 @@ export function getPackageName(specifier: string, lang?: Language): string {
     const idx = specifier.indexOf("::");
     return idx >= 0 ? specifier.slice(0, idx) : specifier;
   }
-  // JS/TS default
   if (specifier.startsWith("@")) {
     const parts = specifier.split("/");
     return parts.slice(0, 2).join("/");
