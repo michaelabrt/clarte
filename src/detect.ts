@@ -1,20 +1,19 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parse as parseToml } from "smol-toml";
-import { glob } from "tinyglobby";
 import type {
   DetectedContext,
-  DetectedFramework,
   IDETarget,
-  Language,
-  MonorepoInfo,
-  MonorepoPackage,
   ProgressCallback,
 } from "./types.js";
 import { fileExists, readFileOr, readJsonFile, readDirSafe } from "./utils.js";
+import { FRAMEWORK_MAP, PYTHON_FRAMEWORK_MAP, extractMavenVersion } from "./detect-frameworks.js";
+import { detectMonorepo, parsePyprojectDeps } from "./detect-monorepo.js";
+import { getExtensionsForLanguage, detectLanguageBreakdown } from "./detect-languages.js";
 
-/** Minimum fraction of source files for a language to qualify as secondary (15%) */
-export const SECONDARY_LANGUAGE_THRESHOLD = 0.15;
+// Re-export for consumers that import from detect.ts
+export { enrichFrameworksWithUsage } from "./detect-frameworks.js";
+export { SECONDARY_LANGUAGE_THRESHOLD } from "./detect-languages.js";
 
 /** Well-known directories to look for */
 const KNOWN_DIRS = [
@@ -40,66 +39,6 @@ const KNOWN_DIRS = [
   "docs",
   "types",
 ];
-
-/** Framework detection rules: dependency name -> framework info */
-const FRAMEWORK_MAP: Record<string, string> = {
-  expo: "Expo",
-  "react-native": "React Native",
-  next: "Next.js",
-  react: "React",
-  vue: "Vue",
-  nuxt: "Nuxt",
-  svelte: "Svelte",
-  "@sveltejs/kit": "SvelteKit",
-  angular: "Angular",
-  "@angular/core": "Angular",
-  express: "Express",
-  fastify: "Fastify",
-  hono: "Hono",
-  "nestjs/core": "NestJS",
-  "@nestjs/core": "NestJS",
-  electron: "Electron",
-  tauri: "Tauri",
-  zustand: "Zustand",
-  redux: "Redux",
-  "@reduxjs/toolkit": "Redux Toolkit",
-  pinia: "Pinia",
-  mobx: "MobX",
-  jotai: "Jotai",
-  recoil: "Recoil",
-  jest: "Jest",
-  vitest: "Vitest",
-  playwright: "Playwright",
-  cypress: "Cypress",
-  tailwindcss: "Tailwind CSS",
-  nativewind: "NativeWind",
-  "styled-components": "styled-components",
-  "@emotion/react": "Emotion",
-  prisma: "Prisma",
-  "@prisma/client": "Prisma",
-  drizzle: "Drizzle",
-  "drizzle-orm": "Drizzle",
-  typeorm: "TypeORM",
-  mongoose: "Mongoose",
-  "@remix-run/node": "Remix",
-  "@remix-run/react": "Remix",
-  astro: "Astro",
-  "@trpc/server": "tRPC",
-  "@trpc/client": "tRPC",
-  "@supabase/supabase-js": "Supabase",
-};
-
-/** Python framework detection */
-const PYTHON_FRAMEWORK_MAP: Record<string, string> = {
-  django: "Django",
-  flask: "Flask",
-  fastapi: "FastAPI",
-  starlette: "Starlette",
-  sqlalchemy: "SQLAlchemy",
-  pydantic: "Pydantic",
-  pytest: "pytest",
-  celery: "Celery",
-};
 
 /**
  * Auto-detect the tech stack of a project at the given root directory.
@@ -252,7 +191,6 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
 
     const hasRuffConfig = topEntries.includes("ruff.toml") || topEntries.includes(".ruff.toml");
     if (!hasRuffConfig && topEntries.includes("pyproject.toml")) {
-      // Check for [tool.ruff] section in pyproject.toml
       const pyContent = await readFileOr(path.join(rootDir, "pyproject.toml"));
       if (pyContent?.includes("[tool.ruff]")) {
         ctx.linter = "ruff";
@@ -261,8 +199,7 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
       ctx.linter = "ruff";
     }
 
-    // Detect additional Python tools (Black, isort, mypy, flake8).
-    // These don't fit the Linter enum, so add them as DetectedFramework entries.
+    // Detect additional Python tools (Black, isort, mypy, flake8)
     const pyContent = hasPyproject ? await readFileOr(path.join(rootDir, "pyproject.toml")) : null;
     const setupCfg = await readFileOr(path.join(rootDir, "setup.cfg"));
 
@@ -295,7 +232,9 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
         ctx.frameworks.push({ name: "flake8" });
       }
     }
-  }  if (pomXmlContent) {
+  }
+
+  if (pomXmlContent) {
     if (ctx.language === "other") ctx.language = "java";
     const mavenVersion = extractMavenVersion(pomXmlContent);
     ctx.frameworks.push({ name: "Maven", version: mavenVersion });
@@ -309,7 +248,9 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     const lang = ctx.hasTypeScript ? "TypeScript" : ctx.language !== "other" ? ctx.language : "";
     const parts = [lang, fwNames].filter(Boolean);
     onProgress?.(`Detected: ${parts.join(" + ")}`);
-  }  onProgress?.("Scanning directories...");
+  }
+
+  onProgress?.("Scanning directories...");
 
   for (const dir of KNOWN_DIRS) {
     if (topEntries.includes(dir)) {
@@ -324,13 +265,12 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
         ctx.directories.push(`src/${entry}`);
       }
     }
-  }  // detectLanguageBreakdown scans all source extensions; we reuse its file list
-  // to derive the primary language count, avoiding a second glob.
+  }
+
   const allSourceFiles = await detectLanguageBreakdown(ctx, rootDir);
 
   try {
     if (allSourceFiles.length > 0) {
-      // Filter to primary language extensions for source file count
       const extensions = new Set(getExtensionsForLanguage(ctx.language));
       const sourceFiles = allSourceFiles.filter((f) => {
         const ext = path.extname(f).toLowerCase();
@@ -351,7 +291,11 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
     }
   } catch (err: unknown) {
     warnings.push(`Source file counting failed: ${err instanceof Error ? err.message : String(err)}`);
-  }  ctx.testFramework = detectTestFramework(ctx.dependencies);  ctx.ciProvider = await detectCiProvider(rootDir, topEntries);  ctx.monorepo = await detectMonorepo(rootDir, topEntries);
+  }
+
+  ctx.testFramework = detectTestFramework(ctx.dependencies);
+  ctx.ciProvider = await detectCiProvider(rootDir, topEntries);
+  ctx.monorepo = await detectMonorepo(rootDir, topEntries);
 
   if (warnings.length > 0) {
     ctx.warnings = warnings;
@@ -405,351 +349,8 @@ async function detectCiProvider(rootDir: string, topEntries: string[]): Promise<
   return undefined;
 }
 
-function getExtensionsForLanguage(lang: Language): string[] {
-  switch (lang) {
-    case "typescript":
-      return [".ts", ".tsx"];
-    case "javascript":
-      return [".js", ".jsx", ".mjs"];
-    case "python":
-      return [".py"];
-    case "go":
-      return [".go"];
-    case "rust":
-      return [".rs"];
-    case "java":
-      return [".java"];
-    default:
-      return [".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs"];
-  }
-}
-
-/** Extension to language mapping for secondary language detection */
-const EXT_TO_LANGUAGE: Record<string, Language> = {
-  ".ts": "typescript",
-  ".tsx": "typescript",
-  ".js": "javascript",
-  ".jsx": "javascript",
-  ".mjs": "javascript",
-  ".py": "python",
-  ".go": "go",
-  ".rs": "rust",
-  ".java": "java",
-};
-
-/**
- * Detect secondary languages in the project.
- * Populates `ctx.languageBreakdown` and `ctx.secondaryLanguages`.
- * Returns the full list of source files found (reusable for primary language counting).
- */
-async function detectLanguageBreakdown(ctx: DetectedContext, rootDir: string): Promise<string[]> {
-  // Only scan if we have a primary language that isn't "other"
-  if (ctx.language === "other") return [];
-
-  try {
-    const allSourceFiles = await glob(
-      ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.py", "**/*.go", "**/*.rs", "**/*.java"],
-      {
-        cwd: rootDir,
-        ignore: [
-          "**/node_modules/**",
-          "**/dist/**",
-          "**/build/**",
-          "**/.next/**",
-          "**/target/**",
-          "**/vendor/**",
-          "**/__pycache__/**",
-          "**/venv/**",
-          "**/.venv/**",
-          "**/.Trash/**",
-          "**/Library/**",
-          "**/.git/**",
-        ],
-      },
-    );
-
-    if (allSourceFiles.length === 0) return [];
-
-    const counts: Record<string, number> = {};
-    for (const file of allSourceFiles) {
-      const ext = path.extname(file).toLowerCase();
-      const lang = EXT_TO_LANGUAGE[ext];
-      if (lang) {
-        counts[lang] = (counts[lang] ?? 0) + 1;
-      }
-    }
-
-    // Merge TS and JS counts under the primary if applicable
-    if (ctx.language === "typescript" && counts["javascript"]) {
-      counts["typescript"] = (counts["typescript"] ?? 0) + counts["javascript"];
-      delete counts["javascript"];
-    }
-
-    ctx.languageBreakdown = counts;
-
-    const totalFiles = allSourceFiles.length;
-    const threshold = totalFiles * SECONDARY_LANGUAGE_THRESHOLD;
-    const secondary: Language[] = [];
-
-    for (const [lang, count] of Object.entries(counts)) {
-      if (lang !== ctx.language && count >= threshold) {
-        secondary.push(lang as Language);
-      }
-    }
-
-    if (secondary.length > 0) {
-      ctx.secondaryLanguages = secondary;
-    }
-
-    return allSourceFiles;
-  } catch {
-    // Non-critical
-    return [];
-  }
-}
-
-/**
- * Detect monorepo tooling and enumerate packages.
- */
-async function detectMonorepo(rootDir: string, topEntries: string[]): Promise<MonorepoInfo | null> {
-  const hasTurboJson = topEntries.includes("turbo.json");
-  const hasNxJson = topEntries.includes("nx.json");
-  const hasPnpmWorkspace = topEntries.includes("pnpm-workspace.yaml");
-
-  let type: MonorepoInfo["type"] | null = null;
-  if (hasTurboJson) type = "turborepo";
-  else if (hasNxJson) type = "nx";
-  else if (hasPnpmWorkspace) type = "pnpm-workspaces";
-
-  if (!type) {
-    const pkg = await readJsonFile(path.join(rootDir, "package.json"));
-    if (pkg) {
-      const workspaces = pkg.workspaces;
-      const hasWorkspaces =
-        Array.isArray(workspaces) ||
-        (workspaces &&
-          typeof workspaces === "object" &&
-          Array.isArray((workspaces as Record<string, unknown>).packages));
-      if (hasWorkspaces) type = "npm-workspaces";
-    }
-  }
-
-  if (!type) return null;
-
-  let packageGlobs: string[] = [];
-
-  if (hasPnpmWorkspace || hasTurboJson) {
-    // pnpm-workspace.yaml (also used by Turborepo)
-    const yamlContent = await readFileOr(path.join(rootDir, "pnpm-workspace.yaml"));
-    if (yamlContent) {
-      // Simple YAML parse: extract lines under "packages:"
-      const lines = yamlContent.split("\n");
-      let inPackages = false;
-      for (const line of lines) {
-        if (/^packages:/i.test(line.trim())) {
-          inPackages = true;
-          continue;
-        }
-        if (inPackages) {
-          const match = line.match(/^\s+-\s+['"]?([^'"]+)['"]?/);
-          if (match) {
-            packageGlobs.push(match[1].trim());
-          } else if (line.trim() && !line.startsWith(" ") && !line.startsWith("\t")) {
-            break; // new top-level key
-          }
-        }
-      }
-    }
-  }
-
-  if (packageGlobs.length === 0 && hasNxJson) {
-    // Nx: check for packages/ or libs/ directories
-    for (const dir of ["packages", "libs", "apps"]) {
-      if (topEntries.includes(dir)) {
-        packageGlobs.push(`${dir}/*`);
-      }
-    }
-  }
-
-  if (packageGlobs.length === 0) {
-    const pkg = await readJsonFile(path.join(rootDir, "package.json"));
-    if (pkg) {
-      const workspaces = pkg.workspaces;
-      if (Array.isArray(workspaces)) {
-        packageGlobs = workspaces as string[];
-      } else if (
-        workspaces &&
-        typeof workspaces === "object" &&
-        Array.isArray((workspaces as Record<string, unknown>).packages)
-      ) {
-        packageGlobs = (workspaces as Record<string, unknown>).packages as string[];
-      }
-    }
-  }
-
-  if (packageGlobs.length === 0) return null;
-
-  const resolvedDirs = await glob(packageGlobs, {
-    cwd: rootDir,
-    onlyDirectories: true,
-    ignore: ["**/node_modules/**"],
-    absolute: false,
-  });
-
-  const packages: MonorepoPackage[] = [];
-
-  for (const dir of resolvedDirs) {
-    const pkgJsonPath = path.join(rootDir, dir, "package.json");
-    const pkgJson = await readJsonFile(pkgJsonPath);
-    if (!pkgJson) continue;
-
-    const deps = {
-      ...(pkgJson.dependencies as Record<string, string> | undefined),
-      ...(pkgJson.devDependencies as Record<string, string> | undefined),
-    };
-    const depNames = Object.keys(deps);
-
-    const frameworks: DetectedFramework[] = [];
-    const seen = new Set<string>();
-    for (const dep of depNames) {
-      const framework = FRAMEWORK_MAP[dep];
-      if (framework && !seen.has(framework)) {
-        seen.add(framework);
-        const version = deps[dep]?.replace(/^[\^~>=<\s]+/, "");
-        frameworks.push({ name: framework, version });
-      }
-    }
-
-    packages.push({
-      name: (pkgJson.name as string) ?? path.basename(dir),
-      path: dir,
-      dependencies: depNames,
-      frameworks,
-    });
-  }
-
-  if (packages.length === 0) return null;
-
-  return { type, packages };
-}
-
-/**
- * Extract dependency names from a pyproject.toml file using smol-toml.
- * Reads [project.dependencies], [tool.poetry.dependencies],
- * and [project.optional-dependencies.*] sections.
- */
-async function parsePyprojectDeps(filePath: string, warnings?: string[]): Promise<string[]> {
-  const content = await readFileOr(filePath);
-  if (!content) return [];
-
-  try {
-    const doc = parseToml(content) as Record<string, unknown>;
-    const deps: string[] = [];
-
-    // PEP 621: [project.dependencies] array of requirement strings
-    const project = doc.project as Record<string, unknown> | undefined;
-    if (project) {
-      const projDeps = project.dependencies;
-      if (Array.isArray(projDeps)) {
-        for (const dep of projDeps) {
-          if (typeof dep === "string") {
-            const name = dep
-              .split(/[=<>!~;[]/)[0]
-              .trim()
-              .toLowerCase();
-            if (name) deps.push(name);
-          }
-        }
-      }
-
-      // PEP 621: [project.optional-dependencies.*]
-      const optDeps = project["optional-dependencies"] as Record<string, unknown> | undefined;
-      if (optDeps && typeof optDeps === "object") {
-        for (const group of Object.values(optDeps)) {
-          if (Array.isArray(group)) {
-            for (const dep of group) {
-              if (typeof dep === "string") {
-                const name = dep
-                  .split(/[=<>!~;[]/)[0]
-                  .trim()
-                  .toLowerCase();
-                if (name) deps.push(name);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // Poetry: [tool.poetry.dependencies]
-    const tool = doc.tool as Record<string, unknown> | undefined;
-    const poetry = tool?.poetry as Record<string, unknown> | undefined;
-    const poetryDeps = poetry?.dependencies as Record<string, unknown> | undefined;
-    if (poetryDeps && typeof poetryDeps === "object") {
-      for (const key of Object.keys(poetryDeps)) {
-        const name = key.toLowerCase();
-        if (name !== "python") deps.push(name);
-      }
-    }
-
-    return deps;
-  } catch (err: unknown) {
-    warnings?.push(`Failed to parse ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
-    return [];
-  }
-}
-
-/**
- * Extract Maven version from pom.xml content.
- * Tries project-level version first, falls back to parent version.
- */
-function extractMavenVersion(pomXml: string): string | undefined {
-  // Strip <parent>...</parent> to find the project's own <version>
-  const withoutParent = pomXml.replace(/<parent>[\s\S]*?<\/parent>/, "");
-  const projectMatch = withoutParent.match(/<version>([^<]+)<\/version>/);
-  if (projectMatch) return projectMatch[1];
-
-  // Fall back to parent version (common in multi-module Maven projects)
-  const parentMatch = pomXml.match(/<parent>[\s\S]*?<version>([^<]+)<\/version>[\s\S]*?<\/parent>/);
-  return parentMatch?.[1] ?? undefined;
-}
-
-/**
- * Build a reverse map: framework display name -> dependency names.
- */
-function buildReverseFrameworkMap(): Map<string, string[]> {
-  const reverse = new Map<string, string[]>();
-  for (const [dep, name] of Object.entries(FRAMEWORK_MAP)) {
-    const deps = reverse.get(name) ?? [];
-    deps.push(dep);
-    reverse.set(name, deps);
-  }
-  return reverse;
-}
-
-/**
- * Enrich detected frameworks with actual import counts from the import graph.
- * Filters out frameworks with 0 imports (detected in package.json but never used).
- */
-export function enrichFrameworksWithUsage(
-  frameworks: DetectedFramework[],
-  externalImportCounts: Map<string, number>,
-): DetectedFramework[] {
-  const reverseMap = buildReverseFrameworkMap();
-
-  return frameworks.map((fw) => {
-    const depNames = reverseMap.get(fw.name) ?? [];
-    let totalCount = 0;
-    for (const dep of depNames) {
-      totalCount += externalImportCounts.get(dep) ?? 0;
-    }
-    return { ...fw, importCount: totalCount };
-  });
-}
-
 /**
  * Auto-detect which AI coding tools are in use by checking for filesystem markers.
- * Falls back to ["claude"] if nothing is detected.
  */
 export async function detectIDEs(rootDir: string): Promise<IDETarget[]> {
   const markers: Array<{ path: string; ide: IDETarget }> = [
@@ -771,8 +372,6 @@ export async function detectIDEs(rootDir: string): Promise<IDETarget[]> {
 
 /**
  * Extract a project description from manifest files or README.
- * Checks package.json, Cargo.toml, pyproject.toml, then README.md.
- * Returns null if no description is found.
  */
 export async function detectProjectDescription(rootDir: string): Promise<string | null> {
   const pkg = await readJsonFile(path.join(rootDir, "package.json"));
@@ -806,7 +405,6 @@ export async function detectProjectDescription(rootDir: string): Promise<string 
     }
   }
 
-  // 4. README.md: first non-heading, non-badge paragraph
   const readme = await readFileOr(path.join(rootDir, "README.md"));
   if (readme) {
     const lines = readme.split("\n");
