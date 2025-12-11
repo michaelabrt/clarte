@@ -124,7 +124,6 @@ export async function renderArchitectureSections(
     sections.push({ id: "package-dependencies", priority: 4, content: pkgContent, tokens: estimateTokens(pkgContent) });
   }
 
-  // Layer Consistency (full-only: migrated to code-health skill)
   const lcSection = renderLayerConsistencySection(analysis);
   if (lcSection) sections.push(lcSection);
 
@@ -154,7 +153,7 @@ export function renderLayerConsistencySection(analysis: ContextAnalysis): Contex
     lcLines.push(`- ... and ${lc.violations.length - 5} more`);
   }
   const lcContent = lcLines.join("\n");
-  return { id: "layer-consistency", priority: 50 /* full-only: migrated to code-health skill */, content: lcContent, tokens: estimateTokens(lcContent) };
+  return { id: "layer-consistency", priority: 10, content: lcContent, tokens: estimateTokens(lcContent) };
 }
 
 function renderArchitectureDiagram(layers: ArchitecturalLayer[], layerEdges: LayerEdge[]): string {

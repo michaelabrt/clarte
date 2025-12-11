@@ -57,7 +57,7 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
       deadLines.push(`- ... and ${analysis.deadFiles.length - 15} more`);
     }
     const deadContent = deadLines.join("\n");
-    sections.push({ id: "dead-files", priority: 50 /* full-only: migrated to code-health skill */, content: deadContent, tokens: estimateTokens(deadContent) });
+    sections.push({ id: "dead-files", priority: 9, content: deadContent, tokens: estimateTokens(deadContent) });
   }
 
   if (analysis.crossCuttingFiles && analysis.crossCuttingFiles.length > 0) {
@@ -93,7 +93,7 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
       );
     }
     const cpContent = cpLines.join("\n");
-    sections.push({ id: "chokepoints", priority: 50 /* full-only: migrated to code-health skill */, content: cpContent, tokens: estimateTokens(cpContent) });
+    sections.push({ id: "chokepoints", priority: 9, content: cpContent, tokens: estimateTokens(cpContent) });
   }
 
   if (analysis.tightCouplings && analysis.tightCouplings.length > 0) {
@@ -108,7 +108,7 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
       tcLines.push(`- \`${tc.from}\` imports ${tc.importedNames} names from \`${tc.to}\``);
     }
     const tcContent = tcLines.join("\n");
-    sections.push({ id: "tight-coupling", priority: 50 /* full-only: migrated to code-health skill */, content: tcContent, tokens: estimateTokens(tcContent) });
+    sections.push({ id: "tight-coupling", priority: 10, content: tcContent, tokens: estimateTokens(tcContent) });
   }
 
   if (analysis.structuralMismatches && analysis.structuralMismatches.length > 0) {
@@ -128,7 +128,7 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
       );
     }
     const smContent = smLines.join("\n");
-    sections.push({ id: "hidden-coupling", priority: 50 /* full-only: migrated to code-health skill */, content: smContent, tokens: estimateTokens(smContent) });
+    sections.push({ id: "hidden-coupling", priority: 10, content: smContent, tokens: estimateTokens(smContent) });
   }
 
   return sections;

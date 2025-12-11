@@ -32,7 +32,7 @@ export function renderGitActivitySections(analysis: ContextAnalysis): ContextSec
       );
     }
     const ccContent = ccLines.join("\n");
-    sections.push({ id: "change-coupling", priority: 50 /* full-only: migrated to code-health skill */, content: ccContent, tokens: estimateTokens(ccContent) });
+    sections.push({ id: "change-coupling", priority: 7, content: ccContent, tokens: estimateTokens(ccContent) });
   }
 
   return sections;
