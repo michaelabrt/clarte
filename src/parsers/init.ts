@@ -37,12 +37,20 @@ export function initTreeSitter(): Promise<void> {
       ["java", "tree-sitter-java.wasm"],
     ];
 
-    await Promise.all(
-      langFiles.map(async ([name, file]) => {
-        const lang = await Language.load(path.join(wasmDir, file));
-        languages.set(name, lang);
-      }),
-    );
+    try {
+      await Promise.all(
+        langFiles.map(async ([name, file]) => {
+          const lang = await Language.load(path.join(wasmDir, file));
+          languages.set(name, lang);
+        }),
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Failed to load tree-sitter WASM grammars from ${wasmDir}: ${msg}. ` +
+          "Run 'npm install' or 'npm run build' to restore missing files.",
+      );
+    }
   })();
 
   return initPromise;

@@ -72,6 +72,10 @@ export async function initPreCommitHook(rootDir: string): Promise<void> {
   }
 
   // Make executable
-  await fs.chmod(hookPath, 0o755);
+  try {
+    await fs.chmod(hookPath, 0o755);
+  } catch {
+    console.warn("Warning: could not make hook executable. Run: chmod +x .git/hooks/pre-commit");
+  }
   console.log(`Installed pre-commit hook at .git/hooks/pre-commit`);
 }

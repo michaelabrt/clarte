@@ -82,12 +82,17 @@ export async function detectMonorepo(rootDir: string, topEntries: string[]): Pro
 
   if (packageGlobs.length === 0) return null;
 
-  const resolvedDirs = await glob(packageGlobs, {
-    cwd: rootDir,
-    onlyDirectories: true,
-    ignore: ["**/node_modules/**"],
-    absolute: false,
-  });
+  let resolvedDirs: string[];
+  try {
+    resolvedDirs = await glob(packageGlobs, {
+      cwd: rootDir,
+      onlyDirectories: true,
+      ignore: ["**/node_modules/**"],
+      absolute: false,
+    });
+  } catch {
+    return null;
+  }
 
   const packages: MonorepoPackage[] = [];
 
