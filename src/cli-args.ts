@@ -1,9 +1,5 @@
 import path from "node:path";
-import {
-  theme as t,
-  initTheme,
-  resetTerminalColors,
-} from "./theme.js";
+import { theme as t, initTheme, resetTerminalColors } from "./theme.js";
 import type { SectionFilterOptions } from "./templates/main-context.js";
 
 declare const PKG_VERSION: string;
@@ -58,7 +54,6 @@ export function printHelp(): void {
     `    ${t.accent("--include=a,b")}           ${t.text("Always include these sections (comma-separated IDs)")}`,
   );
   console.log(`    ${t.accent("--exclude=a,b")}           ${t.text("Exclude these sections entirely")}`);
-  console.log(`    ${t.accent("--generate-skills")}       ${t.text("Generate Claude Code skill files")}`);
   console.log(
     `    ${t.accent("--init-hook")}             ${t.text("Install git pre-commit hook for auto-refresh on commit")}`,
   );
@@ -107,7 +102,6 @@ export interface CliArgs {
   ciMode: boolean;
   verbose: boolean;
   watchMode: boolean;
-  generateSkills: boolean;
   maxTokens: number | undefined;
   jsonMode: boolean;
   effectiveBudget: number | undefined;
@@ -139,7 +133,6 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const ciMode = rawArgs.includes("--ci");
   const verbose = rawArgs.includes("--verbose") || rawArgs.includes("-v");
   const watchMode = rawArgs.includes("--watch");
-  const generateSkills = rawArgs.includes("--generate-skills");
   const maxTokensArg = rawArgs.find((a) => a.startsWith("--max-tokens="));
   const maxTokensRaw = maxTokensArg ? parseInt(maxTokensArg.split("=").slice(1).join("="), 10) : undefined;
   if (maxTokensRaw !== undefined && Number.isNaN(maxTokensRaw)) {
@@ -198,7 +191,6 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     ciMode,
     verbose,
     watchMode,
-    generateSkills,
     maxTokens,
     jsonMode,
     effectiveBudget,

@@ -279,5 +279,8 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
     lines.push(`Linter: **${ctx.linter}**`);
   }
 
+  lines.push("");
+  lines.push("After significant changes, use `/check` to verify no architectural regressions.");
+
   return lines.join("\n");
 }

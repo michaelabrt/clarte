@@ -10,7 +10,7 @@ import type {
   ProgressCallback,
   UserAnswers,
 } from "./types.js";
-import { fileExists, readFileOr, readJsonFile, writeFileSafe } from "./utils.js";
+import { fileExists, readFileOr, writeFileSafe } from "./utils.js";
 import { buildMainContext, getMainContextFilename, type SectionFilterOptions } from "./templates/main-context.js";
 import { buildCursorRules, renderCursorRule } from "./templates/cursor-rules.js";
 import { buildClaudeSkills, renderClaudeSkill } from "./templates/claude-skills.js";
@@ -101,9 +101,7 @@ export async function generateFiles(
     }
 
     if (generateSkills && ide === "claude") {
-      const pkgJson = await readJsonFile(path.join(ctx.rootDir, "package.json"));
-      const scripts = (pkgJson?.scripts as Record<string, string>) ?? undefined;
-      const skills = await buildClaudeSkills(ctx, answers, analysis, scripts);
+      const skills = buildClaudeSkills();
       for (const skill of skills) {
         const skillPath = `.claude/skills/${skill.name}/SKILL.md`;
         const skillContent = renderClaudeSkill(skill);

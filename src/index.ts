@@ -24,7 +24,7 @@ import { buildGraphWithCache } from "./cache.js";
 import { buildImportGraph, mergeGraph } from "./graph-build.js";
 import { getHubFiles } from "./graph/hub-files.js";
 import { startShimmer } from "./animations.js";
-import type { DetectedContext, HubFile, ImportGraph, ProgressCallback } from "./types.js";
+import type { DetectedContext, GeneratedFile, HubFile, ImportGraph, ProgressCallback } from "./types.js";
 import { serializeAnalysis } from "./serialize.js";
 import { buildDirectives } from "./templates/directives.js";
 import { handleEarlyExits, parseCliArgs } from "./cli-args.js";
@@ -52,7 +52,6 @@ async function main() {
     ciMode,
     verbose,
     watchMode,
-    generateSkills,
     maxTokens,
     jsonMode,
     effectiveBudget,
@@ -234,7 +233,7 @@ async function main() {
     }
   }
 
-  const { analysis, deltaSection } = await runAnalysis(
+  const { analysis } = await runAnalysis(
     rootDir,
     graph,
     detected,
@@ -285,7 +284,9 @@ async function main() {
       `  ${"Circular deps"}   ${analysis.circularDeps.length === 0 ? t.textBold("none") : t.text(`${analysis.circularDeps.length} chain${analysis.circularDeps.length === 1 ? "" : "s"}`)}`,
     );
     if (analysis.gitActivity) {
-      reportLines.push(`  ${"Hot files (" + analysis.analysisDays + "d)"} ${t.textBold(String(analysis.gitActivity.hotFiles.length))}`);
+      reportLines.push(
+        `  ${"Hot files (" + analysis.analysisDays + "d)"} ${t.textBold(String(analysis.gitActivity.hotFiles.length))}`,
+      );
     }
     p.note(reportLines.join("\n"), "Analysis Report");
 
@@ -392,8 +393,8 @@ async function main() {
   }
 
   shimmer = startShimmer(dryRun ? "Preparing context files..." : "Generating context files...");
-  const shouldGenerateSkills = generateSkills || answers.ides.includes("claude");
-  let files;
+  const generateSkills = answers.ides.includes("claude");
+  let files: GeneratedFile[];
   try {
     files = await generateFiles(
       detected,
@@ -402,7 +403,7 @@ async function main() {
       force,
       dryRun,
       analysis,
-      shouldGenerateSkills,
+      generateSkills,
       verbose ? verboseLog : undefined,
       effectiveBudget,
       sectionFilter,

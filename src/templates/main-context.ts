@@ -19,9 +19,6 @@ export { resetProjectNameCache } from "./sections/project-info.js";
 /** Default token budget for context files. */
 export const DEFAULT_BUDGET = 5000;
 
-/** Sections at or above this priority are excluded from budgeted output (only rendered with --full). */
-export const FULL_ONLY_PRIORITY = 50;
-
 /** Default character budget for context files (Claude Code warns above 40k). */
 export const DEFAULT_MAX_CHARS = 39_500;
 
@@ -285,11 +282,8 @@ export function applyBudget(
   const omitted: string[] = [];
 
   // Priority 1-2 are always included (even if over budget)
-  // Sections at FULL_ONLY_PRIORITY or above are always omitted (migrated to skills)
   for (const s of budgeted) {
-    if (s.priority >= FULL_ONLY_PRIORITY) {
-      omitted.push(s.id);
-    } else if (s.priority <= 2) {
+    if (s.priority <= 2) {
       included.push(s);
       remaining -= s.tokens;
     } else if (remaining >= s.tokens) {

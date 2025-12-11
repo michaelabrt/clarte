@@ -24,7 +24,6 @@ describe("parseCliArgs", () => {
     expect(result.ciMode).toBe(false);
     expect(result.verbose).toBe(false);
     expect(result.watchMode).toBe(false);
-    expect(result.generateSkills).toBe(false);
     expect(result.maxTokens).toBeUndefined();
     expect(result.jsonMode).toBe(false);
     expect(result.effectiveBudget).toBeUndefined();
@@ -150,10 +149,6 @@ describe("parseCliArgs", () => {
 
   it("parses --init-hook", () => {
     expect(parseCliArgs(["--init-hook"]).initHook).toBe(true);
-  });
-
-  it("parses --generate-skills", () => {
-    expect(parseCliArgs(["--generate-skills"]).generateSkills).toBe(true);
   });
 
   it("parses --refresh-snapshot", () => {
