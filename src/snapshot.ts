@@ -241,11 +241,17 @@ export async function generateSnapshot(
       break;
   }
 
-  const files = await glob(patterns, {
-    cwd: ctx.rootDir,
-    ignore: ignorePatterns,
-    absolute: false,
-  });
+  let files: string[];
+  try {
+    files = await glob(patterns, {
+      cwd: ctx.rootDir,
+      ignore: ignorePatterns,
+      absolute: false,
+    });
+  } catch {
+    onProgress?.("Warning: could not scan source files (permission denied or invalid path)");
+    return { entries: [], markdown: "" };
+  }
 
   const allEntries: SnapshotEntry[] = [];
 
@@ -264,11 +270,16 @@ export async function generateSnapshot(
       const secScanPaths = getDefaultScanPathsForLanguage(secLang, ctx);
       const { glob: secGlob, extractor: secExtractor, ignore: secIgnore } = getLanguageConfig(secLang);
       const secPatterns = secScanPaths.map((p) => `${p}/${secGlob}`);
-      const secFiles = await glob(secPatterns, {
-        cwd: ctx.rootDir,
-        ignore: [...ignorePatterns, ...secIgnore],
-        absolute: false,
-      });
+      let secFiles: string[];
+      try {
+        secFiles = await glob(secPatterns, {
+          cwd: ctx.rootDir,
+          ignore: [...ignorePatterns, ...secIgnore],
+          absolute: false,
+        });
+      } catch {
+        continue;
+      }
 
       onProgress?.(`Scanning ${secFiles.length} ${secLang} files...`);
       for (let si = 0; si < secFiles.length; si += chunkSize) {

@@ -30,6 +30,12 @@ export async function runDiffMode(
     if (verbose) p.log.info(t.muted(msg));
   };
 
+  // Validate ref to prevent shell injection (only allow git ref characters)
+  if (ref && !/^[\w./:@^~{}-]+$/.test(ref)) {
+    p.log.error(t.error(`Invalid git ref: ${ref}`));
+    return;
+  }
+
   let changedFiles: string[];
   let diffStat: Map<string, { added: number; removed: number }> | null = null;
   try {
