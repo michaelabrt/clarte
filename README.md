@@ -8,13 +8,11 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
-Every time an AI coding agent opens a session on your project, it spends its first turns reading files, tracing imports and piecing together your architecture. Clarté does that analysis once, ahead of time. One command produces a context file with your dependency graph, key files, architectural layers and working guidelines. In [benchmarks](https://github.com/michaelabrt/clarte-benchmark), this reduced agent input tokens by 60% and cost by 58%.
+Clarté is an architecture intelligence engine for AI coding agents. It parses your imports with tree-sitter, builds a dependency graph, and runs 20+ analysis passes (HITS centrality, Tarjan's SCC, betweenness, community detection, change coupling, structural risk scoring) to map your codebase before agents write a single line. In [benchmarks](https://github.com/michaelabrt/clarte-benchmark), this reduced agent cost by 58% and input tokens by 60%.
 
 ```bash
 npx clarte
 ```
-
-Under the hood, Clarté uses tree-sitter to parse your imports, builds a dependency graph, runs graph algorithms on it (HITS centrality, Tarjan's SCC, community detection, change coupling) and analyzes your git history.
 
 ## Quick Start
 
@@ -28,12 +26,12 @@ Clarté will:
 
 1. **Detect** your tech stack, AI tools and project description automatically
 2. **Scan** source files for a code snapshot (types, store shapes, component props)
-3. **Generate** context files for your detected tools
+3. **Generate** analysis results as context files for your detected tools
 4. **Show** a summary with token estimate
 
 Zero prompts on first run. Requires Node.js 20+. Config is saved to `.clarte.json` (add it to `.gitignore`); run with `--reconfigure` to customize.
 
-## What the output contains
+## What the analysis covers
 
 | Section | Example |
 |---------|---------|
@@ -190,9 +188,9 @@ Methodology, fixture projects and full reports are in the [benchmark repo](https
 
 Multi-language projects are handled automatically. When a secondary language accounts for more than 15% of source files, Clarté runs import parsing and snapshot extraction for that language too and merges the results.
 
-## Supported Tools
+## Output Targets
 
-Clarté can generate context files for multiple tools at once.
+Clarté renders its analysis as context files for any major AI coding tool.
 
 | Tool | Generated file | Docs |
 |------|---------------|------|
