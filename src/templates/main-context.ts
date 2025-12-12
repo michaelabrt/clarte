@@ -499,9 +499,9 @@ export function applyCharBudget(
 export function getMainContextFilename(ide: IDETarget): string {
   switch (ide) {
     case "claude":
-      return "CLAUDE.md";
+      return ".claude/rules/clarte.md";
     case "cursor":
-      return "CLAUDE.md";
+      return ".cursor/rules/clarte.mdc";
     case "opencode":
       return "AGENTS.md";
     case "copilot":
