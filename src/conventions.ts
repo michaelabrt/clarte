@@ -131,7 +131,6 @@ function detectNamingPrefixes(functions: string[]): InferredConventions["namingP
   return results;
 }
 
-
 interface DirectoryIdentifiers {
   functions: string[];
   types: string[];

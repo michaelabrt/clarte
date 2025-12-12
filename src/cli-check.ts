@@ -1,5 +1,3 @@
-import path from "node:path";
-import { fileExists } from "./utils.js";
 import { loadConfig, computeSnapshotHash } from "./config.js";
 import { validateContextPaths } from "./check.js";
 
@@ -7,11 +5,7 @@ import { validateContextPaths } from "./check.js";
  * Handle --check mode: fast path for shell integration.
  * Exit codes: 0=fresh, 1=stale, 2=error/missing.
  */
-export async function runCheckMode(
-  rootDir: string,
-  checkTimestamp: boolean,
-  ciMode: boolean,
-): Promise<never> {
+export async function runCheckMode(rootDir: string, checkTimestamp: boolean, ciMode: boolean): Promise<never> {
   try {
     const config = await loadConfig(rootDir);
 
