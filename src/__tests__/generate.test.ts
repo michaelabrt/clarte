@@ -10,9 +10,9 @@ vi.mock("../templates/main-context.js", () => ({
   getMainContextFilename: vi.fn((ide: string) => {
     switch (ide) {
       case "claude":
-        return "CLAUDE.md";
+        return ".claude/rules/clarte.md";
       case "cursor":
-        return "CLAUDE.md";
+        return ".cursor/rules/clarte.mdc";
       case "opencode":
         return "AGENTS.md";
       case "copilot":
@@ -28,7 +28,7 @@ vi.mock("../templates/main-context.js", () => ({
       case "generic":
         return "CONTEXT.md";
       default:
-        return "CLAUDE.md";
+        return ".claude/rules/clarte.md";
     }
   }),
 }));
@@ -145,7 +145,7 @@ afterEach(async () => {
 });
 
 describe("generateFiles", () => {
-  it("produces CLAUDE.md for claude target", async () => {
+  it("produces .claude/rules/clarte.md for claude target", async () => {
     const files = await generateFiles(
       makeCtx(),
       makeAnswers({ ides: ["claude"] }),
@@ -155,7 +155,7 @@ describe("generateFiles", () => {
     );
 
     expect(files.length).toBeGreaterThanOrEqual(1);
-    const claudeFile = files.find((f) => f.path === "CLAUDE.md");
+    const claudeFile = files.find((f) => f.path === ".claude/rules/clarte.md");
     expect(claudeFile).toBeDefined();
     expect(claudeFile!.content).toContain("Main Context");
   });
@@ -164,10 +164,11 @@ describe("generateFiles", () => {
     const files = await generateFiles(makeCtx(), makeAnswers({ ides: ["cursor"] }), null, true, true);
 
     // Should have the main file + rule files
-    const mainFile = files.find((f) => f.path === "CLAUDE.md");
+    const mainFile = files.find((f) => f.path === ".cursor/rules/clarte.mdc");
     expect(mainFile).toBeDefined();
+    expect(mainFile!.content).toContain("alwaysApply: true");
 
-    const ruleFiles = files.filter((f) => f.path.startsWith(".cursor/rules/"));
+    const ruleFiles = files.filter((f) => f.path.startsWith(".cursor/rules/") && f.path !== ".cursor/rules/clarte.mdc");
     expect(ruleFiles.length).toBe(2);
     expect(ruleFiles.map((f) => f.path)).toContain(".cursor/rules/global.md");
     expect(ruleFiles.map((f) => f.path)).toContain(".cursor/rules/testing.md");
@@ -193,7 +194,7 @@ describe("generateFiles", () => {
     expect(files.length).toBeGreaterThan(0);
 
     // Verify nothing was written
-    const claudePath = path.join(tmpDir, "CLAUDE.md");
+    const claudePath = path.join(tmpDir, ".claude/rules/clarte.md");
     await expect(fs.access(claudePath)).rejects.toThrow();
   });
 
@@ -209,17 +210,19 @@ describe("generateFiles", () => {
     expect(files.length).toBeGreaterThan(0);
 
     // Verify file was written
-    const claudePath = path.join(tmpDir, "CLAUDE.md");
+    const claudePath = path.join(tmpDir, ".claude/rules/clarte.md");
     const content = await fs.readFile(claudePath, "utf-8");
     expect(content).toContain("Main Context");
   });
 
-  it("deduplicates files by path", async () => {
-    // Both claude and cursor produce CLAUDE.md
+  it("produces separate files for claude and cursor targets", async () => {
     const files = await generateFiles(makeCtx(), makeAnswers({ ides: ["claude", "cursor"] }), null, true, true);
 
-    const claudeFiles = files.filter((f) => f.path === "CLAUDE.md");
-    expect(claudeFiles).toHaveLength(1);
+    const claudeFile = files.find((f) => f.path === ".claude/rules/clarte.md");
+    const cursorFile = files.find((f) => f.path === ".cursor/rules/clarte.mdc");
+    expect(claudeFile).toBeDefined();
+    expect(cursorFile).toBeDefined();
+    expect(claudeFile!.path).not.toBe(cursorFile!.path);
   });
 });
 

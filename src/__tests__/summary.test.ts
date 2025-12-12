@@ -61,24 +61,24 @@ describe("printSummary", () => {
 
   it("renders a single main file with bytes and token estimate", () => {
     const content = "x".repeat(1000);
-    printSummary([makeFile("CLAUDE.md", content)]);
+    printSummary([makeFile(".claude/rules/clarte.md", content)]);
 
     const output = allOutput();
-    expect(output).toContain("CLAUDE.md");
+    expect(output).toContain("clarte.md");
     expect(output).toContain("1000 B");
     expect(output).toContain("tokens");
     expect(output).toContain("(new)");
   });
 
   it("marks existing files as (updated)", () => {
-    printSummary([makeFile("CLAUDE.md", "hello", true)]);
+    printSummary([makeFile(".claude/rules/clarte.md", "hello", true)]);
     const output = allOutput();
     expect(output).toContain("(updated)");
   });
 
   it("groups cursor rule files under .cursor/rules/ header", () => {
     printSummary([
-      makeFile("CLAUDE.md", "main content"),
+      makeFile(".claude/rules/clarte.md", "main content"),
       makeFile(".cursor/rules/global.md", "global rule"),
       makeFile(".cursor/rules/testing.md", "test rule"),
     ]);
@@ -95,7 +95,7 @@ describe("printSummary", () => {
       markdown: "",
       budgetExcluded: 5,
     };
-    printSummary([makeFile("CLAUDE.md", "content")], snapshot);
+    printSummary([makeFile(".claude/rules/clarte.md", "content")], snapshot);
 
     const output = allOutput();
     expect(output).toContain("5 snapshot entries excluded by token budget");
@@ -107,7 +107,7 @@ describe("printSummary", () => {
       markdown: "",
       budgetExcluded: 0,
     };
-    printSummary([makeFile("CLAUDE.md", "content")], snapshot);
+    printSummary([makeFile(".claude/rules/clarte.md", "content")], snapshot);
 
     const output = allOutput();
     expect(output).not.toContain("snapshot entries excluded");
@@ -117,7 +117,7 @@ describe("printSummary", () => {
     const analysis = makeAnalysis({
       circularDeps: [{ chain: ["src/a.ts", "src/b.ts", "src/a.ts"] }, { chain: ["src/c.ts", "src/d.ts", "src/c.ts"] }],
     });
-    printSummary([makeFile("CLAUDE.md", "content")], null, analysis);
+    printSummary([makeFile(".claude/rules/clarte.md", "content")], null, analysis);
 
     const output = allOutput();
     expect(output).toContain("2");
@@ -129,7 +129,7 @@ describe("printSummary", () => {
     const analysis = makeAnalysis({
       circularDeps: [{ chain: ["src/a.ts", "src/b.ts", "src/a.ts"] }],
     });
-    printSummary([makeFile("CLAUDE.md", "content")], null, analysis);
+    printSummary([makeFile(".claude/rules/clarte.md", "content")], null, analysis);
 
     const output = allOutput();
     expect(output).toContain("1 circular dependency chain");
@@ -146,7 +146,7 @@ describe("printSummary", () => {
         { path: "src/veryUnstable.ts", fanIn: 0, fanOut: 5, instability: 0.95 },
       ],
     });
-    printSummary([makeFile("CLAUDE.md", "content")], null, analysis);
+    printSummary([makeFile(".claude/rules/clarte.md", "content")], null, analysis);
 
     const output = allOutput();
     expect(output).toContain("2");
@@ -166,7 +166,7 @@ describe("printSummary", () => {
         ],
       },
     });
-    printSummary([makeFile("CLAUDE.md", "content")], null, analysis);
+    printSummary([makeFile(".claude/rules/clarte.md", "content")], null, analysis);
 
     const output = allOutput();
     expect(output).toContain("2");
@@ -175,14 +175,14 @@ describe("printSummary", () => {
 
   it("shows success message when no findings", () => {
     const analysis = makeAnalysis();
-    printSummary([makeFile("CLAUDE.md", "content")], null, analysis);
+    printSummary([makeFile(".claude/rules/clarte.md", "content")], null, analysis);
 
     const output = allOutput();
     expect(output).toContain("No structural issues detected");
   });
 
   it("shows first-run benchmark footer", () => {
-    printSummary([makeFile("CLAUDE.md", "content")], null, undefined, true);
+    printSummary([makeFile(".claude/rules/clarte.md", "content")], null, undefined, true);
 
     const output = allOutput();
     expect(output).toContain("reduced agent input tokens by 60%");
@@ -190,14 +190,14 @@ describe("printSummary", () => {
   });
 
   it("does not show benchmark footer when not first run", () => {
-    printSummary([makeFile("CLAUDE.md", "content")], null, undefined, false);
+    printSummary([makeFile(".claude/rules/clarte.md", "content")], null, undefined, false);
 
     const output = allOutput();
     expect(output).not.toContain("reduced agent input tokens");
   });
 
   it("shows total bytes and tokens across all files", () => {
-    printSummary([makeFile("CLAUDE.md", "x".repeat(500)), makeFile("AGENTS.md", "y".repeat(500))]);
+    printSummary([makeFile(".claude/rules/clarte.md", "x".repeat(500)), makeFile("AGENTS.md", "y".repeat(500))]);
 
     const output = allOutput();
     // Total should be ~1000 B

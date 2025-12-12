@@ -111,12 +111,13 @@ describe("validateContextPaths", () => {
     await fs.writeFile(path.join(tmpDir, "src/utils.ts"), "export function x() {}");
 
     const contextContent = "Key files: `src/types.ts` and `src/utils.ts`.";
-    await fs.writeFile(path.join(tmpDir, "CLAUDE.md"), contextContent);
+    await fs.mkdir(path.join(tmpDir, ".claude", "rules"), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, ".claude/rules/clarte.md"), contextContent);
 
     const result = await validateContextPaths(tmpDir, baseConfig);
     expect(result).not.toBeNull();
     expect(result!.broken).toEqual([]);
-    expect(result!.file).toBe("CLAUDE.md");
+    expect(result!.file).toBe(".claude/rules/clarte.md");
   });
 
   it("reports missing files as broken references", async () => {
@@ -124,12 +125,13 @@ describe("validateContextPaths", () => {
     await fs.writeFile(path.join(tmpDir, "src/types.ts"), "export type X = {};");
 
     const contextContent = "Key files: `src/types.ts` and `src/old-file.ts` and `src/removed.ts`.";
-    await fs.writeFile(path.join(tmpDir, "CLAUDE.md"), contextContent);
+    await fs.mkdir(path.join(tmpDir, ".claude", "rules"), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, ".claude/rules/clarte.md"), contextContent);
 
     const result = await validateContextPaths(tmpDir, baseConfig);
     expect(result).not.toBeNull();
     expect(result!.broken).toEqual(["src/old-file.ts", "src/removed.ts"]);
-    expect(result!.file).toBe("CLAUDE.md");
+    expect(result!.file).toBe(".claude/rules/clarte.md");
   });
 
   it("uses the correct context filename based on IDE target", async () => {
@@ -146,10 +148,11 @@ describe("validateContextPaths", () => {
   it("falls back to claude when ides array is empty", async () => {
     const config: ProjectConfig = { ...baseConfig, ides: [] };
     const contextContent = "See `src/missing.ts` for details.";
-    await fs.writeFile(path.join(tmpDir, "CLAUDE.md"), contextContent);
+    await fs.mkdir(path.join(tmpDir, ".claude", "rules"), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, ".claude/rules/clarte.md"), contextContent);
 
     const result = await validateContextPaths(tmpDir, config);
     expect(result).not.toBeNull();
-    expect(result!.file).toBe("CLAUDE.md");
+    expect(result!.file).toBe(".claude/rules/clarte.md");
   });
 });

@@ -85,7 +85,7 @@ describe("initPreCommitHook", () => {
     const content = await fs.readFile(hookPath, "utf-8");
     expect(content).toContain("npx clarte --check");
     expect(content).toContain("npx clarte --refresh-snapshot");
-    expect(content).toContain("git add CLAUDE.md");
+    expect(content).toContain("git add .claude/rules/");
 
     // Verify executable permission
     const stat = await fs.stat(hookPath);

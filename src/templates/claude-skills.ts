@@ -15,14 +15,14 @@ export function buildClaudeSkills(): ClaudeSkill[] {
       body: [
         "# Post-Change Regression Check",
         "",
-        "Run `npx clarte --format=json` and compare the output against the current CLAUDE.md to detect regressions:",
+        "Run `npx clarte --format=json` and compare the output against the current context file to detect regressions:",
         "",
-        "1. **New circular dependencies** not listed in CLAUDE.md",
+        "1. **New circular dependencies** not listed in the context file",
         "2. **New chokepoints** (files whose removal would disconnect the graph)",
         "3. **Coupling increases** (new tight-coupling or hidden-coupling pairs)",
         "4. **New dead files** (files with zero importers)",
         "",
-        "Report only NEW issues (not already documented in CLAUDE.md). If no regressions are found, confirm the changes are clean.",
+        "Report only NEW issues (not already documented in the context file). If no regressions are found, confirm the changes are clean.",
       ].join("\n"),
     },
     {

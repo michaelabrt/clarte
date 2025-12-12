@@ -130,7 +130,8 @@ describe("refreshSnapshot", () => {
       "## Other Section",
     ].join("\n");
 
-    await fs.writeFile(path.join(tmpDir, "CLAUDE.md"), original);
+    await fs.mkdir(path.join(tmpDir, ".claude", "rules"), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, ".claude/rules/clarte.md"), original);
 
     // Need to suppress process.exit
     const realExit = process.exit;
@@ -138,7 +139,7 @@ describe("refreshSnapshot", () => {
 
     await refreshSnapshot(tmpDir);
 
-    const updated = await fs.readFile(path.join(tmpDir, "CLAUDE.md"), "utf-8");
+    const updated = await fs.readFile(path.join(tmpDir, ".claude/rules/clarte.md"), "utf-8");
 
     // Should contain the new snapshot
     expect(updated).toContain("interface Foo {}");
@@ -188,7 +189,8 @@ describe("refreshSnapshot", () => {
     // File with "Sections omitted" and "code-snapshot" but no markers
     const content = ["# Project", "", "<!-- Sections omitted to fit token budget: code-snapshot. -->"].join("\n");
 
-    await fs.writeFile(path.join(tmpDir, "CLAUDE.md"), content);
+    await fs.mkdir(path.join(tmpDir, ".claude", "rules"), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, ".claude/rules/clarte.md"), content);
 
     const realExit = process.exit;
     process.exit = vi.fn(() => {
