@@ -1,0 +1,55 @@
+name: 'Clarte Architecture Review'
+description: 'Architectural risk assessment for pull requests — identifies chokepoints, co-change warnings, and test coverage gaps'
+author: 'Michael Aboukrat'
+
+branding:
+  icon: 'git-pull-request'
+  color: 'blue'
+
+inputs:
+  github-token:
+    description: 'GitHub token for posting PR comments'
+    required: true
+    default: ${{ github.token }}
+
+  working-directory:
+    description: 'Path to the project root (default: repository root)'
+    required: false
+    default: '.'
+
+  risk-threshold:
+    description: 'Minimum risk level to report (low, medium, high, critical)'
+    required: false
+    default: 'medium'
+
+  fail-on-critical:
+    description: 'Fail the action if any critical-risk file is detected'
+    required: false
+    default: 'false'
+
+  comment-mode:
+    description: 'How to handle PR comments: create, update, or none'
+    required: false
+    default: 'update'
+
+  max-files:
+    description: 'Maximum number of changed files to analyze (0 = unlimited)'
+    required: false
+    default: '50'
+
+outputs:
+  risk-level:
+    description: 'Overall risk level of the PR (low, medium, high, critical)'
+
+  high-risk-count:
+    description: 'Number of high or critical risk files'
+
+  comment-id:
+    description: 'ID of the posted/updated PR comment'
+
+  analysis-json:
+    description: 'Full analysis result as JSON string'
+
+runs:
+  using: 'node22'
+  main: 'dist/index.js'
