@@ -62,6 +62,17 @@ export function printHelp(): void {
   );
   console.log(`    ${t.accent("-v, --verbose")}           ${t.text("Show detailed progress output")}`);
   console.log("");
+  console.log(`  ${t.textBold("Subcommands:")}`);
+  console.log(
+    `    ${t.accent("ci")}                      ${t.text("Analyze changed files and output risk assessment as JSON")}`,
+  );
+  console.log(
+    `    ${t.accent("  --base=REF")}            ${t.text("Git ref to diff against (default: HEAD)")}`,
+  );
+  console.log(
+    `    ${t.accent("  --changed-files=a,b")}   ${t.text("Explicit list of changed files (comma-separated)")}`,
+  );
+  console.log("");
   console.log(`  ${t.textBold("Examples:")}`);
   console.log(
     `    ${t.muted("$")} ${t.text(`npx ${NAME}`)}                   ${t.muted("# analyze current directory")}`,
@@ -77,6 +88,9 @@ export function printHelp(): void {
   );
   console.log(
     `    ${t.muted("$")} ${t.text(`npx ${NAME} --diff src/foo.ts`)}  ${t.muted("# diff context for a specific file")}`,
+  );
+  console.log(
+    `    ${t.muted("$")} ${t.text(`npx ${NAME} ci --base=main`)}     ${t.muted("# CI risk report for PR changes")}`,
   );
   console.log(
     `    ${t.muted("$")} ${t.text(`npx ${NAME} --dry-run`)}          ${t.muted("# preview without writing files")}`,
@@ -100,6 +114,9 @@ export interface CliArgs {
   check: boolean;
   checkTimestamp: boolean;
   ciMode: boolean;
+  ciSubcommand: boolean;
+  ciBase: string | undefined;
+  ciChangedFiles: string[];
   verbose: boolean;
   watchMode: boolean;
   maxTokens: number | undefined;
@@ -131,6 +148,11 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const check = !!checkArg;
   const checkTimestamp = checkArg === "--check=timestamp";
   const ciMode = rawArgs.includes("--ci");
+  const ciSubcommand = rawArgs[0] === "ci";
+  const ciBaseArg = rawArgs.find((a) => a.startsWith("--base="));
+  const ciBase = ciBaseArg?.split("=").slice(1).join("=");
+  const ciChangedFilesArg = rawArgs.find((a) => a.startsWith("--changed-files="));
+  const ciChangedFiles = ciChangedFilesArg ? ciChangedFilesArg.split("=").slice(1).join("=").split(",").filter(Boolean) : [];
   const verbose = rawArgs.includes("--verbose") || rawArgs.includes("-v");
   const watchMode = rawArgs.includes("--watch");
   const maxTokensArg = rawArgs.find((a) => a.startsWith("--max-tokens="));
@@ -169,7 +191,8 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const diffFileArg = rawArgs.find((a) => a.startsWith("--diff-file="));
   const diffFile = diffFileArg?.split("=").slice(1).join("=");
   const diffFilterSet = new Set(diffFilterFiles);
-  const targetDir = rawArgs.find((a) => !a.startsWith("-") && !diffFilterSet.has(a)) ?? process.cwd();
+  const subcommands = new Set(["ci"]);
+  const targetDir = rawArgs.find((a) => !a.startsWith("-") && !diffFilterSet.has(a) && !subcommands.has(a)) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
   if (diffFile && !diffMode) {
@@ -189,6 +212,9 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     check,
     checkTimestamp,
     ciMode,
+    ciSubcommand,
+    ciBase,
+    ciChangedFiles,
     verbose,
     watchMode,
     maxTokens,

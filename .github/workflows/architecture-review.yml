@@ -1,0 +1,26 @@
+name: Architecture Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed for git history analysis
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: ./action
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fail-on-critical: 'true'

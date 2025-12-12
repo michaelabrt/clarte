@@ -29,6 +29,7 @@ import { serializeAnalysis } from "./serialize.js";
 import { buildDirectives } from "./templates/directives.js";
 import { handleEarlyExits, parseCliArgs } from "./cli-args.js";
 import { runCheckMode } from "./cli-check.js";
+import { runCiMode } from "./cli-ci.js";
 import { runAnalysis } from "./run-analysis.js";
 
 async function main() {
@@ -50,6 +51,9 @@ async function main() {
     check,
     checkTimestamp,
     ciMode,
+    ciSubcommand,
+    ciBase,
+    ciChangedFiles,
     verbose,
     watchMode,
     maxTokens,
@@ -63,6 +67,14 @@ async function main() {
   if (initHook) {
     await initPreCommitHook(rootDir);
     process.exit(0);
+  }
+
+  if (ciSubcommand) {
+    const result = await runCiMode(rootDir, ciChangedFiles.length > 0 ? ciChangedFiles : null, ciBase, verbose);
+    await new Promise<void>((resolve, reject) => {
+      process.stdout.write(JSON.stringify(result, null, 2) + "\n", (err) => (err ? reject(err) : resolve()));
+    });
+    process.exit(result.summary.criticalRiskFiles > 0 ? 1 : 0);
   }
 
   const PROJECT_MARKERS = [
