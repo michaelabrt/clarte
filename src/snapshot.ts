@@ -20,7 +20,6 @@ import {
   makeExtractor,
 } from "./snapshot-scan-paths.js";
 
-
 function annotateSignature(entry: SnapshotEntry, commentPrefix = "//"): string {
   if (entry.importedByCount && entry.importedByCount > 2) {
     const total = entry.importedByCount;

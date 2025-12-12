@@ -1,11 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parse as parseToml } from "smol-toml";
-import type {
-  DetectedContext,
-  IDETarget,
-  ProgressCallback,
-} from "./types.js";
+import type { DetectedContext, IDETarget, ProgressCallback } from "./types.js";
 import { fileExists, readFileOr, readJsonFile, readDirSafe } from "./utils.js";
 import { FRAMEWORK_MAP, PYTHON_FRAMEWORK_MAP, extractMavenVersion } from "./detect-frameworks.js";
 import { detectMonorepo, parsePyprojectDeps } from "./detect-monorepo.js";

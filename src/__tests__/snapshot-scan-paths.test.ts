@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  getDefaultScanPaths,
-  getDefaultScanPathsForLanguage,
-  getLanguageConfig,
-} from "../snapshot-scan-paths.js";
+import { getDefaultScanPaths, getDefaultScanPathsForLanguage, getLanguageConfig } from "../snapshot-scan-paths.js";
 import type { DetectedContext, Language } from "../types.js";
 
 function makeCtx(language: Language, directories: string[]): DetectedContext {
@@ -38,14 +34,7 @@ describe("getDefaultScanPaths", () => {
         "src/types",
       ]);
       const paths = getDefaultScanPaths(ctx);
-      expect(paths).toEqual([
-        "src/types",
-        "src/stores",
-        "src/services",
-        "src/hooks",
-        "src/components",
-        "src/lib",
-      ]);
+      expect(paths).toEqual(["src/types", "src/stores", "src/services", "src/hooks", "src/components", "src/lib"]);
     });
 
     it("falls back to src/app/lib when no matching dirs", () => {
