@@ -1,7 +1,7 @@
 {
   "name": "clarte",
   "version": "1.0.0",
-  "description": "Static analysis engine that generates context files for AI coding tools.",
+  "description": "Architecture intelligence engine for AI coding agents.",
   "type": "module",
   "bin": {
     "clarte": "dist/index.js"
@@ -22,10 +22,13 @@
   "keywords": [
     "static-analysis",
     "dependency-graph",
+    "architecture-analysis",
+    "code-intelligence",
+    "graph-analysis",
+    "change-coupling",
     "developer-tools",
     "cli",
     "typescript",
-    "context-generation",
     "code-analysis",
     "claude-code",
     "cursor",

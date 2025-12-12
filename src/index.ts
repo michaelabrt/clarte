@@ -135,7 +135,7 @@ async function main() {
   if (!jsonMode) {
     console.log("");
     p.intro(t.textBold("Clart") + t.brandBold("\u00e9"));
-    p.log.info(t.muted("pre-built codebase context for AI agents"));
+    p.log.info(t.muted("architecture intelligence for AI coding agents"));
   }
 
   if (refresh) {
