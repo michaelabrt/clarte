@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import type { ChangeCoupling, GitAnalysis, LagCoupling, ProgressCallback } from "./types.js";
+import type { ChangeCoupling, GitAnalysis, LagCoupling, ProgressCallback } from "../types.js";
 
 /** Adaptive decay half-lives (in decay-constant units, where halfLife = decayConst * ln(2)) */
 const DECAY = {
