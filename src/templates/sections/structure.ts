@@ -1,7 +1,7 @@
 import type { CodeSnapshot, ContextAnalysis, ContextSection, DetectedContext } from "../../types.js";
 import { estimateTokens } from "../../utils.js";
 import { getFrameworkHintsSection } from "../framework-hints.js";
-import { renderConventionsSection } from "../../conventions.js";
+import { renderConventionsSection } from "../../conventions/conventions.js";
 import { renderTestMappingSection } from "../../test-map.js";
 
 export function renderStructureSections(

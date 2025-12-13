@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { inferConventions, renderConventionsSection } from "../conventions.js";
+import { inferConventions, renderConventionsSection } from "../conventions/conventions.js";
 import type { ConfigConstraints, ImportGraph, InferredConventions } from "../types.js";
 
 // Mock utils.ts to control file reads
