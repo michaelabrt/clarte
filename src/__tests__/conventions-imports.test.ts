@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectImportOrderingDetailed } from "../conventions-imports.js";
+import { detectImportOrderingDetailed } from "../conventions/imports.js";
 
 describe("detectImportOrderingDetailed", () => {
   it("returns null ordering for fewer than 3 imports", () => {
