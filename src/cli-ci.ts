@@ -78,7 +78,7 @@ export async function runCiMode(
   const savedConfig = await loadConfig(rootDir);
   const detected = await detectContext(rootDir, verbose ? verboseLog : undefined);
 
-  let graph = await buildGraphWithCache(rootDir, detected.language, verbose ? verboseLog : undefined);
+  const graph = await buildGraphWithCache(rootDir, detected.language, verbose ? verboseLog : undefined);
   if (detected.secondaryLanguages) {
     for (const secLang of detected.secondaryLanguages) {
       const secGraph = await buildImportGraph(rootDir, secLang, verbose ? verboseLog : undefined);

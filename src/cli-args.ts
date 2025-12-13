@@ -66,9 +66,7 @@ export function printHelp(): void {
   console.log(
     `    ${t.accent("ci")}                      ${t.text("Analyze changed files and output risk assessment as JSON")}`,
   );
-  console.log(
-    `    ${t.accent("  --base=REF")}            ${t.text("Git ref to diff against (default: HEAD)")}`,
-  );
+  console.log(`    ${t.accent("  --base=REF")}            ${t.text("Git ref to diff against (default: HEAD)")}`);
   console.log(
     `    ${t.accent("  --changed-files=a,b")}   ${t.text("Explicit list of changed files (comma-separated)")}`,
   );
@@ -152,7 +150,9 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const ciBaseArg = rawArgs.find((a) => a.startsWith("--base="));
   const ciBase = ciBaseArg?.split("=").slice(1).join("=");
   const ciChangedFilesArg = rawArgs.find((a) => a.startsWith("--changed-files="));
-  const ciChangedFiles = ciChangedFilesArg ? ciChangedFilesArg.split("=").slice(1).join("=").split(",").filter(Boolean) : [];
+  const ciChangedFiles = ciChangedFilesArg
+    ? ciChangedFilesArg.split("=").slice(1).join("=").split(",").filter(Boolean)
+    : [];
   const verbose = rawArgs.includes("--verbose") || rawArgs.includes("-v");
   const watchMode = rawArgs.includes("--watch");
   const maxTokensArg = rawArgs.find((a) => a.startsWith("--max-tokens="));
@@ -192,7 +192,8 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const diffFile = diffFileArg?.split("=").slice(1).join("=");
   const diffFilterSet = new Set(diffFilterFiles);
   const subcommands = new Set(["ci"]);
-  const targetDir = rawArgs.find((a) => !a.startsWith("-") && !diffFilterSet.has(a) && !subcommands.has(a)) ?? process.cwd();
+  const targetDir =
+    rawArgs.find((a) => !a.startsWith("-") && !diffFilterSet.has(a) && !subcommands.has(a)) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
   if (diffFile && !diffMode) {

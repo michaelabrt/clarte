@@ -1,9 +1,4 @@
-import type {
-  ContextAnalysis,
-  FileRole,
-  HubFile,
-  ImportGraph,
-} from "./types.js";
+import type { ContextAnalysis, FileRole, ImportGraph } from "./types.js";
 import { computeFileComplexity, type FileComplexityInfo } from "./templates/directives.js";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -299,14 +294,10 @@ export async function analyzeForCI(
   const highRiskFiles = files.filter((f) => f.riskLevel === "high").length;
   const criticalRiskFiles = files.filter((f) => f.riskLevel === "critical").length;
   const missingTests = testGaps.filter((g) => !g.hasTests).length;
-  const coChangeWarnings = files.reduce(
-    (sum, f) => sum + f.coChangeFiles.filter((c) => !c.inDiff).length,
-    0,
-  );
+  const coChangeWarnings = files.reduce((sum, f) => sum + f.coChangeFiles.filter((c) => !c.inDiff).length, 0);
 
   const maxRisk = files[0]?.riskLevel ?? "low";
-  const overallRisk: RiskLevel =
-    criticalRiskFiles > 0 ? "critical" : highRiskFiles > 0 ? "high" : maxRisk;
+  const overallRisk: RiskLevel = criticalRiskFiles > 0 ? "critical" : highRiskFiles > 0 ? "high" : maxRisk;
 
   return {
     version: 1,
