@@ -6,7 +6,7 @@ import {
   computeFileChurn,
   type ParsedCommit,
   type TimeWindow,
-} from "../git-analysis.js";
+} from "../git/analysis.js";
 
 function makeCommit(files: string[], overrides?: Partial<ParsedCommit>): ParsedCommit {
   return {

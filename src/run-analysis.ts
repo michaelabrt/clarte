@@ -14,7 +14,7 @@ import { findChokepoints } from "./graph/chokepoints.js";
 import { computeGraphTopology } from "./graph/topology.js";
 import { findStructuralTemporalMismatches } from "./graph/mismatches.js";
 import { findTightCouplings } from "./graph/tight-coupling.js";
-import { analyzeGitActivity } from "./git-analysis.js";
+import { analyzeGitActivity } from "./git/analysis.js";
 import { analyzeMonorepoGraph, computePackageCentrality } from "./monorepo-analysis.js";
 import { scanConfigConstraints } from "./config-scan.js";
 import { inferConventions } from "./conventions/conventions.js";

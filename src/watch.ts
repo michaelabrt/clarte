@@ -16,7 +16,7 @@ import { computeGraphTopology } from "./graph/topology.js";
 import { findStructuralTemporalMismatches } from "./graph/mismatches.js";
 import { findTightCouplings } from "./graph/tight-coupling.js";
 import { buildGraphWithCache } from "./cache.js";
-import { analyzeGitActivity } from "./git-analysis.js";
+import { analyzeGitActivity } from "./git/analysis.js";
 import { scanConfigConstraints } from "./config-scan.js";
 import { inferConventions } from "./conventions/conventions.js";
 import { buildTestMapping } from "./test-map.js";
