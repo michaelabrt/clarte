@@ -1,6 +1,6 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
-import type { DetectedContext, Language } from "./types.js";
+import type { DetectedContext, Language } from "../types.js";
 
 /** Minimum fraction of source files for a language to qualify as secondary (15%) */
 export const SECONDARY_LANGUAGE_THRESHOLD = 0.15;

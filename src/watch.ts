@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { IGNORE_DIRS_SET } from "./ignore-patterns.js";
 import { loadConfig, configToAnswers } from "./config.js";
-import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
+import { detectContext, enrichFrameworksWithUsage } from "./detect/detect.js";
 import { buildImportGraph, mergeGraph } from "./graph-build.js";
 import { findCircularDeps } from "./graph-cycles.js";
 import { getHubFiles } from "./graph/hub-files.js";

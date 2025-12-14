@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { ContextSection, DetectedContext, UserAnswers } from "../../types.js";
-import { summarizeDetection } from "../../detect.js";
+import { summarizeDetection } from "../../detect/detect.js";
 import { estimateTokens, readJsonFile, readFileOr } from "../../utils.js";
 
 // Cache for getProjectName to avoid redundant filesystem reads within a single

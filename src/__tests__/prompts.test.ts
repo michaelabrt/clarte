@@ -45,7 +45,7 @@ vi.mock("../theme.js", () => ({
   },
 }));
 
-vi.mock("../detect.js", () => ({
+vi.mock("../detect/detect.js", () => ({
   summarizeDetection: () => "TypeScript + React + Vitest",
 }));
 

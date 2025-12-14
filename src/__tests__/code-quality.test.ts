@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { detectContext } from "../detect.js";
+import { detectContext } from "../detect/detect.js";
 import { buildMainContext } from "../templates/main-context.js";
 import type { DetectedContext, UserAnswers } from "../types.js";
 

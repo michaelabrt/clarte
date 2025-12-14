@@ -3,7 +3,7 @@ import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
 import { theme as t, unpatchPicocolors } from "./theme.js";
 import { writeFileSafe } from "./utils.js";
-import { detectContext, enrichFrameworksWithUsage } from "./detect.js";
+import { detectContext, enrichFrameworksWithUsage } from "./detect/detect.js";
 import { buildGraphWithCache } from "./cache.js";
 import { buildImportGraph, mergeGraph } from "./graph-build.js";
 import { findCircularDeps } from "./graph-cycles.js";
