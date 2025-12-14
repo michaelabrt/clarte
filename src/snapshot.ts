@@ -1,6 +1,6 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
-import { IGNORE_GLOBS } from "./ignore-patterns.js";
+import { IGNORE_GLOBS } from "./config/ignore-patterns.js";
 import { estimateTokens, readJsonFile } from "./utils.js";
 import { findUsedExports } from "./graph/hub-files.js";
 import { initTreeSitter } from "./parsers/init.js";

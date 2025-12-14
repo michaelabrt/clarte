@@ -5,7 +5,7 @@ import { startShimmer } from "./animations.js";
 import { detectContext } from "./detect/detect.js";
 import { generateSnapshot } from "./snapshot.js";
 import { buildImportGraph } from "./graph-build.js";
-import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "./config.js";
+import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "./config/config.js";
 import { fileExists, readFileOr, writeFileSafe } from "./utils.js";
 
 /** Known context files in priority order */

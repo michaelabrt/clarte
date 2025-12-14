@@ -8,7 +8,7 @@ import type {
 } from "../../types.js";
 import { estimateTokens } from "../../utils.js";
 import { renderDirectivesSection } from "../directives.js";
-import { renderConstraintsSection } from "../../config-scan.js";
+import { renderConstraintsSection } from "../../config/scan.js";
 
 export async function renderArchitectureSections(
   analysis: ContextAnalysis,

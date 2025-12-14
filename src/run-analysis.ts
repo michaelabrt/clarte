@@ -16,7 +16,7 @@ import { findStructuralTemporalMismatches } from "./graph/mismatches.js";
 import { findTightCouplings } from "./graph/tight-coupling.js";
 import { analyzeGitActivity } from "./git/analysis.js";
 import { analyzeMonorepoGraph, computePackageCentrality } from "./monorepo-analysis.js";
-import { scanConfigConstraints } from "./config-scan.js";
+import { scanConfigConstraints } from "./config/scan.js";
 import { inferConventions } from "./conventions/conventions.js";
 import { buildTestMapping } from "./test-map.js";
 import { predictChangeImpact } from "./change-impact.js";

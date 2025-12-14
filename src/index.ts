@@ -15,7 +15,7 @@ import { generateSnapshot } from "./snapshot.js";
 import { generateFiles } from "./generate.js";
 import { printSummary } from "./summary.js";
 import type { UserAnswers } from "./types.js";
-import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "./config.js";
+import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "./config/config.js";
 import { refreshSnapshot } from "./refresh.js";
 import { initPreCommitHook } from "./hooks.js";
 import { runDiffMode } from "./diff.js";

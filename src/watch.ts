@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { IGNORE_DIRS_SET } from "./ignore-patterns.js";
-import { loadConfig, configToAnswers } from "./config.js";
+import { IGNORE_DIRS_SET } from "./config/ignore-patterns.js";
+import { loadConfig, configToAnswers } from "./config/config.js";
 import { detectContext, enrichFrameworksWithUsage } from "./detect/detect.js";
 import { buildImportGraph, mergeGraph } from "./graph-build.js";
 import { findCircularDeps } from "./graph-cycles.js";
@@ -17,7 +17,7 @@ import { findStructuralTemporalMismatches } from "./graph/mismatches.js";
 import { findTightCouplings } from "./graph/tight-coupling.js";
 import { buildGraphWithCache } from "./cache.js";
 import { analyzeGitActivity } from "./git/analysis.js";
-import { scanConfigConstraints } from "./config-scan.js";
+import { scanConfigConstraints } from "./config/scan.js";
 import { inferConventions } from "./conventions/conventions.js";
 import { buildTestMapping } from "./test-map.js";
 import {
