@@ -50,7 +50,7 @@ vi.mock("../templates/aider-context.js", () => ({
   buildAiderContext: vi.fn().mockResolvedValue("# Aider Context\nread:\n  - README.md\n"),
 }));
 
-vi.mock("../detect.js", () => ({
+vi.mock("../detect/detect.js", () => ({
   detectContext: vi.fn().mockResolvedValue({
     rootDir: "/tmp/test",
     language: "typescript",

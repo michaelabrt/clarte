@@ -9,7 +9,7 @@ import {
   enrichFrameworksWithUsage,
   summarizeDetection,
   SECONDARY_LANGUAGE_THRESHOLD,
-} from "../detect.js";
+} from "../detect/detect.js";
 import type { DetectedContext, DetectedFramework } from "../types.js";
 
 /** Create a temporary project directory with the given file tree. */

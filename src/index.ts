@@ -9,7 +9,7 @@ import {
   detectTerminalBackground,
 } from "./theme.js";
 import { fileExists, formatBytes } from "./utils.js";
-import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "./detect.js";
+import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "./detect/detect.js";
 import { runPrompts } from "./prompts.js";
 import { generateSnapshot } from "./snapshot.js";
 import { generateFiles } from "./generate.js";

@@ -1,8 +1,8 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
-import type { DetectedFramework, MonorepoInfo, MonorepoPackage } from "./types.js";
-import { readFileOr, readJsonFile } from "./utils.js";
-import { FRAMEWORK_MAP } from "./detect-frameworks.js";
+import type { DetectedFramework, MonorepoInfo, MonorepoPackage } from "../types.js";
+import { readFileOr, readJsonFile } from "../utils.js";
+import { FRAMEWORK_MAP } from "./frameworks.js";
 
 /**
  * Detect monorepo tooling and enumerate packages.

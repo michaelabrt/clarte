@@ -26,7 +26,7 @@ const mockDetectContext = vi.fn().mockResolvedValue({
   monorepo: null,
 });
 
-vi.mock("../detect.js", () => ({
+vi.mock("../detect/detect.js", () => ({
   detectContext: (...args: unknown[]) => mockDetectContext(...args),
 }));
 

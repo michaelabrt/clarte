@@ -1,4 +1,4 @@
-import type { DetectedFramework } from "./types.js";
+import type { DetectedFramework } from "../types.js";
 
 /** Framework detection rules: dependency name -> framework info */
 export const FRAMEWORK_MAP: Record<string, string> = {

@@ -15,7 +15,7 @@ import { buildMainContext, getMainContextFilename, type SectionFilterOptions } f
 import { buildCursorRules, renderCursorRule } from "./templates/cursor-rules.js";
 import { buildClaudeSkills, renderClaudeSkill } from "./templates/claude-skills.js";
 import { buildAiderContext } from "./templates/aider-context.js";
-import { detectContext } from "./detect.js";
+import { detectContext } from "./detect/detect.js";
 import { generateSnapshot } from "./snapshot.js";
 
 /**
