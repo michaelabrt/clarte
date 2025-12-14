@@ -1,4 +1,4 @@
-import { loadConfig, computeSnapshotHash } from "./config.js";
+import { loadConfig, computeSnapshotHash } from "./config/config.js";
 import { validateContextPaths } from "./check.js";
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { scanConfigConstraints, renderConstraintsSection } from "../config-scan.js";
+import { scanConfigConstraints, renderConstraintsSection } from "../config/scan.js";
 import type { ConfigConstraints, DetectedContext } from "../types.js";
 
 // Mock utils.ts to control file reads

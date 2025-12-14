@@ -1,5 +1,5 @@
 import path from "node:path";
-import { IGNORE_GLOBS } from "./ignore-patterns.js";
+import { IGNORE_GLOBS } from "./config/ignore-patterns.js";
 import { readFileOr, readJsonFile } from "./utils.js";
 import { parseImportsAst } from "./parsers/parse-imports.js";
 import { resolveBarrelExportsAst } from "./parsers/barrel.js";

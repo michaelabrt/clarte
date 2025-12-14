@@ -1,7 +1,7 @@
 import type { CodeSnapshot, ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
 import { summarizeDetection } from "../detect/detect.js";
 import { getFrameworkHints } from "./framework-hints.js";
-import { renderConstraintsSection } from "../config-scan.js";
+import { renderConstraintsSection } from "../config/scan.js";
 import { renderConventionsSection } from "../conventions/conventions.js";
 import { renderTestMappingSection } from "../test-map.js";
 import { buildDirectives, computeFileComplexity } from "./directives.js";

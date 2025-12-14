@@ -53,7 +53,7 @@ vi.mock("../snapshot.js", () => ({
   generateSnapshot: (...args: unknown[]) => mockGenerateSnapshot(...args),
 }));
 
-vi.mock("../config.js", () => ({
+vi.mock("../config/config.js", () => ({
   loadConfig: vi.fn().mockResolvedValue(null),
   saveConfig: vi.fn(),
   configToAnswers: vi.fn().mockReturnValue({}),

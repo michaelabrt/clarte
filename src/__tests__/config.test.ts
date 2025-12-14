@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, afterEach } from "vitest";
-import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash, migrateConfig } from "../config.js";
+import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash, migrateConfig } from "../config/config.js";
 import type { ProjectConfig, UserAnswers } from "../types.js";
 
 async function makeTmpDir(): Promise<string> {
