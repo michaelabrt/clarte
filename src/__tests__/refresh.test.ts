@@ -49,7 +49,7 @@ const mockGenerateSnapshot = vi.fn().mockResolvedValue({
   budgetExcluded: 0,
 });
 
-vi.mock("../snapshot.js", () => ({
+vi.mock("../snapshot/snapshot.js", () => ({
   generateSnapshot: (...args: unknown[]) => mockGenerateSnapshot(...args),
 }));
 

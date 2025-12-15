@@ -103,7 +103,7 @@ describe("multi-line generic signature extraction", () => {
   }
 
   it("extracts multi-line generic function signature", async () => {
-    const { generateSnapshot } = await import("../snapshot.js");
+    const { generateSnapshot } = await import("../snapshot/snapshot.js");
     const tsContent = `export function foo<
   T extends Bar,
   U extends Baz
@@ -128,7 +128,7 @@ describe("multi-line generic signature extraction", () => {
   });
 
   it("handles generics with constraint braces like T extends { key: V }", async () => {
-    const { generateSnapshot } = await import("../snapshot.js");
+    const { generateSnapshot } = await import("../snapshot/snapshot.js");
     const tsContent = `export function transform<
   T extends { key: string },
   U extends { value: number }
@@ -149,7 +149,7 @@ describe("multi-line generic signature extraction", () => {
   });
 
   it("still works for single-line generics", async () => {
-    const { generateSnapshot } = await import("../snapshot.js");
+    const { generateSnapshot } = await import("../snapshot/snapshot.js");
     const tsContent = `export function identity<T>(arg: T): T {
   return arg;
 }`;

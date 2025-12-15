@@ -14,7 +14,7 @@ import { detectCommunities } from "./graph/communities.js";
 import { analyzeGitActivity } from "./git/analysis.js";
 import { loadConfig } from "./config/config.js";
 import { buildTestMapping } from "./analysis/test-map.js";
-import { generateSnapshot } from "./snapshot.js";
+import { generateSnapshot } from "./snapshot/snapshot.js";
 import { buildDirectives } from "./templates/directives.js";
 import { startShimmer } from "./animations.js";
 import type { ContextAnalysis, ProgressCallback } from "./types.js";

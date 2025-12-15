@@ -16,7 +16,7 @@ import { buildCursorRules, renderCursorRule } from "./templates/cursor-rules.js"
 import { buildClaudeSkills, renderClaudeSkill } from "./templates/claude-skills.js";
 import { buildAiderContext } from "./templates/aider-context.js";
 import { detectContext } from "./detect/detect.js";
-import { generateSnapshot } from "./snapshot.js";
+import { generateSnapshot } from "./snapshot/snapshot.js";
 
 /**
  * Generate all context files based on detection, user answers, and snapshot.
