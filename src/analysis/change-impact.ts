@@ -1,5 +1,5 @@
-import type { GitAnalysis, ImportGraph } from "./types.js";
-import { buildAdjacency } from "./utils.js";
+import type { GitAnalysis, ImportGraph } from "../types.js";
+import { buildAdjacency } from "../utils.js";
 
 /**
  * Predict which files are most likely to need changes when a given file is modified.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTestMapping, classifyTestType, renderTestMappingSection } from "../test-map.js";
+import { buildTestMapping, classifyTestType, renderTestMappingSection } from "../analysis/test-map.js";
 import type { DetectedContext, ImportGraph, TestMapping } from "../types.js";
 
 function makeCtx(overrides: Partial<DetectedContext> = {}): DetectedContext {

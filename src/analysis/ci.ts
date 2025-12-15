@@ -1,5 +1,5 @@
-import type { ContextAnalysis, FileRole, ImportGraph } from "./types.js";
-import { computeFileComplexity, type FileComplexityInfo } from "./templates/directives.js";
+import type { ContextAnalysis, FileRole, ImportGraph } from "../types.js";
+import { computeFileComplexity, type FileComplexityInfo } from "../templates/directives.js";
 
 // ── Types ────────────────────────────────────────────────────────────
 

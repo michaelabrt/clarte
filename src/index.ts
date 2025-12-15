@@ -25,7 +25,7 @@ import { buildImportGraph, mergeGraph } from "./graph-build.js";
 import { getHubFiles } from "./graph/hub-files.js";
 import { startShimmer } from "./animations.js";
 import type { DetectedContext, GeneratedFile, HubFile, ImportGraph, ProgressCallback } from "./types.js";
-import { serializeAnalysis } from "./serialize.js";
+import { serializeAnalysis } from "./analysis/serialize.js";
 import { buildDirectives } from "./templates/directives.js";
 import { handleEarlyExits, parseCliArgs } from "./cli-args.js";
 import { runCheckMode } from "./cli-check.js";

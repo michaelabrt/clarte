@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { ContextAnalysis } from "./types.js";
+import type { ContextAnalysis } from "../types.js";
 
 const CLARTE_DIR = ".clarte";
 const HISTORY_FILE = "history.json";

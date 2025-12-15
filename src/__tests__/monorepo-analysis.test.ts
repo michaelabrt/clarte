@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { analyzeMonorepoGraph, annotateCrossPackageEdges, computePackageCentrality } from "../monorepo-analysis.js";
+import { analyzeMonorepoGraph, annotateCrossPackageEdges, computePackageCentrality } from "../analysis/monorepo.js";
 import type { ImportEdge, ImportGraph, MonorepoInfo } from "../types.js";
 
 /** Helper to create a minimal ImportGraph from edges */

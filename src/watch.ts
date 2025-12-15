@@ -19,7 +19,7 @@ import { buildGraphWithCache } from "./cache.js";
 import { analyzeGitActivity } from "./git/analysis.js";
 import { scanConfigConstraints } from "./config/scan.js";
 import { inferConventions } from "./conventions/conventions.js";
-import { buildTestMapping } from "./test-map.js";
+import { buildTestMapping } from "./analysis/test-map.js";
 import {
   extractSnapshot,
   loadPreviousSnapshot,
@@ -27,7 +27,7 @@ import {
   computeDelta,
   isDeltaEmpty,
   type AnalysisSnapshot,
-} from "./delta.js";
+} from "./analysis/delta.js";
 import type { ContextAnalysis, ProgressCallback } from "./types.js";
 
 /** Directories and patterns to ignore in fs.watch events. */
