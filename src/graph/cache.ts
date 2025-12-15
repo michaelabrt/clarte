@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { glob } from "tinyglobby";
 import { computeHITS, computeBetweenness } from "./centrality.js";
-import { detectBarrelFiles, buildImportGraph } from "./graph-build.js";
+import { detectBarrelFiles, buildImportGraph } from "./build.js";
 import {
   getSourceGlob,
   parseImports,
@@ -15,8 +15,8 @@ import {
   SOURCE_IGNORE,
   type PathAlias,
 } from "./import-resolution.js";
-import { initTreeSitter } from "./parsers/init.js";
-import { readFileOr } from "./utils.js";
+import { initTreeSitter } from "../parsers/init.js";
+import { readFileOr } from "../utils.js";
 import type {
   ArchitecturalLayer,
   Chokepoint,
@@ -33,7 +33,7 @@ import type {
   LayerEdge,
   ProgressCallback,
   TightCoupling,
-} from "./types.js";
+} from "../types.js";
 
 const CACHE_VERSION = 2;
 const CACHE_DIR = ".clarte";

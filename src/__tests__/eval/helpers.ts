@@ -5,7 +5,7 @@
  * with computed inDegree, centrality (HITS authority), hub scores, etc.
  */
 
-import { computeHITS, computeBetweenness } from "../../centrality.js";
+import { computeHITS, computeBetweenness } from "../../graph/centrality.js";
 import type { ImportEdge, ImportGraph } from "../../types.js";
 
 /**

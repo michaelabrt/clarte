@@ -6,11 +6,11 @@
  */
 
 import { bench, describe } from "vitest";
-import { computeHITS, computeBetweenness } from "../../centrality.js";
+import { computeHITS, computeBetweenness } from "../../graph/centrality.js";
 import { detectCommunities } from "../../graph/communities.js";
 import { findChokepoints } from "../../graph/chokepoints.js";
 import { computeInstability } from "../../graph/instability.js";
-import { findCircularDeps } from "../../graph-cycles.js";
+import { findCircularDeps } from "../../graph/cycles.js";
 import { findDeadFiles } from "../../graph/dead-files.js";
 import { generateGraph } from "./graph-generator.js";
 

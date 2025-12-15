@@ -1,8 +1,8 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
-import { readFileOr } from "./utils.js";
-import { initTreeSitter } from "./parsers/init.js";
-import { detectBarrelAst } from "./parsers/barrel.js";
+import { readFileOr } from "../utils.js";
+import { initTreeSitter } from "../parsers/init.js";
+import { detectBarrelAst } from "../parsers/barrel.js";
 import { computeHITS, computeBetweenness } from "./centrality.js";
 import {
   getSourceGlob,
@@ -19,7 +19,7 @@ import {
   type BarrelExportMap,
   type ResolveContext,
 } from "./import-resolution.js";
-import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "./types.js";
+import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "../types.js";
 
 /**
  * Detect barrel files: files where >50% of top-level statements are re-exports.
