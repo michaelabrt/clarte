@@ -10,26 +10,26 @@ import {
 } from "./theme.js";
 import { fileExists, formatBytes } from "./utils.js";
 import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "./detect/detect.js";
-import { runPrompts } from "./prompts.js";
+import { runPrompts } from "./cli/prompts.js";
 import { generateSnapshot } from "./snapshot/snapshot.js";
 import { generateFiles } from "./generate.js";
-import { printSummary } from "./summary.js";
+import { printSummary } from "./cli/summary.js";
 import type { UserAnswers } from "./types.js";
 import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "./config/config.js";
 import { refreshSnapshot } from "./refresh.js";
-import { initPreCommitHook } from "./hooks.js";
+import { initPreCommitHook } from "./cli/hooks.js";
 import { runDiffMode } from "./diff.js";
 import { runWatchMode } from "./watch.js";
 import { buildGraphWithCache } from "./graph/cache.js";
 import { buildImportGraph, mergeGraph } from "./graph/build.js";
 import { getHubFiles } from "./graph/hub-files.js";
-import { startShimmer } from "./animations.js";
+import { startShimmer } from "./cli/animations.js";
 import type { DetectedContext, GeneratedFile, HubFile, ImportGraph, ProgressCallback } from "./types.js";
 import { serializeAnalysis } from "./analysis/serialize.js";
 import { buildDirectives } from "./templates/directives.js";
-import { handleEarlyExits, parseCliArgs } from "./cli-args.js";
-import { runCheckMode } from "./cli-check.js";
-import { runCiMode } from "./cli-ci.js";
+import { handleEarlyExits, parseCliArgs } from "./cli/args.js";
+import { runCheckMode } from "./cli/check.js";
+import { runCiMode } from "./cli/ci.js";
 import { runAnalysis } from "./run-analysis.js";
 
 async function main() {

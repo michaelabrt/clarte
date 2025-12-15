@@ -1,6 +1,6 @@
 import path from "node:path";
-import { theme as t, initTheme, resetTerminalColors } from "./theme.js";
-import type { SectionFilterOptions } from "./templates/main-context.js";
+import { theme as t, initTheme, resetTerminalColors } from "../theme.js";
+import type { SectionFilterOptions } from "../templates/main-context.js";
 
 declare const PKG_VERSION: string;
 declare const PKG_NAME: string;

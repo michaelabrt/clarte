@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, afterEach, beforeEach, vi } from "vitest";
-import { initPreCommitHook } from "../hooks.js";
+import { initPreCommitHook } from "../cli/hooks.js";
 
 let tmpDir: string;
 

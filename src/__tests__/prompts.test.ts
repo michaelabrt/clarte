@@ -49,7 +49,7 @@ vi.mock("../detect/detect.js", () => ({
   summarizeDetection: () => "TypeScript + React + Vitest",
 }));
 
-import { runPrompts } from "../prompts.js";
+import { runPrompts } from "../cli/prompts.js";
 
 function makeDetected(overrides: Partial<DetectedContext> = {}): DetectedContext {
   return {
