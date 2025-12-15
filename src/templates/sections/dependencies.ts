@@ -1,6 +1,6 @@
 import type { ContextAnalysis, ContextSection } from "../../types.js";
 import { estimateTokens } from "../../utils.js";
-import { findFeedbackEdges } from "../../graph-cycles.js";
+import { findFeedbackEdges } from "../../graph/cycles.js";
 
 export function renderDependencySections(analysis: ContextAnalysis): ContextSection[] {
   const sections: ContextSection[] = [];

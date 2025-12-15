@@ -12,9 +12,9 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { buildImportGraph } from "../../graph-build.js";
+import { buildImportGraph } from "../../graph/build.js";
 import { getHubFiles } from "../../graph/hub-files.js";
-import { findCircularDeps } from "../../graph-cycles.js";
+import { findCircularDeps } from "../../graph/cycles.js";
 import { detectArchitecturalLayers } from "../../graph/layers.js";
 import { computeInstability } from "../../graph/instability.js";
 import { detectCommunities } from "../../graph/communities.js";

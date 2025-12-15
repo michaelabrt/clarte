@@ -1,12 +1,12 @@
 import path from "node:path";
-import { IGNORE_GLOBS } from "./config/ignore-patterns.js";
-import { readFileOr, readJsonFile } from "./utils.js";
-import { parseImportsAst } from "./parsers/parse-imports.js";
-import { resolveBarrelExportsAst } from "./parsers/barrel.js";
-import type { Language } from "./types.js";
+import { IGNORE_GLOBS } from "../config/ignore-patterns.js";
+import { readFileOr, readJsonFile } from "../utils.js";
+import { parseImportsAst } from "../parsers/parse-imports.js";
+import { resolveBarrelExportsAst } from "../parsers/barrel.js";
+import type { Language } from "../types.js";
 
-export type { RawImport } from "./parsers/types.js";
-type RawImport = import("./parsers/types.js").RawImport;
+export type { RawImport } from "../parsers/types.js";
+type RawImport = import("../parsers/types.js").RawImport;
 
 /**
  * Resolution priority: .ts > .tsx > .js > .jsx > .mjs

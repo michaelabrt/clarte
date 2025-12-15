@@ -1,5 +1,5 @@
-import type { CircularDependency, ImportEdge, ImportGraph } from "./types.js";
-import { getOrSet } from "./utils.js";
+import type { CircularDependency, ImportEdge, ImportGraph } from "../types.js";
+import { getOrSet } from "../utils.js";
 
 /**
  * Find all strongly connected components using Tarjan's algorithm.

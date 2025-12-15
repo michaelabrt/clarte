@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { findSCCs, findCircularDeps } from "../../graph-cycles.js";
+import { findSCCs, findCircularDeps } from "../../graph/cycles.js";
 import { getHubFiles } from "../../graph/hub-files.js";
 import { computeInstability } from "../../graph/instability.js";
 import { detectCommunities } from "../../graph/communities.js";

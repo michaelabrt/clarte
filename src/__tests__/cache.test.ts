@@ -12,7 +12,7 @@ import {
   computeAnalysisCacheKey,
   type CacheData,
   type AnalysisCacheData,
-} from "../cache.js";
+} from "../graph/cache.js";
 import type { ImportGraph } from "../types.js";
 
 let tmpDir: string;

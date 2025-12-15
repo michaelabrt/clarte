@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { findSCCs, findCircularDeps } from "../graph-cycles.js";
+import { findSCCs, findCircularDeps } from "../graph/cycles.js";
 import { getHubFiles } from "../graph/hub-files.js";
-import { computeHITS, deriveRole, computeBetweenness } from "../centrality.js";
+import { computeHITS, deriveRole, computeBetweenness } from "../graph/centrality.js";
 import { findStructuralTemporalMismatches } from "../graph/mismatches.js";
 import { findTightCouplings } from "../graph/tight-coupling.js";
 import { checkArchitecturalFitness } from "../graph/fitness.js";

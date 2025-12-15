@@ -1,5 +1,5 @@
-import type { FileRole, ImportEdge, ImportGraph } from "./types.js";
-import { buildAdjacency } from "./utils.js";
+import type { FileRole, ImportEdge, ImportGraph } from "../types.js";
+import { buildAdjacency } from "../utils.js";
 
 /** HITS edge-weighting parameters */
 const HITS = {

@@ -1,4 +1,4 @@
-import { deriveRole } from "../centrality.js";
+import { deriveRole } from "./centrality.js";
 import type { HubFile, ImportEdge, ImportGraph } from "../types.js";
 
 /**
