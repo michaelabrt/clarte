@@ -27,7 +27,7 @@ vi.mock("../graph.js", async () => {
   };
 });
 
-import { generateSnapshot } from "../snapshot.js";
+import { generateSnapshot } from "../snapshot/snapshot.js";
 import { readFileOr } from "../utils.js";
 import { glob } from "tinyglobby";
 import type { DetectedContext } from "../types.js";

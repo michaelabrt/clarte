@@ -11,7 +11,7 @@ import {
 import { fileExists, formatBytes } from "./utils.js";
 import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "./detect/detect.js";
 import { runPrompts } from "./prompts.js";
-import { generateSnapshot } from "./snapshot.js";
+import { generateSnapshot } from "./snapshot/snapshot.js";
 import { generateFiles } from "./generate.js";
 import { printSummary } from "./summary.js";
 import type { UserAnswers } from "./types.js";

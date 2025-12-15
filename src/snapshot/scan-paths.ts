@@ -1,6 +1,6 @@
-import type { DetectedContext, Language, SnapshotEntry } from "./types.js";
-import { readFileOr } from "./utils.js";
-import { extractSnapshotAst } from "./parsers/extract-snapshot.js";
+import type { DetectedContext, Language, SnapshotEntry } from "../types.js";
+import { readFileOr } from "../utils.js";
+import { extractSnapshotAst } from "../parsers/extract-snapshot.js";
 
 export function getDefaultScanPaths(ctx: DetectedContext): string[] {
   switch (ctx.language) {

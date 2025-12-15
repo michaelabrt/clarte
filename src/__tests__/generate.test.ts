@@ -67,7 +67,7 @@ vi.mock("../detect/detect.js", () => ({
   }),
 }));
 
-vi.mock("../snapshot.js", () => ({
+vi.mock("../snapshot/snapshot.js", () => ({
   generateSnapshot: vi.fn().mockResolvedValue({
     entries: [],
     markdown: "",
