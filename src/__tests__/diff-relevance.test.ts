@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeNeighborhood, scopeHubFiles, scopeCircularDeps } from "../diff.js";
+import { computeNeighborhood, scopeHubFiles, scopeCircularDeps } from "../modes/diff.js";
 
 // ── computeNeighborhood: 2-hop expansion ──────────────────────────────
 

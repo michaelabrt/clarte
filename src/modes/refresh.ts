@@ -1,12 +1,12 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
-import { theme as t } from "./theme.js";
-import { startShimmer } from "./cli/animations.js";
-import { detectContext } from "./detect/detect.js";
-import { generateSnapshot } from "./snapshot/snapshot.js";
-import { buildImportGraph } from "./graph/build.js";
-import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "./config/config.js";
-import { fileExists, readFileOr, writeFileSafe } from "./utils.js";
+import { theme as t } from "../theme.js";
+import { startShimmer } from "../cli/animations.js";
+import { detectContext } from "../detect/detect.js";
+import { generateSnapshot } from "../snapshot/snapshot.js";
+import { buildImportGraph } from "../graph/build.js";
+import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "../config/config.js";
+import { fileExists, readFileOr, writeFileSafe } from "../utils.js";
 
 /** Known context files in priority order */
 const CONTEXT_FILES = [

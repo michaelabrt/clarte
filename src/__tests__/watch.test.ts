@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { shouldRebuild, createDebounce } from "../watch.js";
+import { shouldRebuild, createDebounce } from "../modes/watch.js";
 
 describe("shouldRebuild", () => {
   it("accepts TypeScript source files", () => {

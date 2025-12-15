@@ -85,7 +85,7 @@ vi.mock("../theme.js", () => ({
   },
 }));
 
-import { refreshSnapshot } from "../refresh.js";
+import { refreshSnapshot } from "../modes/refresh.js";
 
 let tmpDir: string;
 

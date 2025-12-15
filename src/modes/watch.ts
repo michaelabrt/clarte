@@ -1,25 +1,25 @@
 import fs from "node:fs";
 import path from "node:path";
-import { IGNORE_DIRS_SET } from "./config/ignore-patterns.js";
-import { loadConfig, configToAnswers } from "./config/config.js";
-import { detectContext, enrichFrameworksWithUsage } from "./detect/detect.js";
-import { buildImportGraph, mergeGraph } from "./graph/build.js";
-import { findCircularDeps } from "./graph/cycles.js";
-import { getHubFiles } from "./graph/hub-files.js";
-import { detectArchitecturalLayers, computeLayerConsistency } from "./graph/layers.js";
-import { computeInstability } from "./graph/instability.js";
-import { detectCommunities } from "./graph/communities.js";
-import { findDeadFiles } from "./graph/dead-files.js";
-import { findCrossCuttingFiles } from "./graph/cross-cutting.js";
-import { findChokepoints } from "./graph/chokepoints.js";
-import { computeGraphTopology } from "./graph/topology.js";
-import { findStructuralTemporalMismatches } from "./graph/mismatches.js";
-import { findTightCouplings } from "./graph/tight-coupling.js";
-import { buildGraphWithCache } from "./graph/cache.js";
-import { analyzeGitActivity } from "./git/analysis.js";
-import { scanConfigConstraints } from "./config/scan.js";
-import { inferConventions } from "./conventions/conventions.js";
-import { buildTestMapping } from "./analysis/test-map.js";
+import { IGNORE_DIRS_SET } from "../config/ignore-patterns.js";
+import { loadConfig, configToAnswers } from "../config/config.js";
+import { detectContext, enrichFrameworksWithUsage } from "../detect/detect.js";
+import { buildImportGraph, mergeGraph } from "../graph/build.js";
+import { findCircularDeps } from "../graph/cycles.js";
+import { getHubFiles } from "../graph/hub-files.js";
+import { detectArchitecturalLayers, computeLayerConsistency } from "../graph/layers.js";
+import { computeInstability } from "../graph/instability.js";
+import { detectCommunities } from "../graph/communities.js";
+import { findDeadFiles } from "../graph/dead-files.js";
+import { findCrossCuttingFiles } from "../graph/cross-cutting.js";
+import { findChokepoints } from "../graph/chokepoints.js";
+import { computeGraphTopology } from "../graph/topology.js";
+import { findStructuralTemporalMismatches } from "../graph/mismatches.js";
+import { findTightCouplings } from "../graph/tight-coupling.js";
+import { buildGraphWithCache } from "../graph/cache.js";
+import { analyzeGitActivity } from "../git/analysis.js";
+import { scanConfigConstraints } from "../config/scan.js";
+import { inferConventions } from "../conventions/conventions.js";
+import { buildTestMapping } from "../analysis/test-map.js";
 import {
   extractSnapshot,
   loadPreviousSnapshot,
@@ -27,8 +27,8 @@ import {
   computeDelta,
   isDeltaEmpty,
   type AnalysisSnapshot,
-} from "./analysis/delta.js";
-import type { ContextAnalysis, ProgressCallback } from "./types.js";
+} from "../analysis/delta.js";
+import type { ContextAnalysis, ProgressCallback } from "../types.js";
 
 /** Directories and patterns to ignore in fs.watch events. */
 const IGNORE_DIRS = IGNORE_DIRS_SET;
