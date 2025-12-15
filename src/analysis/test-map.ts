@@ -1,6 +1,6 @@
 import path from "node:path";
-import type { DetectedContext, ImportGraph, TestMapping, TestType } from "./types.js";
-import { getOrSet, isTestFile } from "./utils.js";
+import type { DetectedContext, ImportGraph, TestMapping, TestType } from "../types.js";
+import { getOrSet, isTestFile } from "../utils.js";
 
 function isExcludedFromUntested(filePath: string): boolean {
   const basename = path.basename(filePath);

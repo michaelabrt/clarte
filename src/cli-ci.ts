@@ -4,7 +4,7 @@ import { buildGraphWithCache } from "./cache.js";
 import { buildImportGraph, mergeGraph } from "./graph-build.js";
 import { runAnalysis } from "./run-analysis.js";
 import { loadConfig } from "./config/config.js";
-import { analyzeForCI, type CIAnalysisResult } from "./ci.js";
+import { analyzeForCI, type CIAnalysisResult } from "./analysis/ci.js";
 import type { ProgressCallback } from "./types.js";
 
 /**

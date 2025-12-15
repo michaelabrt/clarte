@@ -1,7 +1,7 @@
 import path from "node:path";
-import type { CrossPackageEdge, ImportEdge, ImportGraph, MonorepoAnalysis, MonorepoInfo } from "./types.js";
-import { readJsonFile } from "./utils.js";
-import { computeHITS } from "./centrality.js";
+import type { CrossPackageEdge, ImportEdge, ImportGraph, MonorepoAnalysis, MonorepoInfo } from "../types.js";
+import { readJsonFile } from "../utils.js";
+import { computeHITS } from "../centrality.js";
 
 /**
  * Determine the public API entry points for a package.

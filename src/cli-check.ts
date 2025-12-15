@@ -1,5 +1,5 @@
 import { loadConfig, computeSnapshotHash } from "./config/config.js";
-import { validateContextPaths } from "./check.js";
+import { validateContextPaths } from "./analysis/check.js";
 
 /**
  * Handle --check mode: fast path for shell integration.

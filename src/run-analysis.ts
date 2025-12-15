@@ -15,11 +15,11 @@ import { computeGraphTopology } from "./graph/topology.js";
 import { findStructuralTemporalMismatches } from "./graph/mismatches.js";
 import { findTightCouplings } from "./graph/tight-coupling.js";
 import { analyzeGitActivity } from "./git/analysis.js";
-import { analyzeMonorepoGraph, computePackageCentrality } from "./monorepo-analysis.js";
+import { analyzeMonorepoGraph, computePackageCentrality } from "./analysis/monorepo.js";
 import { scanConfigConstraints } from "./config/scan.js";
 import { inferConventions } from "./conventions/conventions.js";
-import { buildTestMapping } from "./test-map.js";
-import { predictChangeImpact } from "./change-impact.js";
+import { buildTestMapping } from "./analysis/test-map.js";
+import { predictChangeImpact } from "./analysis/change-impact.js";
 import {
   extractSnapshot,
   loadPreviousSnapshot,
@@ -27,7 +27,7 @@ import {
   computeDelta,
   isDeltaEmpty,
   renderDeltaSection,
-} from "./delta.js";
+} from "./analysis/delta.js";
 import type {
   ContextAnalysis,
   DetectedContext,

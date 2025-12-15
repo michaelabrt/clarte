@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { serializeAnalysis } from "../serialize.js";
+import { serializeAnalysis } from "../analysis/serialize.js";
 import type { CodeSnapshot, ContextAnalysis, DetectedContext, ImportGraph } from "../types.js";
 
 function mockCtx(overrides?: Partial<DetectedContext>): DetectedContext {

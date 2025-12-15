@@ -13,7 +13,7 @@ import { computeInstability } from "./graph/instability.js";
 import { detectCommunities } from "./graph/communities.js";
 import { analyzeGitActivity } from "./git/analysis.js";
 import { loadConfig } from "./config/config.js";
-import { buildTestMapping } from "./test-map.js";
+import { buildTestMapping } from "./analysis/test-map.js";
 import { generateSnapshot } from "./snapshot.js";
 import { buildDirectives } from "./templates/directives.js";
 import { startShimmer } from "./animations.js";

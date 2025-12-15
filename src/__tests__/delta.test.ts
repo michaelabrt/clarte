@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { extractSnapshot, computeDelta, isDeltaEmpty, renderDeltaSection, buildDeltaDirectives } from "../delta.js";
-import type { AnalysisSnapshot } from "../delta.js";
+import { extractSnapshot, computeDelta, isDeltaEmpty, renderDeltaSection, buildDeltaDirectives } from "../analysis/delta.js";
+import type { AnalysisSnapshot } from "../analysis/delta.js";
 import type { ContextAnalysis } from "../types.js";
 
 function mockAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
