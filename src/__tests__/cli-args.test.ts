@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { parseCliArgs } from "../cli-args.js";
+import { parseCliArgs } from "../cli/args.js";
 
 // Mock process.exit to prevent test termination
 const mockExit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);

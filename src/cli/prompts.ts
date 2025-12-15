@@ -1,7 +1,7 @@
 import * as p from "@clack/prompts";
-import type { DetectedContext, IDETarget, ProjectConfig, UserAnswers } from "./types.js";
-import { theme as t } from "./theme.js";
-import { summarizeDetection } from "./detect/detect.js";
+import type { DetectedContext, IDETarget, ProjectConfig, UserAnswers } from "../types.js";
+import { theme as t } from "../theme.js";
+import { summarizeDetection } from "../detect/detect.js";
 
 /** Languages that support code snapshot extraction */
 const SNAPSHOT_LANGUAGES = new Set(["typescript", "javascript", "python", "go", "rust", "java"]);

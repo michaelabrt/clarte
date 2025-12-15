@@ -1,6 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { fileExists, readFileOr, writeFileSafe } from "./utils.js";
+import { fileExists, readFileOr, writeFileSafe } from "../utils.js";
 
 const PRE_COMMIT_CONTENT = `#!/bin/sh
 npx clarte --check || {

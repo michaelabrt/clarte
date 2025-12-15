@@ -4,7 +4,7 @@ import path from "node:path";
 import os from "node:os";
 
 // Mock heavy dependencies
-vi.mock("../animations.js", () => ({
+vi.mock("../cli/animations.js", () => ({
   startShimmer: () => ({
     message: vi.fn(),
     stop: vi.fn(),

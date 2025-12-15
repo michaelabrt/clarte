@@ -16,7 +16,7 @@ import { loadConfig } from "./config/config.js";
 import { buildTestMapping } from "./analysis/test-map.js";
 import { generateSnapshot } from "./snapshot/snapshot.js";
 import { buildDirectives } from "./templates/directives.js";
-import { startShimmer } from "./animations.js";
+import { startShimmer } from "./cli/animations.js";
 import type { ContextAnalysis, ProgressCallback } from "./types.js";
 
 export async function runDiffMode(

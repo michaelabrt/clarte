@@ -26,7 +26,7 @@ vi.mock("../theme.js", () => ({
   },
 }));
 
-import { printSummary } from "../summary.js";
+import { printSummary } from "../cli/summary.js";
 
 function allOutput(): string {
   return logCalls.map((c) => String(c.args[0])).join("\n");
