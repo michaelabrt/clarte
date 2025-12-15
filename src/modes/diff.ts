@@ -1,23 +1,23 @@
 import path from "node:path";
 import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
-import { theme as t, unpatchPicocolors } from "./theme.js";
-import { writeFileSafe } from "./utils.js";
-import { detectContext, enrichFrameworksWithUsage } from "./detect/detect.js";
-import { buildGraphWithCache } from "./graph/cache.js";
-import { buildImportGraph, mergeGraph } from "./graph/build.js";
-import { findCircularDeps } from "./graph/cycles.js";
-import { getHubFiles } from "./graph/hub-files.js";
-import { detectArchitecturalLayers } from "./graph/layers.js";
-import { computeInstability } from "./graph/instability.js";
-import { detectCommunities } from "./graph/communities.js";
-import { analyzeGitActivity } from "./git/analysis.js";
-import { loadConfig } from "./config/config.js";
-import { buildTestMapping } from "./analysis/test-map.js";
-import { generateSnapshot } from "./snapshot/snapshot.js";
-import { buildDirectives } from "./templates/directives.js";
-import { startShimmer } from "./cli/animations.js";
-import type { ContextAnalysis, ProgressCallback } from "./types.js";
+import { theme as t, unpatchPicocolors } from "../theme.js";
+import { writeFileSafe } from "../utils.js";
+import { detectContext, enrichFrameworksWithUsage } from "../detect/detect.js";
+import { buildGraphWithCache } from "../graph/cache.js";
+import { buildImportGraph, mergeGraph } from "../graph/build.js";
+import { findCircularDeps } from "../graph/cycles.js";
+import { getHubFiles } from "../graph/hub-files.js";
+import { detectArchitecturalLayers } from "../graph/layers.js";
+import { computeInstability } from "../graph/instability.js";
+import { detectCommunities } from "../graph/communities.js";
+import { analyzeGitActivity } from "../git/analysis.js";
+import { loadConfig } from "../config/config.js";
+import { buildTestMapping } from "../analysis/test-map.js";
+import { generateSnapshot } from "../snapshot/snapshot.js";
+import { buildDirectives } from "../templates/directives.js";
+import { startShimmer } from "../cli/animations.js";
+import type { ContextAnalysis, ProgressCallback } from "../types.js";
 
 export async function runDiffMode(
   rootDir: string,

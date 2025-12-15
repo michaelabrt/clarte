@@ -99,7 +99,7 @@ vi.mock("../theme.js", () => ({
   },
 }));
 
-import { generateFiles, extractUserSections, mergeUserSections } from "../generate.js";
+import { generateFiles, extractUserSections, mergeUserSections } from "../core/generate.js";
 
 let tmpDir: string;
 

@@ -1,6 +1,6 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
-import { theme as t } from "./theme.js";
+import { theme as t } from "../theme.js";
 import type {
   CodeSnapshot,
   ContextAnalysis,
@@ -9,14 +9,14 @@ import type {
   ImportGraph,
   ProgressCallback,
   UserAnswers,
-} from "./types.js";
-import { fileExists, readFileOr, writeFileSafe } from "./utils.js";
-import { buildMainContext, getMainContextFilename, type SectionFilterOptions } from "./templates/main-context.js";
-import { buildCursorRules, renderCursorRule } from "./templates/cursor-rules.js";
-import { buildClaudeSkills, renderClaudeSkill } from "./templates/claude-skills.js";
-import { buildAiderContext } from "./templates/aider-context.js";
-import { detectContext } from "./detect/detect.js";
-import { generateSnapshot } from "./snapshot/snapshot.js";
+} from "../types.js";
+import { fileExists, readFileOr, writeFileSafe } from "../utils.js";
+import { buildMainContext, getMainContextFilename, type SectionFilterOptions } from "../templates/main-context.js";
+import { buildCursorRules, renderCursorRule } from "../templates/cursor-rules.js";
+import { buildClaudeSkills, renderClaudeSkill } from "../templates/claude-skills.js";
+import { buildAiderContext } from "../templates/aider-context.js";
+import { detectContext } from "../detect/detect.js";
+import { generateSnapshot } from "../snapshot/snapshot.js";
 
 /**
  * Generate all context files based on detection, user answers, and snapshot.

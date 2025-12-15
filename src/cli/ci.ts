@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { detectContext, enrichFrameworksWithUsage } from "../detect/detect.js";
 import { buildGraphWithCache } from "../graph/cache.js";
 import { buildImportGraph, mergeGraph } from "../graph/build.js";
-import { runAnalysis } from "../run-analysis.js";
+import { runAnalysis } from "../core/run-analysis.js";
 import { loadConfig } from "../config/config.js";
 import { analyzeForCI, type CIAnalysisResult } from "../analysis/ci.js";
 import type { ProgressCallback } from "../types.js";

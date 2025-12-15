@@ -1,25 +1,25 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
-import { theme as t } from "./theme.js";
-import { fileExists } from "./utils.js";
-import { computeAnalysisCacheKey, loadAnalysisCache, saveAnalysisCache, ANALYSIS_CACHE_VERSION } from "./graph/cache.js";
-import { findCircularDeps } from "./graph/cycles.js";
-import { getHubFiles } from "./graph/hub-files.js";
-import { detectArchitecturalLayers, computeLayerConsistency } from "./graph/layers.js";
-import { computeInstability, INSTABILITY_THRESHOLD } from "./graph/instability.js";
-import { detectCommunities } from "./graph/communities.js";
-import { findDeadFiles } from "./graph/dead-files.js";
-import { findCrossCuttingFiles } from "./graph/cross-cutting.js";
-import { findChokepoints } from "./graph/chokepoints.js";
-import { computeGraphTopology } from "./graph/topology.js";
-import { findStructuralTemporalMismatches } from "./graph/mismatches.js";
-import { findTightCouplings } from "./graph/tight-coupling.js";
-import { analyzeGitActivity } from "./git/analysis.js";
-import { analyzeMonorepoGraph, computePackageCentrality } from "./analysis/monorepo.js";
-import { scanConfigConstraints } from "./config/scan.js";
-import { inferConventions } from "./conventions/conventions.js";
-import { buildTestMapping } from "./analysis/test-map.js";
-import { predictChangeImpact } from "./analysis/change-impact.js";
+import { theme as t } from "../theme.js";
+import { fileExists } from "../utils.js";
+import { computeAnalysisCacheKey, loadAnalysisCache, saveAnalysisCache, ANALYSIS_CACHE_VERSION } from "../graph/cache.js";
+import { findCircularDeps } from "../graph/cycles.js";
+import { getHubFiles } from "../graph/hub-files.js";
+import { detectArchitecturalLayers, computeLayerConsistency } from "../graph/layers.js";
+import { computeInstability, INSTABILITY_THRESHOLD } from "../graph/instability.js";
+import { detectCommunities } from "../graph/communities.js";
+import { findDeadFiles } from "../graph/dead-files.js";
+import { findCrossCuttingFiles } from "../graph/cross-cutting.js";
+import { findChokepoints } from "../graph/chokepoints.js";
+import { computeGraphTopology } from "../graph/topology.js";
+import { findStructuralTemporalMismatches } from "../graph/mismatches.js";
+import { findTightCouplings } from "../graph/tight-coupling.js";
+import { analyzeGitActivity } from "../git/analysis.js";
+import { analyzeMonorepoGraph, computePackageCentrality } from "../analysis/monorepo.js";
+import { scanConfigConstraints } from "../config/scan.js";
+import { inferConventions } from "../conventions/conventions.js";
+import { buildTestMapping } from "../analysis/test-map.js";
+import { predictChangeImpact } from "../analysis/change-impact.js";
 import {
   extractSnapshot,
   loadPreviousSnapshot,
@@ -27,7 +27,7 @@ import {
   computeDelta,
   isDeltaEmpty,
   renderDeltaSection,
-} from "./analysis/delta.js";
+} from "../analysis/delta.js";
 import type {
   ContextAnalysis,
   DetectedContext,
@@ -35,7 +35,7 @@ import type {
   PackageHubFile,
   ProgressCallback,
   ProjectConfig,
-} from "./types.js";
+} from "../types.js";
 
 export interface AnalysisResult {
   analysis: ContextAnalysis;

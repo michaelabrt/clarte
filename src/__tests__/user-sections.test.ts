@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractUserSections, mergeUserSections } from "../generate.js";
+import { extractUserSections, mergeUserSections } from "../core/generate.js";
 
 describe("extractUserSections", () => {
   it("extracts a single user section", () => {
