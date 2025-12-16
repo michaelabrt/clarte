@@ -2,7 +2,12 @@ import path from "node:path";
 import * as p from "@clack/prompts";
 import { theme as t } from "../theme.js";
 import { fileExists } from "../utils.js";
-import { computeAnalysisCacheKey, loadAnalysisCache, saveAnalysisCache, ANALYSIS_CACHE_VERSION } from "../graph/cache.js";
+import {
+  computeAnalysisCacheKey,
+  loadAnalysisCache,
+  saveAnalysisCache,
+  ANALYSIS_CACHE_VERSION,
+} from "../graph/cache.js";
 import { findCircularDeps } from "../graph/cycles.js";
 import { getHubFiles } from "../graph/hub-files.js";
 import { detectArchitecturalLayers, computeLayerConsistency } from "../graph/layers.js";
