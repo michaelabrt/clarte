@@ -8,15 +8,9 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
-Clarté is an architecture intelligence engine for AI coding agents. It parses your imports with tree-sitter, builds a dependency graph, and runs 20+ analysis passes (HITS centrality, Tarjan's SCC, betweenness, community detection, change coupling, structural risk scoring) to map your codebase before agents write a single line. In [benchmarks](https://github.com/michaelabrt/clarte-benchmark), this reduced agent cost by 58% and input tokens by 60%.
-
-```bash
-npx clarte
-```
+Clarté is a software architecture intelligence engine. It parses your imports with tree-sitter, builds a dependency graph and runs 20+ analysis passes (HITS centrality, Tarjan's SCC, betweenness, community detection, change coupling, structural risk scoring) to map your codebase, then renders the results as context files that AI coding tools read before writing code. In [benchmarks](https://github.com/michaelabrt/clarte-benchmark), this reduced agent cost by 58% and input tokens by 60%.
 
 ## Quick Start
-
-Run in your project root:
 
 ```bash
 npx clarte
@@ -24,14 +18,23 @@ npx clarte
 
 Clarté will:
 
-1. **Detect** your tech stack, AI tools and project description automatically
-2. **Scan** source files for a code snapshot (types, store shapes, component props)
-3. **Generate** analysis results as context files for your detected tools
-4. **Show** a summary with token estimate
+- **Detect** your tech stack, AI tools and project description automatically
+- **Scan** source files for a code snapshot (types, store shapes, component props)
+- **Generate** analysis results as context files for your detected tools
+- **Show** a summary with token estimate
 
 Zero prompts on first run. Requires Node.js 20+. Config is saved to `.clarte.json` (add it to `.gitignore`); run with `--reconfigure` to customize.
 
 ## What the analysis covers
+
+```
+┌────────────┐      ┌─────────────┐      ┌────────────────┐      ┌──────────────┐
+│  your code │ ───▶ │  dep graph  │ ───▶ │  20+ analyses  │ ───▶ │ context file │
+└────────────┘      └─────────────┘      └────────────────┘      └──────────────┘
+  tree-sitter          import graph        HITS, SCC,              .claude/rules/,
+  AST parsing          + git metadata      betweenness,            .cursor/rules/,
+                                           coupling ...            AGENTS.md ...
+```
 
 | Section | Example |
 |---------|---------|
@@ -49,7 +52,7 @@ Zero prompts on first run. Requires Node.js 20+. Config is saved to `.clarte.jso
 | Code snapshot | Public types, interfaces, props and function signatures |
 
 <details>
-<summary><strong>Example: generated CLAUDE.md</strong> (click to expand)</summary>
+<summary><strong>Example: generated context file</strong> (click to expand)</summary>
 
 ```markdown
 # MyProject
@@ -190,12 +193,12 @@ Multi-language projects are handled automatically. When a secondary language acc
 
 ## Output Targets
 
-Clarté renders its analysis as context files for any major AI coding tool.
+Clarté auto-detects your AI coding tools and renders analysis as their native context file format.
 
 | Tool | Generated file | Docs |
 |------|---------------|------|
-| Claude Code | `CLAUDE.md` | [code.claude.com](https://code.claude.com/docs/en/memory) |
-| Cursor | `CLAUDE.md` + `.cursor/rules/*.md` | [cursor101.com](https://cursor101.com/cursor/rules) |
+| Claude Code | `.claude/rules/clarte.md` | [code.claude.com](https://code.claude.com/docs/en/memory) |
+| Cursor | `.cursor/rules/clarte.mdc` | [cursor101.com](https://cursor101.com/cursor/rules) |
 | OpenCode | `AGENTS.md` | [opencode.ai](https://opencode.ai/) |
 | GitHub Copilot | `.github/copilot-instructions.md` | [docs.github.com](https://docs.github.com/en/copilot/customizing-copilot/adding-repository-custom-instructions-for-github-copilot) |
 | Windsurf | `.windsurfrules` | [docs.windsurf.com](https://docs.windsurf.com/windsurf/cascade/memories) |
@@ -203,6 +206,8 @@ Clarté renders its analysis as context files for any major AI coding tool.
 | Continue.dev | `.continuerules` | [continue.dev/docs](https://docs.continue.dev/customize/deep-dives/rules) |
 | Aider | `.aider.conf.yml` | [aider.chat](https://aider.chat/docs/config/aider_conf.html) |
 | Generic | `CONTEXT.md` | - |
+
+Multiple targets can be configured at once. For Claude Code, Clarté also generates `/check` and `/refresh` skill files.
 
 ## Framework Conventions
 
@@ -224,7 +229,7 @@ Also supports: Fastify, Hono, Angular, Svelte, Prisma, Drizzle, Tailwind CSS, El
 
 ## How It Works
 
-Clarté runs a pipeline of static analysis steps. Each one feeds into the next. For the details on each algorithm, see [docs/how-it-works.md](docs/how-it-works.md).
+Clarté runs a pipeline of static analysis steps. Each one feeds into the next. For details on each algorithm, see [docs/how-it-works.md](docs/how-it-works.md).
 
 | Step | What it does | Result |
 |------|-------------|--------|
@@ -250,19 +255,47 @@ Clarté runs a pipeline of static analysis steps. Each one feeds into the next. 
 | [Git activity](docs/how-it-works.md#git-activity) | Surfaces recently active files | Shows where current work is focused |
 | [Stale detection](docs/how-it-works.md#stale-detection) | Hashes file paths + mtimes | Tells you when to re-run |
 
-## User Section Preservation
+## GitHub Action
 
-Clarté preserves your manual additions across regenerations. Wrap custom content with markers:
+Clarté provides a GitHub Action that posts architecture risk assessments on pull requests.
 
-```markdown
-<!-- clarte:user-start -->
-## My Custom Notes
+```yaml
+# .github/workflows/clarte.yml
+name: Architecture Review
+on: [pull_request]
 
-These notes will survive the next `npx clarte` run.
-<!-- clarte:user-end -->
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: michaelabrt/clarte@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-Marked sections are anchored to the nearest preceding `## Header` and reinserted at the same position when the file is regenerated.
+The PR comment includes:
+
+- **Per-file risk scores**: role, import count, top risk reason for each changed file
+- **Co-change warnings**: files not in the diff that usually change alongside ones that are
+- **Test coverage gaps**: changed files missing tests
+- **Architectural impact**: layer violations, chokepoint modifications, cross-cutting changes
+
+<details>
+<summary><strong>Action inputs</strong></summary>
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `github-token` | `${{ github.token }}` | GitHub token for posting PR comments |
+| `working-directory` | `.` | Path to the project root |
+| `risk-threshold` | `medium` | Minimum risk level to report (`low`, `medium`, `high`, `critical`) |
+| `fail-on-critical` | `false` | Fail the action when a critical-risk file is detected |
+| `comment-mode` | `update` | How to handle PR comments: `create`, `update` or `none` |
+| `max-files` | `50` | Maximum changed files to analyze (0 = unlimited) |
+
+</details>
 
 ## Options
 
@@ -286,14 +319,20 @@ npx clarte [directory] [options]
 | `--ci` | Machine-readable output (use with `--check` for CI pipelines) |
 | `--max-tokens=N` | Set the token budget for the code snapshot |
 | `--budget=N` | Set token budget for the context file (prioritized sections) |
+| `--max-chars=N` | Set character budget (default: 39500, 0 to disable) |
 | `--full` | Disable token budget (include all sections) |
 | `--include=a,b` | Always include these sections (comma-separated IDs) |
 | `--exclude=a,b` | Exclude these sections entirely |
 | `--format=json` | Output full analysis as structured JSON to stdout |
-| `--generate-skills` | Generate Claude Code skill files |
 | `--init-hook` | Install git pre-commit hook for auto-refresh on commit |
 | `--watch` | Watch for file changes and re-analyze continuously |
 | `-v, --verbose` | Show detailed progress output |
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| `ci --base=REF --changed-files=a,b` | Analyze changed files and output risk assessment as JSON |
 
 ### Diff Mode
 
@@ -341,6 +380,20 @@ npx clarte --refresh-snapshot
 ```
 
 This finds the `<!-- CODE SNAPSHOT -->` markers in your context file, re-scans source files and replaces just that section.
+
+## User Section Preservation
+
+Clarté preserves your manual additions across regenerations. Wrap custom content with markers:
+
+```markdown
+<!-- clarte:user-start -->
+## My Custom Notes
+
+These notes will survive the next `npx clarte` run.
+<!-- clarte:user-end -->
+```
+
+Marked sections are anchored to the nearest preceding `## Header` and reinserted at the same position when the file is regenerated.
 
 ## Shell Integration
 
