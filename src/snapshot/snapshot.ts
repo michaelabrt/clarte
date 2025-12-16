@@ -13,12 +13,7 @@ import type {
   ProgressCallback,
   SnapshotEntry,
 } from "../types.js";
-import {
-  getDefaultScanPaths,
-  getDefaultScanPathsForLanguage,
-  getLanguageConfig,
-  makeExtractor,
-} from "./scan-paths.js";
+import { getDefaultScanPaths, getDefaultScanPathsForLanguage, getLanguageConfig, makeExtractor } from "./scan-paths.js";
 
 function annotateSignature(entry: SnapshotEntry, commentPrefix = "//"): string {
   if (entry.importedByCount && entry.importedByCount > 2) {
