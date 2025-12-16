@@ -8,7 +8,32 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
-Clarté is a software architecture intelligence engine. It parses your imports with tree-sitter, builds a dependency graph and runs 20+ analysis passes (HITS centrality, Tarjan's SCC, betweenness, community detection, change coupling, structural risk scoring) to map your codebase, then renders the results as context files that AI coding tools read before writing code. In [benchmarks](https://github.com/michaelabrt/clarte-benchmark), this reduced agent cost by 58% and input tokens by 60%.
+Clarté is a software architecture intelligence engine. It parses your imports with tree-sitter, builds a dependency graph, and runs 20+ static analysis passes to surface the structure that matters: key files, chokepoints, coupling patterns, risk hotspots. The results render as context files for tools like Claude Code, Cursor and Copilot. In [benchmarks](#benchmarks), this cut agent cost by 58%.
+
+```mermaid
+graph LR
+    subgraph Input
+        A[Source Files<br><small>TS · Python · Go · Rust · Java</small>]
+        B[Git History]
+    end
+    subgraph Parse
+        C[tree-sitter AST<br>→ Dependency Graph]
+    end
+    subgraph Analyze
+        D[Structural<br><small>HITS · SCC · betweenness · layers</small>]
+        E[Coupling<br><small>change · hidden · tight · co-change</small>]
+        F[Risk<br><small>chokepoints · instability · cross-cutting</small>]
+    end
+    subgraph Output
+        G[Context Files<br><small>Claude Code · Cursor · Copilot · ...</small>]
+    end
+    A --> C
+    B --> E
+    C --> D & E & F
+    D & E & F --> G
+```
+
+[Quick Start](#quick-start) | [Example Output](#example-output) | [Benchmarks](#benchmarks) | [How It Works](#how-it-works) | [GitHub Action](#github-action) | [Reference](#options)
 
 ## Quick Start
 
@@ -25,34 +50,7 @@ Clarté will:
 
 Zero prompts on first run. Requires Node.js 20+. Config is saved to `.clarte.json` (add it to `.gitignore`); run with `--reconfigure` to customize.
 
-## What the analysis covers
-
-```
-┌────────────┐      ┌─────────────┐      ┌────────────────┐      ┌──────────────┐
-│  your code │ ───▶ │  dep graph  │ ───▶ │  20+ analyses  │ ───▶ │ context file │
-└────────────┘      └─────────────┘      └────────────────┘      └──────────────┘
-  tree-sitter          import graph        HITS, SCC,              .claude/rules/,
-  AST parsing          + git metadata      betweenness,            .cursor/rules/,
-                                           coupling ...            AGENTS.md ...
-```
-
-| Section | Example |
-|---------|---------|
-| Tech stack | Next.js 14 (App Router), TypeScript, Zustand, Tailwind |
-| Key files | `src/types.ts` (Foundation), `src/api/client.ts` (Orchestrator) |
-| Architecture layers | types -> stores -> hooks -> components -> pages |
-| Working guidelines | "When modifying `src/graph.ts`, check `src/types.ts` for breaking changes" |
-| Active areas | `src/auth/` changed 12 times in the last 90 days |
-| Cross-cutting files | `src/types.ts` spans 5 layers; changes have wide blast radius |
-| Chokepoints | `src/utils.ts` separates 3 components; no alternative paths |
-| Change coupling | `routes.ts` and `middleware.ts` always change together |
-| Hidden coupling | `schemas/user.ts` and `store/user.ts` co-change but have no import path |
-| Tight coupling | `index.ts` imports 14 names from `graph.ts`; consider an interface |
-| Dead files | Files with zero imports that may be safe to remove |
-| Code snapshot | Public types, interfaces, props and function signatures |
-
-<details>
-<summary><strong>Example: generated context file</strong> (click to expand)</summary>
+## Example Output
 
 ```markdown
 # MyProject
@@ -134,7 +132,22 @@ types -> stores -> hooks -> components -> pages
 <!-- ... more sections: change coupling, dead files, gotchas -->
 ```
 
-</details>
+## What It Analyzes
+
+| Section | Example |
+|---------|---------|
+| Tech stack | Next.js 14 (App Router), TypeScript, Zustand, Tailwind |
+| Key files | `src/types.ts` (Foundation), `src/api/client.ts` (Orchestrator) |
+| Architecture layers | types -> stores -> hooks -> components -> pages |
+| Working guidelines | "When modifying `src/graph.ts`, check `src/types.ts` for breaking changes" |
+| Active areas | `src/auth/` changed 12 times in the last 90 days |
+| Cross-cutting files | `src/types.ts` spans 5 layers; changes have wide blast radius |
+| Chokepoints | `src/utils.ts` separates 3 components; no alternative paths |
+| Change coupling | `routes.ts` and `middleware.ts` always change together |
+| Hidden coupling | `schemas/user.ts` and `store/user.ts` co-change but have no import path |
+| Tight coupling | `index.ts` imports 14 names from `graph.ts`; consider an interface |
+| Dead files | Files with zero imports that may be safe to remove |
+| Code snapshot | Public types, interfaces, props and function signatures |
 
 ## Benchmarks
 
@@ -297,7 +310,33 @@ The PR comment includes:
 
 </details>
 
-## Options
+## Working Guidelines
+
+The generated context includes a **Working Guidelines** section with analysis-derived directives. These aren't informational; each one tells the agent what to do differently:
+
+- **Foundation file guards**: "When modifying `src/graph.ts` (imported by 23 files), check dependents for breaking changes"
+- **Chokepoint warnings**: "`src/types.ts` is a structural chokepoint (separates 3 components). Refactor with extreme care."
+- **Co-change reminders**: "When modifying `src/graph.ts`, also check: `src/print.ts`, `src/cache.ts`"
+- **Circular dependency hints**: "Convert X -> Y to type-only import" (with severity ranking)
+- **Complexity warnings**: files with high export counts or line counts get "read thoroughly before modifying" directives
+- **Test reminders**: hub files missing test coverage are flagged
+
+Guidelines are refreshed on every run. The `--budget` flag controls how many fit within the token limit.
+
+## Monorepo Support
+
+Clarté detects monorepo tooling and can generate per-package context files:
+
+- **pnpm workspaces** (`pnpm-workspace.yaml`)
+- **Turborepo** (`turbo.json`)
+- **Nx** (`nx.json`)
+
+When detected, you'll be asked if you want per-package files. Each package gets its own scoped context with that package's dependencies, frameworks and code snapshot.
+
+Cross-package import analysis detects encapsulation violations (imports that bypass a package's public API) and computes per-package centrality to identify key files within each package.
+
+<details>
+<summary><strong>Options</strong></summary>
 
 ```bash
 npx clarte [directory] [options]
@@ -334,7 +373,9 @@ npx clarte [directory] [options]
 |---------|-------------|
 | `ci --base=REF --changed-files=a,b` | Analyze changed files and output risk assessment as JSON |
 
-### Diff Mode
+</details>
+
+## Diff Mode
 
 Generate focused context for just the files you changed:
 
@@ -351,7 +392,7 @@ Outputs to stdout by default (use `--diff-file=PATH` for file output). For each 
 - **Cycle context**: circular dependencies involving changed files, with break hints
 - **Scoped directives**: architectural guidelines filtered to the changed files only
 
-### Watch Mode
+## Watch Mode
 
 Run continuous analysis in a terminal tab while you develop:
 
@@ -362,26 +403,58 @@ npx clarte --watch -v       # Verbose output
 
 On each source file change (debounced 500ms), Clarté rebuilds the import graph incrementally and runs the full analysis pipeline. Architecture deltas (new hub files, resolved cycles, new dead files) are logged as they're detected.
 
-### Context Splitting
+<details>
+<summary><strong>Configuration</strong></summary>
 
-For large projects (150+ source files or 8000+ estimated context tokens), Clarté automatically splits context into tiered files:
+### Config File
 
-- **Root context file**: project overview, tech stack, key files, architecture layers, development commands. Links to per-directory files.
-- **Per-directory context files**: placed in `.clarte/context/`. Each contains local hub files, dependency patterns, test coverage and related directories.
+On first run, Clarté saves your answers to `.clarte.json`:
 
-Monorepo projects are excluded (they already get per-package context).
-
-### Refreshing Snapshots
-
-After a refactor, update just the code snapshot without re-generating the entire file:
-
-```bash
-npx clarte --refresh-snapshot
+```json
+{
+  "_version": 2,
+  "ides": ["cursor", "copilot"],
+  "projectPurpose": "A mobile AI chat app...",
+  "keyPatterns": "Zustand slices for state...",
+  "gotchas": "Never use FadeIn/FadeOut...",
+  "generateSnapshot": true,
+  "snapshotPaths": [],
+  "stackCorrections": "",
+  "generatePerPackage": false
+}
 ```
 
-This finds the `<!-- CODE SNAPSHOT -->` markers in your context file, re-scans source files and replaces just that section.
+Subsequent runs load this config and skip all prompts. Use `--reconfigure` to re-prompt.
 
-## User Section Preservation
+Additional options:
+
+| Field | Description |
+|-------|-------------|
+| `analysisDays` | Git history window in days (default: 90) |
+| `staleDays` | Days before snapshot is considered stale in `--check=timestamp` (default: 7) |
+| `sectionOrder` | Custom ordering of context sections; prefix with `-` to exclude a section |
+| `layers` | Custom architectural layer patterns (see below) |
+
+Add `.clarte.json` to your `.gitignore`. It's local tool config, not project docs.
+
+### Custom Layer Patterns
+
+Projects using non-standard architectures (hexagonal, clean architecture, DDD) can define custom layer patterns:
+
+```json
+{
+  "layers": [
+    { "name": "domain", "pattern": "domain/" },
+    { "name": "infrastructure", "pattern": "infra(structure)?/" },
+    { "name": "adapters", "pattern": "adapters?/" },
+    { "name": "ports", "pattern": "ports?/" }
+  ]
+}
+```
+
+Custom patterns are matched as regex and take priority over the built-in patterns (`types`, `stores`, `hooks`, `services`, `components`, `pages`, `utils`, `config`).
+
+### User Section Preservation
 
 Clarté preserves your manual additions across regenerations. Wrap custom content with markers:
 
@@ -395,7 +468,7 @@ These notes will survive the next `npx clarte` run.
 
 Marked sections are anchored to the nearest preceding `## Header` and reinserted at the same position when the file is regenerated.
 
-## Shell Integration
+### Shell Integration
 
 Automatically detect stale snapshots when you `cd` into a project. These hooks run in pure shell (no Node.js boot), so they add zero latency to your prompt:
 
@@ -461,78 +534,26 @@ end
 
 > **Tip:** Set `"staleDays": 14` in `.clarte.json` to customize the threshold. For CI/pre-commit use the hash-based `--check` instead.
 
-## Config File
+### Context Splitting
 
-On first run, Clarté saves your answers to `.clarte.json`:
+For large projects (150+ source files or 8000+ estimated context tokens), Clarté automatically splits context into tiered files:
 
-```json
-{
-  "_version": 2,
-  "ides": ["cursor", "copilot"],
-  "projectPurpose": "A mobile AI chat app...",
-  "keyPatterns": "Zustand slices for state...",
-  "gotchas": "Never use FadeIn/FadeOut...",
-  "generateSnapshot": true,
-  "snapshotPaths": [],
-  "stackCorrections": "",
-  "generatePerPackage": false
-}
+- **Root context file**: project overview, tech stack, key files, architecture layers, development commands. Links to per-directory files.
+- **Per-directory context files**: placed in `.clarte/context/`. Each contains local hub files, dependency patterns, test coverage and related directories.
+
+Monorepo projects are excluded (they already get per-package context).
+
+### Refreshing Snapshots
+
+After a refactor, update just the code snapshot without re-generating the entire file:
+
+```bash
+npx clarte --refresh-snapshot
 ```
 
-Subsequent runs load this config and skip all prompts. Use `--reconfigure` to re-prompt.
+This finds the `<!-- CODE SNAPSHOT -->` markers in your context file, re-scans source files and replaces just that section.
 
-Additional options:
-
-| Field | Description |
-|-------|-------------|
-| `analysisDays` | Git history window in days (default: 90) |
-| `staleDays` | Days before snapshot is considered stale in `--check=timestamp` (default: 7) |
-| `sectionOrder` | Custom ordering of context sections; prefix with `-` to exclude a section |
-| `layers` | Custom architectural layer patterns (see below) |
-
-### Custom Layer Patterns
-
-Projects using non-standard architectures (hexagonal, clean architecture, DDD) can define custom layer patterns:
-
-```json
-{
-  "layers": [
-    { "name": "domain", "pattern": "domain/" },
-    { "name": "infrastructure", "pattern": "infra(structure)?/" },
-    { "name": "adapters", "pattern": "adapters?/" },
-    { "name": "ports", "pattern": "ports?/" }
-  ]
-}
-```
-
-Custom patterns are matched as regex and take priority over the built-in patterns (`types`, `stores`, `hooks`, `services`, `components`, `pages`, `utils`, `config`).
-
-Add `.clarte.json` to your `.gitignore`. It's local tool config, not project docs.
-
-## Monorepo Support
-
-Clarté detects monorepo tooling and can generate per-package context files:
-
-- **pnpm workspaces** (`pnpm-workspace.yaml`)
-- **Turborepo** (`turbo.json`)
-- **Nx** (`nx.json`)
-
-When detected, you'll be asked if you want per-package files. Each package gets its own scoped context with that package's dependencies, frameworks and code snapshot.
-
-Cross-package import analysis detects encapsulation violations (imports that bypass a package's public API) and computes per-package centrality to identify key files within each package.
-
-## Working Guidelines
-
-The generated context includes a **Working Guidelines** section with analysis-derived directives. These aren't informational; each one tells the agent what to do differently:
-
-- **Foundation file guards**: "When modifying `src/graph.ts` (imported by 23 files), check dependents for breaking changes"
-- **Chokepoint warnings**: "`src/types.ts` is a structural chokepoint (separates 3 components). Refactor with extreme care."
-- **Co-change reminders**: "When modifying `src/graph.ts`, also check: `src/print.ts`, `src/cache.ts`"
-- **Circular dependency hints**: "Convert X -> Y to type-only import" (with severity ranking)
-- **Complexity warnings**: files with high export counts or line counts get "read thoroughly before modifying" directives
-- **Test reminders**: hub files missing test coverage are flagged
-
-Guidelines are refreshed on every run. The `--budget` flag controls how many fit within the token limit.
+</details>
 
 ## Development
 
