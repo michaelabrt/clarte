@@ -8,7 +8,7 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
-Clarté is a software architecture intelligence engine. It parses your imports with tree-sitter, builds a dependency graph, and runs 20+ static analysis passes to surface the structure that matters: key files, chokepoints, coupling patterns, risk hotspots. The results render as context files for tools like Claude Code, Cursor and Copilot. In [benchmarks](#benchmarks), this cut agent cost by 58%.
+Clarté is a software architecture intelligence engine. It parses your imports with tree-sitter, builds a dependency graph and runs 20+ static analysis passes to surface the structure that matters: key files, chokepoints, coupling patterns, risk hotspots. The results render as context files for tools like Claude Code, Cursor and Copilot. In [benchmarks](#benchmarks), this cut agent cost by 58%.
 
 ```mermaid
 graph LR
