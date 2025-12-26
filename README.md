@@ -46,7 +46,7 @@ Clarté will:
 - **Detect** your tech stack, AI tools and project description automatically
 - **Scan** source files for a code snapshot (types, store shapes, component props)
 - **Generate** analysis results as context files for your detected tools
-- **Show** a summary with token estimate
+- **Show** a summary with file sizes, token counts and structural findings
 
 Zero prompts on first run. Requires Node.js 20+. Config is saved to `.clarte.json` (add it to `.gitignore`); run with `--reconfigure` to customize.
 
