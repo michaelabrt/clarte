@@ -51,3 +51,32 @@ export function computeInstability(graph: ImportGraph): FileInstability[] {
   results.sort((a, b) => b.instability - a.instability || a.path.localeCompare(b.path));
   return results;
 }
+
+/**
+ * Compute instability for ALL files in the graph (not just high-instability).
+ * Returns a Map of filePath -> instability score (0-1).
+ * Files with zero total connections are omitted.
+ */
+export function computeAllInstabilities(graph: ImportGraph): Map<string, number> {
+  const TYPE_ONLY_WEIGHT = INSTABILITY.TYPE_ONLY_WEIGHT;
+
+  const fanOutMap = new Map<string, number>();
+  const fanInMap = new Map<string, number>();
+  for (const edge of graph.edges) {
+    if (!edge.isExternal) {
+      const weight = edge.isTypeOnly ? TYPE_ONLY_WEIGHT : 1;
+      fanOutMap.set(edge.from, (fanOutMap.get(edge.from) ?? 0) + weight);
+      fanInMap.set(edge.to, (fanInMap.get(edge.to) ?? 0) + weight);
+    }
+  }
+
+  const result = new Map<string, number>();
+  for (const [filePath] of graph.inDegree) {
+    const fanOut = fanOutMap.get(filePath) ?? 0;
+    const fanIn = fanInMap.get(filePath) ?? 0;
+    const total = fanIn + fanOut;
+    if (total === 0) continue;
+    result.set(filePath, fanOut / total);
+  }
+  return result;
+}

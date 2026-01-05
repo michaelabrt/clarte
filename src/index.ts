@@ -62,6 +62,7 @@ async function main() {
     sectionFilter,
     maxChars,
     initHook,
+    mcpMode,
   } = parseCliArgs(rawArgs);
 
   if (initHook) {
@@ -75,6 +76,12 @@ async function main() {
       process.stdout.write(JSON.stringify(result, null, 2) + "\n", (err) => (err ? reject(err) : resolve()));
     });
     process.exit(result.summary.criticalRiskFiles > 0 ? 1 : 0);
+  }
+
+  if (mcpMode) {
+    const { startMcpServer } = await import("./mcp/server.js");
+    await startMcpServer(rootDir);
+    return;
   }
 
   const PROJECT_MARKERS = [
@@ -256,6 +263,16 @@ async function main() {
     noopProgress,
   );
 
+  // Persist analysis graph for MCP tools (non-critical)
+  let mcpAvailable = false;
+  try {
+    const { persistGraph } = await import("./mcp/persist.js");
+    await persistGraph(rootDir, graph, analysis);
+    mcpAvailable = true;
+  } catch {
+    // Non-critical; MCP tools will report "no graph found"
+  }
+
   if (jsonMode) {
     let snapshot = null;
     if (savedConfig?.generateSnapshot !== false) {
@@ -421,6 +438,7 @@ async function main() {
       sectionFilter,
       maxChars,
       graph,
+      mcpAvailable,
     );
   } finally {
     shimmer.stop();

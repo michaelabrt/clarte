@@ -36,6 +36,7 @@ export async function generateFiles(
   sectionFilter?: SectionFilterOptions,
   maxChars?: number,
   graph?: ImportGraph,
+  mcpAvailable?: boolean,
 ): Promise<GeneratedFile[]> {
   // Deduplicate files by path (e.g. multiple targets that share the same output path)
   const fileMap = new Map<string, GeneratedFile>();
@@ -91,6 +92,7 @@ export async function generateFiles(
             maxChars,
             reservedChars,
             graph,
+            mcpAvailable,
           );
     // Prepend alwaysApply frontmatter for Cursor .mdc files
     const finalContent =
