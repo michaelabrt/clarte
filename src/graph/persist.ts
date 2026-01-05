@@ -1,8 +1,8 @@
 import { execSync } from "node:child_process";
 import path from "node:path";
 import { readFileOr, writeFileSafe } from "../utils.js";
-import { deriveRole } from "../graph/centrality.js";
-import { computeAllInstabilities } from "../graph/instability.js";
+import { deriveRole } from "./centrality.js";
+import { computeAllInstabilities } from "./instability.js";
 import type { ContextAnalysis, ImportGraph } from "../types.js";
 import { PERSISTED_GRAPH_VERSION, type EdgeRecord, type FileRecord, type PersistedGraph } from "./types.js";
 

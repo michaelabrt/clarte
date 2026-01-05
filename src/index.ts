@@ -62,7 +62,6 @@ async function main() {
     sectionFilter,
     maxChars,
     initHook,
-    mcpMode,
   } = parseCliArgs(rawArgs);
 
   if (initHook) {
@@ -76,12 +75,6 @@ async function main() {
       process.stdout.write(JSON.stringify(result, null, 2) + "\n", (err) => (err ? reject(err) : resolve()));
     });
     process.exit(result.summary.criticalRiskFiles > 0 ? 1 : 0);
-  }
-
-  if (mcpMode) {
-    const { startMcpServer } = await import("./mcp/server.js");
-    await startMcpServer(rootDir);
-    return;
   }
 
   const PROJECT_MARKERS = [
@@ -263,14 +256,14 @@ async function main() {
     noopProgress,
   );
 
-  // Persist analysis graph for MCP tools (non-critical)
-  let mcpAvailable = false;
+  // Persist analysis graph for hooks and cursor rules (non-critical)
+  let persistedGraph: import("./graph/types.js").PersistedGraph | null = null;
   try {
-    const { persistGraph } = await import("./mcp/persist.js");
+    const { persistGraph, loadPersistedGraph } = await import("./graph/persist.js");
     await persistGraph(rootDir, graph, analysis);
-    mcpAvailable = true;
+    persistedGraph = await loadPersistedGraph(rootDir);
   } catch {
-    // Non-critical; MCP tools will report "no graph found"
+    // Non-critical
   }
 
   if (jsonMode) {
@@ -438,7 +431,7 @@ async function main() {
       sectionFilter,
       maxChars,
       graph,
-      mcpAvailable,
+      persistedGraph,
     );
   } finally {
     shimmer.stop();
@@ -455,6 +448,17 @@ async function main() {
   }
 
   printSummary(files, snapshot, analysis, !savedConfig);
+
+  // Generate Claude Code hooks for graph context delivery (non-critical)
+  if (!dryRun && persistedGraph && answers.ides.includes("claude") && savedConfig?.hooks !== false) {
+    try {
+      const { generateHookFiles, configureClaudeHooks } = await import("./hooks/generate-hooks.js");
+      await generateHookFiles(rootDir, persistedGraph);
+      await configureClaudeHooks(rootDir);
+    } catch {
+      // Non-critical
+    }
+  }
 
   if (!savedConfig && !dryRun) {
     const gitDir = path.join(rootDir, ".git");

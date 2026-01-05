@@ -10,9 +10,10 @@ import type {
   ProgressCallback,
   UserAnswers,
 } from "../types.js";
+import type { PersistedGraph } from "../graph/types.js";
 import { fileExists, readFileOr, writeFileSafe } from "../utils.js";
 import { buildMainContext, getMainContextFilename, type SectionFilterOptions } from "../templates/main-context.js";
-import { buildCursorRules, renderCursorRule } from "../templates/cursor-rules.js";
+import { buildCursorRules, buildGraphContextRules, renderCursorRule } from "../templates/cursor-rules.js";
 import { buildClaudeSkills, renderClaudeSkill } from "../templates/claude-skills.js";
 import { buildAiderContext } from "../templates/aider-context.js";
 import { detectContext } from "../detect/detect.js";
@@ -36,7 +37,7 @@ export async function generateFiles(
   sectionFilter?: SectionFilterOptions,
   maxChars?: number,
   graph?: ImportGraph,
-  mcpAvailable?: boolean,
+  persistedGraph?: PersistedGraph | null,
 ): Promise<GeneratedFile[]> {
   // Deduplicate files by path (e.g. multiple targets that share the same output path)
   const fileMap = new Map<string, GeneratedFile>();
@@ -92,7 +93,6 @@ export async function generateFiles(
             maxChars,
             reservedChars,
             graph,
-            mcpAvailable,
           );
     // Prepend alwaysApply frontmatter for Cursor .mdc files
     const finalContent =
@@ -103,6 +103,9 @@ export async function generateFiles(
 
     if (ide === "cursor") {
       const rules = await buildCursorRules(ctx, answers, analysis);
+      if (persistedGraph) {
+        rules.push(...buildGraphContextRules(persistedGraph));
+      }
       for (const rule of rules) {
         const rulePath = `.cursor/rules/${rule.filename}`;
         const ruleContent = renderCursorRule(rule);

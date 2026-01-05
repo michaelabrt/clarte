@@ -1,8 +1,12 @@
+import path from "node:path";
 import type { ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
+import type { PersistedGraph } from "../graph/types.js";
+import { buildReverseAdjacency, getFileGraphData } from "../graph/data.js";
+import { isSignificantFile, formatFileContext } from "../hooks/context-map.js";
 import { getFrameworkHints } from "./framework-hints.js";
 import { buildDirectives, computeFileComplexity } from "./directives.js";
 
-interface CursorRule {
+export interface CursorRule {
   /** Filename (without path) */
   filename: string;
   /** Frontmatter description */
@@ -283,6 +287,53 @@ function buildStoresRule(ctx: DetectedContext): CursorRule {
     globs: `${storeDir}/**/*.{ts,js}`,
     body: bodyLines.join("\n"),
   };
+}
+
+const MAX_GRAPH_RULES = 10;
+
+/**
+ * Generate per-directory Cursor rules with graph context for qualifying files.
+ */
+export function buildGraphContextRules(graph: PersistedGraph): CursorRule[] {
+  const reverseAdj = buildReverseAdjacency(graph);
+
+  // Group qualifying files by parent directory
+  const dirFiles = new Map<string, Array<{ file: string; context: string }>>();
+
+  for (const filePath of Object.keys(graph.files)) {
+    const data = getFileGraphData(graph, filePath, reverseAdj);
+    if (!data || !isSignificantFile(data)) continue;
+
+    const dir = path.dirname(filePath);
+    let entries = dirFiles.get(dir);
+    if (!entries) {
+      entries = [];
+      dirFiles.set(dir, entries);
+    }
+    entries.push({ file: path.basename(filePath), context: formatFileContext(data) });
+  }
+
+  // Sort directories by number of qualifying files (descending) and cap
+  const sortedDirs = [...dirFiles.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, MAX_GRAPH_RULES);
+
+  return sortedDirs.map(([dir, entries]) => {
+    const bodyLines = ["# Graph Context", ""];
+    for (const entry of entries) {
+      bodyLines.push(`### ${entry.file}`);
+      bodyLines.push(entry.context);
+      bodyLines.push("");
+    }
+
+    // Sanitize directory name for filename (replace / with -)
+    const safeName = dir.replace(/\//g, "-").replace(/^-/, "");
+
+    return {
+      filename: `graph-${safeName}.md`,
+      description: `Graph context for ${dir}/`,
+      globs: `${dir}/**`,
+      body: bodyLines.join("\n"),
+    };
+  });
 }
 
 /**

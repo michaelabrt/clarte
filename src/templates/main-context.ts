@@ -73,9 +73,8 @@ export async function buildMainContext(
   maxChars?: number,
   reservedChars: number = 0,
   graph?: ImportGraph,
-  mcpAvailable?: boolean,
 ): Promise<string> {
-  const allSections = await buildSections(ctx, answers, snapshot, analysis, graph, mcpAvailable);
+  const allSections = await buildSections(ctx, answers, snapshot, analysis, graph);
   const effectiveBudget = budget ?? DEFAULT_BUDGET;
   const effectiveMaxChars = maxChars ?? DEFAULT_MAX_CHARS;
 
@@ -136,14 +135,13 @@ export async function buildSections(
   snapshot: CodeSnapshot | null,
   analysis?: ContextAnalysis,
   graph?: ImportGraph,
-  mcpAvailable?: boolean,
 ): Promise<ContextSection[]> {
   resetProjectNameCache();
   const projectName = await getProjectName(ctx);
 
   // Collect sections from all submodules
   const projectInfo = await renderProjectInfoSections(ctx, answers, projectName);
-  const architecture = analysis ? await renderArchitectureSections(analysis, ctx, graph, mcpAvailable) : [];
+  const architecture = analysis ? await renderArchitectureSections(analysis, ctx, graph) : [];
   const dependencies = analysis ? renderDependencySections(analysis) : [];
   const structure = renderStructureSections(ctx, snapshot, analysis);
   const gitActivity = analysis ? renderGitActivitySections(analysis) : [];

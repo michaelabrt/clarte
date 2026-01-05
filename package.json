@@ -4,8 +4,7 @@
   "description": "Architecture intelligence engine for AI coding agents.",
   "type": "module",
   "bin": {
-    "clarte": "dist/index.js",
-    "clarte-mcp": "dist/mcp/server.js"
+    "clarte": "dist/index.js"
   },
   "scripts": {
     "build": "tsup && node scripts/copy-wasm.js",
@@ -59,7 +58,6 @@
   ],
   "dependencies": {
     "@clack/prompts": "^1.0.1",
-    "@modelcontextprotocol/sdk": "^1.27.1",
     "picocolors": "^1.1.1",
     "smol-toml": "^1.6.0",
     "tinyglobby": "^0.2.12",

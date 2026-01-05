@@ -124,7 +124,6 @@ export interface CliArgs {
   sectionFilter: SectionFilterOptions | undefined;
   maxChars: number | undefined;
   initHook: boolean;
-  mcpMode: boolean;
 }
 
 export function parseCliArgs(rawArgs: string[]): CliArgs {
@@ -190,11 +189,10 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     process.exit(1);
   }
   const initHook = rawArgs.includes("--init-hook");
-  const mcpMode = rawArgs.includes("--mcp") || rawArgs[0] === "mcp";
   const diffFileArg = rawArgs.find((a) => a.startsWith("--diff-file="));
   const diffFile = diffFileArg?.split("=").slice(1).join("=");
   const diffFilterSet = new Set(diffFilterFiles);
-  const subcommands = new Set(["ci", "mcp"]);
+  const subcommands = new Set(["ci"]);
   const targetDir =
     rawArgs.find((a) => !a.startsWith("-") && !diffFilterSet.has(a) && !subcommands.has(a)) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
@@ -227,7 +225,6 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     sectionFilter,
     maxChars: maxCharsRaw,
     initHook,
-    mcpMode,
   };
 }
 

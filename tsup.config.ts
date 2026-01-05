@@ -9,7 +9,7 @@ export default defineConfig((options) => [
     outDir: "dist",
     clean: !options.watch,
     splitting: false,
-    external: ["web-tree-sitter", "@modelcontextprotocol/sdk"],
+    external: ["web-tree-sitter"],
     sourcemap: false,
     dts: false,
     banner: {
@@ -19,20 +19,6 @@ export default defineConfig((options) => [
       PKG_VERSION: JSON.stringify(pkg.version),
       PKG_NAME: JSON.stringify(pkg.name),
       PKG_DESCRIPTION: JSON.stringify(pkg.description),
-    },
-  },
-  {
-    entry: ["src/mcp/server.ts"],
-    format: ["esm"],
-    target: "node20",
-    outDir: "dist/mcp",
-    clean: false,
-    splitting: false,
-    external: ["web-tree-sitter", "@modelcontextprotocol/sdk"],
-    sourcemap: false,
-    dts: false,
-    banner: {
-      js: "#!/usr/bin/env node",
     },
   },
 ]);

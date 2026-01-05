@@ -426,7 +426,6 @@ export async function renderDirectivesSection(
   analysis: ContextAnalysis,
   ctx: DetectedContext,
   graph?: ImportGraph,
-  mcpAvailable?: boolean,
 ): Promise<string | null> {
   const fileComplexity =
     analysis.hubFiles.length > 0 ? await computeFileComplexity(ctx.rootDir, analysis.hubFiles) : undefined;
@@ -441,11 +440,6 @@ export async function renderDirectivesSection(
   lines.push("");
   for (const d of directives) {
     lines.push(`- ${d}`);
-  }
-
-  if (mcpAvailable) {
-    lines.push("");
-    lines.push("> For files not listed in Key Files, query `clarte_inspect <path>` for graph-derived context.");
   }
 
   return lines.join("\n");

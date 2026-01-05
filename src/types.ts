@@ -184,6 +184,8 @@ export interface ProjectConfig {
   autoRefreshOnCommit?: boolean;
   /** Custom section ordering for context file (prefix with "-" to exclude) */
   sectionOrder?: string[];
+  /** Whether to generate Claude Code hooks for graph context delivery (default: true) */
+  hooks?: boolean;
 }
 
 /** A generated file ready to be written */
