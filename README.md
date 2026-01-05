@@ -335,6 +335,7 @@ When detected, you'll be asked if you want per-package files. Each package gets 
 
 Cross-package import analysis detects encapsulation violations (imports that bypass a package's public API) and computes per-package centrality to identify key files within each package.
 
+<a id="options"></a>
 <details>
 <summary><strong>Options</strong></summary>
 
