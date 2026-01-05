@@ -208,7 +208,13 @@ Multi-language projects are handled automatically. When a secondary language acc
 
 ## Output Targets
 
-Clarté auto-detects your AI coding tools and renders analysis as their native context file format.
+Clarté works with any AI coding tool that reads context files. Deep integrations add per-file graph context delivery for tools that support it.
+
+| Tier | Tools | What you get |
+|------|-------|--------------|
+| Full | Claude Code | Context file + per-file graph hooks (model-gated, Sonnet+) |
+| Enhanced | Cursor | Context file + per-directory graph rules |
+| Universal | All others | Context file (works out of the box) |
 
 | Tool | Generated file | Docs |
 |------|---------------|------|
