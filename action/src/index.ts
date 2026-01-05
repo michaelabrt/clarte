@@ -1,8 +1,8 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
-import { runCiMode } from "../../src/cli-ci.js";
+import { runCiMode } from "../../src/cli/ci.js";
 import { formatComment } from "./comment.js";
-import type { RiskLevel } from "../../src/ci.js";
+import type { RiskLevel } from "../../src/analysis/ci.js";
 
 const MARKER = "<!-- clarte-ci-review -->";
 
@@ -27,11 +27,11 @@ async function run(): Promise<void> {
     const prNumber = context.payload.pull_request.number;
     const baseSha = context.payload.pull_request.base?.sha;
 
-    // Get changed files from the PR
-    const { data: prFiles } = await octokit.rest.pulls.listFiles({
+    // Get changed files from the PR (paginated for large PRs)
+    const prFiles = await octokit.paginate(octokit.rest.pulls.listFiles, {
       ...context.repo,
       pull_number: prNumber,
-      per_page: 300,
+      per_page: 100,
     });
 
     let changedFiles = prFiles
@@ -117,7 +117,7 @@ async function run(): Promise<void> {
       );
     }
   } catch (error) {
-    core.setFailed((error as Error).message);
+    core.setFailed(error instanceof Error ? error.message : String(error));
   }
 }
 
