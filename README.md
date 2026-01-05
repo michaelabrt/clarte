@@ -33,7 +33,9 @@ graph LR
     D & E & F --> G
 ```
 
-[Quick Start](#quick-start) | [Example Output](#example-output) | [Benchmarks](#benchmarks) | [How It Works](#how-it-works) | [GitHub Action](#github-action) | [Options](#options)
+<p align="center">
+  <a href="#quick-start">Quick Start</a> · <a href="#example-output">Example Output</a> · <a href="#benchmarks">Benchmarks</a> · <a href="#how-it-works">How It Works</a> · <a href="#github-action">GitHub Action</a> · <a href="#options">Options</a>
+</p>
 
 ## Quick Start
 
