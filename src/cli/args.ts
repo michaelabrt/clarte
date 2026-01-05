@@ -61,6 +61,7 @@ export function printHelp(): void {
     `    ${t.accent("--watch")}                 ${t.text("Watch for file changes and re-analyze continuously")}`,
   );
   console.log(`    ${t.accent("-v, --verbose")}           ${t.text("Show detailed progress output")}`);
+  console.log(`    ${t.accent("--mcp")}                   ${t.text("Start MCP server for on-demand graph queries")}`);
   console.log("");
   console.log(`  ${t.textBold("Subcommands:")}`);
   console.log(
@@ -123,6 +124,7 @@ export interface CliArgs {
   sectionFilter: SectionFilterOptions | undefined;
   maxChars: number | undefined;
   initHook: boolean;
+  mcpMode: boolean;
 }
 
 export function parseCliArgs(rawArgs: string[]): CliArgs {
@@ -188,10 +190,11 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     process.exit(1);
   }
   const initHook = rawArgs.includes("--init-hook");
+  const mcpMode = rawArgs.includes("--mcp") || rawArgs[0] === "mcp";
   const diffFileArg = rawArgs.find((a) => a.startsWith("--diff-file="));
   const diffFile = diffFileArg?.split("=").slice(1).join("=");
   const diffFilterSet = new Set(diffFilterFiles);
-  const subcommands = new Set(["ci"]);
+  const subcommands = new Set(["ci", "mcp"]);
   const targetDir =
     rawArgs.find((a) => !a.startsWith("-") && !diffFilterSet.has(a) && !subcommands.has(a)) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
@@ -224,6 +227,7 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     sectionFilter,
     maxChars: maxCharsRaw,
     initHook,
+    mcpMode,
   };
 }
 
