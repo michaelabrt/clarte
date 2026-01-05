@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeForCI, type CIAnalysisResult } from "../analysis/ci.js";
+import { analyzeForCI } from "../analysis/ci.js";
 import type { ContextAnalysis, ImportGraph } from "../types.js";
 
 function makeGraph(
@@ -55,7 +55,15 @@ describe("analyzeForCI", () => {
       ]);
       const analysis = makeAnalysis({
         hubFiles: [
-          { path: "utils.ts", centrality: 0.9, authority: 0.9, hubScore: 0.1, role: "Foundation", importedBy: 5, imports: 0 },
+          {
+            path: "utils.ts",
+            centrality: 0.9,
+            authority: 0.9,
+            hubScore: 0.1,
+            role: "Foundation",
+            importedBy: 5,
+            imports: 0,
+          },
         ],
         chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 5 }],
       });
@@ -92,7 +100,15 @@ describe("analyzeForCI", () => {
       ]);
       const analysis = makeAnalysis({
         hubFiles: [
-          { path: "risky.ts", centrality: 0.9, authority: 0.9, hubScore: 0.1, role: "Foundation", importedBy: 5, imports: 0 },
+          {
+            path: "risky.ts",
+            centrality: 0.9,
+            authority: 0.9,
+            hubScore: 0.1,
+            role: "Foundation",
+            importedBy: 5,
+            imports: 0,
+          },
         ],
         chokepoints: [{ file: "risky.ts", separates: 5, importedBy: 5 }],
         testMapping: { sourceToTests: new Map(), untestedFiles: ["risky.ts"] },
@@ -107,21 +123,22 @@ describe("analyzeForCI", () => {
     });
 
     it("maps score 4-5 to high", async () => {
-      const graph = makeGraph([
-        { from: "a.ts", to: "hub.ts" },
-        { from: "b.ts", to: "hub.ts" },
-        { from: "c.ts", to: "hub.ts" },
-        { from: "d.ts", to: "hub.ts" },
-        { from: "e.ts", to: "hub.ts" },
-      ]);
       const analysis = makeAnalysis({
         hubFiles: [
-          { path: "hub.ts", centrality: 0.8, authority: 0.8, hubScore: 0.2, role: "Foundation", importedBy: 5, imports: 0 },
+          {
+            path: "hub.ts",
+            centrality: 0.8,
+            authority: 0.8,
+            hubScore: 0.2,
+            role: "Foundation",
+            importedBy: 5,
+            imports: 0,
+          },
         ],
         testMapping: { sourceToTests: new Map([["hub.ts", ["hub.test.ts"]]]), untestedFiles: [] },
       });
       const betweenness = new Map([["hub.ts", 0.5]]);
-      const graphB = makeGraph(
+      const graph = makeGraph(
         [
           { from: "a.ts", to: "hub.ts" },
           { from: "b.ts", to: "hub.ts" },
@@ -132,7 +149,7 @@ describe("analyzeForCI", () => {
         { betweenness },
       );
 
-      const result = await analyzeForCI("/tmp", ["hub.ts"], analysis, graphB);
+      const result = await analyzeForCI("/tmp", ["hub.ts"], analysis, graph);
       const file = result.files[0];
 
       // highImportCount(2) + flowBottleneck(2) = 4 -> high
@@ -150,7 +167,15 @@ describe("analyzeForCI", () => {
       ]);
       const analysis = makeAnalysis({
         hubFiles: [
-          { path: "medium.ts", centrality: 0.5, authority: 0.5, hubScore: 0.3, role: "Foundation", importedBy: 5, imports: 0 },
+          {
+            path: "medium.ts",
+            centrality: 0.5,
+            authority: 0.5,
+            hubScore: 0.3,
+            role: "Foundation",
+            importedBy: 5,
+            imports: 0,
+          },
         ],
         testMapping: { sourceToTests: new Map([["medium.ts", ["medium.test.ts"]]]), untestedFiles: [] },
       });
@@ -170,11 +195,12 @@ describe("analyzeForCI", () => {
       const graph = makeGraph([{ from: "a.ts", to: "b.ts" }]);
       const analysis = makeAnalysis({
         gitActivity: {
-          commitCounts: new Map([["a.ts", 10], ["b.ts", 8]]),
+          commitCounts: new Map([
+            ["a.ts", 10],
+            ["b.ts", 8],
+          ]),
           hotFiles: [],
-          changeCoupling: [
-            { fileA: "a.ts", fileB: "partner.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 },
-          ],
+          changeCoupling: [{ fileA: "a.ts", fileB: "partner.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 }],
         },
       });
 
@@ -190,11 +216,12 @@ describe("analyzeForCI", () => {
       const graph = makeGraph([{ from: "a.ts", to: "b.ts" }]);
       const analysis = makeAnalysis({
         gitActivity: {
-          commitCounts: new Map([["a.ts", 10], ["b.ts", 8]]),
+          commitCounts: new Map([
+            ["a.ts", 10],
+            ["b.ts", 8],
+          ]),
           hotFiles: [],
-          changeCoupling: [
-            { fileA: "a.ts", fileB: "b.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 },
-          ],
+          changeCoupling: [{ fileA: "a.ts", fileB: "b.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 }],
         },
       });
 
@@ -213,9 +240,7 @@ describe("analyzeForCI", () => {
         gitActivity: {
           commitCounts: new Map([["a.ts", 10]]),
           hotFiles: [],
-          changeCoupling: [
-            { fileA: "a.ts", fileB: "partner.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 },
-          ],
+          changeCoupling: [{ fileA: "a.ts", fileB: "partner.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 }],
         },
       });
 
@@ -261,7 +286,15 @@ describe("analyzeForCI", () => {
       ]);
       const analysis = makeAnalysis({
         hubFiles: [
-          { path: "choke.ts", centrality: 0.9, authority: 0.9, hubScore: 0.1, role: "Foundation", importedBy: 5, imports: 0 },
+          {
+            path: "choke.ts",
+            centrality: 0.9,
+            authority: 0.9,
+            hubScore: 0.1,
+            role: "Foundation",
+            importedBy: 5,
+            imports: 0,
+          },
         ],
         chokepoints: [{ file: "choke.ts", separates: 3, importedBy: 5 }],
       });
@@ -309,7 +342,15 @@ describe("analyzeForCI", () => {
       ]);
       const analysis = makeAnalysis({
         hubFiles: [
-          { path: "risky.ts", centrality: 0.9, authority: 0.9, hubScore: 0.1, role: "Foundation", importedBy: 5, imports: 0 },
+          {
+            path: "risky.ts",
+            centrality: 0.9,
+            authority: 0.9,
+            hubScore: 0.1,
+            role: "Foundation",
+            importedBy: 5,
+            imports: 0,
+          },
         ],
         chokepoints: [{ file: "risky.ts", separates: 5, importedBy: 5 }],
         testMapping: { sourceToTests: new Map(), untestedFiles: ["risky.ts"] },
@@ -327,9 +368,7 @@ describe("analyzeForCI", () => {
         gitActivity: {
           commitCounts: new Map(),
           hotFiles: [],
-          changeCoupling: [
-            { fileA: "a.ts", fileB: "outside.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 },
-          ],
+          changeCoupling: [{ fileA: "a.ts", fileB: "outside.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 }],
         },
       });
 
