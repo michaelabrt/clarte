@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { detectContext, enrichFrameworksWithUsage } from "../detect/detect.js";
 import { buildGraphWithCache } from "../graph/cache.js";
 import { buildImportGraph, mergeGraph } from "../graph/build.js";
@@ -28,7 +28,7 @@ export async function runCiMode(
   } else {
     const ref = base ?? "HEAD";
     try {
-      const output = execSync(`git diff --name-only --diff-filter=ACMR ${ref}`, {
+      const output = execFileSync("git", ["diff", "--name-only", "--diff-filter=ACMR", ref], {
         cwd: rootDir,
         encoding: "utf-8",
         timeout: 30_000,
@@ -37,7 +37,7 @@ export async function runCiMode(
     } catch {
       // Fallback: try uncommitted changes
       try {
-        const output = execSync("git diff --name-only --diff-filter=ACMR HEAD", {
+        const output = execFileSync("git", ["diff", "--name-only", "--diff-filter=ACMR", "HEAD"], {
           cwd: rootDir,
           encoding: "utf-8",
           timeout: 30_000,

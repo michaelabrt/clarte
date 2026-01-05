@@ -10,6 +10,6 @@
     "rootDir": "..",
     "paths": {}
   },
-  "include": ["src/**/*.ts", "../src/ci.ts", "../src/cli-ci.ts"],
+  "include": ["src/**/*.ts", "../src/analysis/ci.ts", "../src/cli/ci.ts"],
   "exclude": ["dist", "node_modules"]
 }

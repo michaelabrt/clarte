@@ -1,4 +1,12 @@
-import type { ContextAnalysis, FileRole, ImportGraph } from "../types.js";
+import type {
+  ContextAnalysis,
+  CrossCuttingFile,
+  FileRole,
+  HubFile,
+  ImportGraph,
+  Chokepoint,
+  FileInstability,
+} from "../types.js";
 import { computeFileComplexity, type FileComplexityInfo } from "../templates/directives.js";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -61,6 +69,19 @@ export interface CIAnalysisResult {
   summary: CISummary;
 }
 
+// ── Pre-computed lookup context ─────────────────────────────────────
+
+interface RiskContext {
+  hubFileMap: Map<string, HubFile>;
+  chokepointMap: Map<string, Chokepoint>;
+  crossCuttingMap: Map<string, CrossCuttingFile>;
+  instabilityMap: Map<string, FileInstability>;
+  cycleFiles: Set<string>;
+  edgeSet: Set<string>;
+  changedFilesSet: Set<string>;
+  complexityMap: Map<string, FileComplexityInfo>;
+}
+
 // ── Risk scoring ────────────────────────────────────────────────────
 
 const WEIGHTS = {
@@ -86,19 +107,18 @@ function computeFileRisk(
   filePath: string,
   analysis: ContextAnalysis,
   graph: ImportGraph,
-  changedFilesSet: Set<string>,
-  complexityMap: Map<string, FileComplexityInfo>,
+  ctx: RiskContext,
 ): FileRiskAssessment {
   const reasons: string[] = [];
   let score = 0;
 
   // Hub file lookup
-  const hubFile = analysis.hubFiles.find((h) => h.path === filePath);
+  const hubFile = ctx.hubFileMap.get(filePath);
   const role = hubFile?.role ?? null;
   const importedBy = graph.inDegree.get(filePath) ?? 0;
 
   // Chokepoint
-  const chokepoint = analysis.chokepoints?.find((c) => c.file === filePath);
+  const chokepoint = ctx.chokepointMap.get(filePath);
   const isChokepoint = !!chokepoint;
   const separatesComponents = chokepoint?.separates ?? 0;
   if (isChokepoint) {
@@ -131,14 +151,14 @@ function computeFileRisk(
   }
 
   // Complexity
-  const complexity = complexityMap.get(filePath);
+  const complexity = ctx.complexityMap.get(filePath);
   if (complexity && (complexity.exports > 15 || complexity.lines > 300)) {
     score += WEIGHTS.highComplexity;
     reasons.push(`High complexity (${complexity.exports} exports, ${complexity.lines} lines)`);
   }
 
   // Cross-cutting
-  const crossCutting = analysis.crossCuttingFiles?.find((c) => c.file === filePath);
+  const crossCutting = ctx.crossCuttingMap.get(filePath);
   const isCrossCutting = !!crossCutting;
   if (isCrossCutting) {
     score += WEIGHTS.crossCutting;
@@ -146,14 +166,14 @@ function computeFileRisk(
   }
 
   // Circular dependency
-  const isInCycle = analysis.circularDeps.some((c) => c.chain.includes(filePath));
+  const isInCycle = ctx.cycleFiles.has(filePath);
   if (isInCycle) {
     score += WEIGHTS.inCycle;
     reasons.push("Part of circular dependency");
   }
 
   // Instability
-  const instabilityEntry = analysis.instabilities.find((i) => i.path === filePath);
+  const instabilityEntry = ctx.instabilityMap.get(filePath);
   const instability = instabilityEntry?.instability ?? null;
   if (instability !== null && instability > 0.8) {
     score += WEIGHTS.highInstability;
@@ -167,16 +187,13 @@ function computeFileRisk(
       const partner =
         coupling.fileA === filePath ? coupling.fileB : coupling.fileB === filePath ? coupling.fileA : null;
       if (partner) {
-        // Check if this is hidden coupling (no direct import edge)
-        const hasImportEdge = graph.edges.some(
-          (e) => (e.from === filePath && e.to === partner) || (e.from === partner && e.to === filePath),
-        );
+        const hasImportEdge = ctx.edgeSet.has(`${filePath}->${partner}`) || ctx.edgeSet.has(`${partner}->${filePath}`);
         coChangeFiles.push({
           file: partner,
           confidence: coupling.confidence,
           coChangeCount: coupling.coChangeCount,
           isHiddenCoupling: !hasImportEdge,
-          inDiff: changedFilesSet.has(partner),
+          inDiff: ctx.changedFilesSet.has(partner),
         });
       }
     }
@@ -190,7 +207,7 @@ function computeFileRisk(
             confidence: m.coChangeConfidence,
             coChangeCount: m.coChangeCount,
             isHiddenCoupling: true,
-            inDiff: changedFilesSet.has(partner),
+            inDiff: ctx.changedFilesSet.has(partner),
           });
         }
       }
@@ -238,8 +255,20 @@ export async function analyzeForCI(
   const complexityMap = new Map<string, FileComplexityInfo>();
   for (const c of complexityList) complexityMap.set(c.path, c);
 
+  // Pre-compute lookup maps (O(1) per file instead of O(n) scans)
+  const ctx: RiskContext = {
+    hubFileMap: new Map(analysis.hubFiles.map((h) => [h.path, h])),
+    chokepointMap: new Map((analysis.chokepoints ?? []).map((c) => [c.file, c])),
+    crossCuttingMap: new Map((analysis.crossCuttingFiles ?? []).map((c) => [c.file, c])),
+    instabilityMap: new Map(analysis.instabilities.map((i) => [i.path, i])),
+    cycleFiles: new Set(analysis.circularDeps.flatMap((c) => c.chain)),
+    edgeSet: new Set(graph.edges.map((e) => `${e.from}->${e.to}`)),
+    changedFilesSet,
+    complexityMap,
+  };
+
   // Score each changed file
-  const files = changedFiles.map((f) => computeFileRisk(f, analysis, graph, changedFilesSet, complexityMap));
+  const files = changedFiles.map((f) => computeFileRisk(f, analysis, graph, ctx));
 
   // Sort by risk score descending
   files.sort((a, b) => b.riskScore - a.riskScore);
