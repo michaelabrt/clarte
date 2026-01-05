@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatComment } from "../../action/src/comment.js";
-import type { CIAnalysisResult, FileRiskAssessment, RiskLevel } from "../analysis/ci.js";
+import type { CIAnalysisResult, FileRiskAssessment } from "../analysis/ci.js";
 
 function makeFile(overrides: Partial<FileRiskAssessment> & { path: string }): FileRiskAssessment {
   return {
@@ -52,7 +52,12 @@ describe("formatComment", () => {
       const result = makeResult({
         files: [
           makeFile({ path: "low.ts", riskLevel: "low", riskScore: 0 }),
-          makeFile({ path: "med.ts", riskLevel: "medium", riskScore: 2, reasons: ["Foundation file (imported by 5 files)"] }),
+          makeFile({
+            path: "med.ts",
+            riskLevel: "medium",
+            riskScore: 2,
+            reasons: ["Foundation file (imported by 5 files)"],
+          }),
         ],
       });
 
