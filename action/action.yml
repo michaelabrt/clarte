@@ -1,5 +1,5 @@
 name: 'Clarte Architecture Review'
-description: 'Architectural advisor for pull requests: identifies missing co-changes, chokepoints, flow bottlenecks and tight coupling'
+description: 'Reviews pull requests for missing co-changes, chokepoints, flow bottlenecks and tight coupling'
 author: 'Michael Aboukrat'
 
 branding:
