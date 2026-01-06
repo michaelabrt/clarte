@@ -2,9 +2,18 @@ import type { ArchitecturalLayer, ArchViolation, ImportGraph, LayerEdge } from "
 
 /** Layer consistency parameters used by fitness checks */
 const LAYER_CONSISTENCY = {
-  /** Minimum layers for layer consistency scoring */
+  /**
+   * Minimum layers for layer consistency scoring.
+   * Rationale: with only 1 layer, there are no cross-layer edges to check.
+   * 2 is the minimum where upward-dependency and layer-skip rules are meaningful.
+   */
   MIN_LAYERS_FOR_SCORING: 2,
-  /** Minimum layer skip distance to count as a violation */
+  /**
+   * Minimum layer skip distance to count as a violation.
+   * Rationale: skipping 1 layer (adjacent layers importing each other) is normal.
+   * Skipping 2+ layers suggests a missing abstraction in an intermediate layer.
+   * This avoids flagging standard controller->service or service->model patterns.
+   */
   MIN_SKIP_DISTANCE: 2,
 } as const;
 
@@ -85,6 +94,7 @@ export function checkArchitecturalFitness(
   layerEdges: LayerEdge[],
 ): ArchViolation[] {
   const violations: ArchViolation[] = [];
+  /** Rationale: 20 is enough to surface systemic issues without overwhelming the agent. Beyond 20, violations are likely repetitions of the same pattern. */
   const MAX_VIOLATIONS = 20;
 
   // Build file-to-layer mapping

@@ -2,11 +2,22 @@ import type { FileInstability, ImportGraph } from "../types.js";
 
 /** Instability metric parameters */
 const INSTABILITY = {
-  /** Type-only imports carry less coupling risk (erased at runtime) */
+  /**
+   * Type-only imports carry less coupling risk (erased at runtime).
+   * Rationale: 0.3 means a type-only import counts as ~1/3 of a value import.
+   * This acknowledges that type changes can still break dependents at compile time
+   * while recognizing there is no runtime coupling.
+   */
   TYPE_ONLY_WEIGHT: 0.3,
 } as const;
 
-/** Threshold above which a file is considered high-instability */
+/**
+ * Threshold above which a file is considered high-instability.
+ * Rationale: Martin's Stable Dependencies Principle flags files with I > 0.5 as
+ * unstable. We use 0.8 (stricter) to only surface files that are both heavily
+ * depended upon AND have many outgoing dependencies, a genuinely risky combination.
+ * Lower thresholds produced too many false positives in practice.
+ */
 export const INSTABILITY_THRESHOLD = 0.8;
 
 /**

@@ -2,7 +2,12 @@ import path from "node:path";
 import { glob } from "tinyglobby";
 import type { DetectedContext, Language } from "../types.js";
 
-/** Minimum fraction of source files for a language to qualify as secondary (15%) */
+/**
+ * Minimum fraction of source files for a language to qualify as secondary (15%).
+ * Rationale: below 15%, a language is likely test fixtures, generated code, or vendored
+ * dependencies rather than a genuine part of the project. 15% balances catching real
+ * polyglot projects (e.g. a Go backend with 20% Python scripts) while ignoring noise.
+ */
 export const SECONDARY_LANGUAGE_THRESHOLD = 0.15;
 
 export function getExtensionsForLanguage(lang: Language): string[] {

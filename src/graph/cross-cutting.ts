@@ -9,6 +9,11 @@ import type { ArchitecturalLayer, CrossCuttingFile, ImportGraph } from "../types
 export function findCrossCuttingFiles(
   graph: ImportGraph,
   layers: ArchitecturalLayer[],
+  /**
+   * Rationale: a file imported from 2 layers is normal (e.g. types used by
+   * services and controllers). 3+ layers means the file is a true cross-cutting
+   * concern whose changes ripple across architectural boundaries.
+   */
   minLayerSpread = 3,
 ): CrossCuttingFile[] {
   if (layers.length < minLayerSpread) return [];
