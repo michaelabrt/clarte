@@ -24,7 +24,7 @@ import { findChokepoints } from "../../graph/chokepoints.js";
 import { findTightCouplings } from "../../graph/tight-coupling.js";
 import { computeGraphTopology } from "../../graph/topology.js";
 import { computeBetweenness } from "../../graph/centrality.js";
-import type { ImportGraph } from "../../types.js";
+import type { ImportGraph, Language } from "../../types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.join(__dirname, "fixtures");
@@ -61,7 +61,7 @@ interface GoldenAnalysis {
  * Run the full graph analysis pipeline on a fixture directory and
  * return a normalized, serializable result object.
  */
-async function analyzeFixture(fixtureDir: string, language: "typescript" | "python"): Promise<GoldenAnalysis> {
+async function analyzeFixture(fixtureDir: string, language: Language): Promise<GoldenAnalysis> {
   const graph: ImportGraph = await buildImportGraph(fixtureDir, language);
 
   const hubFiles = getHubFiles(graph, 10);
@@ -157,7 +157,7 @@ async function saveGolden(name: string, data: GoldenAnalysis): Promise<void> {
 
 interface FixtureDef {
   name: string;
-  language: "typescript" | "python";
+  language: Language;
   /** Basic sanity assertions independent of golden file */
   sanity: (analysis: GoldenAnalysis) => void;
 }
@@ -224,6 +224,49 @@ const fixtures: FixtureDef[] = [
       // if they appear, their score must be 0
       if (db) expect(db.score).toBe(0);
       if (cache) expect(cache.score).toBe(0);
+    },
+  },
+  {
+    name: "go-api",
+    language: "go",
+    sanity: (a) => {
+      // 8 Go files across cmd/, internal/{config,models,repository,handlers,server}
+      expect(a.fileCount).toBeGreaterThanOrEqual(8);
+      expect(a.edgeCount).toBeGreaterThan(5);
+      // server.go should be the top betweenness chokepoint (all paths funnel through it)
+      expect(a.betweennessTopFiles.some((f) => f.file.includes("server") && f.score > 0.5)).toBe(true);
+      // Should detect at least 1 layer
+      expect(a.layers.length).toBeGreaterThanOrEqual(1);
+      // Clean layered project: no circular deps
+      expect(a.circularDeps).toHaveLength(0);
+    },
+  },
+  {
+    name: "rust-web",
+    language: "rust",
+    sanity: (a) => {
+      // 9 Rust files: main.rs, config.rs, models/{mod,user,product}, db/{mod,queries}, routes/{mod,handlers}
+      expect(a.fileCount).toBeGreaterThanOrEqual(8);
+      expect(a.edgeCount).toBeGreaterThan(5);
+      // models/user.rs should be a hub (imported by product, queries, handlers)
+      expect(a.hubFiles.some((h) => h.path.includes("user"))).toBe(true);
+    },
+  },
+  {
+    name: "java-service",
+    language: "java",
+    sanity: (a) => {
+      // 7 Java files: App, AppConfig, User, Product, UserRepository, UserService, UserController
+      expect(a.fileCount).toBeGreaterThanOrEqual(7);
+      expect(a.edgeCount).toBeGreaterThan(5);
+      // User.java should be the highest-authority hub
+      const userHub = a.hubFiles.find((h) => h.path.includes("model/User.java"));
+      expect(userHub).toBeDefined();
+      expect(userHub!.authority).toBe(1);
+      // UserService should be a chokepoint (chains through repository to model)
+      expect(a.betweennessTopFiles.some((f) => f.file.includes("UserService") && f.score > 0.5)).toBe(true);
+      // Should detect at least 2 layers
+      expect(a.layers.length).toBeGreaterThanOrEqual(2);
     },
   },
 ];
