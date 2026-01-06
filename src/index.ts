@@ -74,7 +74,7 @@ async function main() {
     await new Promise<void>((resolve, reject) => {
       process.stdout.write(JSON.stringify(result, null, 2) + "\n", (err) => (err ? reject(err) : resolve()));
     });
-    process.exit(result.summary.criticalRiskFiles > 0 ? 1 : 0);
+    process.exit(0);
   }
 
   const PROJECT_MARKERS = [

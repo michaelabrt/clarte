@@ -1,5 +1,5 @@
 name: 'Clarte Architecture Review'
-description: 'Architectural risk assessment for pull requests — identifies chokepoints, co-change warnings, and test coverage gaps'
+description: 'Architectural advisor for pull requests: identifies missing co-changes, chokepoints, flow bottlenecks and tight coupling'
 author: 'Michael Aboukrat'
 
 branding:
@@ -17,16 +17,6 @@ inputs:
     required: false
     default: '.'
 
-  risk-threshold:
-    description: 'Minimum risk level to report (low, medium, high, critical)'
-    required: false
-    default: 'medium'
-
-  fail-on-critical:
-    description: 'Fail the action if any critical-risk file is detected'
-    required: false
-    default: 'false'
-
   comment-mode:
     description: 'How to handle PR comments: create, update, or none'
     required: false
@@ -38,11 +28,11 @@ inputs:
     default: '50'
 
 outputs:
-  risk-level:
-    description: 'Overall risk level of the PR (low, medium, high, critical)'
+  has-findings:
+    description: 'Whether any architectural findings were detected'
 
-  high-risk-count:
-    description: 'Number of high or critical risk files'
+  co-change-count:
+    description: 'Number of missing co-change warnings'
 
   comment-id:
     description: 'ID of the posted/updated PR comment'

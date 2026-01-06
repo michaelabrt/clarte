@@ -2,7 +2,6 @@ import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { runCiMode } from "../../src/cli/ci.js";
 import { formatComment } from "./comment.js";
-import type { RiskLevel } from "../../src/analysis/ci.js";
 
 const MARKER = "<!-- clarte-ci-review -->";
 
@@ -10,8 +9,6 @@ async function run(): Promise<void> {
   try {
     const token = core.getInput("github-token", { required: true });
     const workingDir = core.getInput("working-directory") || ".";
-    const riskThreshold = (core.getInput("risk-threshold") || "medium") as RiskLevel;
-    const failOnCritical = core.getBooleanInput("fail-on-critical");
     const commentMode = core.getInput("comment-mode") || "update";
     const maxFiles = parseInt(core.getInput("max-files") || "50", 10);
     const verbose = core.isDebug();
@@ -45,8 +42,8 @@ async function run(): Promise<void> {
 
     if (changedFiles.length === 0) {
       core.info("No changed files to analyze.");
-      core.setOutput("risk-level", "low");
-      core.setOutput("high-risk-count", 0);
+      core.setOutput("has-findings", false);
+      core.setOutput("co-change-count", 0);
       return;
     }
 
@@ -56,13 +53,13 @@ async function run(): Promise<void> {
     const result = await runCiMode(workingDir, changedFiles, baseSha, verbose);
 
     // Set outputs
-    core.setOutput("risk-level", result.summary.overallRisk);
-    core.setOutput("high-risk-count", result.summary.highRiskFiles + result.summary.criticalRiskFiles);
+    core.setOutput("has-findings", result.hasFindings);
+    core.setOutput("co-change-count", result.missingCoChanges.length);
     core.setOutput("analysis-json", JSON.stringify(result));
 
     // Post/update PR comment
     if (commentMode !== "none") {
-      const commentBody = `${MARKER}\n${formatComment(result, riskThreshold)}`;
+      const commentBody = `${MARKER}\n${formatComment(result)}`;
 
       if (commentMode === "update") {
         const { data: comments } = await octokit.rest.issues.listComments({
@@ -103,19 +100,11 @@ async function run(): Promise<void> {
 
     // Summary
     core.info(
-      `Risk: ${result.summary.overallRisk} | ` +
-        `${result.summary.highRiskFiles + result.summary.criticalRiskFiles} high-risk files | ` +
-        `${result.summary.missingTests} test gaps | ` +
-        `${result.summary.coChangeWarnings} co-change warnings`,
+      `Findings: ${result.hasFindings ? "yes" : "none"} | ` +
+        `${result.missingCoChanges.length} co-change warnings | ` +
+        `${result.chokepoints.length} chokepoints | ` +
+        `${result.tightCouplings.length} tight couplings`,
     );
-
-    // Fail if configured
-    if (failOnCritical && result.summary.criticalRiskFiles > 0) {
-      core.setFailed(
-        `${result.summary.criticalRiskFiles} critical-risk file(s) detected. ` +
-          `Review the PR comment for details.`,
-      );
-    }
   } catch (error) {
     core.setFailed(error instanceof Error ? error.message : String(error));
   }
