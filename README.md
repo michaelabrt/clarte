@@ -216,6 +216,8 @@ Clarté works with any AI coding tool that reads context files. Deep integration
 | Enhanced | Cursor | Context file + per-directory graph rules |
 | Universal | All others | Context file (works out of the box) |
 
+Each tool gets a context file in the format it expects:
+
 | Tool | Generated file | Docs |
 |------|---------------|------|
 | Claude Code | `.claude/rules/clarte.md` | [code.claude.com](https://code.claude.com/docs/en/memory) |
