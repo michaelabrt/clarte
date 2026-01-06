@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, afterEach, beforeEach, vi } from "vitest";
 import { initPreCommitHook } from "../cli/hooks.js";
+import { ClarteError } from "../errors.js";
 
 let tmpDir: string;
 
@@ -18,28 +19,19 @@ afterEach(async () => {
 
 describe("initPreCommitHook", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
-  let errorSpy: ReturnType<typeof vi.spyOn>;
-  let exitSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
-      throw new Error("process.exit called");
-    }) as never);
   });
 
   afterEach(() => {
     logSpy.mockRestore();
-    errorSpy.mockRestore();
-    exitSpy.mockRestore();
   });
 
-  it("exits with error when not a git repo", async () => {
+  it("throws ClarteError when not a git repo", async () => {
     // tmpDir has no .git directory
-    await expect(initPreCommitHook(tmpDir)).rejects.toThrow("process.exit called");
-    expect(exitSpy).toHaveBeenCalledWith(1);
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Not a git repository"));
+    await expect(initPreCommitHook(tmpDir)).rejects.toThrow(ClarteError);
+    await expect(initPreCommitHook(tmpDir)).rejects.toThrow("Not a git repository");
   });
 
   it("prints Husky instructions with auto-refresh command", async () => {

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { parseCliArgs } from "../cli/args.js";
+import { ClarteError } from "../errors.js";
 
-// Mock process.exit to prevent test termination
+// Mock process.exit to prevent test termination (still needed for handleEarlyExits)
 const mockExit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 const mockConsoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -92,10 +93,8 @@ describe("parseCliArgs", () => {
     expect(result.maxTokens).toBe(5000);
   });
 
-  it("exits on invalid --max-tokens", () => {
-    parseCliArgs(["--max-tokens=abc"]);
-    expect(mockExit).toHaveBeenCalledWith(1);
-    expect(mockConsoleError).toHaveBeenCalled();
+  it("throws ClarteError on invalid --max-tokens", () => {
+    expect(() => parseCliArgs(["--max-tokens=abc"])).toThrow(ClarteError);
   });
 
   it("parses --budget=N", () => {
@@ -103,9 +102,8 @@ describe("parseCliArgs", () => {
     expect(result.effectiveBudget).toBe(3000);
   });
 
-  it("exits on invalid --budget", () => {
-    parseCliArgs(["--budget=xyz"]);
-    expect(mockExit).toHaveBeenCalledWith(1);
+  it("throws ClarteError on invalid --budget", () => {
+    expect(() => parseCliArgs(["--budget=xyz"])).toThrow(ClarteError);
   });
 
   it("parses --full as budget=0", () => {
@@ -129,9 +127,8 @@ describe("parseCliArgs", () => {
     expect(result.maxChars).toBe(20000);
   });
 
-  it("exits on invalid --max-chars", () => {
-    parseCliArgs(["--max-chars=bad"]);
-    expect(mockExit).toHaveBeenCalledWith(1);
+  it("throws ClarteError on invalid --max-chars", () => {
+    expect(() => parseCliArgs(["--max-chars=bad"])).toThrow(ClarteError);
   });
 
   it("parses positional directory argument", () => {

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { ClarteError, ExitCode } from "../errors.js";
 import { IGNORE_DIRS_SET } from "../config/ignore-patterns.js";
 import { loadConfig, configToAnswers } from "../config/config.js";
 import { detectContext, enrichFrameworksWithUsage } from "../detect/detect.js";
@@ -120,8 +121,7 @@ export async function runWatchMode(rootDir: string, verbose: boolean): Promise<v
   // 1. Load config (required for watch mode)
   const config = await loadConfig(rootDir);
   if (!config) {
-    console.error("[clarte] No .clarte.json found. Run `npx clarte` first to configure your project.");
-    process.exit(1);
+    throw new ClarteError("No .clarte.json found. Run `npx clarte` first to configure your project.", ExitCode.MISSING);
   }
 
   const answers = configToAnswers(config);
@@ -181,8 +181,7 @@ export async function runWatchMode(rootDir: string, verbose: boolean): Promise<v
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[clarte] Failed to start file watcher: ${msg}`);
-    process.exit(1);
+    throw new ClarteError(`Failed to start file watcher: ${msg}`);
   }
 
   // 4. Handle clean shutdown
