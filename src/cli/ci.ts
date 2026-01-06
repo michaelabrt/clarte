@@ -51,24 +51,15 @@ export async function runCiMode(
 
   if (files.length === 0) {
     return {
-      version: 1,
+      version: 2 as const,
       timestamp: new Date().toISOString(),
-      files: [],
-      testGaps: [],
-      architecturalImpact: {
-        layerViolations: [],
-        chokepointModifications: [],
-        crossCuttingChanges: [],
-        tightCouplingRisks: [],
-      },
-      summary: {
-        totalFilesChanged: 0,
-        highRiskFiles: 0,
-        criticalRiskFiles: 0,
-        missingTests: 0,
-        coChangeWarnings: 0,
-        overallRisk: "low",
-      },
+      filesAnalyzed: 0,
+      missingCoChanges: [],
+      chokepoints: [],
+      crossCutting: [],
+      flowBottlenecks: [],
+      tightCouplings: [],
+      hasFindings: false,
     };
   }
 

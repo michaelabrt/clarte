@@ -15,7 +15,7 @@ jobs:
 
     steps:
       # fetch-depth: 0 fetches full git history, needed for
-      # change coupling analysis and git-based risk scoring
+      # change coupling analysis
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -30,4 +30,3 @@ jobs:
       - uses: ./action
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          fail-on-critical: 'true'

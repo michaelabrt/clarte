@@ -278,7 +278,7 @@ Clarté runs a pipeline of static analysis steps. Each one feeds into the next. 
 
 ## GitHub Action
 
-Clarté provides a GitHub Action that posts architecture risk assessments on pull requests.
+Clarté provides a GitHub Action that acts as an architectural advisor on pull requests, surfacing signals no other tool provides.
 
 ```yaml
 # .github/workflows/clarte.yml
@@ -299,10 +299,9 @@ jobs:
 
 The PR comment includes:
 
-- **Per-file risk scores**: role, import count, top risk reason for each changed file
-- **Co-change warnings**: files not in the diff that usually change alongside ones that are
-- **Test coverage gaps**: changed files missing tests
-- **Architectural impact**: layer violations, chokepoint modifications, cross-cutting changes
+- **Missing co-changes**: files not in the diff that usually change alongside ones that are (hidden and structural coupling)
+- **Structural hotspots**: chokepoints, flow bottlenecks and cross-cutting files touched by the PR
+- **Tight coupling**: file pairs with high import specificity affected by the change
 
 <details>
 <summary><strong>Action inputs</strong></summary>
@@ -311,8 +310,6 @@ The PR comment includes:
 |-------|---------|-------------|
 | `github-token` | `${{ github.token }}` | GitHub token for posting PR comments |
 | `working-directory` | `.` | Path to the project root |
-| `risk-threshold` | `medium` | Minimum risk level to report (`low`, `medium`, `high`, `critical`) |
-| `fail-on-critical` | `false` | Fail the action when a critical-risk file is detected |
 | `comment-mode` | `update` | How to handle PR comments: `create`, `update` or `none` |
 | `max-files` | `50` | Maximum changed files to analyze (0 = unlimited) |
 
@@ -380,7 +377,7 @@ npx clarte [directory] [options]
 
 | Command | Description |
 |---------|-------------|
-| `ci --base=REF --changed-files=a,b` | Analyze changed files and output risk assessment as JSON |
+| `ci --base=REF --changed-files=a,b` | Analyze changed files and output architectural findings as JSON |
 
 </details>
 

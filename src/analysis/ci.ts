@@ -1,346 +1,216 @@
-import type {
-  ContextAnalysis,
-  CrossCuttingFile,
-  FileRole,
-  HubFile,
-  ImportGraph,
-  Chokepoint,
-  FileInstability,
-} from "../types.js";
-import { computeFileComplexity, type FileComplexityInfo } from "../templates/directives.js";
+import type { ContextAnalysis, CrossCuttingFile, ImportGraph, Chokepoint, TightCoupling } from "../types.js";
 
 // ── Types ────────────────────────────────────────────────────────────
 
-export type RiskLevel = "low" | "medium" | "high" | "critical";
-
-export interface FileRiskAssessment {
-  path: string;
-  riskLevel: RiskLevel;
-  riskScore: number;
-  reasons: string[];
-  role: FileRole | null;
-  importedBy: number;
-  isChokepoint: boolean;
-  separatesComponents: number;
-  isCrossCutting: boolean;
-  isInCycle: boolean;
-  instability: number | null;
-  hasTests: boolean;
-  testFiles: string[];
-  coChangeFiles: CoChangeWarning[];
-}
-
-export interface CoChangeWarning {
-  file: string;
+export interface MissingCoChange {
+  changed: string;
+  missing: string;
   confidence: number;
   coChangeCount: number;
   isHiddenCoupling: boolean;
-  inDiff: boolean;
 }
 
-export interface TestCoverageGap {
-  changedFile: string;
-  hasTests: boolean;
-  testFiles: string[];
+export interface ChokepointAlert {
+  file: string;
+  separates: number;
+  importedBy: number;
 }
 
-export interface ArchitecturalImpact {
-  layerViolations: string[];
-  chokepointModifications: string[];
-  crossCuttingChanges: string[];
-  tightCouplingRisks: string[];
+export interface CrossCuttingAlert {
+  file: string;
+  layerSpread: number;
+  layers: string[];
+  totalImporters: number;
 }
 
-export interface CISummary {
-  totalFilesChanged: number;
-  highRiskFiles: number;
-  criticalRiskFiles: number;
-  missingTests: number;
-  coChangeWarnings: number;
-  overallRisk: RiskLevel;
+export interface FlowBottleneckAlert {
+  file: string;
+  betweenness: number;
+  importedBy: number;
+}
+
+export interface TightCouplingAlert {
+  from: string;
+  to: string;
+  importedNames: number;
 }
 
 export interface CIAnalysisResult {
-  version: number;
+  version: 2;
   timestamp: string;
-  files: FileRiskAssessment[];
-  testGaps: TestCoverageGap[];
-  architecturalImpact: ArchitecturalImpact;
-  summary: CISummary;
+  filesAnalyzed: number;
+  missingCoChanges: MissingCoChange[];
+  chokepoints: ChokepointAlert[];
+  crossCutting: CrossCuttingAlert[];
+  flowBottlenecks: FlowBottleneckAlert[];
+  tightCouplings: TightCouplingAlert[];
+  hasFindings: boolean;
 }
 
-// ── Pre-computed lookup context ─────────────────────────────────────
+// ── Collectors ───────────────────────────────────────────────────────
 
-interface RiskContext {
-  hubFileMap: Map<string, HubFile>;
-  chokepointMap: Map<string, Chokepoint>;
-  crossCuttingMap: Map<string, CrossCuttingFile>;
-  instabilityMap: Map<string, FileInstability>;
-  cycleFiles: Set<string>;
-  edgeSet: Set<string>;
-  changedFilesSet: Set<string>;
-  complexityMap: Map<string, FileComplexityInfo>;
-}
-
-// ── Risk scoring ────────────────────────────────────────────────────
-
-const WEIGHTS = {
-  chokepoint: 3,
-  flowBottleneck: 2,
-  highImportCount: 2,
-  noTests: 2,
-  highComplexity: 1,
-  hiddenCoupling: 1,
-  crossCutting: 1,
-  inCycle: 1,
-  highInstability: 1,
-} as const;
-
-function scoreToLevel(score: number): RiskLevel {
-  if (score >= 6) return "critical";
-  if (score >= 4) return "high";
-  if (score >= 2) return "medium";
-  return "low";
-}
-
-function computeFileRisk(
-  filePath: string,
+function collectMissingCoChanges(
+  changedFilesSet: Set<string>,
   analysis: ContextAnalysis,
-  graph: ImportGraph,
-  ctx: RiskContext,
-): FileRiskAssessment {
-  const reasons: string[] = [];
-  let score = 0;
+  edgeSet: Set<string>,
+): MissingCoChange[] {
+  const seen = new Set<string>();
+  const results: MissingCoChange[] = [];
 
-  // Hub file lookup
-  const hubFile = ctx.hubFileMap.get(filePath);
-  const role = hubFile?.role ?? null;
-  const importedBy = graph.inDegree.get(filePath) ?? 0;
+  for (const changed of changedFilesSet) {
+    // Change coupling from git analysis
+    if (analysis.gitActivity) {
+      for (const coupling of analysis.gitActivity.changeCoupling) {
+        const partner =
+          coupling.fileA === changed ? coupling.fileB : coupling.fileB === changed ? coupling.fileA : null;
+        if (!partner || changedFilesSet.has(partner)) continue;
 
-  // Chokepoint
-  const chokepoint = ctx.chokepointMap.get(filePath);
-  const isChokepoint = !!chokepoint;
-  const separatesComponents = chokepoint?.separates ?? 0;
-  if (isChokepoint) {
-    score += WEIGHTS.chokepoint;
-    reasons.push(`Chokepoint (separates ${separatesComponents} components)`);
-  }
+        const key = `${changed}:${partner}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
 
-  // Flow bottleneck (high betweenness)
-  const betweenness = graph.betweennessScores?.get(filePath) ?? 0;
-  if (betweenness > 0.1) {
-    score += WEIGHTS.flowBottleneck;
-    reasons.push(`Flow bottleneck (betweenness: ${betweenness.toFixed(2)})`);
-  }
+        const hasImportEdge = edgeSet.has(`${changed}->${partner}`) || edgeSet.has(`${partner}->${changed}`);
 
-  // High import count (Foundation file)
-  if (importedBy >= 5) {
-    score += WEIGHTS.highImportCount;
-    reasons.push(`Foundation file (imported by ${importedBy} files)`);
-  }
-
-  // Test coverage
-  const testFiles = analysis.testMapping?.sourceToTests.get(filePath) ?? [];
-  const hasTests = testFiles.length > 0;
-  if (!hasTests) {
-    const isUntested = analysis.testMapping?.untestedFiles.includes(filePath) ?? false;
-    if (isUntested) {
-      score += WEIGHTS.noTests;
-      reasons.push("No test coverage");
-    }
-  }
-
-  // Complexity
-  const complexity = ctx.complexityMap.get(filePath);
-  if (complexity && (complexity.exports > 15 || complexity.lines > 300)) {
-    score += WEIGHTS.highComplexity;
-    reasons.push(`High complexity (${complexity.exports} exports, ${complexity.lines} lines)`);
-  }
-
-  // Cross-cutting
-  const crossCutting = ctx.crossCuttingMap.get(filePath);
-  const isCrossCutting = !!crossCutting;
-  if (isCrossCutting) {
-    score += WEIGHTS.crossCutting;
-    reasons.push(`Cross-cutting (spans ${crossCutting.layerSpread} layers)`);
-  }
-
-  // Circular dependency
-  const isInCycle = ctx.cycleFiles.has(filePath);
-  if (isInCycle) {
-    score += WEIGHTS.inCycle;
-    reasons.push("Part of circular dependency");
-  }
-
-  // Instability
-  const instabilityEntry = ctx.instabilityMap.get(filePath);
-  const instability = instabilityEntry?.instability ?? null;
-  if (instability !== null && instability > 0.8) {
-    score += WEIGHTS.highInstability;
-    reasons.push(`High instability (${instability.toFixed(2)})`);
-  }
-
-  // Co-change warnings
-  const coChangeFiles: CoChangeWarning[] = [];
-  if (analysis.gitActivity) {
-    for (const coupling of analysis.gitActivity.changeCoupling) {
-      const partner =
-        coupling.fileA === filePath ? coupling.fileB : coupling.fileB === filePath ? coupling.fileA : null;
-      if (partner) {
-        const hasImportEdge = ctx.edgeSet.has(`${filePath}->${partner}`) || ctx.edgeSet.has(`${partner}->${filePath}`);
-        coChangeFiles.push({
-          file: partner,
+        results.push({
+          changed,
+          missing: partner,
           confidence: coupling.confidence,
           coChangeCount: coupling.coChangeCount,
           isHiddenCoupling: !hasImportEdge,
-          inDiff: ctx.changedFilesSet.has(partner),
         });
       }
     }
-    // Also include structural-temporal mismatches
+
+    // Structural-temporal mismatches (always hidden coupling)
     if (analysis.structuralMismatches) {
       for (const m of analysis.structuralMismatches) {
-        const partner = m.fileA === filePath ? m.fileB : m.fileB === filePath ? m.fileA : null;
-        if (partner && !coChangeFiles.some((c) => c.file === partner)) {
-          coChangeFiles.push({
-            file: partner,
-            confidence: m.coChangeConfidence,
-            coChangeCount: m.coChangeCount,
-            isHiddenCoupling: true,
-            inDiff: ctx.changedFilesSet.has(partner),
-          });
-        }
+        const partner = m.fileA === changed ? m.fileB : m.fileB === changed ? m.fileA : null;
+        if (!partner || changedFilesSet.has(partner)) continue;
+
+        const key = `${changed}:${partner}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        results.push({
+          changed,
+          missing: partner,
+          confidence: m.coChangeConfidence,
+          coChangeCount: m.coChangeCount,
+          isHiddenCoupling: true,
+        });
       }
-    }
-    if (coChangeFiles.some((c) => c.isHiddenCoupling && !c.inDiff)) {
-      score += WEIGHTS.hiddenCoupling;
-      reasons.push("Has hidden coupling (co-change without import)");
     }
   }
 
-  // Sort co-change files by confidence
-  coChangeFiles.sort((a, b) => b.confidence - a.confidence);
+  // Sort: hidden first, then by confidence desc
+  results.sort((a, b) => {
+    if (a.isHiddenCoupling !== b.isHiddenCoupling) return a.isHiddenCoupling ? -1 : 1;
+    return b.confidence - a.confidence;
+  });
 
-  return {
-    path: filePath,
-    riskLevel: scoreToLevel(score),
-    riskScore: score,
-    reasons,
-    role,
-    importedBy,
-    isChokepoint,
-    separatesComponents,
-    isCrossCutting,
-    isInCycle,
-    instability,
-    hasTests,
-    testFiles: [...testFiles],
-    coChangeFiles,
-  };
+  return results;
+}
+
+function collectChokepoints(changedFilesSet: Set<string>, chokepointMap: Map<string, Chokepoint>): ChokepointAlert[] {
+  const results: ChokepointAlert[] = [];
+  for (const file of changedFilesSet) {
+    const cp = chokepointMap.get(file);
+    if (cp) {
+      results.push({ file: cp.file, separates: cp.separates, importedBy: cp.importedBy });
+    }
+  }
+  return results;
+}
+
+function collectCrossCutting(
+  changedFilesSet: Set<string>,
+  crossCuttingMap: Map<string, CrossCuttingFile>,
+): CrossCuttingAlert[] {
+  const results: CrossCuttingAlert[] = [];
+  for (const file of changedFilesSet) {
+    const cc = crossCuttingMap.get(file);
+    if (cc) {
+      results.push({
+        file: cc.file,
+        layerSpread: cc.layerSpread,
+        layers: cc.layers,
+        totalImporters: cc.totalImporters,
+      });
+    }
+  }
+  return results;
+}
+
+function collectFlowBottlenecks(changedFilesSet: Set<string>, graph: ImportGraph): FlowBottleneckAlert[] {
+  const results: FlowBottleneckAlert[] = [];
+  if (!graph.betweennessScores) return results;
+
+  for (const file of changedFilesSet) {
+    const betweenness = graph.betweennessScores.get(file);
+    if (betweenness !== undefined && betweenness > 0.1) {
+      results.push({
+        file,
+        betweenness,
+        importedBy: graph.inDegree.get(file) ?? 0,
+      });
+    }
+  }
+  return results;
+}
+
+function collectTightCouplings(
+  changedFilesSet: Set<string>,
+  tightCouplings: TightCoupling[] | undefined,
+): TightCouplingAlert[] {
+  if (!tightCouplings) return [];
+
+  const results: TightCouplingAlert[] = [];
+  for (const tc of tightCouplings) {
+    if (changedFilesSet.has(tc.from) || changedFilesSet.has(tc.to)) {
+      results.push({ from: tc.from, to: tc.to, importedNames: tc.importedNames });
+    }
+  }
+  return results;
 }
 
 // ── Public API ──────────────────────────────────────────────────────
 
 export async function analyzeForCI(
-  rootDir: string,
+  _rootDir: string,
   changedFiles: string[],
   analysis: ContextAnalysis,
   graph: ImportGraph,
 ): Promise<CIAnalysisResult> {
   const changedFilesSet = new Set(changedFiles);
 
-  // Pre-compute complexity for all hub files that are in the changed set
-  const hubsToCheck = analysis.hubFiles.filter((h) => changedFilesSet.has(h.path));
-  const complexityList = await computeFileComplexity(rootDir, hubsToCheck);
-  const complexityMap = new Map<string, FileComplexityInfo>();
-  for (const c of complexityList) complexityMap.set(c.path, c);
+  // Pre-compute lookup maps
+  const chokepointMap = new Map((analysis.chokepoints ?? []).map((c) => [c.file, c]));
+  const crossCuttingMap = new Map((analysis.crossCuttingFiles ?? []).map((c) => [c.file, c]));
+  const edgeSet = new Set(graph.edges.map((e) => `${e.from}->${e.to}`));
 
-  // Pre-compute lookup maps (O(1) per file instead of O(n) scans)
-  const ctx: RiskContext = {
-    hubFileMap: new Map(analysis.hubFiles.map((h) => [h.path, h])),
-    chokepointMap: new Map((analysis.chokepoints ?? []).map((c) => [c.file, c])),
-    crossCuttingMap: new Map((analysis.crossCuttingFiles ?? []).map((c) => [c.file, c])),
-    instabilityMap: new Map(analysis.instabilities.map((i) => [i.path, i])),
-    cycleFiles: new Set(analysis.circularDeps.flatMap((c) => c.chain)),
-    edgeSet: new Set(graph.edges.map((e) => `${e.from}->${e.to}`)),
-    changedFilesSet,
-    complexityMap,
-  };
+  // Collect all signals
+  const missingCoChanges = collectMissingCoChanges(changedFilesSet, analysis, edgeSet);
+  const chokepoints = collectChokepoints(changedFilesSet, chokepointMap);
+  const crossCutting = collectCrossCutting(changedFilesSet, crossCuttingMap);
+  const flowBottlenecks = collectFlowBottlenecks(changedFilesSet, graph);
+  const tightCouplings = collectTightCouplings(changedFilesSet, analysis.tightCouplings);
 
-  // Score each changed file
-  const files = changedFiles.map((f) => computeFileRisk(f, analysis, graph, ctx));
-
-  // Sort by risk score descending
-  files.sort((a, b) => b.riskScore - a.riskScore);
-
-  // Test coverage gaps
-  const testGaps: TestCoverageGap[] = changedFiles.map((f) => {
-    const testFiles = analysis.testMapping?.sourceToTests.get(f) ?? [];
-    return { changedFile: f, hasTests: testFiles.length > 0, testFiles: [...testFiles] };
-  });
-
-  // Architectural impact
-  const layerViolations: string[] = [];
-  if (analysis.layerConsistency) {
-    for (const v of analysis.layerConsistency.violations) {
-      if (changedFilesSet.has(v.from) || changedFilesSet.has(v.to)) {
-        layerViolations.push(`${v.from} (${v.fromLayer}) imports ${v.to} (${v.toLayer})`);
-      }
-    }
-  }
-
-  const chokepointModifications: string[] = [];
-  for (const f of files) {
-    if (f.isChokepoint) {
-      chokepointModifications.push(`${f.path} is a chokepoint (separates ${f.separatesComponents} components)`);
-    }
-  }
-
-  const crossCuttingChanges: string[] = [];
-  for (const f of files) {
-    if (f.isCrossCutting) {
-      crossCuttingChanges.push(f.path);
-    }
-  }
-
-  const tightCouplingRisks: string[] = [];
-  if (analysis.tightCouplings) {
-    for (const tc of analysis.tightCouplings) {
-      if (changedFilesSet.has(tc.from) || changedFilesSet.has(tc.to)) {
-        tightCouplingRisks.push(`${tc.from} imports ${tc.importedNames} names from ${tc.to}`);
-      }
-    }
-  }
-
-  const architecturalImpact: ArchitecturalImpact = {
-    layerViolations,
-    chokepointModifications,
-    crossCuttingChanges,
-    tightCouplingRisks,
-  };
-
-  // Summary
-  const highRiskFiles = files.filter((f) => f.riskLevel === "high").length;
-  const criticalRiskFiles = files.filter((f) => f.riskLevel === "critical").length;
-  const missingTests = testGaps.filter((g) => !g.hasTests).length;
-  const coChangeWarnings = files.reduce((sum, f) => sum + f.coChangeFiles.filter((c) => !c.inDiff).length, 0);
-
-  const maxRisk = files[0]?.riskLevel ?? "low";
-  const overallRisk: RiskLevel = criticalRiskFiles > 0 ? "critical" : highRiskFiles > 0 ? "high" : maxRisk;
+  const hasFindings =
+    missingCoChanges.length > 0 ||
+    chokepoints.length > 0 ||
+    crossCutting.length > 0 ||
+    flowBottlenecks.length > 0 ||
+    tightCouplings.length > 0;
 
   return {
-    version: 1,
+    version: 2,
     timestamp: new Date().toISOString(),
-    files,
-    testGaps,
-    architecturalImpact,
-    summary: {
-      totalFilesChanged: changedFiles.length,
-      highRiskFiles,
-      criticalRiskFiles,
-      missingTests,
-      coChangeWarnings,
-      overallRisk,
-    },
+    filesAnalyzed: changedFiles.length,
+    missingCoChanges,
+    chokepoints,
+    crossCutting,
+    flowBottlenecks,
+    tightCouplings,
+    hasFindings,
   };
 }

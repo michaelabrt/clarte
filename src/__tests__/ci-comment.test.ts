@@ -1,282 +1,221 @@
 import { describe, expect, it } from "vitest";
 import { formatComment } from "../../action/src/comment.js";
-import type { CIAnalysisResult, FileRiskAssessment } from "../analysis/ci.js";
+import type { CIAnalysisResult } from "../analysis/ci.js";
 
-function makeFile(overrides: Partial<FileRiskAssessment> & { path: string }): FileRiskAssessment {
+function makeResult(overrides?: Partial<CIAnalysisResult>): CIAnalysisResult {
   return {
-    riskLevel: "low",
-    riskScore: 0,
-    reasons: [],
-    role: null,
-    importedBy: 0,
-    isChokepoint: false,
-    separatesComponents: 0,
-    isCrossCutting: false,
-    isInCycle: false,
-    instability: null,
-    hasTests: true,
-    testFiles: [],
-    coChangeFiles: [],
+    version: 2,
+    timestamp: "2026-01-01T00:00:00Z",
+    filesAnalyzed: 0,
+    missingCoChanges: [],
+    chokepoints: [],
+    crossCutting: [],
+    flowBottlenecks: [],
+    tightCouplings: [],
+    hasFindings: false,
     ...overrides,
   };
 }
 
-function makeResult(overrides?: Partial<CIAnalysisResult>): CIAnalysisResult {
-  const files = overrides?.files ?? [];
-  const testGaps = overrides?.testGaps ?? [];
-  return {
-    version: 1,
-    timestamp: "2026-01-01T00:00:00Z",
-    files,
-    testGaps,
-    architecturalImpact: overrides?.architecturalImpact ?? {
-      layerViolations: [],
-      chokepointModifications: [],
-      crossCuttingChanges: [],
-      tightCouplingRisks: [],
-    },
-    summary: overrides?.summary ?? {
-      totalFilesChanged: files.length,
-      highRiskFiles: files.filter((f) => f.riskLevel === "high").length,
-      criticalRiskFiles: files.filter((f) => f.riskLevel === "critical").length,
-      missingTests: testGaps.filter((g) => !g.hasTests).length,
-      coChangeWarnings: 0,
-      overallRisk: "low",
-    },
-  };
-}
-
 describe("formatComment", () => {
-  describe("threshold filtering", () => {
-    it("medium threshold hides low-risk files", () => {
-      const result = makeResult({
-        files: [
-          makeFile({ path: "low.ts", riskLevel: "low", riskScore: 0 }),
-          makeFile({
-            path: "med.ts",
-            riskLevel: "medium",
-            riskScore: 2,
-            reasons: ["Foundation file (imported by 5 files)"],
-          }),
-        ],
-      });
-
-      const output = formatComment(result, "medium");
-
-      expect(output).toContain("`med.ts`");
-      expect(output).not.toContain("`low.ts`");
-    });
-
-    it("high threshold hides medium and low files", () => {
-      const result = makeResult({
-        files: [
-          makeFile({ path: "low.ts", riskLevel: "low", riskScore: 0 }),
-          makeFile({ path: "med.ts", riskLevel: "medium", riskScore: 2 }),
-          makeFile({ path: "high.ts", riskLevel: "high", riskScore: 4, reasons: ["Chokepoint"] }),
-        ],
-      });
-
-      const output = formatComment(result, "high");
-
-      expect(output).toContain("`high.ts`");
-      expect(output).not.toContain("`med.ts`");
-      expect(output).not.toContain("`low.ts`");
-    });
-  });
-
-  describe("risk distribution", () => {
-    it("shows correct counts per risk level", () => {
-      const result = makeResult({
-        files: [
-          makeFile({ path: "a.ts", riskLevel: "critical", riskScore: 7, reasons: ["Chokepoint"] }),
-          makeFile({ path: "b.ts", riskLevel: "high", riskScore: 4, reasons: ["Chokepoint"] }),
-          makeFile({ path: "c.ts", riskLevel: "high", riskScore: 4, reasons: ["Chokepoint"] }),
-          makeFile({ path: "d.ts", riskLevel: "medium", riskScore: 2, reasons: ["Foundation"] }),
-          makeFile({ path: "e.ts", riskLevel: "low", riskScore: 0 }),
-        ],
-        summary: {
-          totalFilesChanged: 5,
-          highRiskFiles: 2,
-          criticalRiskFiles: 1,
-          missingTests: 0,
-          coChangeWarnings: 0,
-          overallRisk: "critical",
-        },
-      });
-
-      const output = formatComment(result, "medium");
-
-      // Check distribution row
-      expect(output).toContain("| 1 | 2 | 1 | 1 |");
-    });
-  });
-
-  describe("co-change dedup", () => {
-    it("deduplicates co-change warnings by partner", () => {
-      const result = makeResult({
-        files: [
-          makeFile({
-            path: "a.ts",
-            riskLevel: "medium",
-            riskScore: 2,
-            reasons: ["Foundation"],
-            coChangeFiles: [
-              { file: "partner.ts", confidence: 0.5, coChangeCount: 5, isHiddenCoupling: false, inDiff: false },
-              { file: "partner.ts", confidence: 0.5, coChangeCount: 5, isHiddenCoupling: false, inDiff: false },
-            ],
-          }),
-        ],
-        summary: {
-          totalFilesChanged: 1,
-          highRiskFiles: 0,
-          criticalRiskFiles: 0,
-          missingTests: 0,
-          coChangeWarnings: 2,
-          overallRisk: "medium",
-        },
-      });
-
-      const output = formatComment(result, "medium");
-
-      // Should only appear once after dedup
-      const partnerMatches = output.match(/`partner\.ts`/g);
-      // Once in the co-change table (two columns per row: Changed + Should Also Check)
-      // After dedup, should have exactly 1 row = 1 mention as partner
-      expect(partnerMatches).toBeTruthy();
-      expect(partnerMatches!.length).toBeLessThanOrEqual(2); // 1 row has partner.ts mentioned once in "Should Also Check"
-    });
-  });
-
   describe("clean PR", () => {
-    it("shows check mark when no risks detected", () => {
-      const result = makeResult({
-        files: [],
-        summary: {
-          totalFilesChanged: 0,
-          highRiskFiles: 0,
-          criticalRiskFiles: 0,
-          missingTests: 0,
-          coChangeWarnings: 0,
-          overallRisk: "low",
-        },
-      });
+    it("shows check mark and no section headers", () => {
+      const output = formatComment(makeResult());
 
-      const output = formatComment(result, "medium");
-
-      expect(output).toContain(":white_check_mark: No architectural risks detected.");
-      // Should not contain risk table headers
-      expect(output).not.toContain("Files at Risk");
-    });
-  });
-
-  describe("output format", () => {
-    it("does not contain em dashes", () => {
-      const result = makeResult({
-        files: [
-          makeFile({
-            path: "file.ts",
-            riskLevel: "high",
-            riskScore: 5,
-            reasons: ["Chokepoint (separates 3 components)", "No test coverage"],
-            coChangeFiles: [
-              { file: "other.ts", confidence: 0.5, coChangeCount: 5, isHiddenCoupling: true, inDiff: false },
-            ],
-          }),
-        ],
-        testGaps: [{ changedFile: "file.ts", hasTests: false, testFiles: [] }],
-        architecturalImpact: {
-          layerViolations: [],
-          chokepointModifications: ["file.ts is a chokepoint (separates 3 components)"],
-          crossCuttingChanges: [],
-          tightCouplingRisks: [],
-        },
-        summary: {
-          totalFilesChanged: 1,
-          highRiskFiles: 1,
-          criticalRiskFiles: 0,
-          missingTests: 1,
-          coChangeWarnings: 1,
-          overallRisk: "high",
-        },
-      });
-
-      const output = formatComment(result, "low");
-
-      expect(output).not.toContain("\u2014"); // em dash
-    });
-
-    it("uses blockquote header with risk level", () => {
-      const result = makeResult({
-        summary: {
-          totalFilesChanged: 3,
-          highRiskFiles: 1,
-          criticalRiskFiles: 0,
-          missingTests: 0,
-          coChangeWarnings: 0,
-          overallRisk: "high",
-        },
-      });
-
-      const output = formatComment(result, "medium");
-
-      expect(output).toContain("> :orange_circle: **High Risk** - 3 files changed");
-    });
-
-    it("includes Why column with top 2 reasons", () => {
-      const result = makeResult({
-        files: [
-          makeFile({
-            path: "complex.ts",
-            riskLevel: "high",
-            riskScore: 5,
-            reasons: ["Chokepoint (separates 3 components)", "No test coverage", "High instability"],
-          }),
-        ],
-      });
-
-      const output = formatComment(result, "low");
-
-      // Should show first 2 reasons joined by semicolons
-      expect(output).toContain("Chokepoint (separates 3 components); No test coverage");
-      // Should NOT include the third reason in the same cell
-      expect(output).not.toContain("High instability");
+      expect(output).toContain(":white_check_mark: No architectural concerns.");
+      expect(output).not.toContain("### Missing Co-changes");
+      expect(output).not.toContain("Structural Hotspots");
+      expect(output).not.toContain("Tight Coupling");
     });
 
     it("includes Powered by Clarte footer", () => {
-      const result = makeResult();
-      const output = formatComment(result, "medium");
+      const output = formatComment(makeResult());
 
       expect(output).toContain("Powered by");
       expect(output).toContain("Clarte");
     });
   });
 
-  describe("test coverage section", () => {
-    it("shows covered and missing files", () => {
+  describe("co-change table", () => {
+    it("renders a table with correct columns", () => {
       const result = makeResult({
-        files: [
-          makeFile({ path: "tested.ts", riskLevel: "medium", riskScore: 2, reasons: ["Foundation"] }),
-          makeFile({ path: "untested.ts", riskLevel: "medium", riskScore: 2, reasons: ["Foundation"] }),
+        hasFindings: true,
+        missingCoChanges: [
+          { changed: "a.ts", missing: "partner.ts", confidence: 0.5, coChangeCount: 5, isHiddenCoupling: false },
         ],
-        testGaps: [
-          { changedFile: "tested.ts", hasTests: true, testFiles: ["tested.test.ts"] },
-          { changedFile: "untested.ts", hasTests: false, testFiles: [] },
-        ],
-        summary: {
-          totalFilesChanged: 2,
-          highRiskFiles: 0,
-          criticalRiskFiles: 0,
-          missingTests: 1,
-          coChangeWarnings: 0,
-          overallRisk: "medium",
-        },
       });
 
-      const output = formatComment(result, "medium");
+      const output = formatComment(result);
 
-      expect(output).toContain(":white_check_mark:");
-      expect(output).toContain(":x: Missing tests");
-      expect(output).toContain("1 gap");
+      expect(output).toContain("### Missing Co-changes");
+      expect(output).toContain("| Changed | Usually Changes With | Confidence | Coupling |");
+      expect(output).toContain("`a.ts`");
+      expect(output).toContain("`partner.ts`");
+      expect(output).toContain("50%");
+      expect(output).toContain("Structural");
+    });
+
+    it("labels hidden coupling correctly", () => {
+      const result = makeResult({
+        hasFindings: true,
+        missingCoChanges: [
+          { changed: "a.ts", missing: "far.ts", confidence: 0.7, coChangeCount: 8, isHiddenCoupling: true },
+        ],
+      });
+
+      const output = formatComment(result);
+
+      expect(output).toContain("Hidden");
+    });
+
+    it("truncates beyond 10 rows", () => {
+      const items = Array.from({ length: 12 }, (_, i) => ({
+        changed: `file${i}.ts`,
+        missing: `partner${i}.ts`,
+        confidence: 0.5,
+        coChangeCount: 5,
+        isHiddenCoupling: false,
+      }));
+
+      const result = makeResult({ hasFindings: true, missingCoChanges: items });
+      const output = formatComment(result);
+
+      // Should show truncation note
+      expect(output).toContain("2 more not shown");
+      // Should not render row 11 or 12
+      expect(output).not.toContain("`file10.ts`");
+      expect(output).not.toContain("`file11.ts`");
+    });
+
+    it("preserves input order (hidden before structural from analyzeForCI)", () => {
+      // analyzeForCI sorts hidden first; formatComment renders in given order
+      const result = makeResult({
+        hasFindings: true,
+        missingCoChanges: [
+          { changed: "a.ts", missing: "hidden.ts", confidence: 0.3, coChangeCount: 3, isHiddenCoupling: true },
+          { changed: "a.ts", missing: "structural.ts", confidence: 0.9, coChangeCount: 10, isHiddenCoupling: false },
+        ],
+      });
+
+      const output = formatComment(result);
+      const hiddenIdx = output.indexOf("hidden.ts");
+      const structuralIdx = output.indexOf("structural.ts");
+
+      expect(hiddenIdx).toBeLessThan(structuralIdx);
+    });
+  });
+
+  describe("structural hotspots", () => {
+    it("renders chokepoints, bottlenecks and cross-cutting", () => {
+      const result = makeResult({
+        hasFindings: true,
+        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44 }],
+        flowBottlenecks: [{ file: "hub.ts", betweenness: 0.25, importedBy: 10 }],
+        crossCutting: [{ file: "types.ts", layerSpread: 3, layers: ["a", "b", "c"], totalImporters: 20 }],
+      });
+
+      const output = formatComment(result);
+
+      expect(output).toContain(":pushpin: `utils.ts` is a chokepoint");
+      expect(output).toContain(":repeat: `hub.ts` is a flow bottleneck");
+      expect(output).toContain(":globe_with_meridians: `types.ts` spans 3 architectural layers");
+    });
+
+    it("is collapsible when co-changes section is present", () => {
+      const result = makeResult({
+        hasFindings: true,
+        missingCoChanges: [
+          { changed: "a.ts", missing: "b.ts", confidence: 0.5, coChangeCount: 5, isHiddenCoupling: false },
+        ],
+        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44 }],
+      });
+
+      const output = formatComment(result);
+
+      expect(output).toContain("<details>");
+      expect(output).toContain("<summary>Structural Hotspots</summary>");
+    });
+
+    it("is not collapsible when co-changes section is absent", () => {
+      const result = makeResult({
+        hasFindings: true,
+        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44 }],
+      });
+
+      const output = formatComment(result);
+
+      expect(output).toContain("### Structural Hotspots");
+      expect(output).not.toContain("<summary>Structural Hotspots</summary>");
+    });
+  });
+
+  describe("tight coupling", () => {
+    it("renders coupling items", () => {
+      const result = makeResult({
+        hasFindings: true,
+        tightCouplings: [{ from: "cache.ts", to: "types.ts", importedNames: 15 }],
+      });
+
+      const output = formatComment(result);
+
+      expect(output).toContain("`cache.ts` imports 15 names from `types.ts`");
+    });
+
+    it("is collapsible when co-changes are present", () => {
+      const result = makeResult({
+        hasFindings: true,
+        missingCoChanges: [
+          { changed: "a.ts", missing: "b.ts", confidence: 0.5, coChangeCount: 5, isHiddenCoupling: false },
+        ],
+        tightCouplings: [{ from: "cache.ts", to: "types.ts", importedNames: 15 }],
+      });
+
+      const output = formatComment(result);
+
+      expect(output).toContain("<summary>Tight Coupling</summary>");
+    });
+  });
+
+  describe("output format", () => {
+    it("does not contain em dashes", () => {
+      const result = makeResult({
+        hasFindings: true,
+        missingCoChanges: [
+          { changed: "a.ts", missing: "b.ts", confidence: 0.5, coChangeCount: 5, isHiddenCoupling: true },
+        ],
+        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44 }],
+        tightCouplings: [{ from: "cache.ts", to: "types.ts", importedNames: 15 }],
+      });
+
+      const output = formatComment(result);
+
+      expect(output).not.toContain("\u2014"); // em dash
+    });
+
+    it("does not render empty sections", () => {
+      const result = makeResult({
+        hasFindings: true,
+        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44 }],
+        // no co-changes, no tight coupling
+      });
+
+      const output = formatComment(result);
+
+      expect(output).not.toContain("Missing Co-changes");
+      expect(output).not.toContain("Tight Coupling");
+      expect(output).toContain("Structural Hotspots");
+    });
+
+    it("includes Powered by Clarte footer on findings", () => {
+      const result = makeResult({
+        hasFindings: true,
+        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44 }],
+      });
+
+      const output = formatComment(result);
+
+      expect(output).toContain("Powered by");
+      expect(output).toContain("Clarte");
     });
   });
 });

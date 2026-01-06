@@ -44,198 +44,9 @@ function makeAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
 }
 
 describe("analyzeForCI", () => {
-  describe("risk scoring", () => {
-    it("scores a chokepoint file as high or critical", async () => {
-      const graph = makeGraph([
-        { from: "a.ts", to: "utils.ts" },
-        { from: "b.ts", to: "utils.ts" },
-        { from: "c.ts", to: "utils.ts" },
-        { from: "d.ts", to: "utils.ts" },
-        { from: "e.ts", to: "utils.ts" },
-      ]);
-      const analysis = makeAnalysis({
-        hubFiles: [
-          {
-            path: "utils.ts",
-            centrality: 0.9,
-            authority: 0.9,
-            hubScore: 0.1,
-            role: "Foundation",
-            importedBy: 5,
-            imports: 0,
-          },
-        ],
-        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 5 }],
-      });
-
-      const result = await analyzeForCI("/tmp", ["utils.ts"], analysis, graph);
-      const file = result.files[0];
-
-      // chokepoint(3) + highImportCount(2) = 5 -> high
-      expect(file.riskScore).toBeGreaterThanOrEqual(4);
-      expect(["high", "critical"]).toContain(file.riskLevel);
-      expect(file.isChokepoint).toBe(true);
-      expect(file.reasons.some((r) => r.includes("Chokepoint"))).toBe(true);
-    });
-
-    it("scores a clean file with no risk factors as low", async () => {
-      const graph = makeGraph([]);
-      const analysis = makeAnalysis();
-
-      const result = await analyzeForCI("/tmp", ["clean.ts"], analysis, graph);
-      const file = result.files[0];
-
-      expect(file.riskScore).toBe(0);
-      expect(file.riskLevel).toBe("low");
-      expect(file.reasons).toHaveLength(0);
-    });
-
-    it("maps score 6+ to critical", async () => {
-      const graph = makeGraph([
-        { from: "a.ts", to: "risky.ts" },
-        { from: "b.ts", to: "risky.ts" },
-        { from: "c.ts", to: "risky.ts" },
-        { from: "d.ts", to: "risky.ts" },
-        { from: "e.ts", to: "risky.ts" },
-      ]);
-      const analysis = makeAnalysis({
-        hubFiles: [
-          {
-            path: "risky.ts",
-            centrality: 0.9,
-            authority: 0.9,
-            hubScore: 0.1,
-            role: "Foundation",
-            importedBy: 5,
-            imports: 0,
-          },
-        ],
-        chokepoints: [{ file: "risky.ts", separates: 5, importedBy: 5 }],
-        testMapping: { sourceToTests: new Map(), untestedFiles: ["risky.ts"] },
-      });
-
-      const result = await analyzeForCI("/tmp", ["risky.ts"], analysis, graph);
-      const file = result.files[0];
-
-      // chokepoint(3) + highImportCount(2) + noTests(2) = 7 -> critical
-      expect(file.riskScore).toBeGreaterThanOrEqual(6);
-      expect(file.riskLevel).toBe("critical");
-    });
-
-    it("maps score 4-5 to high", async () => {
-      const analysis = makeAnalysis({
-        hubFiles: [
-          {
-            path: "hub.ts",
-            centrality: 0.8,
-            authority: 0.8,
-            hubScore: 0.2,
-            role: "Foundation",
-            importedBy: 5,
-            imports: 0,
-          },
-        ],
-        testMapping: { sourceToTests: new Map([["hub.ts", ["hub.test.ts"]]]), untestedFiles: [] },
-      });
-      const betweenness = new Map([["hub.ts", 0.5]]);
-      const graph = makeGraph(
-        [
-          { from: "a.ts", to: "hub.ts" },
-          { from: "b.ts", to: "hub.ts" },
-          { from: "c.ts", to: "hub.ts" },
-          { from: "d.ts", to: "hub.ts" },
-          { from: "e.ts", to: "hub.ts" },
-        ],
-        { betweenness },
-      );
-
-      const result = await analyzeForCI("/tmp", ["hub.ts"], analysis, graph);
-      const file = result.files[0];
-
-      // highImportCount(2) + flowBottleneck(2) = 4 -> high
-      expect(file.riskScore).toBeGreaterThanOrEqual(4);
-      expect(file.riskLevel).toBe("high");
-    });
-
-    it("maps score 2-3 to medium", async () => {
-      const graph = makeGraph([
-        { from: "a.ts", to: "medium.ts" },
-        { from: "b.ts", to: "medium.ts" },
-        { from: "c.ts", to: "medium.ts" },
-        { from: "d.ts", to: "medium.ts" },
-        { from: "e.ts", to: "medium.ts" },
-      ]);
-      const analysis = makeAnalysis({
-        hubFiles: [
-          {
-            path: "medium.ts",
-            centrality: 0.5,
-            authority: 0.5,
-            hubScore: 0.3,
-            role: "Foundation",
-            importedBy: 5,
-            imports: 0,
-          },
-        ],
-        testMapping: { sourceToTests: new Map([["medium.ts", ["medium.test.ts"]]]), untestedFiles: [] },
-      });
-
-      const result = await analyzeForCI("/tmp", ["medium.ts"], analysis, graph);
-      const file = result.files[0];
-
-      // highImportCount(2) = 2 -> medium
-      expect(file.riskScore).toBeGreaterThanOrEqual(2);
-      expect(file.riskScore).toBeLessThan(4);
-      expect(file.riskLevel).toBe("medium");
-    });
-  });
-
-  describe("co-change detection", () => {
-    it("flags co-change partners not in the diff", async () => {
+  describe("missing co-changes", () => {
+    it("flags a partner not in the diff", async () => {
       const graph = makeGraph([{ from: "a.ts", to: "b.ts" }]);
-      const analysis = makeAnalysis({
-        gitActivity: {
-          commitCounts: new Map([
-            ["a.ts", 10],
-            ["b.ts", 8],
-          ]),
-          hotFiles: [],
-          changeCoupling: [{ fileA: "a.ts", fileB: "partner.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 }],
-        },
-      });
-
-      const result = await analyzeForCI("/tmp", ["a.ts"], analysis, graph);
-      const file = result.files[0];
-      const partner = file.coChangeFiles.find((c) => c.file === "partner.ts");
-
-      expect(partner).toBeDefined();
-      expect(partner!.inDiff).toBe(false);
-    });
-
-    it("does not flag co-change partners that are in the diff", async () => {
-      const graph = makeGraph([{ from: "a.ts", to: "b.ts" }]);
-      const analysis = makeAnalysis({
-        gitActivity: {
-          commitCounts: new Map([
-            ["a.ts", 10],
-            ["b.ts", 8],
-          ]),
-          hotFiles: [],
-          changeCoupling: [{ fileA: "a.ts", fileB: "b.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 }],
-        },
-      });
-
-      const result = await analyzeForCI("/tmp", ["a.ts", "b.ts"], analysis, graph);
-      const file = result.files.find((f) => f.path === "a.ts")!;
-      const partner = file.coChangeFiles.find((c) => c.file === "b.ts");
-
-      expect(partner).toBeDefined();
-      expect(partner!.inDiff).toBe(true);
-    });
-
-    it("identifies hidden coupling when no import edge exists", async () => {
-      // No direct edges between a.ts and partner.ts
-      const graph = makeGraph([]);
       const analysis = makeAnalysis({
         gitActivity: {
           commitCounts: new Map([["a.ts", 10]]),
@@ -245,67 +56,144 @@ describe("analyzeForCI", () => {
       });
 
       const result = await analyzeForCI("/tmp", ["a.ts"], analysis, graph);
-      const file = result.files[0];
-      const partner = file.coChangeFiles.find((c) => c.file === "partner.ts");
 
-      expect(partner).toBeDefined();
-      expect(partner!.isHiddenCoupling).toBe(true);
+      expect(result.missingCoChanges).toHaveLength(1);
+      expect(result.missingCoChanges[0].changed).toBe("a.ts");
+      expect(result.missingCoChanges[0].missing).toBe("partner.ts");
+      expect(result.missingCoChanges[0].confidence).toBe(0.5);
     });
-  });
 
-  describe("test gap detection", () => {
-    it("detects files without test coverage", async () => {
-      const graph = makeGraph([]);
+    it("omits partners already in the diff", async () => {
+      const graph = makeGraph([{ from: "a.ts", to: "b.ts" }]);
       const analysis = makeAnalysis({
-        testMapping: {
-          sourceToTests: new Map([["tested.ts", ["tested.test.ts"]]]),
-          untestedFiles: ["untested.ts"],
+        gitActivity: {
+          commitCounts: new Map(),
+          hotFiles: [],
+          changeCoupling: [{ fileA: "a.ts", fileB: "b.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 }],
         },
       });
 
-      const result = await analyzeForCI("/tmp", ["tested.ts", "untested.ts"], analysis, graph);
+      const result = await analyzeForCI("/tmp", ["a.ts", "b.ts"], analysis, graph);
 
-      const testedGap = result.testGaps.find((g) => g.changedFile === "tested.ts");
-      const untestedGap = result.testGaps.find((g) => g.changedFile === "untested.ts");
+      expect(result.missingCoChanges).toHaveLength(0);
+    });
 
-      expect(testedGap?.hasTests).toBe(true);
-      expect(testedGap?.testFiles).toEqual(["tested.test.ts"]);
-      expect(untestedGap?.hasTests).toBe(false);
-      expect(result.summary.missingTests).toBe(1);
+    it("marks hidden coupling when no import edge exists", async () => {
+      const graph = makeGraph([]); // no edges
+      const analysis = makeAnalysis({
+        gitActivity: {
+          commitCounts: new Map(),
+          hotFiles: [],
+          changeCoupling: [{ fileA: "a.ts", fileB: "partner.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 }],
+        },
+      });
+
+      const result = await analyzeForCI("/tmp", ["a.ts"], analysis, graph);
+
+      expect(result.missingCoChanges[0].isHiddenCoupling).toBe(true);
+    });
+
+    it("marks structural coupling when import edge exists", async () => {
+      const graph = makeGraph([{ from: "a.ts", to: "partner.ts" }]);
+      const analysis = makeAnalysis({
+        gitActivity: {
+          commitCounts: new Map(),
+          hotFiles: [],
+          changeCoupling: [{ fileA: "a.ts", fileB: "partner.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 }],
+        },
+      });
+
+      const result = await analyzeForCI("/tmp", ["a.ts"], analysis, graph);
+
+      expect(result.missingCoChanges[0].isHiddenCoupling).toBe(false);
+    });
+
+    it("includes structural-temporal mismatches as hidden coupling", async () => {
+      const graph = makeGraph([]);
+      const analysis = makeAnalysis({
+        structuralMismatches: [
+          { fileA: "a.ts", fileB: "far.ts", graphDistance: -1, coChangeConfidence: 0.6, coChangeCount: 8 },
+        ],
+      });
+
+      const result = await analyzeForCI("/tmp", ["a.ts"], analysis, graph);
+
+      expect(result.missingCoChanges).toHaveLength(1);
+      expect(result.missingCoChanges[0].missing).toBe("far.ts");
+      expect(result.missingCoChanges[0].isHiddenCoupling).toBe(true);
+    });
+
+    it("deduplicates by changed:partner pair", async () => {
+      const graph = makeGraph([]);
+      const analysis = makeAnalysis({
+        gitActivity: {
+          commitCounts: new Map(),
+          hotFiles: [],
+          changeCoupling: [{ fileA: "a.ts", fileB: "partner.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 }],
+        },
+        structuralMismatches: [
+          { fileA: "a.ts", fileB: "partner.ts", graphDistance: -1, coChangeConfidence: 0.6, coChangeCount: 8 },
+        ],
+      });
+
+      const result = await analyzeForCI("/tmp", ["a.ts"], analysis, graph);
+
+      // Should appear only once (from changeCoupling, which is processed first)
+      expect(result.missingCoChanges).toHaveLength(1);
+    });
+
+    it("sorts hidden first, then by confidence desc", async () => {
+      const graph = makeGraph([{ from: "a.ts", to: "structural.ts" }]);
+      const analysis = makeAnalysis({
+        gitActivity: {
+          commitCounts: new Map(),
+          hotFiles: [],
+          changeCoupling: [
+            { fileA: "a.ts", fileB: "structural.ts", coChangeCount: 5, support: 0.3, confidence: 0.8 },
+            { fileA: "a.ts", fileB: "hidden-low.ts", coChangeCount: 3, support: 0.2, confidence: 0.3 },
+            { fileA: "a.ts", fileB: "hidden-high.ts", coChangeCount: 7, support: 0.4, confidence: 0.7 },
+          ],
+        },
+      });
+
+      const result = await analyzeForCI("/tmp", ["a.ts"], analysis, graph);
+
+      expect(result.missingCoChanges).toHaveLength(3);
+      // Hidden first (hidden-high, hidden-low), then structural
+      expect(result.missingCoChanges[0].missing).toBe("hidden-high.ts");
+      expect(result.missingCoChanges[1].missing).toBe("hidden-low.ts");
+      expect(result.missingCoChanges[2].missing).toBe("structural.ts");
     });
   });
 
-  describe("architectural impact", () => {
-    it("detects chokepoint modifications", async () => {
-      const graph = makeGraph([
-        { from: "a.ts", to: "choke.ts" },
-        { from: "b.ts", to: "choke.ts" },
-        { from: "c.ts", to: "choke.ts" },
-        { from: "d.ts", to: "choke.ts" },
-        { from: "e.ts", to: "choke.ts" },
-      ]);
+  describe("chokepoints", () => {
+    it("alerts when a chokepoint is in the diff", async () => {
+      const graph = makeGraph([]);
       const analysis = makeAnalysis({
-        hubFiles: [
-          {
-            path: "choke.ts",
-            centrality: 0.9,
-            authority: 0.9,
-            hubScore: 0.1,
-            role: "Foundation",
-            importedBy: 5,
-            imports: 0,
-          },
-        ],
-        chokepoints: [{ file: "choke.ts", separates: 3, importedBy: 5 }],
+        chokepoints: [{ file: "choke.ts", separates: 5, importedBy: 10 }],
       });
 
       const result = await analyzeForCI("/tmp", ["choke.ts"], analysis, graph);
 
-      expect(result.architecturalImpact.chokepointModifications.length).toBe(1);
-      expect(result.architecturalImpact.chokepointModifications[0]).toContain("choke.ts");
+      expect(result.chokepoints).toHaveLength(1);
+      expect(result.chokepoints[0].file).toBe("choke.ts");
+      expect(result.chokepoints[0].separates).toBe(5);
     });
 
-    it("detects cross-cutting changes", async () => {
+    it("ignores chokepoints not in the diff", async () => {
+      const graph = makeGraph([]);
+      const analysis = makeAnalysis({
+        chokepoints: [{ file: "choke.ts", separates: 5, importedBy: 10 }],
+      });
+
+      const result = await analyzeForCI("/tmp", ["other.ts"], analysis, graph);
+
+      expect(result.chokepoints).toHaveLength(0);
+    });
+  });
+
+  describe("cross-cutting", () => {
+    it("alerts with layer info when file is in diff", async () => {
       const graph = makeGraph([]);
       const analysis = makeAnalysis({
         crossCuttingFiles: [{ file: "types.ts", totalImporters: 10, layerSpread: 3, layers: ["a", "b", "c"] }],
@@ -313,68 +201,110 @@ describe("analyzeForCI", () => {
 
       const result = await analyzeForCI("/tmp", ["types.ts"], analysis, graph);
 
-      expect(result.architecturalImpact.crossCuttingChanges).toContain("types.ts");
+      expect(result.crossCutting).toHaveLength(1);
+      expect(result.crossCutting[0].layerSpread).toBe(3);
+      expect(result.crossCutting[0].layers).toEqual(["a", "b", "c"]);
+    });
+  });
+
+  describe("flow bottlenecks", () => {
+    it("alerts when betweenness exceeds 0.1", async () => {
+      const betweenness = new Map([["hub.ts", 0.25]]);
+      const graph = makeGraph(
+        [
+          { from: "a.ts", to: "hub.ts" },
+          { from: "b.ts", to: "hub.ts" },
+        ],
+        { betweenness },
+      );
+      const analysis = makeAnalysis();
+
+      const result = await analyzeForCI("/tmp", ["hub.ts"], analysis, graph);
+
+      expect(result.flowBottlenecks).toHaveLength(1);
+      expect(result.flowBottlenecks[0].betweenness).toBe(0.25);
+      expect(result.flowBottlenecks[0].importedBy).toBe(2);
+    });
+
+    it("ignores files with betweenness at or below 0.1", async () => {
+      const betweenness = new Map([["low.ts", 0.1]]);
+      const graph = makeGraph([], { betweenness });
+      const analysis = makeAnalysis();
+
+      const result = await analyzeForCI("/tmp", ["low.ts"], analysis, graph);
+
+      expect(result.flowBottlenecks).toHaveLength(0);
+    });
+  });
+
+  describe("tight coupling", () => {
+    it("alerts when either side is in the diff", async () => {
+      const graph = makeGraph([]);
+      const analysis = makeAnalysis({
+        tightCouplings: [{ from: "cache.ts", to: "types.ts", importedNames: 15 }],
+      });
+
+      // Only cache.ts in diff, types.ts not
+      const result = await analyzeForCI("/tmp", ["cache.ts"], analysis, graph);
+
+      expect(result.tightCouplings).toHaveLength(1);
+      expect(result.tightCouplings[0].from).toBe("cache.ts");
+      expect(result.tightCouplings[0].importedNames).toBe(15);
+    });
+
+    it("alerts when only the target side is in the diff", async () => {
+      const graph = makeGraph([]);
+      const analysis = makeAnalysis({
+        tightCouplings: [{ from: "cache.ts", to: "types.ts", importedNames: 15 }],
+      });
+
+      const result = await analyzeForCI("/tmp", ["types.ts"], analysis, graph);
+
+      expect(result.tightCouplings).toHaveLength(1);
+    });
+  });
+
+  describe("hasFindings", () => {
+    it("is false when no signals fire", async () => {
+      const graph = makeGraph([]);
+      const analysis = makeAnalysis();
+
+      const result = await analyzeForCI("/tmp", ["clean.ts"], analysis, graph);
+
+      expect(result.hasFindings).toBe(false);
+    });
+
+    it("is true when any signal fires", async () => {
+      const graph = makeGraph([]);
+      const analysis = makeAnalysis({
+        chokepoints: [{ file: "choke.ts", separates: 3, importedBy: 5 }],
+      });
+
+      const result = await analyzeForCI("/tmp", ["choke.ts"], analysis, graph);
+
+      expect(result.hasFindings).toBe(true);
     });
   });
 
   describe("edge cases", () => {
-    it("handles empty input gracefully", async () => {
+    it("handles empty changed files", async () => {
       const graph = makeGraph([]);
       const analysis = makeAnalysis();
 
       const result = await analyzeForCI("/tmp", [], analysis, graph);
 
-      expect(result.files).toHaveLength(0);
-      expect(result.testGaps).toHaveLength(0);
-      expect(result.summary.overallRisk).toBe("low");
-      expect(result.summary.totalFilesChanged).toBe(0);
-    });
-  });
-
-  describe("summary", () => {
-    it("computes overall risk from highest individual risk", async () => {
-      const graph = makeGraph([
-        { from: "a.ts", to: "risky.ts" },
-        { from: "b.ts", to: "risky.ts" },
-        { from: "c.ts", to: "risky.ts" },
-        { from: "d.ts", to: "risky.ts" },
-        { from: "e.ts", to: "risky.ts" },
-      ]);
-      const analysis = makeAnalysis({
-        hubFiles: [
-          {
-            path: "risky.ts",
-            centrality: 0.9,
-            authority: 0.9,
-            hubScore: 0.1,
-            role: "Foundation",
-            importedBy: 5,
-            imports: 0,
-          },
-        ],
-        chokepoints: [{ file: "risky.ts", separates: 5, importedBy: 5 }],
-        testMapping: { sourceToTests: new Map(), untestedFiles: ["risky.ts"] },
-      });
-
-      const result = await analyzeForCI("/tmp", ["risky.ts", "clean.ts"], analysis, graph);
-
-      expect(result.summary.overallRisk).toBe("critical");
-      expect(result.summary.criticalRiskFiles).toBe(1);
+      expect(result.filesAnalyzed).toBe(0);
+      expect(result.hasFindings).toBe(false);
+      expect(result.version).toBe(2);
     });
 
-    it("counts co-change warnings (partners not in diff)", async () => {
+    it("handles null gitActivity", async () => {
       const graph = makeGraph([]);
-      const analysis = makeAnalysis({
-        gitActivity: {
-          commitCounts: new Map(),
-          hotFiles: [],
-          changeCoupling: [{ fileA: "a.ts", fileB: "outside.ts", coChangeCount: 5, support: 0.3, confidence: 0.5 }],
-        },
-      });
+      const analysis = makeAnalysis({ gitActivity: null });
 
       const result = await analyzeForCI("/tmp", ["a.ts"], analysis, graph);
 
-      expect(result.summary.coChangeWarnings).toBeGreaterThan(0);
+      expect(result.missingCoChanges).toHaveLength(0);
     });
   });
 });
