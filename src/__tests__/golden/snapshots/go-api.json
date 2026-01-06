@@ -1,0 +1,111 @@
+{
+  "fileCount": 8,
+  "edgeCount": 9,
+  "hubFiles": [
+    {
+      "path": "cmd/main.go",
+      "authority": 0
+    },
+    {
+      "path": "internal/config/config.go",
+      "authority": 0.8548
+    },
+    {
+      "path": "internal/handlers/user_handler.go",
+      "authority": 0.5572
+    },
+    {
+      "path": "internal/models/product.go",
+      "authority": 0.9087
+    },
+    {
+      "path": "internal/repository/product_repo.go",
+      "authority": 1
+    },
+    {
+      "path": "internal/repository/user_repo.go",
+      "authority": 0
+    },
+    {
+      "path": "internal/server/server.go",
+      "authority": 0.2976
+    }
+  ],
+  "circularDeps": [],
+  "layers": [
+    {
+      "name": "config",
+      "files": [
+        "internal/config/config.go"
+      ],
+      "dependsOn": []
+    }
+  ],
+  "layerEdges": [],
+  "instabilities": [],
+  "communityCount": 2,
+  "communityFiles": [
+    [
+      "cmd/main.go",
+      "internal/config/config.go",
+      "internal/server/server.go"
+    ],
+    [
+      "internal/handlers/user_handler.go",
+      "internal/models/product.go",
+      "internal/repository/product_repo.go",
+      "internal/repository/user_repo.go"
+    ]
+  ],
+  "deadFiles": [
+    "internal/models/user.go",
+    "internal/repository/user_repo.go"
+  ],
+  "crossCuttingFiles": [],
+  "layerConsistency": {
+    "consistency": 1,
+    "violationCount": 0
+  },
+  "chokepoints": [
+    {
+      "file": "internal/models/product.go",
+      "separates": 2
+    },
+    {
+      "file": "internal/server/server.go",
+      "separates": 2
+    }
+  ],
+  "tightCouplings": [],
+  "betweennessTopFiles": [
+    {
+      "file": "cmd/main.go",
+      "score": 0
+    },
+    {
+      "file": "internal/config/config.go",
+      "score": 0
+    },
+    {
+      "file": "internal/handlers/user_handler.go",
+      "score": 0.3333
+    },
+    {
+      "file": "internal/repository/product_repo.go",
+      "score": 0.3333
+    },
+    {
+      "file": "internal/server/server.go",
+      "score": 1
+    }
+  ],
+  "graphTopology": {
+    "componentCount": 1,
+    "componentSizes": [
+      7
+    ],
+    "approximateDiameter": 4,
+    "reachability": 1,
+    "isFragmented": false
+  }
+}

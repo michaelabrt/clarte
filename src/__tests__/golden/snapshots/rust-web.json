@@ -1,0 +1,108 @@
+{
+  "fileCount": 9,
+  "edgeCount": 15,
+  "hubFiles": [
+    {
+      "path": "src/config.rs",
+      "authority": 1
+    },
+    {
+      "path": "src/db/mod.rs",
+      "authority": 0.2182
+    },
+    {
+      "path": "src/db/queries.rs",
+      "authority": 0.1574
+    },
+    {
+      "path": "src/main.rs",
+      "authority": 0
+    },
+    {
+      "path": "src/models/mod.rs",
+      "authority": 0.2182
+    },
+    {
+      "path": "src/models/product.rs",
+      "authority": 0.4123
+    },
+    {
+      "path": "src/models/user.rs",
+      "authority": 0.5549
+    },
+    {
+      "path": "src/routes/handlers.rs",
+      "authority": 0.4501
+    },
+    {
+      "path": "src/routes/mod.rs",
+      "authority": 0.2182
+    }
+  ],
+  "circularDeps": [],
+  "layers": [
+    {
+      "name": "pages",
+      "files": [
+        "src/routes/handlers.rs",
+        "src/routes/mod.rs"
+      ],
+      "dependsOn": []
+    }
+  ],
+  "layerEdges": [],
+  "instabilities": [],
+  "communityCount": 1,
+  "communityFiles": [
+    [
+      "src/config.rs",
+      "src/db/mod.rs",
+      "src/db/queries.rs",
+      "src/main.rs",
+      "src/models/mod.rs",
+      "src/models/product.rs",
+      "src/models/user.rs",
+      "src/routes/handlers.rs",
+      "src/routes/mod.rs"
+    ]
+  ],
+  "deadFiles": [],
+  "crossCuttingFiles": [],
+  "layerConsistency": {
+    "consistency": 1,
+    "violationCount": 0
+  },
+  "chokepoints": [],
+  "tightCouplings": [],
+  "betweennessTopFiles": [
+    {
+      "file": "src/config.rs",
+      "score": 0
+    },
+    {
+      "file": "src/db/mod.rs",
+      "score": 0.0714
+    },
+    {
+      "file": "src/db/queries.rs",
+      "score": 1
+    },
+    {
+      "file": "src/models/mod.rs",
+      "score": 0.2143
+    },
+    {
+      "file": "src/routes/handlers.rs",
+      "score": 0.7143
+    }
+  ],
+  "graphTopology": {
+    "componentCount": 1,
+    "componentSizes": [
+      9
+    ],
+    "approximateDiameter": 3,
+    "reachability": 1,
+    "isFragmented": false
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "fileCount": 7,
+  "edgeCount": 9,
+  "hubFiles": [
+    {
+      "path": "src/main/java/com/example/App.java",
+      "authority": 0
+    },
+    {
+      "path": "src/main/java/com/example/config/AppConfig.java",
+      "authority": 0.2161
+    },
+    {
+      "path": "src/main/java/com/example/controller/UserController.java",
+      "authority": 0.2161
+    },
+    {
+      "path": "src/main/java/com/example/model/Product.java",
+      "authority": 0
+    },
+    {
+      "path": "src/main/java/com/example/model/User.java",
+      "authority": 1
+    },
+    {
+      "path": "src/main/java/com/example/repository/UserRepository.java",
+      "authority": 0.2658
+    },
+    {
+      "path": "src/main/java/com/example/service/UserService.java",
+      "authority": 0.5316
+    }
+  ],
+  "circularDeps": [],
+  "layers": [
+    {
+      "name": "config",
+      "files": [
+        "src/main/java/com/example/config/AppConfig.java"
+      ],
+      "dependsOn": []
+    },
+    {
+      "name": "services",
+      "files": [
+        "src/main/java/com/example/service/UserService.java"
+      ],
+      "dependsOn": []
+    }
+  ],
+  "layerEdges": [],
+  "instabilities": [],
+  "communityCount": 1,
+  "communityFiles": [
+    [
+      "src/main/java/com/example/App.java",
+      "src/main/java/com/example/config/AppConfig.java",
+      "src/main/java/com/example/controller/UserController.java",
+      "src/main/java/com/example/model/Product.java",
+      "src/main/java/com/example/model/User.java",
+      "src/main/java/com/example/repository/UserRepository.java",
+      "src/main/java/com/example/service/UserService.java"
+    ]
+  ],
+  "deadFiles": [
+    "src/main/java/com/example/App.java",
+    "src/main/java/com/example/model/Product.java"
+  ],
+  "crossCuttingFiles": [],
+  "layerConsistency": {
+    "consistency": 1,
+    "violationCount": 0
+  },
+  "chokepoints": [
+    {
+      "file": "src/main/java/com/example/App.java",
+      "separates": 2
+    },
+    {
+      "file": "src/main/java/com/example/model/User.java",
+      "separates": 2
+    }
+  ],
+  "tightCouplings": [],
+  "betweennessTopFiles": [
+    {
+      "file": "src/main/java/com/example/App.java",
+      "score": 0
+    },
+    {
+      "file": "src/main/java/com/example/config/AppConfig.java",
+      "score": 0
+    },
+    {
+      "file": "src/main/java/com/example/controller/UserController.java",
+      "score": 0.2
+    },
+    {
+      "file": "src/main/java/com/example/model/Product.java",
+      "score": 0
+    },
+    {
+      "file": "src/main/java/com/example/service/UserService.java",
+      "score": 1
+    }
+  ],
+  "graphTopology": {
+    "componentCount": 1,
+    "componentSizes": [
+      7
+    ],
+    "approximateDiameter": 4,
+    "reachability": 1,
+    "isFragmented": false
+  }
+}
