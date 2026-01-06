@@ -8,6 +8,11 @@ import type { ImportGraph, TightCoupling } from "../types.js";
  * Threshold: 5+ named imports from a single file suggests the importing
  * file may be too tightly coupled and could benefit from an intermediate
  * interface or facade.
+ *
+ * Rationale for minNames=5: importing 1-4 names is typical (a type, a function, a constant).
+ * 5+ names indicates the importer depends on many internal details of the target file.
+ * Rationale for topN=10: limits output to the 10 worst offenders to keep the context
+ * file actionable. Most projects have 2-5 genuinely tight couplings; 10 provides headroom.
  */
 export function findTightCouplings(graph: ImportGraph, minNames = 5, topN = 10): TightCoupling[] {
   // Aggregate named imports per (from, to) pair

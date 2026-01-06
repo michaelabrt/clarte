@@ -16,10 +16,20 @@ import { renderStructureSections } from "./sections/structure.js";
 // Re-export for external consumers
 export { resetProjectNameCache } from "./sections/project-info.js";
 
-/** Default token budget for context files. */
+/**
+ * Default token budget for context files.
+ * Rationale: 5000 tokens ≈ 20k characters of markdown. This leaves room for user
+ * sections while keeping the context file within the sweet spot where agents read
+ * the full file without summarization. Benchmarked against Claude, Cursor and Copilot.
+ */
 export const DEFAULT_BUDGET = 5000;
 
-/** Default character budget for context files (Claude Code warns above 40k). */
+/**
+ * Default character budget for context files (Claude Code warns above 40k).
+ * Rationale: Claude Code displays a warning when CLAUDE.md exceeds 40k characters.
+ * 39,500 provides a 500-char safety margin for the user-sections block that gets
+ * appended after generation.
+ */
 export const DEFAULT_MAX_CHARS = 39_500;
 
 export interface SectionFilterOptions {

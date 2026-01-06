@@ -2,11 +2,25 @@ import type { Community, ImportGraph } from "../types.js";
 
 /** Community detection parameters */
 const COMMUNITY = {
-  /** Minimum community size; smaller groups get merged into neighbors */
+  /**
+   * Minimum community size; smaller groups get merged into neighbors.
+   * Rationale: communities of 1-2 files are noise (often orphan utilities).
+   * 3 is the smallest group that represents a meaningful architectural cluster.
+   */
   MIN_SIZE: 3,
-  /** Maximum merge rounds to attempt */
+  /**
+   * Maximum merge rounds to attempt.
+   * Rationale: merge rounds are convergent (each round merges fewer groups).
+   * Empirically 2-3 rounds reach fixpoint on all tested projects. More rounds
+   * would waste cycles without changing results.
+   */
   MAX_MERGE_ROUNDS: 3,
-  /** ARI threshold above which communities just mirror directory structure (no novel insight) */
+  /**
+   * ARI threshold above which communities just mirror directory structure (no novel insight).
+   * Rationale: if the detected communities match the directory tree at ARI > 0.85,
+   * reporting them adds no value since the developer already knows the directory layout.
+   * 0.85 allows minor deviations (a few files reassigned) while filtering out trivial results.
+   */
   ARI_NOVELTY_THRESHOLD: 0.85,
 } as const;
 

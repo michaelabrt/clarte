@@ -11,6 +11,11 @@ import { buildAdjacency } from "../utils.js";
  *
  * RRF formula: score(file) = sum(1 / (60 + rank_i(file))) for each ranking
  * where the file appears.
+ *
+ * Rationale for k=60: the standard RRF constant from Cormack et al. (2009).
+ * It balances contributions from different rankings so that a #1 rank in one
+ * signal doesn't dominate a top-5 rank in another. Lower k values overweight
+ * top-ranked items; higher values flatten the distribution too much.
  */
 export function predictChangeImpact(
   file: string,
@@ -36,7 +41,9 @@ export function predictChangeImpact(
   // Remove the input file itself
   rrfScores.delete(file);
 
-  // Sort by RRF score descending and return top 5 (alphabetical tiebreaker)
+  // Sort by RRF score descending and return top 5 (alphabetical tiebreaker).
+  // Rationale for top=5: agents work best with 4-6 concrete suggestions. More than 5
+  // dilutes signal; fewer risks missing a real dependency.
   return [...rrfScores.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, 5)
