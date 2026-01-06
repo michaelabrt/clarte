@@ -278,7 +278,7 @@ Clarté runs a pipeline of static analysis steps. Each one feeds into the next. 
 
 ## GitHub Action
 
-Clarté provides a GitHub Action that acts as an architectural advisor on pull requests, surfacing signals no other tool provides.
+Clarté provides a GitHub Action that reviews pull requests for architectural concerns.
 
 ```yaml
 # .github/workflows/clarte.yml
