@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { ClarteError } from "../errors.js";
 
 export interface GitExecOptions {
   cwd: string;
@@ -9,7 +10,7 @@ export interface GitExecOptions {
 const DEFAULT_TIMEOUT = 10_000;
 const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024;
 
-export class GitError extends Error {
+export class GitError extends ClarteError {
   readonly command: string;
   override readonly cause?: unknown;
 

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
+import { ClarteError } from "../errors.js";
 import { theme as t, unpatchPicocolors } from "../theme.js";
 import { writeFileSafe } from "../utils.js";
 import { detectContext, enrichFrameworksWithUsage } from "../detect/detect.js";
@@ -97,11 +98,10 @@ export async function runDiffMode(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (ref && (msg.includes("unknown revision") || msg.includes("bad revision"))) {
-      p.log.error(t.text(`Failed to resolve ref '${ref}'. Verify the branch or commit exists.`));
+      throw new ClarteError(`Failed to resolve ref '${ref}'. Verify the branch or commit exists.`);
     } else {
-      p.log.error(t.text("Failed to get changed files from git. Is this a git repo?"));
+      throw new ClarteError("Failed to get changed files from git. Is this a git repo?");
     }
-    process.exit(1);
   }
 
   if (changedFiles.length === 0) {

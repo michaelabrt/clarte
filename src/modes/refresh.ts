@@ -1,5 +1,6 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
+import { ClarteError, ExitCode } from "../errors.js";
 import { theme as t } from "../theme.js";
 import { startShimmer } from "../cli/animations.js";
 import { detectContext } from "../detect/detect.js";
@@ -61,40 +62,34 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   // 1. Find context file
   const found = await findContextFile(rootDir);
   if (!found) {
-    p.log.error(t.text("No context file found. Run ") + t.accent("clarte") + t.text(" first to generate one."));
-    process.exit(1);
+    throw new ClarteError("No context file found. Run clarte first to generate one.", ExitCode.MISSING);
   }
 
   const absPath = path.join(rootDir, found.path);
   const content = await readFileOr(absPath);
   if (!content) {
-    p.log.error(t.text(`Could not read ${found.path}`));
-    process.exit(1);
+    throw new ClarteError(`Could not read ${found.path}`, ExitCode.MISSING);
   }
 
   // 2. Verify snapshot markers exist
   const budgetOmitted = content.includes("Sections omitted") && content.includes("code-snapshot");
   if (found.isAider) {
     if (!AIDER_START.test(content) || !AIDER_END.test(content)) {
-      p.log.error(
-        t.text(
-          budgetOmitted
-            ? `Snapshot was omitted from ${found.path} to fit token budget. Run ${t.accent("clarte --full")} to include it.`
-            : `No code snapshot markers found in ${found.path}. Run ${t.accent("clarte")} to regenerate.`,
-        ),
+      throw new ClarteError(
+        budgetOmitted
+          ? `Snapshot was omitted from ${found.path} to fit token budget. Run clarte --full to include it.`
+          : `No code snapshot markers found in ${found.path}. Run clarte to regenerate.`,
+        ExitCode.MISSING,
       );
-      process.exit(1);
     }
   } else {
     if (!MD_START.test(content) || !MD_END.test(content)) {
-      p.log.error(
-        t.text(
-          budgetOmitted
-            ? `Snapshot was omitted from ${found.path} to fit token budget. Run ${t.accent("clarte --full")} to include it.`
-            : `No code snapshot markers found in ${found.path}. Run ${t.accent("clarte")} to regenerate.`,
-        ),
+      throw new ClarteError(
+        budgetOmitted
+          ? `Snapshot was omitted from ${found.path} to fit token budget. Run clarte --full to include it.`
+          : `No code snapshot markers found in ${found.path}. Run clarte to regenerate.`,
+        ExitCode.MISSING,
       );
-      process.exit(1);
     }
   }
 
@@ -133,8 +128,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
     const startMatch = content.match(AIDER_START);
     const endMatch = content.match(AIDER_END);
     if (!startMatch || !endMatch) {
-      p.log.error(t.text("Failed to parse snapshot markers."));
-      process.exit(1);
+      throw new ClarteError("Failed to parse snapshot markers.", ExitCode.PARSE_ERROR);
     }
 
     const startIdx = content.indexOf(startMatch[0]);
@@ -154,8 +148,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
     const startMatch = content.match(MD_START);
     const endMatch = content.match(MD_END);
     if (!startMatch || !endMatch) {
-      p.log.error(t.text("Failed to parse snapshot markers."));
-      process.exit(1);
+      throw new ClarteError("Failed to parse snapshot markers.", ExitCode.PARSE_ERROR);
     }
 
     const startIdx = content.indexOf(startMatch[0]);

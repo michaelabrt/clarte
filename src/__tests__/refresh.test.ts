@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { ClarteError } from "../errors.js";
 
 // Mock heavy dependencies
 vi.mock("../cli/animations.js", () => ({
@@ -101,18 +102,9 @@ afterEach(async () => {
 });
 
 describe("refreshSnapshot", () => {
-  it("exits when no context file found", async () => {
-    const realExit = process.exit;
-    process.exit = vi.fn(() => {
-      throw new Error("exit");
-    }) as never;
-
-    await expect(refreshSnapshot(tmpDir)).rejects.toThrow("exit");
-
-    const output = logCalls.map((c) => String(c.args[0])).join("\n");
-    expect(output).toContain("No context file found");
-
-    process.exit = realExit;
+  it("throws ClarteError when no context file found", async () => {
+    await expect(refreshSnapshot(tmpDir)).rejects.toThrow(ClarteError);
+    await expect(refreshSnapshot(tmpDir)).rejects.toThrow("No context file found");
   });
 
   it("replaces markdown snapshot between markers", async () => {
@@ -133,10 +125,6 @@ describe("refreshSnapshot", () => {
     await fs.mkdir(path.join(tmpDir, ".claude", "rules"), { recursive: true });
     await fs.writeFile(path.join(tmpDir, ".claude/rules/clarte.md"), original);
 
-    // Need to suppress process.exit
-    const realExit = process.exit;
-    process.exit = vi.fn() as never;
-
     await refreshSnapshot(tmpDir);
 
     const updated = await fs.readFile(path.join(tmpDir, ".claude/rules/clarte.md"), "utf-8");
@@ -148,8 +136,6 @@ describe("refreshSnapshot", () => {
     expect(updated).toContain("## Other Section");
     // Old content should be gone
     expect(updated).not.toContain("Old snapshot content here");
-
-    process.exit = realExit;
   });
 
   it("replaces aider YAML snapshot between markers", async () => {
@@ -166,9 +152,6 @@ describe("refreshSnapshot", () => {
 
     await fs.writeFile(path.join(tmpDir, ".aider.conf.yml"), original);
 
-    const realExit = process.exit;
-    process.exit = vi.fn() as never;
-
     await refreshSnapshot(tmpDir);
 
     const updated = await fs.readFile(path.join(tmpDir, ".aider.conf.yml"), "utf-8");
@@ -181,28 +164,16 @@ describe("refreshSnapshot", () => {
     expect(updated).toContain("extra-config: true");
     // Old content should be gone
     expect(updated).not.toContain("# Old snapshot");
-
-    process.exit = realExit;
   });
 
-  it("shows budget-trimmed error message", async () => {
+  it("throws budget-trimmed error message", async () => {
     // File with "Sections omitted" and "code-snapshot" but no markers
     const content = ["# Project", "", "<!-- Sections omitted to fit token budget: code-snapshot. -->"].join("\n");
 
     await fs.mkdir(path.join(tmpDir, ".claude", "rules"), { recursive: true });
     await fs.writeFile(path.join(tmpDir, ".claude/rules/clarte.md"), content);
 
-    const realExit = process.exit;
-    process.exit = vi.fn(() => {
-      throw new Error("exit");
-    }) as never;
-
-    await expect(refreshSnapshot(tmpDir)).rejects.toThrow("exit");
-
-    const output = logCalls.map((c) => String(c.args[0])).join("\n");
-    expect(output).toContain("omitted");
-    expect(output).toContain("--full");
-
-    process.exit = realExit;
+    await expect(refreshSnapshot(tmpDir)).rejects.toThrow(ClarteError);
+    await expect(refreshSnapshot(tmpDir)).rejects.toThrow("omitted");
   });
 });

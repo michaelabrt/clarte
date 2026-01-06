@@ -1,4 +1,5 @@
 import path from "node:path";
+import { ClarteError } from "../errors.js";
 import { theme as t, initTheme, resetTerminalColors } from "../theme.js";
 import type { SectionFilterOptions } from "../templates/main-context.js";
 
@@ -159,8 +160,7 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const maxTokensArg = rawArgs.find((a) => a.startsWith("--max-tokens="));
   const maxTokensRaw = maxTokensArg ? parseInt(maxTokensArg.split("=").slice(1).join("="), 10) : undefined;
   if (maxTokensRaw !== undefined && Number.isNaN(maxTokensRaw)) {
-    console.error(`Invalid --max-tokens value: ${maxTokensArg?.split("=").slice(1).join("=")}`);
-    process.exit(1);
+    throw new ClarteError(`Invalid --max-tokens value: ${maxTokensArg?.split("=").slice(1).join("=")}`);
   }
   const maxTokens = maxTokensRaw;
   const formatArg = rawArgs.find((a) => a.startsWith("--format="));
@@ -168,8 +168,7 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const budgetArg = rawArgs.find((a) => a.startsWith("--budget="));
   const budgetRaw = budgetArg ? parseInt(budgetArg.split("=").slice(1).join("="), 10) : undefined;
   if (budgetRaw !== undefined && Number.isNaN(budgetRaw)) {
-    console.error(`Invalid --budget value: ${budgetArg?.split("=").slice(1).join("=")}`);
-    process.exit(1);
+    throw new ClarteError(`Invalid --budget value: ${budgetArg?.split("=").slice(1).join("=")}`);
   }
   const fullMode = rawArgs.includes("--full");
   const includeArg = rawArgs.find((a) => a.startsWith("--include="));
@@ -185,8 +184,7 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const maxCharsArg = rawArgs.find((a) => a.startsWith("--max-chars="));
   const maxCharsRaw = maxCharsArg ? parseInt(maxCharsArg.split("=").slice(1).join("="), 10) : undefined;
   if (maxCharsRaw !== undefined && Number.isNaN(maxCharsRaw)) {
-    console.error(`Invalid --max-chars value: ${maxCharsArg?.split("=").slice(1).join("=")}`);
-    process.exit(1);
+    throw new ClarteError(`Invalid --max-chars value: ${maxCharsArg?.split("=").slice(1).join("=")}`);
   }
   const initHook = rawArgs.includes("--init-hook");
   const diffFileArg = rawArgs.find((a) => a.startsWith("--diff-file="));

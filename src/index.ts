@@ -1,5 +1,6 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
+import { ClarteError } from "./errors.js";
 import {
   theme as t,
   initTheme,
@@ -96,14 +97,7 @@ async function main() {
   );
 
   if (!hasProjectMarker) {
-    initTheme("dark");
-    patchPicocolors();
-    console.log("");
-    console.log(t.error(`No project found at ${rootDir}`));
-    console.log(t.text(`Run ${t.accent("npx clarte")} from a project directory, or pass a path:`));
-    console.log(t.muted("  npx clarte ./my-project"));
-    resetTerminalColors();
-    process.exit(1);
+    throw new ClarteError(`No project found at ${rootDir}. Run npx clarte from a project directory, or pass a path: npx clarte ./my-project`);
   }
 
   if (watchMode) {
@@ -495,6 +489,14 @@ async function main() {
 }
 
 main().catch((err) => {
+  if (err instanceof ClarteError) {
+    console.error(t.error(err.message));
+    unpatchPicocolors();
+    resetTerminalColors();
+    process.exit(err.exitCode);
+  }
+
+  // Unexpected errors: provide context-specific messages
   const msg = err instanceof Error ? err.message : String(err);
 
   if (msg.includes("ENOENT")) {

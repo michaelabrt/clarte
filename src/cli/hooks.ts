@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
+import { ClarteError, ExitCode } from "../errors.js";
 import { fileExists, readFileOr, writeFileSafe } from "../utils.js";
 
 const PRE_COMMIT_CONTENT = `#!/bin/sh
@@ -21,8 +22,7 @@ export async function initPreCommitHook(rootDir: string): Promise<void> {
 
   // Check if this is a git repo
   if (!(await fileExists(gitDir))) {
-    console.error("Not a git repository. Run 'git init' first.");
-    process.exit(1);
+    throw new ClarteError("Not a git repository. Run 'git init' first.", ExitCode.MISSING);
   }
 
   // Check for Husky
