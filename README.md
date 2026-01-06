@@ -208,15 +208,7 @@ Multi-language projects are handled automatically. When a secondary language acc
 
 ## Output Targets
 
-Clarté works with any AI coding tool that reads context files. Deep integrations add per-file graph context delivery for tools that support it.
-
-| Tier | Tools | What you get |
-|------|-------|--------------|
-| Full | Claude Code | Context file + per-file graph hooks (model-gated, Sonnet+) |
-| Enhanced | Cursor | Context file + per-directory graph rules |
-| Universal | All others | Context file (works out of the box) |
-
-Each tool gets a context file in the format it expects:
+Clarté works with any AI coding tool that reads context files.
 
 | Tool | Generated file | Docs |
 |------|---------------|------|
@@ -229,6 +221,14 @@ Each tool gets a context file in the format it expects:
 | Continue.dev | `.continuerules` | [continue.dev/docs](https://docs.continue.dev/customize/deep-dives/rules) |
 | Aider | `.aider.conf.yml` | [aider.chat](https://aider.chat/docs/config/aider_conf.html) |
 | Generic | `CONTEXT.md` | - |
+
+Deep integrations add per-file graph context delivery for tools that support it:
+
+| Tier | Tools | What you get |
+|------|-------|--------------|
+| Full | Claude Code | Context file + per-file graph hooks (model-gated, Sonnet+) |
+| Enhanced | Cursor | Context file + per-directory graph rules |
+| Universal | All others | Context file (works out of the box) |
 
 Multiple targets can be configured at once. For Claude Code, Clarté also generates `/check` and `/refresh` skill files.
 
