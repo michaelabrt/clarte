@@ -80,7 +80,11 @@ function buildPackageFinder(monorepo: MonorepoInfo): (filePath: string) => { nam
 
 /**
  * Annotate import edges that cross monorepo package boundaries.
- * Mutates the graph's edges by setting `crossPackage: true` on cross-boundary edges.
+ *
+ * **Mutates `graph` in place:** sets `crossPackage: true` on each edge whose
+ * `from` and `to` belong to different packages. The caller must treat the
+ * graph's `edges` array as modified after this call. No new edges are added
+ * or removed; only the `crossPackage` flag is written.
  */
 export function annotateCrossPackageEdges(graph: ImportGraph, monorepo: MonorepoInfo): void {
   const findPackage = buildPackageFinder(monorepo);

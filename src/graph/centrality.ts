@@ -210,14 +210,15 @@ export function computeHITS(
     if (hub[i] < hubMin) hubMin = hub[i];
     if (hub[i] > hubMax) hubMax = hub[i];
   }
-  const authRange = authMax - authMin || 1;
-  const hubRange = hubMax - hubMin || 1;
+  const NORM_EPSILON = 1e-9;
+  const authRange = authMax - authMin;
+  const hubRange = hubMax - hubMin;
 
   const authorityMap = new Map<string, number>();
   const hubMap = new Map<string, number>();
   for (let i = 0; i < n; i++) {
-    authorityMap.set(files[i], (auth[i] - authMin) / authRange);
-    hubMap.set(files[i], (hub[i] - hubMin) / hubRange);
+    authorityMap.set(files[i], authRange > NORM_EPSILON ? (auth[i] - authMin) / authRange : 0);
+    hubMap.set(files[i], hubRange > NORM_EPSILON ? (hub[i] - hubMin) / hubRange : 0);
   }
 
   return { authority: authorityMap, hub: hubMap };

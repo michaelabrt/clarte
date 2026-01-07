@@ -3,7 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { glob } from "tinyglobby";
 import { computeHITS, computeBetweenness } from "./centrality.js";
-import { detectBarrelFiles, buildImportGraph } from "./build.js";
+import { buildImportGraph } from "./build.js";
+import { detectBarrelAst } from "../parsers/barrel.js";
 import {
   getSourceGlob,
   parseImports,
@@ -380,7 +381,20 @@ export async function buildGraphWithCache(
 
       const mergedEdges = [...keptEdges, ...newEdges];
       const allFiles = [...currentHashes.keys()];
-      const detectedBarrels = await detectBarrelFiles(rootDir, allCurrentFiles);
+
+      // Use cached barrel set; only re-detect changed/new files
+      const detectedBarrels = new Set(cache.barrelFiles);
+      for (const f of deletedFiles) detectedBarrels.delete(f);
+      for (const file of [...changedFiles, ...newFiles]) {
+        const absPath = path.join(rootDir, file);
+        const content = await readFileOr(absPath);
+        if (content) {
+          const { isBarrel } = detectBarrelAst(content, file);
+          if (isBarrel) detectedBarrels.add(file);
+          else detectedBarrels.delete(file);
+        }
+      }
+
       const graph = rebuildGraph(mergedEdges, allFiles, detectedBarrels);
 
       try {

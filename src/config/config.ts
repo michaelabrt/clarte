@@ -196,7 +196,8 @@ const MANIFEST_FILES: Record<string, string[]> = {
 };
 
 /**
- * Compute a hash of all source files (path + mtime) to detect changes.
+ * Compute a hash of all source files (path + content) to detect changes.
+ * Uses md5 per-file (fast, not security-critical) with sha256 for the final hash.
  * Also includes the project manifest file (package.json, Cargo.toml, etc.)
  * so that dependency changes make the snapshot stale even if no source files changed.
  * Returns a 16-char hex string.
@@ -218,11 +219,12 @@ export async function computeSnapshotHash(rootDir: string, language: Language): 
     absolute: false,
   });
 
-  // Sort by path for deterministic hashing
+  // Sort by path for deterministic hashing (content-based, not mtime)
   const entries = await Promise.all(
     files.map(async (f) => {
-      const stat = await fs.stat(path.join(rootDir, f)).catch(() => null);
-      return `${f}:${stat?.mtimeMs ?? 0}`;
+      const content = await fs.readFile(path.join(rootDir, f), "utf-8").catch(() => "");
+      const fileHash = createHash("md5").update(content).digest("hex");
+      return `${f}:${fileHash}`;
     }),
   );
   entries.sort();
