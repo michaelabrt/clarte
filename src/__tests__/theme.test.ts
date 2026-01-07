@@ -1,9 +1,13 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 // Cache original env values
 const origNoColor = process.env.NO_COLOR;
 const origColorTerm = process.env.COLORTERM;
 const origColorFGBG = process.env.COLORFGBG;
+const origTermProgram = process.env.TERM_PROGRAM;
+const origWtSession = process.env.WT_SESSION;
+const origTerm = process.env.TERM;
+const origIsTTY = process.stdout.isTTY;
 
 function _cleanEnv() {
   delete process.env.NO_COLOR;
@@ -15,6 +19,7 @@ function _cleanEnv() {
 
 describe("theme", () => {
   afterEach(() => {
+    vi.resetModules();
     // Restore original env
     if (origNoColor !== undefined) process.env.NO_COLOR = origNoColor;
     else delete process.env.NO_COLOR;
@@ -22,6 +27,13 @@ describe("theme", () => {
     else delete process.env.COLORTERM;
     if (origColorFGBG !== undefined) process.env.COLORFGBG = origColorFGBG;
     else delete process.env.COLORFGBG;
+    if (origTermProgram !== undefined) process.env.TERM_PROGRAM = origTermProgram;
+    else delete process.env.TERM_PROGRAM;
+    if (origWtSession !== undefined) process.env.WT_SESSION = origWtSession;
+    else delete process.env.WT_SESSION;
+    if (origTerm !== undefined) process.env.TERM = origTerm;
+    else delete process.env.TERM;
+    Object.defineProperty(process.stdout, "isTTY", { value: origIsTTY, configurable: true });
   });
 
   describe("noColor mode", () => {
@@ -197,6 +209,80 @@ describe("theme", () => {
 
       // Restore
       initTheme("dark");
+    });
+  });
+
+  describe("trueColor detection", () => {
+    function setupTTY() {
+      Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+      delete process.env.NO_COLOR;
+      delete process.env.COLORTERM;
+      delete process.env.TERM_PROGRAM;
+      delete process.env.WT_SESSION;
+      delete process.env.TERM;
+    }
+
+    it("COLORTERM=truecolor enables trueColor", async () => {
+      setupTTY();
+      process.env.COLORTERM = "truecolor";
+
+      const mod = await import("../theme.js");
+      expect(mod.trueColor).toBe(true);
+    });
+
+    it("COLORTERM=24bit enables trueColor", async () => {
+      setupTTY();
+      process.env.COLORTERM = "24bit";
+
+      const mod = await import("../theme.js");
+      expect(mod.trueColor).toBe(true);
+    });
+
+    it("TERM_PROGRAM=vscode enables trueColor", async () => {
+      setupTTY();
+      process.env.TERM_PROGRAM = "vscode";
+
+      const mod = await import("../theme.js");
+      expect(mod.trueColor).toBe(true);
+    });
+
+    it("NO_COLOR=1 disables trueColor regardless", async () => {
+      Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+      process.env.NO_COLOR = "1";
+      process.env.COLORTERM = "truecolor";
+
+      const mod = await import("../theme.js");
+      expect(mod.trueColor).toBe(false);
+    });
+
+    it("rgb() produces ANSI escape sequences when trueColor is on", async () => {
+      setupTTY();
+      process.env.COLORTERM = "truecolor";
+
+      const mod = await import("../theme.js");
+      // theme.brand uses rgb() internally
+      const result = mod.theme.brand("test");
+      expect(result).toContain("\x1b[38;2;");
+    });
+
+    it("gradient() produces per-character ANSI sequences when trueColor is on", async () => {
+      setupTTY();
+      process.env.COLORTERM = "truecolor";
+
+      const mod = await import("../theme.js");
+      const result = mod.gradient("AB", [255, 0, 0], [0, 0, 255]);
+      // Should have at least 2 ANSI color codes (one per character)
+      const escapeCount = result.split("\x1b[38;2;").length - 1;
+      expect(escapeCount).toBeGreaterThanOrEqual(2);
+    });
+
+    it("trueColor is false when not a TTY", async () => {
+      Object.defineProperty(process.stdout, "isTTY", { value: false, configurable: true });
+      delete process.env.NO_COLOR;
+      process.env.COLORTERM = "truecolor";
+
+      const mod = await import("../theme.js");
+      expect(mod.trueColor).toBe(false);
     });
   });
 });

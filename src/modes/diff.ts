@@ -41,22 +41,12 @@ export async function runDiffMode(
   let diffStat: Map<string, { added: number; removed: number }> | null = null;
   try {
     const cmd = ref ? `git diff --name-only ${ref}...HEAD` : "git diff --name-only HEAD";
-    let output = execSync(cmd, {
+    const output = execSync(cmd, {
       cwd: rootDir,
       encoding: "utf-8",
       timeout: 10000,
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
-
-    if (!ref) {
-      const staged = execSync("git diff --name-only --cached", {
-        cwd: rootDir,
-        encoding: "utf-8",
-        timeout: 5000,
-      }).trim();
-      const unstaged = execSync("git diff --name-only", { cwd: rootDir, encoding: "utf-8", timeout: 5000 }).trim();
-      output = [output, staged, unstaged].filter(Boolean).join("\n");
-    }
 
     changedFiles = [...new Set(output.split("\n").filter(Boolean))];
 
@@ -67,16 +57,7 @@ export async function runDiffMode(
 
     try {
       const statCmd = ref ? `git diff --numstat ${ref}...HEAD` : "git diff --numstat HEAD";
-      let statOutput = execSync(statCmd, { cwd: rootDir, encoding: "utf-8", timeout: 10000 }).trim();
-      if (!ref) {
-        const stagedStat = execSync("git diff --numstat --cached", {
-          cwd: rootDir,
-          encoding: "utf-8",
-          timeout: 5000,
-        }).trim();
-        const unstagedStat = execSync("git diff --numstat", { cwd: rootDir, encoding: "utf-8", timeout: 5000 }).trim();
-        statOutput = [statOutput, stagedStat, unstagedStat].filter(Boolean).join("\n");
-      }
+      const statOutput = execSync(statCmd, { cwd: rootDir, encoding: "utf-8", timeout: 10000 }).trim();
       diffStat = new Map();
       for (const line of statOutput.split("\n").filter(Boolean)) {
         const [addStr, rmStr, file] = line.split("\t");
