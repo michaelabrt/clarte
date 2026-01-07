@@ -5,14 +5,15 @@ import { buildContextMap } from "./context-map.js";
 
 const HOOKS_DIR = ".clarte/hooks";
 const CONTEXT_MAP_FILE = "context-map.json";
-const READ_SCRIPT_FILE = "on-read.mjs";
-const SESSION_START_SCRIPT_FILE = "on-session-start.mjs";
 const SETTINGS_PATH = ".claude/settings.json";
+
+const PARSE_STDIN = `let input;
+try { input = JSON.parse(readFileSync("/dev/stdin", "utf-8")); } catch { process.exit(0); }`;
 
 const SESSION_START_SCRIPT = `#!/usr/bin/env node
 import { readFileSync, appendFileSync } from "node:fs";
 
-const input = JSON.parse(readFileSync("/dev/stdin", "utf-8"));
+${PARSE_STDIN}
 const model = (input.model || "").toLowerCase();
 if (model.includes("haiku") && process.env.CLAUDE_ENV_FILE) {
   appendFileSync(process.env.CLAUDE_ENV_FILE, "export CLARTE_HOOKS_DISABLED=1\\n");
@@ -25,7 +26,7 @@ import { resolve, relative } from "node:path";
 
 if (process.env.CLARTE_HOOKS_DISABLED) process.exit(0);
 
-const input = JSON.parse(readFileSync("/dev/stdin", "utf-8"));
+${PARSE_STDIN}
 const filePath = input.tool_input?.file_path;
 if (!filePath) process.exit(0);
 
@@ -43,6 +44,18 @@ const output = JSON.stringify({ additionalContext: ctx });
 process.stdout.write(output);
 `;
 
+interface HookDef {
+  event: string;
+  file: string;
+  matcher?: string;
+  script: string;
+}
+
+const HOOK_DEFS: HookDef[] = [
+  { event: "SessionStart", file: "on-session-start.mjs", script: SESSION_START_SCRIPT },
+  { event: "PreToolUse", file: "on-read.mjs", matcher: "Read", script: READ_SCRIPT },
+];
+
 /**
  * Generate hook files: context-map.json, on-read.mjs and on-session-start.mjs.
  */
@@ -51,8 +64,9 @@ export async function generateHookFiles(rootDir: string, graph: PersistedGraph):
 
   const hooksDir = path.join(rootDir, HOOKS_DIR);
   await writeFileSafe(path.join(hooksDir, CONTEXT_MAP_FILE), JSON.stringify(contextMap, null, 2));
-  await writeFileSafe(path.join(hooksDir, READ_SCRIPT_FILE), READ_SCRIPT);
-  await writeFileSafe(path.join(hooksDir, SESSION_START_SCRIPT_FILE), SESSION_START_SCRIPT);
+  for (const def of HOOK_DEFS) {
+    await writeFileSafe(path.join(hooksDir, def.file), def.script);
+  }
 }
 
 interface HookEntry {
@@ -95,21 +109,15 @@ export async function configureClaudeHooks(rootDir: string): Promise<void> {
   if (!settings.hooks) {
     settings.hooks = {};
   }
-  if (!settings.hooks.SessionStart) {
-    settings.hooks.SessionStart = [];
-  }
-  if (!settings.hooks.PreToolUse) {
-    settings.hooks.PreToolUse = [];
-  }
 
-  upsertHookEntry(settings.hooks.SessionStart, {
-    hooks: [{ type: "command", command: "node .clarte/hooks/on-session-start.mjs" }],
-  });
-
-  upsertHookEntry(settings.hooks.PreToolUse, {
-    matcher: "Read",
-    hooks: [{ type: "command", command: "node .clarte/hooks/on-read.mjs" }],
-  });
+  for (const def of HOOK_DEFS) {
+    const group = (settings.hooks[def.event] ??= []) as MatchedHookGroup[];
+    const entry: MatchedHookGroup = {
+      ...(def.matcher ? { matcher: def.matcher } : {}),
+      hooks: [{ type: "command", command: `node ${HOOKS_DIR}/${def.file}` }],
+    };
+    upsertHookEntry(group, entry);
+  }
 
   await writeFileSafe(settingsPath, JSON.stringify(settings, null, 2) + "\n");
 }
