@@ -37,6 +37,10 @@ function parseRustUsePath(node: Node, imports: RawImport[]): void {
           names.push(child.text);
         } else if (child.type === "scoped_identifier") {
           names.push(child.text);
+        } else if (child.type === "use_wildcard" || child.text === "*") {
+          names.push("*");
+        } else if (child.type === "scoped_use_list") {
+          parseRustUsePath(child, imports);
         }
       }
       imports.push({ specifier: `${basePath}::{${names.join(", ")}}`, importedNames: names });

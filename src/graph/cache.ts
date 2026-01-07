@@ -12,10 +12,13 @@ import {
   resolveAliasImport,
   loadTsconfigPaths,
   getPackageName,
+  loadGoModule,
+  detectJavaSourceRoots,
   SOURCE_IGNORE,
   type PathAlias,
+  type ResolveContext,
 } from "./import-resolution.js";
-import { initTreeSitter } from "../parsers/init.js";
+import { initForLanguage } from "../parsers/init.js";
 import { readFileOr } from "../utils.js";
 import type {
   ArchitecturalLayer,
@@ -120,8 +123,10 @@ export function computeAnalysisCacheKey(
 
   const layersPart = layersConfig ? JSON.stringify(layersConfig) : "";
 
+  // Include betweenness sample size so cache invalidates if the constant changes
+  const BETWEENNESS_K = 50;
   return createHash("sha256")
-    .update(sortedEdges + `|ext:${externalCount}` + layersPart)
+    .update(sortedEdges + `|ext:${externalCount}|bk:${BETWEENNESS_K}` + layersPart)
     .digest("hex");
 }
 
@@ -189,6 +194,7 @@ async function parseFileEdges(
   language: Language,
   fileSet: Set<string>,
   pathAliases: PathAlias[],
+  resolveCtx?: ResolveContext,
 ): Promise<ImportEdge[]> {
   const absPath = path.join(rootDir, file);
   const content = await readFileOr(absPath);
@@ -199,7 +205,7 @@ async function parseFileEdges(
 
   for (const raw of rawImports) {
     if (isRelativeSpecifier(raw.specifier, language)) {
-      const resolved = resolveImport(raw.specifier, file, language, fileSet);
+      const resolved = resolveImport(raw.specifier, file, language, fileSet, resolveCtx);
       if (resolved) {
         edges.push({
           from: file,
@@ -307,7 +313,7 @@ export async function buildGraphWithCache(
   language: Language,
   onProgress?: ProgressCallback,
 ): Promise<ImportGraph> {
-  await initTreeSitter();
+  await initForLanguage(language);
 
   onProgress?.("Computing file hashes...");
   const currentHashes = await computeFileHashes(rootDir, language);
@@ -359,9 +365,16 @@ export async function buildGraphWithCache(
 
       const isJsTs = language === "typescript" || language === "javascript";
       const pathAliases = isJsTs ? await loadTsconfigPaths(rootDir) : [];
+      const resolveCtx: ResolveContext = {};
+      if (language === "go") {
+        resolveCtx.goModulePath = await loadGoModule(rootDir);
+      }
+      if (language === "java") {
+        resolveCtx.javaSourceRoots = detectJavaSourceRoots([...allCurrentFiles]);
+      }
       const newEdges: ImportEdge[] = [];
       for (const file of [...changedFiles, ...newFiles]) {
-        const edges = await parseFileEdges(rootDir, file, language, allCurrentFiles, pathAliases);
+        const edges = await parseFileEdges(rootDir, file, language, allCurrentFiles, pathAliases, resolveCtx);
         newEdges.push(...edges);
       }
 

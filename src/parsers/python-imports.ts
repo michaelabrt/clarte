@@ -12,7 +12,7 @@ export function parsePythonImportsAst(root: Node): RawImport[] {
     } else if (node.type === "if_statement") {
       // TYPE_CHECKING guard
       const condition = node.childForFieldName("condition");
-      if (condition && condition.text === "TYPE_CHECKING") {
+      if (condition && (condition.text === "TYPE_CHECKING" || condition.text === "typing.TYPE_CHECKING")) {
         const consequence = node.childForFieldName("consequence");
         if (consequence) {
           for (const child of consequence.namedChildren) {

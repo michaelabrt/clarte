@@ -17,7 +17,7 @@ import { computeGraphTopology } from "../graph/topology.js";
 import { findStructuralTemporalMismatches } from "../graph/mismatches.js";
 import { findTightCouplings } from "../graph/tight-coupling.js";
 import { buildGraphWithCache } from "../graph/cache.js";
-import { analyzeGitActivity } from "../git/analysis.js";
+import { analyzeGitActivityAsync } from "../git/analysis.js";
 import { scanConfigConstraints } from "../config/scan.js";
 import { inferConventions } from "../conventions/conventions.js";
 import { buildTestMapping } from "../analysis/test-map.js";
@@ -233,7 +233,7 @@ async function runAnalysis(
   const { layers, layerEdges } = detectArchitecturalLayers(graph, answers.layers);
   const instabilities = computeInstability(graph);
   const communities = detectCommunities(graph);
-  const gitActivity = detected.isGitRepo ? analyzeGitActivity(rootDir, noopProgress) : null;
+  const gitActivity = detected.isGitRepo ? await analyzeGitActivityAsync(rootDir, noopProgress) : null;
   const deadFiles = findDeadFiles(graph);
   const crossCuttingFiles = findCrossCuttingFiles(graph, layers);
   const layerConsistency = layers.length >= 2 ? computeLayerConsistency(graph, layers, layerEdges) : undefined;

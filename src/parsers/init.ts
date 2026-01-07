@@ -5,55 +5,106 @@ import type { Language as ClarteLanguage } from "../types.js";
 
 const languages = new Map<string, Language>();
 let parser: Parser | null = null;
-let initPromise: Promise<void> | null = null;
+let parserInitPromise: Promise<void> | null = null;
+
+const LANG_FILES: Record<string, string> = {
+  typescript: "tree-sitter-typescript.wasm",
+  tsx: "tree-sitter-tsx.wasm",
+  javascript: "tree-sitter-javascript.wasm",
+  python: "tree-sitter-python.wasm",
+  go: "tree-sitter-go.wasm",
+  rust: "tree-sitter-rust.wasm",
+  java: "tree-sitter-java.wasm",
+};
+
+function getWasmDir(): string {
+  const selfDir = path.dirname(new URL(import.meta.url).pathname);
+  return selfDir.includes("/src") ? path.join(selfDir, "..", "..", "dist", "wasm") : path.join(selfDir, "wasm");
+}
+
+const langPromises = new Map<string, Promise<void>>();
+
+async function ensureLanguage(name: string): Promise<void> {
+  if (languages.has(name)) return;
+  if (!langPromises.has(name)) {
+    langPromises.set(
+      name,
+      (async () => {
+        const wasmFile = LANG_FILES[name];
+        if (!wasmFile) throw new Error(`Unknown tree-sitter language: ${name}`);
+        const wasmDir = getWasmDir();
+        try {
+          const lang = await Language.load(path.join(wasmDir, wasmFile));
+          languages.set(name, lang);
+        } catch (err) {
+          langPromises.delete(name);
+          const msg = err instanceof Error ? err.message : String(err);
+          throw new Error(
+            `Failed to load tree-sitter WASM grammar '${name}' from ${wasmDir}: ${msg}. ` +
+              "Run 'npm install' or 'npm run build' to restore missing files.",
+          );
+        }
+      })(),
+    );
+  }
+  return langPromises.get(name);
+}
+
+/**
+ * Map a ClarteLanguage to the tree-sitter grammar names it requires.
+ */
+function getRequiredGrammars(lang: ClarteLanguage): string[] {
+  switch (lang) {
+    case "typescript":
+      return ["typescript", "tsx", "javascript"];
+    case "javascript":
+      return ["javascript", "tsx"];
+    case "python":
+      return ["python"];
+    case "go":
+      return ["go"];
+    case "rust":
+      return ["rust"];
+    case "java":
+      return ["java"];
+    default:
+      return ["typescript", "tsx", "javascript"];
+  }
+}
 
 /**
  * Initialize the tree-sitter WASM runtime and load all language grammars.
- * Must be called once before any parsing. Subsequent calls are no-ops.
+ * Backward-compatible: loads ALL grammars eagerly.
  * Safe to call concurrently (deduplicates via shared promise).
  */
 export function initTreeSitter(): Promise<void> {
-  if (initPromise) return initPromise;
+  if (parserInitPromise) return parserInitPromise;
 
-  initPromise = (async () => {
+  parserInitPromise = (async () => {
     await Parser.init();
     parser = new Parser();
 
-    // Resolve WASM grammars bundled in dist/wasm/ (copied at build time).
-    // Dev: import.meta.url is in src/parsers/ -> ../../dist/wasm/
-    // Prod: tsup bundles into dist/index.js -> ./wasm/
-    const selfDir = path.dirname(new URL(import.meta.url).pathname);
-    const wasmDir = selfDir.includes("/src")
-      ? path.join(selfDir, "..", "..", "dist", "wasm")
-      : path.join(selfDir, "wasm");
-
-    const langFiles: [string, string][] = [
-      ["typescript", "tree-sitter-typescript.wasm"],
-      ["tsx", "tree-sitter-tsx.wasm"],
-      ["javascript", "tree-sitter-javascript.wasm"],
-      ["python", "tree-sitter-python.wasm"],
-      ["go", "tree-sitter-go.wasm"],
-      ["rust", "tree-sitter-rust.wasm"],
-      ["java", "tree-sitter-java.wasm"],
-    ];
-
-    try {
-      await Promise.all(
-        langFiles.map(async ([name, file]) => {
-          const lang = await Language.load(path.join(wasmDir, file));
-          languages.set(name, lang);
-        }),
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `Failed to load tree-sitter WASM grammars from ${wasmDir}: ${msg}. ` +
-          "Run 'npm install' or 'npm run build' to restore missing files.",
-      );
-    }
+    // Load all grammars for backward compatibility
+    await Promise.all(Object.keys(LANG_FILES).map(ensureLanguage));
   })();
 
-  return initPromise;
+  return parserInitPromise;
+}
+
+/**
+ * Initialize the tree-sitter runtime and load only the grammars needed for a language.
+ * Preferred over initTreeSitter() to avoid loading unused grammars.
+ */
+export async function initForLanguage(lang: ClarteLanguage): Promise<void> {
+  if (!parserInitPromise) {
+    parserInitPromise = (async () => {
+      await Parser.init();
+      parser = new Parser();
+    })();
+  }
+  await parserInitPromise;
+  const grammars = getRequiredGrammars(lang);
+  await Promise.all(grammars.map(ensureLanguage));
 }
 
 export function getLanguage(lang: ClarteLanguage, filePath?: string): Language {
@@ -64,7 +115,7 @@ export function getLanguage(lang: ClarteLanguage, filePath?: string): Language {
     return languages.get("typescript")!;
   }
   const tsLang = languages.get(lang);
-  if (!tsLang) throw new Error(`No tree-sitter grammar loaded for language: ${lang}`);
+  if (!tsLang) throw new Error(`No tree-sitter grammar loaded for language: ${lang}. Call initForLanguage() first.`);
   return tsLang;
 }
 
