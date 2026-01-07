@@ -1,5 +1,8 @@
-import { execSync } from "node:child_process";
+import { execSync, execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { ChangeCoupling, GitAnalysis, LagCoupling, ProgressCallback } from "../types.js";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Adaptive decay half-lives (in decay-constant units, where halfLife = decayConst * ln(2)).
@@ -515,4 +518,174 @@ export function computeLagCoupling(commits: ParsedCommit[], couplingResults: Cha
   results.sort((a, b) => b.lagScore - a.lagScore || a.fileA.localeCompare(b.fileA) || a.fileB.localeCompare(b.fileB));
 
   return results;
+}
+
+// --- Async variants for watch mode (non-blocking event loop) ---
+
+function buildGitLogArgs(window: TimeWindow): string[] {
+  const SEP = "---CLARTE_COMMIT_SEP---";
+  const US = "\x1f";
+  const rangeArg = "ref" in window ? `${window.ref}..HEAD` : `--since=${window.days} days ago`;
+  return [
+    "log",
+    "--no-merges",
+    rangeArg,
+    "--diff-filter=ACDMRT",
+    "--name-only",
+    `--format=${SEP}%H${US}%aI${US}%ar${US}%s`,
+  ];
+}
+
+function parseGitLogOutput(output: string): ParsedCommit[] {
+  const SEP = "---CLARTE_COMMIT_SEP---";
+  if (!output.trim()) return [];
+
+  const commits: ParsedCommit[] = [];
+  const chunks = output.split(SEP).filter(Boolean);
+
+  for (const chunk of chunks) {
+    const lines = chunk.split("\n").filter(Boolean);
+    if (lines.length === 0) continue;
+
+    const headerLine = lines[0];
+    const parts = headerLine.split("\x1f");
+    if (parts.length < 4) continue;
+
+    const hash = parts[0];
+    const date = parts[1];
+    const relativeDate = parts[2];
+    const message = parts.slice(3).join("\x1f");
+
+    const files = [
+      ...new Set(
+        lines
+          .slice(1)
+          .map((f) => f.trim())
+          .filter(Boolean),
+      ),
+    ];
+
+    if (files.length > 0) {
+      commits.push({ hash, date, relativeDate, message, files });
+    }
+  }
+
+  return commits;
+}
+
+async function parseGitLogAsync(rootDir: string, window: TimeWindow = { days: 90 }): Promise<ParsedCommit[]> {
+  const args = buildGitLogArgs(window);
+  const { stdout } = await execFileAsync("git", args, {
+    cwd: rootDir,
+    timeout: 15000,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  return parseGitLogOutput(stdout);
+}
+
+async function computeFileChurnAsync(
+  rootDir: string,
+  window: TimeWindow = { days: 90 },
+): Promise<Map<string, { linesAdded: number; linesRemoved: number }> | null> {
+  try {
+    const rangeArg = "ref" in window ? `${window.ref}..HEAD` : `--since=${window.days} days ago`;
+    const { stdout } = await execFileAsync("git", ["log", "--numstat", "--format=", rangeArg, "--no-merges"], {
+      cwd: rootDir,
+      timeout: 15000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+
+    const output = stdout.trim();
+    if (!output) return null;
+
+    const churn = new Map<string, { linesAdded: number; linesRemoved: number }>();
+
+    for (const line of output.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      const parts = trimmed.split("\t");
+      if (parts.length < 3) continue;
+
+      const added = parseInt(parts[0], 10);
+      const removed = parseInt(parts[1], 10);
+      if (Number.isNaN(added) || Number.isNaN(removed)) continue;
+
+      const file = parts.slice(2).join("\t");
+      const existing = churn.get(file);
+      if (existing) {
+        existing.linesAdded += added;
+        existing.linesRemoved += removed;
+      } else {
+        churn.set(file, { linesAdded: added, linesRemoved: removed });
+      }
+    }
+
+    return churn;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Async version of analyzeGitActivity for watch mode.
+ * Uses non-blocking child_process.execFile instead of execSync.
+ */
+export async function analyzeGitActivityAsync(
+  rootDir: string,
+  onProgress?: ProgressCallback,
+  analysisDays: number = 90,
+  sinceRef?: string,
+): Promise<GitAnalysis | null> {
+  try {
+    const window: TimeWindow = sinceRef ? { ref: sinceRef } : { days: analysisDays };
+
+    const windowLabel = sinceRef ? `since ${sinceRef}` : `last ${analysisDays} days`;
+    onProgress?.(`Analyzing git history (${windowLabel})...`);
+
+    const commits = await parseGitLogAsync(rootDir, window);
+    if (commits.length === 0) return null;
+
+    onProgress?.(`Parsed ${commits.length} commits`);
+
+    const commitCounts = new Map<string, number>();
+    const lastChanged = new Map<string, string>();
+
+    for (const commit of commits) {
+      for (const file of commit.files) {
+        commitCounts.set(file, (commitCounts.get(file) ?? 0) + 1);
+        if (!lastChanged.has(file)) {
+          lastChanged.set(file, commit.relativeDate);
+        }
+      }
+    }
+
+    if (commitCounts.size === 0) return null;
+
+    onProgress?.(`Found activity in ${commitCounts.size} files`);
+
+    const sorted = [...commitCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    const hotFiles: GitAnalysis["hotFiles"] = sorted.slice(0, 15).map(([filePath, commitCount]) => ({
+      path: filePath,
+      commits: commitCount,
+      lastChanged: lastChanged.get(filePath) ?? "",
+    }));
+
+    onProgress?.("Analyzing change coupling...");
+    const changeCoupling = computeChangeCoupling(commits, analysisDays);
+    const lagCouplings = computeLagCoupling(commits, changeCoupling);
+    const fileChurn = await computeFileChurnAsync(rootDir, window);
+
+    return {
+      commitCounts,
+      hotFiles,
+      changeCoupling,
+      lagCouplings: lagCouplings.length > 0 ? lagCouplings : undefined,
+      fileChurn: fileChurn && fileChurn.size > 0 ? fileChurn : undefined,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    onProgress?.(`Warning: git analysis failed: ${msg}`);
+    return null;
+  }
 }

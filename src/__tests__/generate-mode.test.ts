@@ -96,6 +96,10 @@ vi.mock("../graph/build.js", () => ({
   buildImportGraph: (...args: unknown[]) => mockBuildImportGraph(...args),
   mergeGraph: (...args: unknown[]) => mockMergeGraph(...args),
 }));
+vi.mock("../graph/centrality.js", () => ({
+  computeHITS: () => ({ authority: new Map(), hub: new Map() }),
+  computeBetweenness: () => new Map(),
+}));
 
 const mockGetHubFiles = vi.fn().mockReturnValue([]);
 vi.mock("../graph/hub-files.js", () => ({

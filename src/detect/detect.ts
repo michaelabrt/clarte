@@ -350,7 +350,7 @@ async function detectCiProvider(rootDir: string, topEntries: string[]): Promise<
  */
 export async function detectIDEs(rootDir: string): Promise<IDETarget[]> {
   const markers: Array<{ path: string; ide: IDETarget }> = [
-    { path: ".cursor", ide: "cursor" },
+    { path: path.join(".cursor", "rules"), ide: "cursor" },
     { path: path.join(".github", "copilot-instructions.md"), ide: "copilot" },
     { path: ".windsurfrules", ide: "windsurf" },
     { path: ".clinerules", ide: "cline" },

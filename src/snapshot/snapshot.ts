@@ -3,7 +3,7 @@ import { glob } from "tinyglobby";
 import { IGNORE_GLOBS } from "../config/ignore-patterns.js";
 import { estimateTokens, readJsonFile } from "../utils.js";
 import { findUsedExports } from "../graph/hub-files.js";
-import { initTreeSitter } from "../parsers/init.js";
+import { initForLanguage } from "../parsers/init.js";
 import type {
   CodeSnapshot,
   DetectedContext,
@@ -180,7 +180,9 @@ export async function generateSnapshot(
   const dirNames = scanPaths.map((p) => p.split("/").pop() ?? p);
   onProgress?.(`Scanning ${scanPaths.length} directories: ${dirNames.join(", ")}...`);
 
-  await initTreeSitter();
+  const langsToLoad: Language[] = [ctx.language];
+  if (ctx.secondaryLanguages) langsToLoad.push(...ctx.secondaryLanguages);
+  await Promise.all(langsToLoad.map(initForLanguage));
 
   let fileGlob: string;
   let extractor: (filePath: string, relPath: string) => Promise<SnapshotEntry[]>;
@@ -403,6 +405,8 @@ function filterDeadExports(entries: SnapshotEntry[], graph?: ImportGraph): Snaps
 
 /**
  * Greedy knapsack: prioritize entries by centrality-weighted value per token.
+ * Uses pre-sorted entries with a deferred list for diversity-discounted items
+ * to avoid O(n^2) rescanning.
  */
 function applyTokenBudget(
   entries: SnapshotEntry[],
@@ -433,38 +437,68 @@ function applyTokenBudget(
     return { entry, tokens, value };
   });
 
+  // Pre-sort by base value descending (alphabetical tiebreaker for determinism)
+  scored.sort((a, b) => b.value - a.value || a.entry.file.localeCompare(b.entry.file));
+
   // Submodular greedy selection with diversity discount:
-  // After selecting an entry, discount remaining entries from the same file
-  // to ensure diverse file coverage in the snapshot.
+  // Walk the sorted list once. When an entry's file is already selected,
+  // apply 0.5 discount and defer it. Process deferred entries when they
+  // would beat the next unvisited entry.
   let remaining = budget;
   const selected: SnapshotEntry[] = [];
   const selectedFiles = new Set<string>();
-  const consumed = new Set<number>();
+  const deferred: Array<{ entry: SnapshotEntry; tokens: number; value: number }> = [];
+  let mainIdx = 0;
 
   while (remaining > 0) {
-    // Re-score with diversity discount and find best remaining entry
-    let bestIdx = -1;
-    let bestValue = -1;
+    // Advance past entries that are too large
+    while (mainIdx < scored.length && scored[mainIdx].tokens > remaining) mainIdx++;
 
-    for (let j = 0; j < scored.length; j++) {
-      if (consumed.has(j)) continue;
-      const { entry, tokens, value } = scored[j];
-      if (tokens > remaining) continue;
+    const mainCandidate = mainIdx < scored.length ? scored[mainIdx] : null;
+    const mainValue = mainCandidate
+      ? selectedFiles.has(mainCandidate.entry.file)
+        ? mainCandidate.value * 0.5
+        : mainCandidate.value
+      : -1;
 
-      const adjustedValue = selectedFiles.has(entry.file) ? value * 0.5 : value;
-      if (adjustedValue > bestValue) {
-        bestValue = adjustedValue;
-        bestIdx = j;
+    // Check deferred list for a better candidate
+    let bestDeferredIdx = -1;
+    let bestDeferredValue = -1;
+    for (let d = 0; d < deferred.length; d++) {
+      if (deferred[d].tokens > remaining) continue;
+      if (deferred[d].value > bestDeferredValue) {
+        bestDeferredValue = deferred[d].value;
+        bestDeferredIdx = d;
       }
     }
 
-    if (bestIdx === -1) break;
+    if (mainValue < 0 && bestDeferredIdx < 0) break;
 
-    const { entry, tokens } = scored[bestIdx];
-    selected.push(entry);
-    remaining -= tokens;
-    selectedFiles.add(entry.file);
-    consumed.add(bestIdx);
+    if (bestDeferredValue > mainValue && bestDeferredIdx >= 0) {
+      // Take from deferred
+      const item = deferred[bestDeferredIdx];
+      selected.push(item.entry);
+      remaining -= item.tokens;
+      selectedFiles.add(item.entry.file);
+      deferred.splice(bestDeferredIdx, 1);
+    } else if (mainCandidate) {
+      // Take from main list
+      if (selectedFiles.has(mainCandidate.entry.file)) {
+        // Needs discount: defer it with discounted value
+        deferred.push({
+          entry: mainCandidate.entry,
+          tokens: mainCandidate.tokens,
+          value: mainCandidate.value * 0.5,
+        });
+      } else {
+        selected.push(mainCandidate.entry);
+        remaining -= mainCandidate.tokens;
+        selectedFiles.add(mainCandidate.entry.file);
+      }
+      mainIdx++;
+    } else {
+      break;
+    }
   }
 
   return {

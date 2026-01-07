@@ -4,6 +4,7 @@ import {
   computeLagCoupling,
   adaptiveDecayConstant,
   computeFileChurn,
+  analyzeGitActivityAsync,
   type ParsedCommit,
   type TimeWindow,
 } from "../git/analysis.js";
@@ -307,6 +308,23 @@ describe("computeFileChurn", () => {
 
   it("accepts a TimeWindow with ref", () => {
     const result = computeFileChurn("/nonexistent-dir", { ref: "main" });
+    expect(result).toBeNull();
+  });
+});
+
+describe("analyzeGitActivityAsync", () => {
+  it("returns null for non-git directories", async () => {
+    const result = await analyzeGitActivityAsync("/nonexistent-dir-that-does-not-exist");
+    expect(result).toBeNull();
+  });
+
+  it("accepts analysisDays parameter", async () => {
+    const result = await analyzeGitActivityAsync("/nonexistent-dir", undefined, 30);
+    expect(result).toBeNull();
+  });
+
+  it("accepts sinceRef parameter", async () => {
+    const result = await analyzeGitActivityAsync("/nonexistent-dir", undefined, 90, "main");
     expect(result).toBeNull();
   });
 });

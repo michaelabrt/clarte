@@ -259,6 +259,14 @@ export function extractUserSections(content: string): UserSection[] {
     const endIdx = content.indexOf(USER_END, startIdx + USER_START.length);
     if (endIdx < 0) break; // Unclosed marker — skip
 
+    // Check for nested start markers (malformed user sections)
+    const inner = content.slice(startIdx + USER_START.length, endIdx);
+    if (inner.includes(USER_START)) {
+      console.error("[clarte] Warning: nested clarte:user-start markers detected. Skipping malformed section.");
+      searchFrom = endIdx + USER_END.length;
+      continue;
+    }
+
     const fullBlock = content.slice(startIdx, endIdx + USER_END.length);
 
     // Find nearest preceding ## header as position anchor

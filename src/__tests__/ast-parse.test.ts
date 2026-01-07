@@ -122,6 +122,19 @@ describe("parseImportsAst - Python", () => {
     expect(typeOnlyImport).toBeDefined();
     expect(typeOnlyImport!.isTypeOnly).toBe(true);
   });
+
+  it("detects typing.TYPE_CHECKING attribute access pattern as type-only", () => {
+    const result = parseImportsAst(
+      `import typing\nif typing.TYPE_CHECKING:\n    from .models import User\n    from .services import AuthService\n`,
+      "python",
+    );
+    const userImport = result.find((i) => i.specifier === ".models");
+    expect(userImport).toBeDefined();
+    expect(userImport!.isTypeOnly).toBe(true);
+    const authImport = result.find((i) => i.specifier === ".services");
+    expect(authImport).toBeDefined();
+    expect(authImport!.isTypeOnly).toBe(true);
+  });
 });
 
 // ── Go Import Parsing ────────────────────────────────────────────────────────
@@ -167,6 +180,32 @@ describe("parseImportsAst - Rust", () => {
     const result = parseImportsAst(`mod config;`, "rust");
     expect(result).toHaveLength(1);
     expect(result[0].specifier).toBe("mod::config");
+  });
+
+  it("handles wildcard in scoped_use_list", () => {
+    const result = parseImportsAst(`use std::io::{self, Read, *};`, "rust");
+    expect(result).toHaveLength(1);
+    expect(result[0].importedNames).toContain("self");
+    expect(result[0].importedNames).toContain("Read");
+    expect(result[0].importedNames).toContain("*");
+  });
+
+  it("handles nested scoped_use_list", () => {
+    // utils::{self, helpers} is a nested scoped_use_list within the outer list
+    const result = parseImportsAst(`use crate::{utils::{self, helpers}, other};`, "rust");
+    // Should produce 2 imports: one from the nested scoped_use_list (crate::utils::{self, helpers})
+    // and one for 'other' in the outer list
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    const nested = result.find((i) => i.specifier.includes("utils"));
+    expect(nested).toBeDefined();
+    expect(nested!.importedNames).toContain("self");
+    expect(nested!.importedNames).toContain("helpers");
+  });
+
+  it("handles top-level wildcard use", () => {
+    const result = parseImportsAst(`use crate::prelude::*;`, "rust");
+    expect(result).toHaveLength(1);
+    expect(result[0].specifier).toBe("crate::prelude::*");
   });
 });
 

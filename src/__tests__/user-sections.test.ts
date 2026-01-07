@@ -73,6 +73,24 @@ describe("extractUserSections", () => {
 
     expect(extractUserSections(content)).toHaveLength(0);
   });
+
+  it("skips nested start markers (malformed sections)", () => {
+    const content = [
+      "## Key Files",
+      "",
+      "<!-- clarte:user-start -->",
+      "Outer section",
+      "<!-- clarte:user-start -->",
+      "Nested section",
+      "<!-- clarte:user-end -->",
+      "",
+      "## Development",
+    ].join("\n");
+
+    const sections = extractUserSections(content);
+    // The nested section should be skipped
+    expect(sections).toHaveLength(0);
+  });
 });
 
 describe("mergeUserSections", () => {

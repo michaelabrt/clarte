@@ -1,7 +1,7 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
 import { readFileOr } from "../utils.js";
-import { initTreeSitter } from "../parsers/init.js";
+import { initForLanguage } from "../parsers/init.js";
 import { detectBarrelAst } from "../parsers/barrel.js";
 import { computeHITS, computeBetweenness } from "./centrality.js";
 import {
@@ -50,7 +50,7 @@ export async function buildImportGraph(
   language: Language,
   onProgress?: ProgressCallback,
 ): Promise<ImportGraph> {
-  await initTreeSitter();
+  await initForLanguage(language);
   const globs = getSourceGlob(language);
   let files: string[];
   try {

@@ -20,6 +20,7 @@ import { saveConfig, configToAnswers, computeSnapshotHash } from "../config/conf
 import { initPreCommitHook } from "../cli/hooks.js";
 import { buildGraphWithCache } from "../graph/cache.js";
 import { buildImportGraph, mergeGraph } from "../graph/build.js";
+import { computeHITS, computeBetweenness } from "../graph/centrality.js";
 import { getHubFiles } from "../graph/hub-files.js";
 import { startShimmer } from "../cli/animations.js";
 import { serializeAnalysis } from "../analysis/serialize.js";
@@ -91,6 +92,13 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
         const secGraph = await buildImportGraph(rootDir, secLang, verbose ? verboseLog : undefined);
         mergeGraph(graph, secGraph);
       }
+      // Recompute HITS and betweenness on merged graph (per-language scores are incommensurable)
+      const allFiles = [...graph.inDegree.keys()];
+      const { authority, hub } = computeHITS(allFiles, graph.edges, 30, 1e-6, graph.barrelFiles);
+      graph.authority = authority;
+      graph.hubScores = hub;
+      graph.centrality = authority;
+      graph.betweennessScores = computeBetweenness(graph);
     }
 
     topHub = getHubFiles(graph, 1)[0];
@@ -161,8 +169,8 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     const { persistGraph, loadPersistedGraph } = await import("../graph/persist.js");
     await persistGraph(rootDir, graph, analysis);
     persistedGraph = await loadPersistedGraph(rootDir);
-  } catch {
-    // Non-critical
+  } catch (err) {
+    verboseLog?.(`Graph persistence failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   if (jsonMode) {

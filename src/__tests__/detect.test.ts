@@ -594,8 +594,8 @@ describe("detectIDEs", () => {
     if (tmpDir) await cleanup(tmpDir);
   });
 
-  it("detects cursor IDE from .cursor directory", async () => {
-    tmpDir = await makeProject({ ".cursor/settings.json": "{}" });
+  it("detects cursor IDE from .cursor/rules directory", async () => {
+    tmpDir = await makeProject({ ".cursor/rules/clarte.mdc": "# Rules" });
     const ides = await detectIDEs(tmpDir);
     expect(ides).toContain("cursor");
   });
@@ -614,7 +614,7 @@ describe("detectIDEs", () => {
 
   it("detects multiple IDEs simultaneously", async () => {
     tmpDir = await makeProject({
-      ".cursor/settings.json": "{}",
+      ".cursor/rules/clarte.mdc": "# Rules",
       ".windsurfrules": "",
       "AGENTS.md": "# Agents",
     });
