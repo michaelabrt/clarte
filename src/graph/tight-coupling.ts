@@ -15,8 +15,8 @@ import type { ImportGraph, TightCoupling } from "../types.js";
  * file actionable. Most projects have 2-5 genuinely tight couplings; 10 provides headroom.
  */
 export function findTightCouplings(graph: ImportGraph, minNames = 5, topN = 10): TightCoupling[] {
-  // Aggregate named imports per (from, to) pair
-  const pairNames = new Map<string, { from: string; to: string; names: Set<string> }>();
+  // Aggregate named imports per (from, to) pair, tracking type-only separately
+  const pairNames = new Map<string, { from: string; to: string; names: Set<string>; typeOnlyNames: Set<string> }>();
 
   const barrels = graph.barrelFiles ?? new Set<string>();
 
@@ -27,11 +27,14 @@ export function findTightCouplings(graph: ImportGraph, minNames = 5, topN = 10):
     const key = `${edge.from}->${edge.to}`;
     let entry = pairNames.get(key);
     if (!entry) {
-      entry = { from: edge.from, to: edge.to, names: new Set() };
+      entry = { from: edge.from, to: edge.to, names: new Set(), typeOnlyNames: new Set() };
       pairNames.set(key, entry);
     }
     for (const name of edge.importedNames) {
       entry.names.add(name);
+      if (edge.isTypeOnly) {
+        entry.typeOnlyNames.add(name);
+      }
     }
   }
 
@@ -39,11 +42,13 @@ export function findTightCouplings(graph: ImportGraph, minNames = 5, topN = 10):
 
   for (const entry of pairNames.values()) {
     if (entry.names.size >= minNames) {
+      const typeOnlyCount = entry.typeOnlyNames.size;
       results.push({
         from: entry.from,
         to: entry.to,
         importedNames: entry.names.size,
         names: [...entry.names].sort(),
+        ...(typeOnlyCount > 0 ? { typeOnlyCount } : {}),
       });
     }
   }

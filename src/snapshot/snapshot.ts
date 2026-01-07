@@ -399,7 +399,11 @@ function filterDeadExports(entries: SnapshotEntry[], graph?: ImportGraph): Snaps
     const name = extractNameFromSignature(entry.signature);
     if (!name) return true; // Can't determine name, keep it
 
-    return usedExports.has(`${entry.file}::${name}`);
+    if (usedExports.has(`${entry.file}::${name}`)) return true;
+    // Fallback: barrel re-exports with aliases (e.g., `export { default as Foo }`)
+    // register "default" in usedExports, so check that too
+    if (usedExports.has(`${entry.file}::default`)) return true;
+    return false;
   });
 }
 
@@ -416,8 +420,12 @@ function applyTokenBudget(
 ): { selected: SnapshotEntry[]; excluded: number } {
   if (entries.length === 0) return { selected: [], excluded: 0 };
 
+  // Per-entry markdown overhead: annotation line (~10 tokens), inter-entry
+  // newlines (~2 tokens), proportional share of section header + fence (~5 tokens)
+  const MARKDOWN_OVERHEAD_PER_ENTRY = 17;
+
   const scored = entries.map((entry) => {
-    const tokens = Math.max(1, estimateTokens(entry.signature));
+    const tokens = Math.max(1, estimateTokens(entry.signature) + MARKDOWN_OVERHEAD_PER_ENTRY);
     const centrality = graph?.centrality.get(entry.file) ?? 0.5;
 
     // Category boost: types/interfaces are more valuable for context
