@@ -2,9 +2,9 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { parseCliArgs } from "../cli/args.js";
 import { ClarteError } from "../errors.js";
 
-// Mock process.exit to prevent test termination (still needed for handleEarlyExits)
-const mockExit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
-const mockConsoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+// Suppress process.exit and console.error during tests (handleEarlyExits calls them)
+vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+vi.spyOn(console, "error").mockImplementation(() => {});
 
 beforeEach(() => {
   vi.clearAllMocks();

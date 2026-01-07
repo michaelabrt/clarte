@@ -138,9 +138,9 @@ vi.mock("../snapshot/snapshot.js", () => ({
 }));
 
 // File generation mock
-const mockGenerateFiles = vi.fn().mockResolvedValue([
-  { path: ".claude/rules/clarte.md", content: "# Test", isNew: true },
-]);
+const mockGenerateFiles = vi
+  .fn()
+  .mockResolvedValue([{ path: ".claude/rules/clarte.md", content: "# Test", isNew: true }]);
 
 vi.mock("../core/generate.js", () => ({
   generateFiles: (...args: unknown[]) => mockGenerateFiles(...args),
@@ -249,9 +249,7 @@ beforeEach(() => {
     sourceFileCount: 50,
     monorepo: null,
   });
-  mockGenerateFiles.mockResolvedValue([
-    { path: ".claude/rules/clarte.md", content: "# Test", isNew: true },
-  ]);
+  mockGenerateFiles.mockResolvedValue([{ path: ".claude/rules/clarte.md", content: "# Test", isNew: true }]);
   mockRunAnalysis.mockResolvedValue({
     analysis: {
       hubFiles: [],
