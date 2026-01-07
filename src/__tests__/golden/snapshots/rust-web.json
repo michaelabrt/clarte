@@ -43,10 +43,7 @@
   "layers": [
     {
       "name": "pages",
-      "files": [
-        "src/routes/handlers.rs",
-        "src/routes/mod.rs"
-      ],
+      "files": ["src/routes/handlers.rs", "src/routes/mod.rs"],
       "dependsOn": []
     }
   ],
@@ -98,9 +95,7 @@
   ],
   "graphTopology": {
     "componentCount": 1,
-    "componentSizes": [
-      9
-    ],
+    "componentSizes": [9],
     "approximateDiameter": 3,
     "reachability": 1,
     "isFragmented": false

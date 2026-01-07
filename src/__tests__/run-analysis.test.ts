@@ -277,7 +277,16 @@ describe("runAnalysis", () => {
   });
 
   it("calls analyzeGitActivity when isGitRepo=true", async () => {
-    await runAnalysis("/tmp/test", makeGraph(), makeDetected({ isGitRepo: true }), null, false, true, noopProgress, noopProgress);
+    await runAnalysis(
+      "/tmp/test",
+      makeGraph(),
+      makeDetected({ isGitRepo: true }),
+      null,
+      false,
+      true,
+      noopProgress,
+      noopProgress,
+    );
 
     expect(mockAnalyzeGitActivity).toHaveBeenCalledWith("/tmp/test", expect.any(Function), 90);
   });
@@ -304,9 +313,7 @@ describe("runAnalysis", () => {
         { path: "src/alive.ts", commits: 5, lastChanged: "1d ago" },
         { path: "src/deleted.ts", commits: 3, lastChanged: "2d ago" },
       ],
-      changeCoupling: [
-        { fileA: "src/alive.ts", fileB: "src/deleted.ts", coChanges: 3, confidence: 0.5 },
-      ],
+      changeCoupling: [{ fileA: "src/alive.ts", fileB: "src/deleted.ts", coChanges: 3, confidence: 0.5 }],
       lagCouplings: [],
     });
     // alive.ts exists, deleted.ts does not
@@ -367,9 +374,12 @@ describe("runAnalysis", () => {
   it("saves analysis cache on cache miss", async () => {
     await runAnalysis("/tmp/test", makeGraph(), makeDetected(), null, false, true, noopProgress, noopProgress);
 
-    expect(mockSaveAnalysisCache).toHaveBeenCalledWith("/tmp/test", expect.objectContaining({
-      cacheKey: "cache-key-123",
-    }));
+    expect(mockSaveAnalysisCache).toHaveBeenCalledWith(
+      "/tmp/test",
+      expect.objectContaining({
+        cacheKey: "cache-key-123",
+      }),
+    );
   });
 
   it("does not save cache on cache hit", async () => {
