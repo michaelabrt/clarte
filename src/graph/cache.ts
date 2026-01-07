@@ -15,9 +15,11 @@ import {
   getPackageName,
   loadGoModule,
   detectJavaSourceRoots,
+  resolveBarrelFiles,
   SOURCE_IGNORE,
   type PathAlias,
   type ResolveContext,
+  type BarrelExportMap,
 } from "./import-resolution.js";
 import { initForLanguage } from "../parsers/init.js";
 import { readFileOr } from "../utils.js";
@@ -373,10 +375,75 @@ export async function buildGraphWithCache(
       if (language === "java") {
         resolveCtx.javaSourceRoots = detectJavaSourceRoots([...allCurrentFiles]);
       }
-      const newEdges: ImportEdge[] = [];
+      const rawNewEdges: ImportEdge[] = [];
       for (const file of [...changedFiles, ...newFiles]) {
         const edges = await parseFileEdges(rootDir, file, language, allCurrentFiles, pathAliases, resolveCtx);
-        newEdges.push(...edges);
+        rawNewEdges.push(...edges);
+      }
+
+      // Apply barrel routing to new edges so incremental matches full rebuild.
+      // Resolve barrel exports from the cached barrel set, then re-route edges
+      // that target barrel files to their actual source files.
+      const barrelSet = new Set(cache.barrelFiles);
+      let barrelMap: BarrelExportMap = { namedExports: new Map(), starExports: new Map() };
+      if (isJsTs && barrelSet.size > 0) {
+        barrelMap = await resolveBarrelFiles(rootDir, allCurrentFiles);
+      }
+
+      const newEdges: ImportEdge[] = [];
+      for (const edge of rawNewEdges) {
+        if (edge.isExternal) {
+          newEdges.push(edge);
+          continue;
+        }
+
+        const barrelNamed = barrelMap.namedExports.get(edge.to);
+        const barrelStars = barrelMap.starExports.get(edge.to);
+
+        if (barrelNamed || barrelStars) {
+          // Route each imported name to its actual source file
+          const routedNames = new Map<string, string[]>();
+          const unresolved: string[] = [];
+
+          for (const name of edge.importedNames) {
+            const source = barrelNamed?.get(name);
+            if (source) {
+              const existing = routedNames.get(source) ?? [];
+              existing.push(name);
+              routedNames.set(source, existing);
+            } else {
+              unresolved.push(name);
+            }
+          }
+
+          for (const [source, names] of routedNames) {
+            newEdges.push({
+              ...edge,
+              to: source,
+              importedNames: names,
+              isBarrelRouted: true,
+            });
+          }
+
+          // Unresolved names route to star export sources
+          if (unresolved.length > 0 && barrelStars) {
+            for (const starSource of barrelStars) {
+              newEdges.push({
+                ...edge,
+                to: starSource,
+                importedNames: unresolved,
+                isBarrelRouted: true,
+              });
+            }
+          }
+
+          // Side-effect import (no names): keep edge to barrel itself
+          if (edge.importedNames.length === 0) {
+            newEdges.push(edge);
+          }
+        } else {
+          newEdges.push(edge);
+        }
       }
 
       const mergedEdges = [...keptEdges, ...newEdges];

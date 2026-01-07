@@ -87,6 +87,8 @@ export interface TightCoupling {
   importedNames: number;
   /** The actual imported names */
   names: string[];
+  /** Number of imports that are type-only (import type) */
+  typeOnlyCount?: number;
 }
 
 /** Graph topology metrics (connected components, diameter, reachability) */

@@ -105,7 +105,8 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
     );
     tcLines.push("");
     for (const tc of analysis.tightCouplings) {
-      tcLines.push(`- \`${tc.from}\` imports ${tc.importedNames} names from \`${tc.to}\``);
+      const typeAnnotation = tc.typeOnlyCount ? ` (${tc.typeOnlyCount} type-only)` : "";
+      tcLines.push(`- \`${tc.from}\` imports ${tc.importedNames} names from \`${tc.to}\`${typeAnnotation}`);
     }
     const tcContent = tcLines.join("\n");
     sections.push({ id: "tight-coupling", priority: 10, content: tcContent, tokens: estimateTokens(tcContent) });

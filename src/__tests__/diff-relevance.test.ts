@@ -54,6 +54,27 @@ describe("computeNeighborhood", () => {
     expect([...hop1].sort()).toEqual(["b", "c"]);
   });
 
+  it("splits hop1 into importers and dependencies", () => {
+    // a imports b (a -> b), c imports a (c -> a)
+    const edges = [edge("a", "b"), edge("c", "a")];
+
+    const result = computeNeighborhood(new Set(["a"]), edges);
+    // b is a dependency of a (a imports b)
+    expect([...result.hop1Dependencies]).toEqual(["b"]);
+    // c is an importer of a (c imports a)
+    expect([...result.hop1Importers]).toEqual(["c"]);
+  });
+
+  it("splits hop2 into importers and dependencies", () => {
+    // a -> b -> c, d -> a (d=hop1 importer, b=hop1 dependency, c=hop2 dependency)
+    // e -> d (e is hop2 importer of d)
+    const edges = [edge("a", "b"), edge("b", "c"), edge("d", "a"), edge("e", "d")];
+
+    const result = computeNeighborhood(new Set(["a"]), edges);
+    expect([...result.hop2Dependencies]).toEqual(["c"]);
+    expect([...result.hop2Importers]).toEqual(["e"]);
+  });
+
   it("ignores external edges", () => {
     const edges = [
       edge("a", "b"),

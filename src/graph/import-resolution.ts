@@ -33,6 +33,7 @@ export interface PathAlias {
 export async function loadTsconfigPaths(rootDir: string): Promise<PathAlias[]> {
   let configPath = path.join(rootDir, "tsconfig.json");
   let baseUrl = ".";
+  let baseUrlSet = false;
   const paths: Record<string, string[]> = {};
 
   for (let depth = 0; depth < 5; depth++) {
@@ -40,7 +41,14 @@ export async function loadTsconfigPaths(rootDir: string): Promise<PathAlias[]> {
     if (!config) break;
 
     const co = config.compilerOptions as Record<string, unknown> | undefined;
-    if (co?.baseUrl && typeof co.baseUrl === "string") baseUrl = co.baseUrl;
+    // Child config wins over parent (same semantics as paths below)
+    if (!baseUrlSet && co?.baseUrl && typeof co.baseUrl === "string") {
+      // baseUrl is relative to the config file's directory, not rootDir.
+      // Convert to rootDir-relative for downstream path resolution.
+      const absBase = path.resolve(path.dirname(configPath), co.baseUrl);
+      baseUrl = path.relative(rootDir, absBase).replace(/\\/g, "/") || ".";
+      baseUrlSet = true;
+    }
     if (co?.paths && typeof co.paths === "object") {
       // Child config wins over parent — only set if not already set by child
       const configPaths = co.paths as Record<string, string[]>;

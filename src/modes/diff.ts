@@ -112,7 +112,8 @@ export async function runDiffMode(
   shimmer.stop();
 
   const changedSet = new Set(changedFiles);
-  const { hop1: hop1Set, hop2: hop2Set } = computeNeighborhood(changedSet, graph.edges);
+  const neighborhood = computeNeighborhood(changedSet, graph.edges);
+  const { hop1: hop1Set, hop2: hop2Set } = neighborhood;
 
   const neighborSet = new Set([...hop1Set, ...hop2Set]);
 
@@ -302,33 +303,36 @@ export async function runDiffMode(
     sections.push("## Neighbors");
     sections.push("");
 
-    if (hop1Set.size > 0) {
-      sections.push("### Direct (1-hop)");
-      sections.push("");
+    const renderNeighborTable = (files: Set<string>, cap?: number) => {
+      const sorted = [...files].sort();
+      const capped = cap ? sorted.slice(0, cap) : sorted;
       sections.push("| File | Role | Imported By |");
       sections.push("|------|------|-------------|");
-      for (const f of [...hop1Set].sort()) {
+      for (const f of capped) {
         const hub = hubFileMap.get(f);
         const importedBy = graph.inDegree.get(f) ?? 0;
         const role = hub?.role ?? "Leaf";
         sections.push(`| \`${f}\` | ${role} | ${importedBy} |`);
       }
       sections.push("");
+    };
+
+    if (neighborhood.hop1Importers.size > 0) {
+      sections.push("### Dependents (import changed files)");
+      sections.push("");
+      renderNeighborTable(neighborhood.hop1Importers);
+    }
+
+    if (neighborhood.hop1Dependencies.size > 0) {
+      sections.push("### Dependencies (imported by changed files)");
+      sections.push("");
+      renderNeighborTable(neighborhood.hop1Dependencies);
     }
 
     if (hop2Set.size > 0) {
-      const hop2Capped = [...hop2Set].sort().slice(0, 15);
       sections.push("### Indirect (2-hop)");
       sections.push("");
-      sections.push("| File | Role | Imported By |");
-      sections.push("|------|------|-------------|");
-      for (const f of hop2Capped) {
-        const hub = hubFileMap.get(f);
-        const importedBy = graph.inDegree.get(f) ?? 0;
-        const role = hub?.role ?? "Leaf";
-        sections.push(`| \`${f}\` | ${role} | ${importedBy} |`);
-      }
-      sections.push("");
+      renderNeighborTable(hop2Set, 15);
     }
   }
 
@@ -408,35 +412,64 @@ function isDiffTestFile(filePath: string): boolean {
   );
 }
 
+export interface NeighborhoodResult {
+  /** All direct neighbors (union of importers + dependencies) */
+  hop1: Set<string>;
+  /** All 2-hop neighbors */
+  hop2: Set<string>;
+  /** Files that import a changed file (downstream dependents) */
+  hop1Importers: Set<string>;
+  /** Files imported by a changed file (upstream dependencies) */
+  hop1Dependencies: Set<string>;
+  /** 2-hop files that are downstream of hop1 */
+  hop2Importers: Set<string>;
+  /** 2-hop files that are upstream of hop1 */
+  hop2Dependencies: Set<string>;
+}
+
 /**
  * Compute 2-hop neighborhoods from a set of changed files in an import graph.
- * Returns separate sets for 1-hop (direct) and 2-hop (indirect) neighbors.
+ * Returns separate sets for 1-hop (direct) and 2-hop (indirect) neighbors,
+ * split by direction: importers (downstream) vs dependencies (upstream).
  */
 export function computeNeighborhood(
   changedFiles: Set<string>,
   edges: Array<{ from: string; to: string; isExternal: boolean }>,
-): { hop1: Set<string>; hop2: Set<string> } {
+): NeighborhoodResult {
   const hop1 = new Set<string>();
+  const hop1Importers = new Set<string>();
+  const hop1Dependencies = new Set<string>();
 
   for (const edge of edges) {
     if (edge.isExternal) continue;
-    if (changedFiles.has(edge.from)) hop1.add(edge.to);
-    if (changedFiles.has(edge.to)) hop1.add(edge.from);
+    // edge.from imports edge.to
+    if (changedFiles.has(edge.to) && !changedFiles.has(edge.from)) {
+      hop1.add(edge.from);
+      hop1Importers.add(edge.from); // edge.from imports the changed file
+    }
+    if (changedFiles.has(edge.from) && !changedFiles.has(edge.to)) {
+      hop1.add(edge.to);
+      hop1Dependencies.add(edge.to); // edge.to is imported by the changed file
+    }
   }
-  for (const f of changedFiles) hop1.delete(f);
 
   const hop2 = new Set<string>();
+  const hop2Importers = new Set<string>();
+  const hop2Dependencies = new Set<string>();
+
   for (const edge of edges) {
     if (edge.isExternal) continue;
-    if (hop1.has(edge.from) && !changedFiles.has(edge.to) && !hop1.has(edge.to)) {
-      hop2.add(edge.to);
-    }
     if (hop1.has(edge.to) && !changedFiles.has(edge.from) && !hop1.has(edge.from)) {
       hop2.add(edge.from);
+      hop2Importers.add(edge.from);
+    }
+    if (hop1.has(edge.from) && !changedFiles.has(edge.to) && !hop1.has(edge.to)) {
+      hop2.add(edge.to);
+      hop2Dependencies.add(edge.to);
     }
   }
 
-  return { hop1, hop2 };
+  return { hop1, hop2, hop1Importers, hop1Dependencies, hop2Importers, hop2Dependencies };
 }
 
 /**

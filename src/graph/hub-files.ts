@@ -12,6 +12,13 @@ export function findUsedExports(edges: ImportEdge[]): Set<string> {
     for (const name of edge.importedNames) {
       used.add(`${edge.to}::${name}`);
     }
+    // Barrel-routed edges carry the aliased name (e.g., "Foo" from
+    // `export { default as Foo }`), but the source file's actual export
+    // is "default". Add the "default" key so the source entry isn't
+    // falsely marked as dead.
+    if (edge.isBarrelRouted && edge.importedNames.length > 0) {
+      used.add(`${edge.to}::default`);
+    }
   }
   return used;
 }
