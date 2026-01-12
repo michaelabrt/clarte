@@ -84,7 +84,7 @@ export async function saveCache(rootDir: string, data: CacheData): Promise<void>
   await fs.writeFile(cachePath, JSON.stringify(data), "utf-8");
 }
 
-export const ANALYSIS_CACHE_VERSION = 2;
+export const ANALYSIS_CACHE_VERSION = 3;
 const ANALYSIS_CACHE_FILE = "analysis-cache.json";
 
 /** Cached graph-derived analysis results (deterministic given edges + config) */
@@ -381,13 +381,25 @@ export async function buildGraphWithCache(
         rawNewEdges.push(...edges);
       }
 
+      // Detect barrels for changed/new files, merge with cached set
+      const detectedBarrels = new Set(cache.barrelFiles);
+      for (const f of deletedFiles) detectedBarrels.delete(f);
+      for (const file of [...changedFiles, ...newFiles]) {
+        const absPath = path.join(rootDir, file);
+        const content = await readFileOr(absPath);
+        if (content) {
+          const { isBarrel } = detectBarrelAst(content, file);
+          if (isBarrel) detectedBarrels.add(file);
+          else detectedBarrels.delete(file);
+        }
+      }
+
       // Apply barrel routing to new edges so incremental matches full rebuild.
-      // Resolve barrel exports from the cached barrel set, then re-route edges
+      // Resolve barrel exports from the detected barrel set, then re-route edges
       // that target barrel files to their actual source files.
-      const barrelSet = new Set(cache.barrelFiles);
       let barrelMap: BarrelExportMap = { namedExports: new Map(), starExports: new Map() };
-      if (isJsTs && barrelSet.size > 0) {
-        barrelMap = await resolveBarrelFiles(rootDir, allCurrentFiles);
+      if (isJsTs && detectedBarrels.size > 0) {
+        barrelMap = await resolveBarrelFiles(rootDir, allCurrentFiles, detectedBarrels);
       }
 
       const newEdges: ImportEdge[] = [];
@@ -448,19 +460,6 @@ export async function buildGraphWithCache(
 
       const mergedEdges = [...keptEdges, ...newEdges];
       const allFiles = [...currentHashes.keys()];
-
-      // Use cached barrel set; only re-detect changed/new files
-      const detectedBarrels = new Set(cache.barrelFiles);
-      for (const f of deletedFiles) detectedBarrels.delete(f);
-      for (const file of [...changedFiles, ...newFiles]) {
-        const absPath = path.join(rootDir, file);
-        const content = await readFileOr(absPath);
-        if (content) {
-          const { isBarrel } = detectBarrelAst(content, file);
-          if (isBarrel) detectedBarrels.add(file);
-          else detectedBarrels.delete(file);
-        }
-      }
 
       const graph = rebuildGraph(mergedEdges, allFiles, detectedBarrels);
 

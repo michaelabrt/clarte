@@ -130,7 +130,7 @@ describe("buildContextMap", () => {
     });
 
     const map = buildContextMap(graph);
-    expect(map["src/router.ts"]).toContain("chokepoint: separates 7 components");
+    expect(map["src/router.ts"]).toContain("chokepoint: 7 files depend through it");
   });
 
   it("formats co-change partners", () => {

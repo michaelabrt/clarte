@@ -45,7 +45,7 @@ interface GoldenAnalysis {
   deadFiles: string[];
   crossCuttingFiles: Array<{ file: string; layerSpread: number }>;
   layerConsistency: { consistency: number; violationCount: number } | null;
-  chokepoints: Array<{ file: string; separates: number }>;
+  chokepoints: Array<{ file: string; separates: number; upstreamCount: number; downstreamCount: number }>;
   tightCouplings: Array<{ from: string; to: string; importedNames: number }>;
   betweennessTopFiles: Array<{ file: string; score: number }>;
   graphTopology: {
@@ -113,7 +113,12 @@ async function analyzeFixture(fixtureDir: string, language: Language): Promise<G
         }
       : null,
     chokepoints: chokepoints
-      .map((c) => ({ file: c.file, separates: c.separates }))
+      .map((c) => ({
+        file: c.file,
+        separates: c.separates,
+        upstreamCount: c.upstreamCount,
+        downstreamCount: c.downstreamCount,
+      }))
       .sort((a, b) => a.file.localeCompare(b.file)),
     tightCouplings: tightCouplings
       .map((t) => ({ from: t.from, to: t.to, importedNames: t.importedNames }))

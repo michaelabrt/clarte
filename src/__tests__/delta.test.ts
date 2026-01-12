@@ -38,7 +38,7 @@ function mockAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
     instabilities: [],
     communities: [],
     deadFiles: ["src/dead.ts"],
-    chokepoints: [{ file: "src/utils.ts", separates: 2, importedBy: 8 }],
+    chokepoints: [{ file: "src/utils.ts", separates: 2, importedBy: 8, upstreamCount: 2, downstreamCount: 0 }],
     layerConsistency: {
       consistency: 0.9,
       violations: [{ from: "src/x.ts", to: "src/y.ts", fromLayer: "hooks", toLayer: "types" }],

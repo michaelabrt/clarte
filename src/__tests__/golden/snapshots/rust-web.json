@@ -69,7 +69,14 @@
     "consistency": 1,
     "violationCount": 0
   },
-  "chokepoints": [],
+  "chokepoints": [
+    {
+      "file": "src/db/queries.rs",
+      "separates": 4,
+      "upstreamCount": 4,
+      "downstreamCount": 3
+    }
+  ],
   "tightCouplings": [],
   "betweennessTopFiles": [
     {

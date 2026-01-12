@@ -114,6 +114,44 @@ describe("buildImportGraph with tsconfig path aliases", () => {
   });
 });
 
+describe("buildImportGraph non-index barrel resolution", () => {
+  let tmpDir: string;
+  afterEach(async () => {
+    if (tmpDir) await cleanup(tmpDir);
+  });
+
+  it("routes imports through non-index barrel files to source files", async () => {
+    tmpDir = await makeProject({
+      "src/Button.ts": "export function Button() {}",
+      "src/Card.ts": "export function Card() {}",
+      "src/components.ts": ["export { Button } from './Button';", "export { Card } from './Card';"].join("\n"),
+      "src/app.ts": "import { Button, Card } from './components';",
+    });
+
+    const graph = await buildImportGraph(tmpDir, "typescript");
+    const internal = graph.edges.filter((e) => !e.isExternal);
+
+    // Button should route to Button.ts via barrel routing
+    const toButton = internal.find((e) => e.to === "src/Button.ts" && e.from === "src/app.ts");
+    expect(toButton).toBeDefined();
+    expect(toButton!.importedNames).toEqual(["Button"]);
+    expect(toButton!.isBarrelRouted).toBe(true);
+
+    // Card should route to Card.ts via barrel routing
+    const toCard = internal.find((e) => e.to === "src/Card.ts" && e.from === "src/app.ts");
+    expect(toCard).toBeDefined();
+    expect(toCard!.importedNames).toEqual(["Card"]);
+    expect(toCard!.isBarrelRouted).toBe(true);
+
+    // No direct edge from app.ts to the barrel components.ts (all names resolved)
+    const toBarrel = internal.find((e) => e.to === "src/components.ts" && e.from === "src/app.ts");
+    expect(toBarrel).toBeUndefined();
+
+    // components.ts should be detected as a barrel
+    expect(graph.barrelFiles?.has("src/components.ts")).toBe(true);
+  });
+});
+
 describe("buildImportGraph barrel file resolution", () => {
   let tmpDir: string;
   afterEach(async () => {

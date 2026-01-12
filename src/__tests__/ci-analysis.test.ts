@@ -170,7 +170,7 @@ describe("analyzeForCI", () => {
     it("alerts when a chokepoint is in the diff", async () => {
       const graph = makeGraph([]);
       const analysis = makeAnalysis({
-        chokepoints: [{ file: "choke.ts", separates: 5, importedBy: 10 }],
+        chokepoints: [{ file: "choke.ts", separates: 5, importedBy: 10, upstreamCount: 5, downstreamCount: 0 }],
       });
 
       const result = await analyzeForCI("/tmp", ["choke.ts"], analysis, graph);
@@ -183,7 +183,7 @@ describe("analyzeForCI", () => {
     it("ignores chokepoints not in the diff", async () => {
       const graph = makeGraph([]);
       const analysis = makeAnalysis({
-        chokepoints: [{ file: "choke.ts", separates: 5, importedBy: 10 }],
+        chokepoints: [{ file: "choke.ts", separates: 5, importedBy: 10, upstreamCount: 5, downstreamCount: 0 }],
       });
 
       const result = await analyzeForCI("/tmp", ["other.ts"], analysis, graph);
@@ -277,7 +277,7 @@ describe("analyzeForCI", () => {
     it("is true when any signal fires", async () => {
       const graph = makeGraph([]);
       const analysis = makeAnalysis({
-        chokepoints: [{ file: "choke.ts", separates: 3, importedBy: 5 }],
+        chokepoints: [{ file: "choke.ts", separates: 3, importedBy: 5, upstreamCount: 3, downstreamCount: 0 }],
       });
 
       const result = await analyzeForCI("/tmp", ["choke.ts"], analysis, graph);

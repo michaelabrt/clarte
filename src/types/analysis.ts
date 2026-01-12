@@ -30,15 +30,19 @@ export interface LayerConsistency {
   violations: LayerViolation[];
 }
 
-/** An articulation point (chokepoint) in the import graph */
+/** A chokepoint in the import graph: a file with many transitive dependents bridging to dependencies */
 export interface Chokepoint {
   /** Relative file path */
   file: string;
-  /** Number of disconnected components if this file were removed */
+  /** Backward compat: equals upstreamCount */
   separates: number;
   /** Number of files that import this file */
   importedBy: number;
-  /** Files that would be disconnected from the main component if this file were removed */
+  /** Number of files that transitively depend on this file */
+  upstreamCount: number;
+  /** Number of files this file transitively depends on */
+  downstreamCount: number;
+  /** Top direct dependents (up to 10) */
   dependents?: string[];
 }
 

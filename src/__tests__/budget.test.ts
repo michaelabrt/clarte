@@ -90,7 +90,7 @@ function mockAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
     crossCuttingFiles: [
       { file: "src/types.ts", totalImporters: 20, layerSpread: 3, layers: ["types", "utils", "graph"] },
     ],
-    chokepoints: [{ file: "src/utils.ts", separates: 2, importedBy: 14 }],
+    chokepoints: [{ file: "src/utils.ts", separates: 2, importedBy: 14, upstreamCount: 2, downstreamCount: 0 }],
     tightCouplings: [{ from: "src/index.ts", to: "src/types.ts", importedNames: 15, names: [] }],
     ...overrides,
   };

@@ -236,7 +236,11 @@ export async function runAnalysis(
     );
     if (verbose) {
       for (const cp of chokepoints.slice(0, 5)) {
-        p.log.info(t.muted(`  ${cp.file} (separates ${cp.separates} components, ${cp.importedBy} importers)`));
+        p.log.info(
+          t.muted(
+            `  ${cp.file} (${cp.upstreamCount ?? cp.separates} dependents, ${cp.downstreamCount ?? 0} dependencies)`,
+          ),
+        );
       }
     }
   }

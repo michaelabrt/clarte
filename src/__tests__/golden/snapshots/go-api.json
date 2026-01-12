@@ -59,12 +59,10 @@
   },
   "chokepoints": [
     {
-      "file": "internal/models/product.go",
-      "separates": 2
-    },
-    {
-      "file": "internal/server/server.go",
-      "separates": 2
+      "file": "internal/repository/product_repo.go",
+      "separates": 3,
+      "upstreamCount": 3,
+      "downstreamCount": 1
     }
   ],
   "tightCouplings": [],

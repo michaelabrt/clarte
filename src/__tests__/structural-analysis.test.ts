@@ -370,47 +370,61 @@ describe("computeLayerConsistency", () => {
   });
 });
 
-// ── §1.9 Articulation Point Detection ─────────────────────────────────
+// ── §2.53 Directed Reachability Chokepoints ────────────────────────────
 
 describe("findChokepoints", () => {
-  it("finds the chokepoint in a linear chain", () => {
-    // a - b - c (b is an articulation point)
-    const graph = makeGraph(["a", "b", "c"], [edge("a", "b"), edge("b", "c")]);
-
-    const result = findChokepoints(graph);
-    expect(result).toHaveLength(1);
-    expect(result[0].file).toBe("b");
-    expect(result[0].separates).toBe(2); // removing b creates {a} and {c}
-  });
-
-  it("finds no chokepoints in a complete graph", () => {
-    // a - b - c - a (triangle, no articulation points)
-    const graph = makeGraph(["a", "b", "c"], [edge("a", "b"), edge("b", "c"), edge("c", "a")]);
-
-    const result = findChokepoints(graph);
-    expect(result).toHaveLength(0);
-  });
-
-  it("finds no chokepoints in a star graph (center is not articulation)", () => {
-    // center connects to a, b, c but a-b, b-c, a-c also connected
+  it("finds chokepoints in a directed chain", () => {
+    // a→b→c→d→e (5 nodes, threshold=ceil(sqrt(5))=3)
+    // d: upstream=3 (a,b,c), qualifies
+    // c: upstream=2, below threshold
+    // b: upstream=1, below threshold
     const graph = makeGraph(
-      ["center", "a", "b", "c"],
-      [edge("center", "a"), edge("center", "b"), edge("center", "c"), edge("a", "b"), edge("b", "c"), edge("a", "c")],
+      ["a", "b", "c", "d", "e"],
+      [edge("a", "b"), edge("b", "c"), edge("c", "d"), edge("d", "e")],
     );
 
     const result = findChokepoints(graph);
+    expect(result).toHaveLength(1);
+
+    // d: upstream=3 (a,b,c reach it), downstream=1 (e)
+    expect(result[0].file).toBe("d");
+    expect(result[0].upstreamCount).toBe(3);
+    expect(result[0].downstreamCount).toBe(1);
+  });
+
+  it("finds fan-in chokepoint", () => {
+    // a→c, b→c, c→d (4 nodes, threshold=ceil(sqrt(4))=2)
+    // c has upstream=2, downstream=1. Qualifies.
+    const graph = makeGraph(["a", "b", "c", "d"], [edge("a", "c"), edge("b", "c"), edge("c", "d")]);
+
+    const result = findChokepoints(graph);
+    expect(result).toHaveLength(1);
+    expect(result[0].file).toBe("c");
+    expect(result[0].upstreamCount).toBe(2);
+    expect(result[0].downstreamCount).toBe(1);
+  });
+
+  it("excludes pure sinks (no downstream)", () => {
+    // a→b, c→b: b has upstream=2 but downstream=0. Not bridging anything.
+    const graph = makeGraph(["a", "b", "c"], [edge("a", "b"), edge("c", "b")]);
+
+    const result = findChokepoints(graph);
     expect(result).toHaveLength(0);
   });
 
-  it("finds center as chokepoint in a pure star (no leaf-to-leaf edges)", () => {
-    // center connects to a, b, c with no connections among leaves
-    const graph = makeGraph(["center", "a", "b", "c"], [edge("center", "a"), edge("center", "b"), edge("center", "c")]);
+  it("handles cycle nodes", () => {
+    // a→b→c→a, d→a: cycle members have high reachability via the cycle
+    const graph = makeGraph(["a", "b", "c", "d"], [edge("a", "b"), edge("b", "c"), edge("c", "a"), edge("d", "a")]);
 
+    // a: upstream=3 (b,c,d reach it via cycle/direct), downstream=2 (b,c)
+    // b: upstream=3 (a,c,d reach it via cycle), downstream=2 (c,a)
+    // c: upstream=3 (a,b,d reach it via cycle), downstream=2 (a,b)
     const result = findChokepoints(graph);
-    // center is an articulation point (root with 3 children)
-    expect(result).toHaveLength(1);
-    expect(result[0].file).toBe("center");
-    expect(result[0].separates).toBe(3);
+    expect(result.length).toBe(3);
+    for (const cp of result) {
+      expect(cp.upstreamCount).toBe(3);
+      expect(cp.downstreamCount).toBe(2);
+    }
   });
 
   it("returns empty for empty graph", () => {
@@ -420,73 +434,39 @@ describe("findChokepoints", () => {
   });
 
   it("returns empty for a single edge", () => {
+    // a→b: b has upstream=1 (only a), below threshold
     const graph = makeGraph(["a", "b"], [edge("a", "b")]);
-    // Both a and b are articulation points in a 2-node graph
-    // but neither truly separates components (removing either leaves 1 component)
-    // Actually: removing a leaves {b} (1 component), removing b leaves {a} (1 component)
-    // These are NOT articulation points because removing them doesn't increase components
-    // (the original graph has 1 component, and after removal still 1 component)
     const result = findChokepoints(graph);
     expect(result).toHaveLength(0);
   });
 
-  it("handles bridge topology", () => {
-    // Two triangles connected by a bridge: {a,b,c} - bridge - {d,e,f}
-    // bridge is the articulation point
+  it("sorts by upstreamCount descending then downstreamCount", () => {
+    // a→b→c→d→e, f→d, g→c (7 nodes, threshold=ceil(sqrt(7))=3)
+    // d: upstream=5 (a,b,c,f,g), downstream=1 (e)
+    // c: upstream=3 (a,b,g), downstream=2 (d,e)
     const graph = makeGraph(
-      ["a", "b", "c", "bridge", "d", "e", "f"],
-      [
-        // Left triangle
-        edge("a", "b"),
-        edge("b", "c"),
-        edge("c", "a"),
-        // Bridge connection
-        edge("c", "bridge"),
-        edge("bridge", "d"),
-        // Right triangle
-        edge("d", "e"),
-        edge("e", "f"),
-        edge("f", "d"),
-      ],
+      ["a", "b", "c", "d", "e", "f", "g"],
+      [edge("a", "b"), edge("b", "c"), edge("c", "d"), edge("d", "e"), edge("f", "d"), edge("g", "c")],
     );
 
     const result = findChokepoints(graph);
-    const bridgePoint = result.find((r) => r.file === "bridge");
-    expect(bridgePoint).toBeDefined();
-    expect(bridgePoint!.separates).toBe(2);
-
-    // c and d are also articulation points (connecting triangle to bridge)
-    const cPoint = result.find((r) => r.file === "c");
-    const dPoint = result.find((r) => r.file === "d");
-    expect(cPoint).toBeDefined();
-    expect(dPoint).toBeDefined();
-  });
-
-  it("sorts by separates descending", () => {
-    // a-b-c-d-e (chain): b, c, d are articulation points
-    const graph = makeGraph(
-      ["a", "b", "c", "d", "e"],
-      [edge("a", "b"), edge("b", "c"), edge("c", "d"), edge("d", "e")],
-    );
-
-    const result = findChokepoints(graph);
-    expect(result.length).toBeGreaterThanOrEqual(1);
-    // Middle nodes separate more components
-    // c separates {a,b} from {d,e} = 2 components
-    // b separates {a} from {c,d,e} = 2 components
-    // d separates {a,b,c} from {e} = 2 components
-    for (const cp of result) {
-      expect(cp.separates).toBe(2);
-    }
+    expect(result.length).toBe(2);
+    expect(result[0].file).toBe("d");
+    expect(result[0].upstreamCount).toBe(5);
+    expect(result[1].file).toBe("c");
+    expect(result[1].upstreamCount).toBe(3);
   });
 
   it("includes importedBy count", () => {
+    // a→b, c→b, b→d: b has importedBy=2
     const graph = makeGraph(["a", "b", "c", "d"], [edge("a", "b"), edge("c", "b"), edge("b", "d")]);
 
     const result = findChokepoints(graph);
     const bPoint = result.find((r) => r.file === "b");
     expect(bPoint).toBeDefined();
-    expect(bPoint!.importedBy).toBe(2); // a and c import b
+    expect(bPoint!.importedBy).toBe(2);
+    expect(bPoint!.upstreamCount).toBe(2);
+    expect(bPoint!.downstreamCount).toBe(1);
   });
 
   it("ignores external edges", () => {
@@ -498,11 +478,19 @@ describe("findChokepoints", () => {
       importedNames: ["useState"],
     };
 
-    const graph = makeGraph(["a", "b", "c"], [edge("a", "b"), edge("b", "c"), externalEdge]);
+    // a→b, c→b, b→d + external a→react
+    const graph = makeGraph(["a", "b", "c", "d"], [edge("a", "b"), edge("c", "b"), edge("b", "d"), externalEdge]);
 
     const result = findChokepoints(graph);
-    // b is still a chokepoint between a and c
     expect(result).toHaveLength(1);
     expect(result[0].file).toBe("b");
+  });
+
+  it("backward compat: separates equals upstreamCount", () => {
+    const graph = makeGraph(["a", "b", "c", "d"], [edge("a", "c"), edge("b", "c"), edge("c", "d")]);
+
+    const result = findChokepoints(graph);
+    expect(result).toHaveLength(1);
+    expect(result[0].separates).toBe(result[0].upstreamCount);
   });
 });

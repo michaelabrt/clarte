@@ -121,14 +121,16 @@ Violations (imports flowing upward):
 
 ## Chokepoint Detection
 
-Uses [Tarjan's algorithm](https://en.wikipedia.org/wiki/Biconnected_component) to find articulation points: files whose removal would disconnect parts of the import graph. These are fundamentally different from hub files: a hub may have redundant paths around it, but a chokepoint has no alternative paths.
+Uses directed BFS reachability to find files that bridge many upstream dependents to downstream dependencies. For each candidate file, two BFS passes run on the directed import graph: reverse BFS to count transitive dependents (`upstreamCount`), forward BFS to count transitive dependencies (`downstreamCount`). A file qualifies as a chokepoint if `upstreamCount >= ceil(sqrt(N))` (adaptive threshold) and `downstreamCount >= 1`.
+
+This replaced an earlier undirected Tarjan articulation-point approach, which overstated impact in layered architectures (a file that "separates 2 components" in the undirected view may have zero actual upstream dependents in the directed view).
 
 **Example output:**
 
-| File | Separates | Imported By |
-|------|-----------|-------------|
-| `src/utils.ts` | 3 components | 13 files |
-| `src/graph.ts` | 2 components | 6 files |
+| File | Upstream (dependents) | Downstream (deps) |
+|------|-----------------------|-------------------|
+| `src/utils.ts` | 44 files | 3 files |
+| `src/graph/build.ts` | 9 files | 6 files |
 
 ## Change Coupling
 
