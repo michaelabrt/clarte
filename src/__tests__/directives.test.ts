@@ -420,6 +420,26 @@ describe("buildDirectives", () => {
     expect(impactDirectives).toHaveLength(5);
   });
 
+  it("generates risk factor directives with grammatically correct advice", () => {
+    const analysis = emptyAnalysis({
+      gitActivity: {
+        hotFiles: [{ path: "src/core.ts", commits: 15, lastCommit: "2024-01-01" }],
+        changeCoupling: [],
+        lagCouplings: [],
+        commitCounts: new Map([["src/core.ts", 15]]),
+      },
+      tightCouplings: [{ from: "src/core.ts", to: "src/types.ts", importedNames: 10, names: [] }],
+    });
+    const directives = buildDirectives(analysis, mockCtx());
+    const riskDirective = directives.find((d) => d.includes("src/core.ts") && d.includes("risk factor"));
+    expect(riskDirective).toBeDefined();
+    // Must not produce the broken "and before making large changes" pattern
+    expect(riskDirective).not.toMatch(/and before making/);
+    // Should include churn suffix after the action
+    expect(riskDirective).toContain("before making large changes");
+    expect(riskDirective).toContain("Consider extracting an interface");
+  });
+
   it("generates flow bottleneck directives for high betweenness non-chokepoints", () => {
     const analysis = emptyAnalysis({
       chokepoints: [{ file: "src/bridge.ts", separates: 2, importedBy: 5, upstreamCount: 2, downstreamCount: 0 }],

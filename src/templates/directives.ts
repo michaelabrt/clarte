@@ -280,12 +280,13 @@ export function buildDirectives(
       const factorList = factors.join(", ");
       const advice: string[] = [];
       if (factors.includes("no tests")) advice.push("Add tests");
-      if (factors.includes("circular dep")) advice.push("break the cycle");
+      if (factors.includes("circular dep")) advice.push("Break the cycle");
       if (factors.includes("tightly coupled")) advice.push("Consider extracting an interface");
       if (factors.includes("high instability")) advice.push("Stabilize the API");
-      if (factors.includes("high churn")) advice.push("before making large changes");
+      const churnSuffix = factors.includes("high churn") ? " before making large changes" : "";
 
-      directives.push(`\`${file}\` has multiple risk factors (${factorList}). ${advice.join(" and ")}.`);
+      const actionStr = advice.length > 0 ? ` ${advice.join(" and ")}${churnSuffix}.` : `${churnSuffix ? ` Review carefully${churnSuffix}.` : ""}`;
+      directives.push(`\`${file}\` has multiple risk factors (${factorList}).${actionStr}`);
     }
   }
 
