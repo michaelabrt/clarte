@@ -63,7 +63,7 @@ describe("tech debt flags (§3.4)", () => {
     expect(debtDirectives[0]).toContain("circular dep");
     // Should include appropriate advice
     expect(debtDirectives[0]).toContain("Add tests");
-    expect(debtDirectives[0]).toContain("break the cycle");
+    expect(debtDirectives[0]).toContain("Break the cycle");
   });
 
   it("does not flag files with only 1 risk factor", () => {

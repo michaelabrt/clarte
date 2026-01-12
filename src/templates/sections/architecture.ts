@@ -55,7 +55,14 @@ export async function renderArchitectureSections(
     keyLines.push("|------|-------------|-----------|");
     for (const hub of analysis.hubFiles) {
       const inst = instabilityMap.get(hub.path);
-      const stabilityCell = inst != null ? `${(inst * 100).toFixed(0)}% unstable \u26A0\uFE0F` : "stable";
+      // Orchestrators sit at the top of the dependency tree by design — high instability is expected, not a warning.
+      const isOrchestrator = hub.role === "Orchestrator";
+      const stabilityCell =
+        inst == null
+          ? "stable"
+          : isOrchestrator
+            ? `${(inst * 100).toFixed(0)}% unstable`
+            : `${(inst * 100).toFixed(0)}% unstable \u26A0\uFE0F`;
       const roleTag = hub.role !== "Leaf" ? ` (${hub.role})` : "";
       keyLines.push(
         `| \`${hub.path}\`${roleTag} | ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"} | ${stabilityCell} |`,
