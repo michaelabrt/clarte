@@ -240,7 +240,7 @@ describe("analysis cache I/O", () => {
 
   it("round-trips analysis cache data", async () => {
     const data: AnalysisCacheData = {
-      version: 2,
+      version: 3,
       cacheKey: "abc123",
       hubFiles: [
         {

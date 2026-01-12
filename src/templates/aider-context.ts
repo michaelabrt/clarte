@@ -203,8 +203,9 @@ export async function buildAiderContext(
   // Chokepoints
   if (analysis?.chokepoints && analysis.chokepoints.length > 0) {
     for (const cp of analysis.chokepoints.slice(0, 5)) {
+      const count = cp.upstreamCount ?? cp.separates;
       lines.push(
-        `  - "CHOKEPOINT: ${escapeYaml(cp.file)} separates ${cp.separates} components, refactor with extreme care"`,
+        `  - "CHOKEPOINT: ${escapeYaml(cp.file)} has ${count} transitive dependents, refactor with extreme care"`,
       );
     }
   }

@@ -94,12 +94,10 @@
   },
   "chokepoints": [
     {
-      "file": "app/routes/products.py",
-      "separates": 2
-    },
-    {
-      "file": "app/services/product_service.py",
-      "separates": 2
+      "file": "app/services/auth.py",
+      "separates": 4,
+      "upstreamCount": 4,
+      "downstreamCount": 1
     }
   ],
   "tightCouplings": [

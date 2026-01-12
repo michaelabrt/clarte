@@ -125,10 +125,10 @@ describe("buildDirectives", () => {
 
   it("generates chokepoint caution directives", () => {
     const analysis = emptyAnalysis({
-      chokepoints: [{ file: "src/graph.ts", separates: 3, importedBy: 6 }],
+      chokepoints: [{ file: "src/graph.ts", separates: 3, importedBy: 6, upstreamCount: 3, downstreamCount: 0 }],
     });
     const directives = buildDirectives(analysis, mockCtx());
-    expect(directives.some((d) => d.includes("chokepoint") && d.includes("src/graph.ts"))).toBe(true);
+    expect(directives.some((d) => d.includes("transitively depend") && d.includes("src/graph.ts"))).toBe(true);
   });
 
   it("generates test reminders for untested hub files with importedBy >= 2", () => {
@@ -422,7 +422,7 @@ describe("buildDirectives", () => {
 
   it("generates flow bottleneck directives for high betweenness non-chokepoints", () => {
     const analysis = emptyAnalysis({
-      chokepoints: [{ file: "src/bridge.ts", separates: 2, importedBy: 5 }],
+      chokepoints: [{ file: "src/bridge.ts", separates: 2, importedBy: 5, upstreamCount: 2, downstreamCount: 0 }],
     });
 
     const graph: ImportGraph = {
@@ -626,7 +626,7 @@ describe("renderDirectivesSection", () => {
 
   it("includes flow bottleneck directive when graph has high betweenness non-chokepoints", async () => {
     const analysis = emptyAnalysis({
-      chokepoints: [{ file: "src/bridge.ts", separates: 2, importedBy: 5 }],
+      chokepoints: [{ file: "src/bridge.ts", separates: 2, importedBy: 5, upstreamCount: 2, downstreamCount: 0 }],
     });
     const graph: ImportGraph = {
       edges: [],

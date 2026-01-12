@@ -37,9 +37,6 @@ describe("multi-language HITS recomputation", () => {
     const tsGraph = await buildImportGraph(FIXTURE, "typescript");
     const pyGraph = await buildImportGraph(FIXTURE, "python");
 
-    // Record pre-merge authority for TS files
-    const preMergeTsAuthority = new Map(tsGraph.authority);
-
     // Merge Python into TS graph
     mergeGraph(tsGraph, pyGraph);
 

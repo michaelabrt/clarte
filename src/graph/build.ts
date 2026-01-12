@@ -109,9 +109,17 @@ export async function buildImportGraph(
     }
   }
 
-  let barrelMap: BarrelExportMap = { namedExports: new Map(), starExports: new Map() };
+  let detectedBarrels = new Set<string>();
   if (isJsTs) {
-    barrelMap = await resolveBarrelFiles(rootDir, fileSet);
+    detectedBarrels = await detectBarrelFiles(rootDir, fileSet);
+    if (detectedBarrels.size > 0) {
+      onProgress?.(`Detected ${detectedBarrels.size} barrel file${detectedBarrels.size === 1 ? "" : "s"}`);
+    }
+  }
+
+  let barrelMap: BarrelExportMap = { namedExports: new Map(), starExports: new Map() };
+  if (isJsTs && detectedBarrels.size > 0) {
+    barrelMap = await resolveBarrelFiles(rootDir, fileSet, detectedBarrels);
     const barrelCount = barrelMap.namedExports.size + barrelMap.starExports.size;
     if (barrelCount > 0) {
       onProgress?.(`Resolved ${barrelCount} barrel file${barrelCount === 1 ? "" : "s"}`);
@@ -280,14 +288,6 @@ export async function buildImportGraph(
           externalImportCounts.set(pkgName, (externalImportCounts.get(pkgName) ?? 0) + 1);
         }
       }
-    }
-  }
-
-  let detectedBarrels = new Set<string>();
-  if (isJsTs) {
-    detectedBarrels = await detectBarrelFiles(rootDir, fileSet);
-    if (detectedBarrels.size > 0) {
-      onProgress?.(`Detected ${detectedBarrels.size} barrel file${detectedBarrels.size === 1 ? "" : "s"}`);
     }
   }
 

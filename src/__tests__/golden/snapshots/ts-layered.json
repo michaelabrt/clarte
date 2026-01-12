@@ -106,7 +106,20 @@
     "consistency": 1,
     "violationCount": 0
   },
-  "chokepoints": [],
+  "chokepoints": [
+    {
+      "file": "types/errors.ts",
+      "separates": 6,
+      "upstreamCount": 6,
+      "downstreamCount": 1
+    },
+    {
+      "file": "utils/logger.ts",
+      "separates": 5,
+      "upstreamCount": 5,
+      "downstreamCount": 1
+    }
+  ],
   "tightCouplings": [
     {
       "from": "app.ts",

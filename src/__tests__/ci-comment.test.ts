@@ -109,7 +109,7 @@ describe("formatComment", () => {
     it("renders chokepoints, bottlenecks and cross-cutting", () => {
       const result = makeResult({
         hasFindings: true,
-        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44 }],
+        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44, upstreamCount: 5, downstreamCount: 0 }],
         flowBottlenecks: [{ file: "hub.ts", betweenness: 0.25, importedBy: 10 }],
         crossCutting: [{ file: "types.ts", layerSpread: 3, layers: ["a", "b", "c"], totalImporters: 20 }],
       });
@@ -127,7 +127,7 @@ describe("formatComment", () => {
         missingCoChanges: [
           { changed: "a.ts", missing: "b.ts", confidence: 0.5, coChangeCount: 5, isHiddenCoupling: false },
         ],
-        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44 }],
+        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44, upstreamCount: 5, downstreamCount: 0 }],
       });
 
       const output = formatComment(result);
@@ -139,7 +139,7 @@ describe("formatComment", () => {
     it("is not collapsible when co-changes section is absent", () => {
       const result = makeResult({
         hasFindings: true,
-        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44 }],
+        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44, upstreamCount: 5, downstreamCount: 0 }],
       });
 
       const output = formatComment(result);
@@ -183,7 +183,7 @@ describe("formatComment", () => {
         missingCoChanges: [
           { changed: "a.ts", missing: "b.ts", confidence: 0.5, coChangeCount: 5, isHiddenCoupling: true },
         ],
-        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44 }],
+        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44, upstreamCount: 5, downstreamCount: 0 }],
         tightCouplings: [{ from: "cache.ts", to: "types.ts", importedNames: 15 }],
       });
 
@@ -195,7 +195,7 @@ describe("formatComment", () => {
     it("does not render empty sections", () => {
       const result = makeResult({
         hasFindings: true,
-        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44 }],
+        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44, upstreamCount: 5, downstreamCount: 0 }],
         // no co-changes, no tight coupling
       });
 
@@ -209,7 +209,7 @@ describe("formatComment", () => {
     it("includes Powered by Clarte footer on findings", () => {
       const result = makeResult({
         hasFindings: true,
-        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44 }],
+        chokepoints: [{ file: "utils.ts", separates: 5, importedBy: 44, upstreamCount: 5, downstreamCount: 0 }],
       });
 
       const output = formatComment(result);

@@ -66,12 +66,10 @@
   },
   "chokepoints": [
     {
-      "file": "src/main/java/com/example/App.java",
-      "separates": 2
-    },
-    {
-      "file": "src/main/java/com/example/model/User.java",
-      "separates": 2
+      "file": "src/main/java/com/example/repository/UserRepository.java",
+      "separates": 3,
+      "upstreamCount": 3,
+      "downstreamCount": 1
     }
   ],
   "tightCouplings": [],

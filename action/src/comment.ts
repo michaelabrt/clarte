@@ -53,7 +53,7 @@ function formatStructuralHotspots(
 
   for (const cp of chokepoints) {
     lines.push(
-      `- :pushpin: \`${cp.file}\` is a chokepoint (separates ${cp.separates} components, imported by ${cp.importedBy} files)`,
+      `- :pushpin: \`${cp.file}\` is a chokepoint (${cp.upstreamCount ?? cp.separates} transitive dependents, imported by ${cp.importedBy} files)`,
     );
   }
   for (const fb of flowBottlenecks) {

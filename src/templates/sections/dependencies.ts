@@ -83,14 +83,19 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
     const cpLines: string[] = [];
     cpLines.push("## Architectural Chokepoints");
     cpLines.push("");
-    cpLines.push("Files whose removal would disconnect parts of the codebase. Refactor with extreme care.");
+    cpLines.push(
+      "Files that bridge many upstream dependents to downstream dependencies. Changes to their exports will cascade.",
+    );
     cpLines.push("");
-    cpLines.push("| File | Separates | Imported By |");
-    cpLines.push("|------|-----------|-------------|");
-    for (const cp of analysis.chokepoints.slice(0, 10)) {
-      cpLines.push(
-        `| \`${cp.file}\` | ${cp.separates} component${cp.separates === 1 ? "" : "s"} | ${cp.importedBy} file${cp.importedBy === 1 ? "" : "s"} |`,
-      );
+    cpLines.push("| File | Upstream (dependents) | Downstream (deps) |");
+    cpLines.push("|------|-----------------------|-------------------|");
+    for (const cp of analysis.chokepoints.slice(0, 5)) {
+      const upstream = cp.upstreamCount ?? cp.separates;
+      const downstream = cp.downstreamCount ?? 0;
+      cpLines.push(`| \`${cp.file}\` | ${upstream} files | ${downstream} files |`);
+    }
+    if (analysis.chokepoints.length > 5) {
+      cpLines.push(`_...and ${analysis.chokepoints.length - 5} more_`);
     }
     const cpContent = cpLines.join("\n");
     sections.push({ id: "chokepoints", priority: 9, content: cpContent, tokens: estimateTokens(cpContent) });

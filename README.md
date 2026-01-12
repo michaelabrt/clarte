@@ -267,7 +267,7 @@ Clarté runs a pipeline of static analysis steps. Each one feeds into the next. 
 | [Instability scoring](docs/how-it-works.md#instability-scoring) | Flags volatile, widely-depended-on files | Tells agents where to be extra careful |
 | [Cross-cutting analysis](docs/how-it-works.md#cross-cutting-analysis) | Finds files imported across 3+ layers | Warns agents about wide blast radius |
 | [Layer consistency](docs/how-it-works.md#layer-consistency) | Checks import direction against layer order | Prevents new dependency violations |
-| [Chokepoint detection](docs/how-it-works.md#chokepoint-detection) | Finds articulation points in the graph | Highlights irreplaceable connectors |
+| [Chokepoint detection](docs/how-it-works.md#chokepoint-detection) | Directed BFS reachability: upstream dependents × downstream deps | Highlights files where API changes cascade widely |
 | [Tight coupling](docs/how-it-works.md#tight-coupling) | Counts named imports between file pairs | Highlights files that may need an interface |
 | [Change coupling](docs/how-it-works.md#change-coupling) | Finds files that always change together | Prevents incomplete changes |
 | [Hidden coupling](docs/how-it-works.md#hidden-coupling) | Finds co-changing files with no import path | Surfaces implicit dependencies |
@@ -322,7 +322,7 @@ The PR comment includes:
 The generated context includes a **Working Guidelines** section with analysis-derived directives. These aren't informational; each one tells the agent what to do differently:
 
 - **Foundation file guards**: "When modifying `src/graph.ts` (imported by 23 files), check dependents for breaking changes"
-- **Chokepoint warnings**: "`src/types.ts` is a structural chokepoint (separates 3 components). Refactor with extreme care."
+- **Chokepoint warnings**: "When modifying `src/types.ts`, note that 44 files transitively depend on it -- API changes will cascade to all upstream dependents."
 - **Co-change reminders**: "When modifying `src/graph.ts`, also check: `src/print.ts`, `src/cache.ts`"
 - **Circular dependency hints**: "Convert X -> Y to type-only import" (with severity ranking)
 - **Complexity warnings**: files with high export counts or line counts get "read thoroughly before modifying" directives

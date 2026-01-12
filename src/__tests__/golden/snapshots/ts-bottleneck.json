@@ -63,11 +63,15 @@
   "chokepoints": [
     {
       "file": "src/core/handler.ts",
-      "separates": 2
+      "separates": 5,
+      "upstreamCount": 5,
+      "downstreamCount": 2
     },
     {
       "file": "src/core/router.ts",
-      "separates": 4
+      "separates": 4,
+      "upstreamCount": 4,
+      "downstreamCount": 3
     }
   ],
   "tightCouplings": [

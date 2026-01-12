@@ -441,16 +441,26 @@ export interface BarrelExportMap {
 }
 
 /**
- * Scan barrel files (index.ts, etc.) and build a map from barrel path to
+ * Scan barrel files and build a map from barrel path to
  * the source files and exported names they re-export.
+ *
+ * When detectedBarrels is provided, only those files are scanned (already
+ * filtered to barrels). Otherwise falls back to scanning index.* files only.
  */
-export async function resolveBarrelFiles(rootDir: string, fileSet: Set<string>): Promise<BarrelExportMap> {
+export async function resolveBarrelFiles(
+  rootDir: string,
+  fileSet: Set<string>,
+  detectedBarrels?: Set<string>,
+): Promise<BarrelExportMap> {
   const namedExports = new Map<string, Map<string, string>>();
   const starExports = new Map<string, Set<string>>();
 
-  for (const file of fileSet) {
-    const basename = path.basename(file).replace(/\.[^.]+$/, "");
-    if (basename !== "index") continue;
+  const candidates = detectedBarrels ?? fileSet;
+  for (const file of candidates) {
+    if (!detectedBarrels) {
+      const basename = path.basename(file).replace(/\.[^.]+$/, "");
+      if (basename !== "index") continue;
+    }
 
     const absPath = path.join(rootDir, file);
     const content = await readFileOr(absPath);

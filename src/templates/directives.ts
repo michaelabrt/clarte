@@ -131,8 +131,9 @@ export function buildDirectives(
   // 4. Chokepoint caution (max 3)
   if (analysis.chokepoints) {
     for (const cp of analysis.chokepoints.slice(0, 3)) {
+      const count = cp.upstreamCount ?? cp.separates;
       directives.push(
-        `\`${cp.file}\` is a structural chokepoint (separates ${cp.separates} components). Refactor with extreme care.`,
+        `When modifying \`${cp.file}\`, note that ${count} files transitively depend on it -- API changes will cascade to all upstream dependents.`,
       );
     }
   }

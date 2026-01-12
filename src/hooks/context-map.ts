@@ -24,7 +24,7 @@ export function formatFileContext(data: FileGraphData): string {
   lines.push(`role: ${data.role} | betweenness: ${pct(data.betweenness)}`);
 
   if (data.isChokepoint) {
-    lines.push(`chokepoint: separates ${data.separatesComponents} components`);
+    lines.push(`chokepoint: ${data.separatesComponents} files depend through it`);
   }
 
   if (data.coChange.length > 0) {
