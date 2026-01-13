@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildSections, resetProjectNameCache } from "../templates/main-context.js";
 import { buildAiderContext } from "../templates/aider-context.js";
+import { renderArchitectureSections } from "../templates/sections/architecture.js";
 import type { ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
 
 function mockCtx(overrides?: Partial<DetectedContext>): DetectedContext {
@@ -360,5 +361,82 @@ describe("getProjectName caching", () => {
     const header = sections.find((s) => s.id === "header")!.content;
     // Should capitalize the directory name as project name
     expect(header).toContain("# My-awesome-project");
+  });
+});
+
+describe("Key Files instability rendering", () => {
+  function minimalCtx(): DetectedContext {
+    return {
+      rootDir: "/tmp/test",
+      language: "typescript",
+      hasTypeScript: true,
+      packageManager: "npm",
+      linter: "none",
+      frameworks: [],
+      directories: [],
+      dependencies: [],
+      isGitRepo: false,
+      totalSourceBytes: 1000,
+      sourceFileCount: 5,
+      monorepo: null,
+    };
+  }
+
+  it("suppresses ⚠️ for Orchestrator files with high instability", async () => {
+    const analysis: ContextAnalysis = {
+      hubFiles: [
+        { path: "src/index.ts", centrality: 0.9, authority: 0.1, hubScore: 0.9, role: "Orchestrator", importedBy: 1, imports: 20 },
+        // Foundation files have low instability and won't appear in instabilities array
+        { path: "src/types.ts", centrality: 1.0, authority: 1.0, hubScore: 0.1, role: "Foundation", importedBy: 40, imports: 0 },
+      ],
+      // Only high-instability files appear here (> 0.8 threshold, fanIn >= 1)
+      instabilities: [
+        { path: "src/index.ts", fanIn: 1, fanOut: 20, instability: 0.95 },
+      ],
+      circularDeps: [],
+      layers: [],
+      layerEdges: [],
+      gitActivity: null,
+      communities: [],
+    };
+
+    const sections = await renderArchitectureSections(analysis, minimalCtx());
+    const keyFiles = sections.find((s) => s.id === "key-files");
+    expect(keyFiles).toBeDefined();
+
+    // Orchestrator row: has instability number but no ⚠️
+    expect(keyFiles!.content).toContain("95% unstable");
+    const orchestratorRow = keyFiles!.content.split("\n").find((l) => l.includes("src/index.ts"));
+    expect(orchestratorRow).toBeDefined();
+    expect(orchestratorRow).not.toContain("⚠️");
+
+    // Foundation row: no instability score (not in instabilities array) → shows "stable"
+    const foundationRow = keyFiles!.content.split("\n").find((l) => l.includes("src/types.ts"));
+    expect(foundationRow).toBeDefined();
+    expect(foundationRow).toContain("stable");
+    expect(foundationRow).not.toContain("⚠️");
+  });
+
+  it("shows ⚠️ for Foundation files with high instability", async () => {
+    const analysis: ContextAnalysis = {
+      hubFiles: [
+        { path: "src/types.ts", centrality: 1.0, authority: 1.0, hubScore: 0.1, role: "Foundation", importedBy: 40, imports: 0 },
+      ],
+      instabilities: [
+        { path: "src/types.ts", fanIn: 3, fanOut: 10, instability: 0.77 },
+      ],
+      circularDeps: [],
+      layers: [],
+      layerEdges: [],
+      gitActivity: null,
+      communities: [],
+    };
+
+    const sections = await renderArchitectureSections(analysis, minimalCtx());
+    const keyFiles = sections.find((s) => s.id === "key-files");
+    expect(keyFiles).toBeDefined();
+    const foundationRow = keyFiles!.content.split("\n").find((l) => l.includes("src/types.ts"));
+    expect(foundationRow).toBeDefined();
+    expect(foundationRow).toContain("⚠️");
   });
 });
