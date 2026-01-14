@@ -7,6 +7,7 @@ import { runPrompts } from "../cli/prompts.js";
 import { generateSnapshot } from "../snapshot/snapshot.js";
 import { generateFiles } from "../core/generate.js";
 import { printSummary } from "../cli/summary.js";
+import { ExitCode } from "../errors.js";
 import type {
   UserAnswers,
   DetectedContext,
@@ -42,6 +43,14 @@ export interface GenerateOptions {
 }
 
 export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
+  // Clean shutdown on SIGINT to prevent partial file writes
+  const cleanup = () => {
+    unpatchPicocolors();
+    resetTerminalColors();
+    process.exit(ExitCode.FAILURE);
+  };
+  process.on("SIGINT", cleanup);
+
   const startTime = performance.now();
   const {
     rootDir,
@@ -191,7 +200,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       process.stdout.write(JSON.stringify(output, null, 2) + "\n", (err) => (err ? reject(err) : resolve()));
     });
-    process.exit(0);
+    process.exit(ExitCode.SUCCESS);
   }
 
   {

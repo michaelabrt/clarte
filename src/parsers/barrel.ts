@@ -1,6 +1,9 @@
 import { parseSource } from "./init.js";
 import { extractStringContent } from "./ts-imports.js";
 
+/** Minimum ratio of re-exports to total statements to classify as barrel file. */
+const BARREL_THRESHOLD = 0.5;
+
 /**
  * Detect if a file is a barrel file (index.ts that re-exports from other modules).
  */
@@ -39,7 +42,7 @@ export function detectBarrelAst(
   }
 
   return {
-    isBarrel: totalStatements > 0 && reExportCount / totalStatements > 0.5,
+    isBarrel: totalStatements > 0 && reExportCount / totalStatements > BARREL_THRESHOLD,
     reExportCount,
     totalStatements,
   };

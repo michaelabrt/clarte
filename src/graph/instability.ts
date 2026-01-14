@@ -46,8 +46,12 @@ export function computeInstability(graph: ImportGraph): FileInstability[] {
     }
   }
 
+  // Collect all files from both inDegree and fanOutMap to catch pure orchestrators
+  // (files with outgoing edges but zero incoming edges)
+  const allFiles = new Set([...graph.inDegree.keys(), ...fanOutMap.keys()]);
+
   const results: FileInstability[] = [];
-  for (const [filePath] of graph.inDegree) {
+  for (const filePath of allFiles) {
     const fanOut = fanOutMap.get(filePath) ?? 0;
     const fanIn = fanInMap.get(filePath) ?? 0;
     const total = fanIn + fanOut;
@@ -81,8 +85,9 @@ export function computeAllInstabilities(graph: ImportGraph): Map<string, number>
     }
   }
 
+  const allFiles = new Set([...graph.inDegree.keys(), ...fanOutMap.keys()]);
   const result = new Map<string, number>();
-  for (const [filePath] of graph.inDegree) {
+  for (const filePath of allFiles) {
     const fanOut = fanOutMap.get(filePath) ?? 0;
     const fanIn = fanInMap.get(filePath) ?? 0;
     const total = fanIn + fanOut;

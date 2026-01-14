@@ -41,9 +41,11 @@ vi.mock("../theme.js", () => ({
   unpatchPicocolors: vi.fn(),
 }));
 
-const mockExecSync = vi.fn();
-vi.mock("node:child_process", () => ({
-  execSync: (...args: unknown[]) => mockExecSync(...args),
+const mockGitExec = vi.fn();
+const mockGitExecSafe = vi.fn();
+vi.mock("../git/git.js", () => ({
+  gitExec: (...args: unknown[]) => mockGitExec(...args),
+  gitExecSafe: (...args: unknown[]) => mockGitExecSafe(...args),
 }));
 
 const mockDetectContext = vi.fn().mockResolvedValue({
@@ -153,11 +155,14 @@ import { ClarteError } from "../errors.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function setupExecSync(nameOnlyOutput: string, numstatOutput = "") {
-  mockExecSync.mockImplementation((cmd: string) => {
-    if (typeof cmd === "string" && cmd.includes("--name-only")) return nameOnlyOutput;
-    if (typeof cmd === "string" && cmd.includes("--numstat")) return numstatOutput;
+function setupGitMocks(nameOnlyOutput: string, numstatOutput: string | null = "") {
+  mockGitExec.mockImplementation((args: string[]) => {
+    if (args.includes("--name-only")) return nameOnlyOutput;
     return "";
+  });
+  mockGitExecSafe.mockImplementation((args: string[]) => {
+    if (args.includes("--numstat")) return numstatOutput;
+    return null;
   });
 }
 
@@ -184,7 +189,7 @@ beforeEach(() => {
 
 describe("runDiffMode", () => {
   it("detects changed files from git output", async () => {
-    setupExecSync("src/foo.ts\nsrc/bar.ts", "10\t2\tsrc/foo.ts\n5\t1\tsrc/bar.ts");
+    setupGitMocks("src/foo.ts\nsrc/bar.ts", "10\t2\tsrc/foo.ts\n5\t1\tsrc/bar.ts");
 
     await runDiffMode("/tmp/test");
 
@@ -193,50 +198,56 @@ describe("runDiffMode", () => {
   });
 
   it("parses numstat without double-counting", async () => {
-    // The fix: only one --numstat call, no accumulation from --cached/bare
-    setupExecSync("src/foo.ts", "10\t2\tsrc/foo.ts");
+    setupGitMocks("src/foo.ts", "10\t2\tsrc/foo.ts");
     const stdoutWrite = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 
     await runDiffMode("/tmp/test");
 
-    // Verify exactly two execSync calls: --name-only HEAD and --numstat HEAD
-    const execCalls = mockExecSync.mock.calls.map((c) => c[0]);
-    expect(execCalls).toHaveLength(2);
-    expect(execCalls[0]).toBe("git diff --name-only HEAD");
-    expect(execCalls[1]).toBe("git diff --numstat HEAD");
+    // Verify gitExec called with --name-only and gitExecSafe with --numstat
+    expect(mockGitExec).toHaveBeenCalledWith(
+      expect.arrayContaining(["diff", "--name-only", "HEAD"]),
+      expect.any(Object),
+    );
+    expect(mockGitExecSafe).toHaveBeenCalledWith(
+      expect.arrayContaining(["diff", "--numstat", "HEAD"]),
+      expect.any(Object),
+    );
 
     // Verify the output includes the stat (not doubled)
     const output = stdoutWrite.mock.calls.map((c) => c[0]).join("");
     expect(output).toContain("+10 / -2");
-    // Should NOT contain doubled values like +20 / -4
     expect(output).not.toContain("+20");
 
     stdoutWrite.mockRestore();
   });
 
   it("handles empty diff gracefully", async () => {
-    setupExecSync("");
+    setupGitMocks("");
 
     await runDiffMode("/tmp/test");
 
     const infoLogs = logCalls.filter((c) => c.method === "info");
     expect(infoLogs.some((c) => String(c.args[0]).includes("No changed files"))).toBe(true);
-    // Should not proceed to graph building
     expect(mockBuildGraphWithCache).not.toHaveBeenCalled();
   });
 
   it("uses ref parameter for three-dot diff", async () => {
-    setupExecSync("src/foo.ts", "5\t1\tsrc/foo.ts");
+    setupGitMocks("src/foo.ts", "5\t1\tsrc/foo.ts");
 
     await runDiffMode("/tmp/test", "main");
 
-    const execCalls = mockExecSync.mock.calls.map((c) => c[0]);
-    expect(execCalls[0]).toBe("git diff --name-only main...HEAD");
-    expect(execCalls[1]).toBe("git diff --numstat main...HEAD");
+    expect(mockGitExec).toHaveBeenCalledWith(
+      ["diff", "--name-only", "main...HEAD"],
+      expect.any(Object),
+    );
+    expect(mockGitExecSafe).toHaveBeenCalledWith(
+      ["diff", "--numstat", "main...HEAD"],
+      expect.any(Object),
+    );
   });
 
   it("throws ClarteError for bad ref", async () => {
-    mockExecSync.mockImplementation(() => {
+    mockGitExec.mockImplementation(() => {
       throw new Error("unknown revision 'nope'");
     });
 
@@ -244,7 +255,7 @@ describe("runDiffMode", () => {
   });
 
   it("throws ClarteError for non-git repo", async () => {
-    mockExecSync.mockImplementation(() => {
+    mockGitExec.mockImplementation(() => {
       throw new Error("not a git repository");
     });
 
@@ -252,18 +263,17 @@ describe("runDiffMode", () => {
   });
 
   it("rejects invalid ref characters (shell injection prevention)", async () => {
-    setupExecSync("");
+    setupGitMocks("");
 
     await runDiffMode("/tmp/test", "$(whoami)");
 
-    // Should log an error and return early
     const errorLogs = logCalls.filter((c) => c.method === "error");
     expect(errorLogs.length).toBeGreaterThan(0);
-    expect(mockExecSync).not.toHaveBeenCalled();
+    expect(mockGitExec).not.toHaveBeenCalled();
   });
 
   it("writes to output file when specified", async () => {
-    setupExecSync("src/foo.ts", "3\t1\tsrc/foo.ts");
+    setupGitMocks("src/foo.ts", "3\t1\tsrc/foo.ts");
     const { writeFileSafe } = await import("../utils.js");
 
     await runDiffMode("/tmp/test", undefined, false, "diff-context.md");
@@ -272,12 +282,11 @@ describe("runDiffMode", () => {
   });
 
   it("deduplicates changed files from git output", async () => {
-    setupExecSync("src/foo.ts\nsrc/foo.ts\nsrc/bar.ts");
+    setupGitMocks("src/foo.ts\nsrc/foo.ts\nsrc/bar.ts");
     const stdoutWrite = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 
     await runDiffMode("/tmp/test");
 
-    // The step log should say 2 files, not 3
     const stepLogs = logCalls.filter((c) => c.method === "step");
     expect(stepLogs.some((c) => String(c.args[0]).includes("2 changed file"))).toBe(true);
 
@@ -285,11 +294,7 @@ describe("runDiffMode", () => {
   });
 
   it("handles numstat failure gracefully (optional line counts)", async () => {
-    mockExecSync.mockImplementation((cmd: string) => {
-      if (typeof cmd === "string" && cmd.includes("--name-only")) return "src/foo.ts";
-      if (typeof cmd === "string" && cmd.includes("--numstat")) throw new Error("numstat failed");
-      return "";
-    });
+    setupGitMocks("src/foo.ts", null);
     const stdoutWrite = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 
     await runDiffMode("/tmp/test");

@@ -1,7 +1,7 @@
 import path from "node:path";
-import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
 import { ClarteError } from "../errors.js";
+import { gitExec, gitExecSafe } from "../git/git.js";
 import { theme as t, unpatchPicocolors } from "../theme.js";
 import { writeFileSafe } from "../utils.js";
 import { detectContext, enrichFrameworksWithUsage } from "../detect/detect.js";
@@ -40,13 +40,10 @@ export async function runDiffMode(
   let changedFiles: string[];
   let diffStat: Map<string, { added: number; removed: number }> | null = null;
   try {
-    const cmd = ref ? `git diff --name-only ${ref}...HEAD` : "git diff --name-only HEAD";
-    const output = execSync(cmd, {
-      cwd: rootDir,
-      encoding: "utf-8",
-      timeout: 10000,
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
+    const diffArgs = ref
+      ? ["diff", "--name-only", `${ref}...HEAD`]
+      : ["diff", "--name-only", "HEAD"];
+    const output = gitExec(diffArgs, { cwd: rootDir });
 
     changedFiles = [...new Set(output.split("\n").filter(Boolean))];
 
@@ -55,9 +52,11 @@ export async function runDiffMode(
       changedFiles = changedFiles.filter((f) => filterSet.has(path.normalize(f)));
     }
 
-    try {
-      const statCmd = ref ? `git diff --numstat ${ref}...HEAD` : "git diff --numstat HEAD";
-      const statOutput = execSync(statCmd, { cwd: rootDir, encoding: "utf-8", timeout: 10000 }).trim();
+    const statArgs = ref
+      ? ["diff", "--numstat", `${ref}...HEAD`]
+      : ["diff", "--numstat", "HEAD"];
+    const statOutput = gitExecSafe(statArgs, { cwd: rootDir });
+    if (statOutput) {
       diffStat = new Map();
       for (const line of statOutput.split("\n").filter(Boolean)) {
         const [addStr, rmStr, file] = line.split("\t");
@@ -73,8 +72,6 @@ export async function runDiffMode(
           }
         }
       }
-    } catch {
-      // Line counts are optional; continue without them
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -252,10 +249,12 @@ export async function runDiffMode(
   if (gitActivity?.changeCoupling) {
     const suggestions: string[] = [];
     for (const f of changedFiles) {
-      const partners = gitActivity.changeCoupling
+      // Higher threshold than full-mode (0.3) because diff context is narrow-scope
+    const DIFF_COUPLING_THRESHOLD = 0.5;
+    const partners = gitActivity.changeCoupling
         .filter(
           (c) =>
-            c.confidence >= 0.5 &&
+            c.confidence >= DIFF_COUPLING_THRESHOLD &&
             ((c.fileA === f && !changedSet.has(c.fileB)) || (c.fileB === f && !changedSet.has(c.fileA))),
         )
         .map((c) => {

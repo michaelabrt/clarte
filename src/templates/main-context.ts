@@ -470,9 +470,8 @@ export function applyCharBudget(
   maxChars: number,
   generatedComment: string,
 ): { included: ContextSection[]; dropped: string[] } {
-  // Start with all sections
-  const sorted = [...sections].sort((a, b) => a.priority - b.priority);
-  const _mandatory = sorted.filter((s) => s.priority <= 2);
+  // Shallow-copy section objects so callers retain unmodified references
+  const sorted = [...sections].map((s) => ({ ...s })).sort((a, b) => a.priority - b.priority);
   const droppable = sorted.filter((s) => s.priority > 2).reverse(); // highest priority number first
 
   const included = [...sorted];

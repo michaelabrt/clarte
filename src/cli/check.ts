@@ -1,5 +1,6 @@
 import { loadConfig, computeSnapshotHash } from "../config/config.js";
 import { validateContextPaths } from "../analysis/check.js";
+import { ExitCode } from "../errors.js";
 
 /**
  * Handle --check mode: fast path for shell integration.
@@ -16,11 +17,11 @@ export async function runCheckMode(rootDir: string, checkTimestamp: boolean, ciM
         } else {
           console.log("clarte: no context file found. Run npx clarte to generate.");
         }
-        process.exit(2);
+        process.exit(ExitCode.MISSING);
       }
       if (!config.snapshotGeneratedAt) {
         if (ciMode) console.log("fresh");
-        process.exit(0);
+        process.exit(ExitCode.SUCCESS);
       }
       const staleDays = config.staleDays ?? 7;
       const daysSince = Math.floor((Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24));
@@ -30,7 +31,7 @@ export async function runCheckMode(rootDir: string, checkTimestamp: boolean, ciM
         } else {
           console.log(`clarte: snapshot is ${daysSince}d old. Run: npx clarte --refresh-snapshot`);
         }
-        process.exit(1);
+        process.exit(ExitCode.FAILURE);
       }
       if (config) {
         const pathResult = await validateContextPaths(rootDir, config);
@@ -42,11 +43,11 @@ export async function runCheckMode(rootDir: string, checkTimestamp: boolean, ciM
               `clarte: ${pathResult.broken.length} broken file reference(s) in ${pathResult.file}: ${pathResult.broken.join(", ")}`,
             );
           }
-          process.exit(1);
+          process.exit(ExitCode.FAILURE);
         }
       }
       if (ciMode) console.log("fresh");
-      process.exit(0);
+      process.exit(ExitCode.SUCCESS);
     }
 
     // Hash-based check (original behavior)
@@ -56,11 +57,11 @@ export async function runCheckMode(rootDir: string, checkTimestamp: boolean, ciM
       } else {
         console.log("clarte: no context file found. Run npx clarte to generate.");
       }
-      process.exit(2);
+      process.exit(ExitCode.MISSING);
     }
     if (!config.snapshotHash) {
       if (ciMode) console.log("fresh");
-      process.exit(0);
+      process.exit(ExitCode.SUCCESS);
     }
     const lang = config.language ?? "other";
     const currentHash = await computeSnapshotHash(rootDir, lang);
@@ -74,7 +75,7 @@ export async function runCheckMode(rootDir: string, checkTimestamp: boolean, ciM
       } else {
         console.log(`clarte: snapshot is stale${staleMsg}. Run npx clarte --refresh-snapshot`);
       }
-      process.exit(1);
+      process.exit(ExitCode.FAILURE);
     }
 
     const pathResult = await validateContextPaths(rootDir, config);
@@ -86,14 +87,14 @@ export async function runCheckMode(rootDir: string, checkTimestamp: boolean, ciM
           `clarte: ${pathResult.broken.length} broken file reference(s) in ${pathResult.file}: ${pathResult.broken.join(", ")}`,
         );
       }
-      process.exit(1);
+      process.exit(ExitCode.FAILURE);
     }
     if (ciMode) console.log("fresh");
-    process.exit(0);
+    process.exit(ExitCode.SUCCESS);
   } catch (err: unknown) {
     if (ciMode) {
       console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
-      process.exit(2);
+      process.exit(ExitCode.MISSING);
     }
     throw err;
   }

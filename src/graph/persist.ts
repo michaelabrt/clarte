@@ -1,6 +1,6 @@
-import { execSync } from "node:child_process";
 import path from "node:path";
 import { readFileOr, writeFileSafe } from "../utils.js";
+import { gitExecSafe } from "../git/git.js";
 import { deriveRole } from "./centrality.js";
 import { computeAllInstabilities } from "./instability.js";
 import type { ContextAnalysis, ImportGraph } from "../types.js";
@@ -13,7 +13,7 @@ const STALE_HOURS = 24;
  * Build a PersistedGraph from an ImportGraph and ContextAnalysis.
  * This creates the serializable graph structure consumed by MCP tools.
  */
-export function buildPersistedGraph(graph: ImportGraph, analysis: ContextAnalysis): PersistedGraph {
+function buildPersistedGraph(graph: ImportGraph, analysis: ContextAnalysis): PersistedGraph {
   // Build lookup maps from analysis data
   const hubByPath = new Map(analysis.hubFiles.map((h) => [h.path, h]));
   const chokepointByPath = new Map((analysis.chokepoints ?? []).map((c) => [c.file, c]));
@@ -108,12 +108,7 @@ export function buildPersistedGraph(graph: ImportGraph, analysis: ContextAnalysi
   }));
 
   // Get head commit
-  let headCommit: string | undefined;
-  try {
-    headCommit = execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
-  } catch {
-    // Not in a git repo or git not available
-  }
+  const headCommit = gitExecSafe(["rev-parse", "HEAD"], { cwd: "." }) ?? undefined;
 
   return {
     version: PERSISTED_GRAPH_VERSION,
@@ -162,7 +157,7 @@ export async function loadPersistedGraph(rootDir: string): Promise<PersistedGrap
   }
 }
 
-export interface StalenessResult {
+interface StalenessResult {
   isStale: boolean;
   reason?: string;
   ageHours: number;
@@ -172,7 +167,7 @@ export interface StalenessResult {
  * Check whether a persisted graph is stale.
  * Stale if >24h old OR headCommit differs from current.
  */
-export function checkStaleness(persisted: PersistedGraph, currentHead?: string): StalenessResult {
+function checkStaleness(persisted: PersistedGraph, currentHead?: string): StalenessResult {
   const ageMs = Date.now() - new Date(persisted.timestamp).getTime();
   const ageHours = Math.round(ageMs / (1000 * 60 * 60));
 
