@@ -93,7 +93,7 @@ Computes an [instability metric](https://en.wikipedia.org/wiki/Software_package_
 instability = outgoing imports / (outgoing + incoming imports)
 ```
 
-Files that are both highly unstable (many outgoing deps) **and** widely depended on (many incoming deps) are flagged as risk zones. Generated context includes interpretive explanations so agents understand what the scores mean.
+Files with instability > 0.8 **and** at least one dependent (fanIn ≥ 1) are flagged. High instability means the file depends on many things relative to what depends on it — the Orchestrator pattern. These files are safe to change directly (few things depend on them) but fragile to breakage in their own dependencies, since a break anywhere in their large import surface cascades up to their few dependents.
 
 ## Cross-Cutting Analysis
 

@@ -264,7 +264,7 @@ Clarté runs a pipeline of static analysis steps. Each one feeds into the next. 
 | [Token budgeting](docs/how-it-works.md#token-budgeting) | Fits the snapshot into a token limit | Keeps context files within model limits |
 | [Layer detection](docs/how-it-works.md#layer-detection) | Classifies files into architecture layers | Gives agents a mental model of your project |
 | [Cycle detection](docs/how-it-works.md#cycle-detection) | Finds circular import chains | Warns agents about risky dependency loops |
-| [Instability scoring](docs/how-it-works.md#instability-scoring) | Flags volatile, widely-depended-on files | Tells agents where to be extra careful |
+| [Instability scoring](docs/how-it-works.md#instability-scoring) | Flags files with many outgoing deps relative to incoming (Robert Martin's I metric) | Identifies Orchestrator-pattern files; safe to change but fragile to their own dependencies |
 | [Cross-cutting analysis](docs/how-it-works.md#cross-cutting-analysis) | Finds files imported across 3+ layers | Warns agents about wide blast radius |
 | [Layer consistency](docs/how-it-works.md#layer-consistency) | Checks import direction against layer order | Prevents new dependency violations |
 | [Chokepoint detection](docs/how-it-works.md#chokepoint-detection) | Directed BFS reachability: upstream dependents × downstream deps | Highlights files where API changes cascade widely |
