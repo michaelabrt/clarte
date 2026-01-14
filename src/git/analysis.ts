@@ -1,6 +1,7 @@
-import { execSync, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ChangeCoupling, GitAnalysis, LagCoupling, ProgressCallback } from "../types.js";
+import { gitExec } from "./git.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -117,57 +118,9 @@ export type TimeWindow = { days: number } | { ref: string };
  * - { ref: "main" } uses ref..HEAD for branch-specific analysis
  */
 function parseGitLog(rootDir: string, window: TimeWindow = { days: 90 }): ParsedCommit[] {
-  const SEP = "---CLARTE_COMMIT_SEP---";
-
-  // Build the range argument based on the time window type
-  const rangeArg = "ref" in window ? `${window.ref}..HEAD` : `--since="${window.days} days ago"`;
-
-  // Single git log call with all data:
-  // - --no-merges: exclude merge commits (inflates counts and creates spurious coupling)
-  // - --diff-filter=ACDMRT: only Added/Copied/Deleted/Modified/Renamed/Type-changed (skip old paths from renames)
-  // - --name-only: list changed files
-  // - format: hash, ISO date, relative date, subject line (separated by ASCII unit separator \x1f to avoid pipe-in-message issues)
-  const US = "%x1f"; // git format hex escape for ASCII unit separator
-  const output = execSync(
-    `git log --no-merges ${rangeArg} --diff-filter=ACDMRT --name-only --format="${SEP}%H${US}%aI${US}%ar${US}%s"`,
-    { cwd: rootDir, encoding: "utf-8", timeout: 15000, maxBuffer: 10 * 1024 * 1024 },
-  ).trim();
-
-  if (!output) return [];
-
-  const commits: ParsedCommit[] = [];
-  const chunks = output.split(SEP).filter(Boolean);
-
-  for (const chunk of chunks) {
-    const lines = chunk.split("\n").filter(Boolean);
-    if (lines.length === 0) continue;
-
-    // First line: hash\x1fisoDate\x1frelDate\x1fsubject
-    const headerLine = lines[0];
-    const parts = headerLine.split("\x1f");
-    if (parts.length < 4) continue;
-
-    const hash = parts[0];
-    const date = parts[1];
-    const relativeDate = parts[2];
-    const message = parts.slice(3).join("\x1f"); // rejoin in case subject somehow contains \x1f
-
-    // Remaining lines are file paths, deduplicated to handle renames
-    const files = [
-      ...new Set(
-        lines
-          .slice(1)
-          .map((f) => f.trim())
-          .filter(Boolean),
-      ),
-    ];
-
-    if (files.length > 0) {
-      commits.push({ hash, date, relativeDate, message, files });
-    }
-  }
-
-  return commits;
+  const args = buildGitLogArgs(window);
+  const output = gitExec(args, { cwd: rootDir, timeout: 15000, maxBuffer: 10 * 1024 * 1024 });
+  return parseGitLogOutput(output);
 }
 
 /**
@@ -253,46 +206,46 @@ export function computeFileChurn(
   window: TimeWindow = { days: 90 },
 ): Map<string, { linesAdded: number; linesRemoved: number }> | null {
   try {
-    const rangeArg = "ref" in window ? `${window.ref}..HEAD` : `--since="${window.days} days ago"`;
-
-    const output = execSync(`git log --numstat --format="" ${rangeArg} --no-merges`, {
+    const rangeArg = "ref" in window ? `${window.ref}..HEAD` : `--since=${window.days} days ago`;
+    const output = gitExec(["log", "--numstat", "--format=", rangeArg, "--no-merges"], {
       cwd: rootDir,
-      encoding: "utf-8",
       timeout: 15000,
       maxBuffer: 10 * 1024 * 1024,
-    }).trim();
+    });
 
     if (!output) return null;
 
-    const churn = new Map<string, { linesAdded: number; linesRemoved: number }>();
-
-    for (const line of output.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      // Format: <added>\t<removed>\t<file>
-      // Binary files show "-" for added/removed
-      const parts = trimmed.split("\t");
-      if (parts.length < 3) continue;
-
-      const added = parseInt(parts[0], 10);
-      const removed = parseInt(parts[1], 10);
-      if (Number.isNaN(added) || Number.isNaN(removed)) continue;
-
-      const file = parts.slice(2).join("\t"); // filename may contain tabs (rare)
-      const existing = churn.get(file);
-      if (existing) {
-        existing.linesAdded += added;
-        existing.linesRemoved += removed;
-      } else {
-        churn.set(file, { linesAdded: added, linesRemoved: removed });
-      }
-    }
-
-    return churn;
+    return parseChurnOutput(output);
   } catch {
     return null;
   }
+}
+
+function parseChurnOutput(output: string): Map<string, { linesAdded: number; linesRemoved: number }> {
+  const churn = new Map<string, { linesAdded: number; linesRemoved: number }>();
+
+  for (const line of output.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const parts = trimmed.split("\t");
+    if (parts.length < 3) continue;
+
+    const added = parseInt(parts[0], 10);
+    const removed = parseInt(parts[1], 10);
+    if (Number.isNaN(added) || Number.isNaN(removed)) continue;
+
+    const file = parts.slice(2).join("\t");
+    const existing = churn.get(file);
+    if (existing) {
+      existing.linesAdded += added;
+      existing.linesRemoved += removed;
+    } else {
+      churn.set(file, { linesAdded: added, linesRemoved: removed });
+    }
+  }
+
+  return churn;
 }
 
 /** Noise patterns: commits matching these get discounted in coupling weight. */
@@ -598,30 +551,7 @@ async function computeFileChurnAsync(
     const output = stdout.trim();
     if (!output) return null;
 
-    const churn = new Map<string, { linesAdded: number; linesRemoved: number }>();
-
-    for (const line of output.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      const parts = trimmed.split("\t");
-      if (parts.length < 3) continue;
-
-      const added = parseInt(parts[0], 10);
-      const removed = parseInt(parts[1], 10);
-      if (Number.isNaN(added) || Number.isNaN(removed)) continue;
-
-      const file = parts.slice(2).join("\t");
-      const existing = churn.get(file);
-      if (existing) {
-        existing.linesAdded += added;
-        existing.linesRemoved += removed;
-      } else {
-        churn.set(file, { linesAdded: added, linesRemoved: removed });
-      }
-    }
-
-    return churn;
+    return parseChurnOutput(output);
   } catch {
     return null;
   }

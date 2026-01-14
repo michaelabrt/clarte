@@ -63,12 +63,14 @@ export async function fileExists(filePath: string): Promise<boolean> {
 
 /**
  * Read a file's contents, returning null if it doesn't exist.
+ * Re-throws permission errors (EACCES) and other unexpected errors.
  */
 export async function readFileOr(filePath: string): Promise<string | null> {
   try {
     return await fs.readFile(filePath, "utf-8");
-  } catch {
-    return null;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
   }
 }
 

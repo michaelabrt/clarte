@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { ClarteError } from "../errors.js";
 
 export interface GitExecOptions {
@@ -24,12 +24,13 @@ export class GitError extends ClarteError {
 
 /**
  * Execute a git command and return stdout as a trimmed string.
+ * Uses execFileSync to avoid shell injection.
  * Throws GitError on failure.
  */
 export function gitExec(args: string[], opts: GitExecOptions): string {
   const command = `git ${args.join(" ")}`;
   try {
-    return execSync(command, {
+    return execFileSync("git", args, {
       cwd: opts.cwd,
       encoding: "utf-8",
       timeout: opts.timeout ?? DEFAULT_TIMEOUT,

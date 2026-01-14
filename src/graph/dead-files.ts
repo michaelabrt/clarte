@@ -22,12 +22,19 @@ export function findDeadFiles(graph: ImportGraph, entryPoints: string[] = []): s
     if (basename === "mod.ts" || basename === "lib.rs" || basename === "main.rs") continue;
     if (
       basename === "main.go" ||
+      basename === "doc.go" ||
       basename === "main.py" ||
       basename === "manage.py" ||
       basename === "wsgi.py" ||
-      basename === "asgi.py"
+      basename === "asgi.py" ||
+      basename === "conftest.py" ||
+      basename === "__main__.py" ||
+      basename === "setup.py" ||
+      basename === "build.rs"
     )
       continue;
+    // Java entry points
+    if (basename.endsWith("Application.java")) continue;
 
     dead.push(file);
   }

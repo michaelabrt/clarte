@@ -29,7 +29,12 @@ function classifyFilename(name: string): string | null {
   return null;
 }
 
-function majorityStyle(counts: Map<string, number>, threshold = 0.6): string {
+/** Minimum ratio for a style to be reported as a convention. */
+const MAJORITY_THRESHOLD = 0.6;
+/** Stricter threshold for per-directory overrides. */
+const STRONG_MAJORITY_THRESHOLD = 0.8;
+
+function majorityStyle(counts: Map<string, number>, threshold = MAJORITY_THRESHOLD): string {
   let best = "mixed";
   let bestCount = 0;
   let total = 0;
@@ -196,7 +201,7 @@ function detectDirectoryOverrides(
         const style = classifyName(name);
         if (style) counts.set(style, (counts.get(style) ?? 0) + 1);
       }
-      const dirStyle = majorityStyle(counts, 0.8);
+      const dirStyle = majorityStyle(counts, STRONG_MAJORITY_THRESHOLD);
       if (dirStyle !== "mixed" && dirStyle !== globalNaming.functions) {
         naming.functions = dirStyle;
         hasOverride = true;
@@ -209,7 +214,7 @@ function detectDirectoryOverrides(
         const style = classifyName(name);
         if (style) counts.set(style, (counts.get(style) ?? 0) + 1);
       }
-      const dirStyle = majorityStyle(counts, 0.8);
+      const dirStyle = majorityStyle(counts, STRONG_MAJORITY_THRESHOLD);
       if (dirStyle !== "mixed" && dirStyle !== globalNaming.types) {
         naming.types = dirStyle;
         hasOverride = true;
@@ -222,7 +227,7 @@ function detectDirectoryOverrides(
         const style = classifyName(name);
         if (style) counts.set(style, (counts.get(style) ?? 0) + 1);
       }
-      const dirStyle = majorityStyle(counts, 0.8);
+      const dirStyle = majorityStyle(counts, STRONG_MAJORITY_THRESHOLD);
       if (dirStyle !== "mixed" && dirStyle !== globalNaming.constants) {
         naming.constants = dirStyle;
         hasOverride = true;
@@ -235,7 +240,7 @@ function detectDirectoryOverrides(
         const style = classifyFilename(name);
         if (style) counts.set(style, (counts.get(style) ?? 0) + 1);
       }
-      const dirStyle = majorityStyle(counts, 0.8);
+      const dirStyle = majorityStyle(counts, STRONG_MAJORITY_THRESHOLD);
       if (dirStyle !== "mixed" && dirStyle !== globalNaming.files) {
         naming.files = dirStyle;
         hasOverride = true;

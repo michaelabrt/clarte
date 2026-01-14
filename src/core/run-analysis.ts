@@ -19,6 +19,7 @@ import { findChokepoints } from "../graph/chokepoints.js";
 import { computeGraphTopology } from "../graph/topology.js";
 import { findStructuralTemporalMismatches } from "../graph/mismatches.js";
 import { findTightCouplings } from "../graph/tight-coupling.js";
+import { checkArchitecturalFitness } from "../graph/fitness.js";
 import { analyzeGitActivity } from "../git/analysis.js";
 import { analyzeMonorepoGraph, computePackageCentrality } from "../analysis/monorepo.js";
 import { scanConfigConstraints } from "../config/scan.js";
@@ -308,6 +309,8 @@ export async function runAnalysis(
 
   const tightCouplings = useAnalysisCache ? analysisCache.tightCouplings : findTightCouplings(graph);
 
+  const archViolations = layers.length >= 2 ? checkArchitecturalFitness(graph, layers, layerEdges) : [];
+
   const monorepoAnalysis = detected.monorepo
     ? await analyzeMonorepoGraph(rootDir, graph, detected.monorepo)
     : undefined;
@@ -378,6 +381,7 @@ export async function runAnalysis(
     graphTopology,
     structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined,
     tightCouplings: tightCouplings.length ? tightCouplings : undefined,
+    archViolations: archViolations.length ? archViolations : undefined,
     monorepoAnalysis,
     changeImpact,
     analysisDays,

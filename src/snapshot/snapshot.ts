@@ -314,7 +314,10 @@ export async function generateSnapshot(
   onProgress?.("Filtering dead exports...");
   const liveEntries = isLibrary ? allEntries : filterDeadExports(allEntries, graph);
 
-  const budget = maxTokens ?? Math.min(20000, 4000 + Math.floor(Math.sqrt(ctx.sourceFileCount) * 400));
+  const MAX_SNAPSHOT_TOKENS = 20000;
+  const BASE_TOKENS = 4000;
+  const TOKENS_PER_SQRT_FILE = 400;
+  const budget = maxTokens ?? Math.min(MAX_SNAPSHOT_TOKENS, BASE_TOKENS + Math.floor(Math.sqrt(ctx.sourceFileCount) * TOKENS_PER_SQRT_FILE));
   onProgress?.(`Applying token budget (${budget.toLocaleString()} tokens)...`);
   const { selected, excluded } = applyTokenBudget(liveEntries, budget, graph, gitActivity);
 
@@ -437,7 +440,8 @@ function applyTokenBudget(
     if (gitActivity) {
       const commits = gitActivity.commitCounts.get(entry.file) ?? 0;
       if (commits > 0) {
-        gitBoost = 1.0 + Math.log2(commits + 1) * 0.15;
+        const GIT_BOOST_FACTOR = 0.15;
+        gitBoost = 1.0 + Math.log2(commits + 1) * GIT_BOOST_FACTOR;
       }
     }
 

@@ -100,6 +100,14 @@ export function computeHITS(
   const n = files.length;
   if (n === 0) return { authority: new Map(), hub: new Map() };
 
+  // Single file: HITS would produce 0/0 after normalization. Assign neutral scores.
+  if (n === 1) {
+    return {
+      authority: new Map([[files[0], 0.5]]),
+      hub: new Map([[files[0], 0.5]]),
+    };
+  }
+
   const fileSet = new Set(files);
   const barrels = barrelFiles ?? new Set<string>();
   const alpha = HITS.TELEPORT_ALPHA;

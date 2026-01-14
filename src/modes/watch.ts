@@ -37,6 +37,9 @@ const IGNORE_DIRS = IGNORE_DIRS_SET;
 /** File extensions that trigger a rebuild. */
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".py", ".go", ".rs", ".java"]);
 
+/** Debounce delay for file change events (ms). */
+const DEBOUNCE_MS = 500;
+
 /** Files to ignore (lock files, etc.). */
 const IGNORE_FILES = new Set([
   "package-lock.json",
@@ -168,7 +171,7 @@ export async function runWatchMode(rootDir: string, verbose: boolean): Promise<v
         debounced.add(file);
       }
     }
-  }, 500);
+  }, DEBOUNCE_MS);
 
   // Use fs.watch with recursive option
   let watcher: fs.FSWatcher;
@@ -188,7 +191,7 @@ export async function runWatchMode(rootDir: string, verbose: boolean): Promise<v
   const cleanup = () => {
     console.log(`\n[clarte] ${timeStamp()} - shutting down watcher.`);
     watcher.close();
-    process.exit(0);
+    process.exit(ExitCode.SUCCESS);
   };
 
   process.on("SIGINT", cleanup);

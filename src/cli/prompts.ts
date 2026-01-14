@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import type { DetectedContext, IDETarget, ProjectConfig, UserAnswers } from "../types.js";
 import { theme as t } from "../theme.js";
+import { ExitCode } from "../errors.js";
 import { summarizeDetection } from "../detect/detect.js";
 
 /** Languages that support code snapshot extraction */
@@ -43,7 +44,7 @@ export async function runPrompts(
 
   if (p.isCancel(ides)) {
     p.cancel("Cancelled.");
-    process.exit(0);
+    process.exit(ExitCode.SUCCESS);
   }
 
   // 2. Stack corrections (only on --reconfigure)
@@ -61,7 +62,7 @@ export async function runPrompts(
 
       if (p.isCancel(confirm)) {
         p.cancel("Cancelled.");
-        process.exit(0);
+        process.exit(ExitCode.SUCCESS);
       }
 
       stackConfirmed = confirm;
@@ -75,7 +76,7 @@ export async function runPrompts(
 
         if (p.isCancel(corrections)) {
           p.cancel("Cancelled.");
-          process.exit(0);
+          process.exit(ExitCode.SUCCESS);
         }
 
         stackCorrections = corrections;
@@ -95,7 +96,7 @@ export async function runPrompts(
 
   if (p.isCancel(projectPurpose)) {
     p.cancel("Cancelled.");
-    process.exit(0);
+    process.exit(ExitCode.SUCCESS);
   }
 
   // 4. Key patterns, conventions, and gotchas (merged into one prompt)
@@ -115,7 +116,7 @@ export async function runPrompts(
 
   if (p.isCancel(keyPatterns)) {
     p.cancel("Cancelled.");
-    process.exit(0);
+    process.exit(ExitCode.SUCCESS);
   }
 
   // 5. Code snapshot (auto-enabled for supported languages on first run;
@@ -143,7 +144,7 @@ export async function runPrompts(
 
       if (p.isCancel(snapshotChoice)) {
         p.cancel("Cancelled.");
-        process.exit(0);
+        process.exit(ExitCode.SUCCESS);
       }
 
       if (snapshotChoice === "auto") {
@@ -159,7 +160,7 @@ export async function runPrompts(
 
         if (p.isCancel(paths)) {
           p.cancel("Cancelled.");
-          process.exit(0);
+          process.exit(ExitCode.SUCCESS);
         }
 
         snapshotPaths = paths
@@ -192,7 +193,7 @@ export async function runPrompts(
 
     if (p.isCancel(perPkg)) {
       p.cancel("Cancelled.");
-      process.exit(0);
+      process.exit(ExitCode.SUCCESS);
     }
 
     generatePerPackage = perPkg;

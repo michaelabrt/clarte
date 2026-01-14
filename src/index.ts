@@ -1,6 +1,6 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
-import { ClarteError } from "./errors.js";
+import { ClarteError, ExitCode } from "./errors.js";
 import {
   theme as t,
   initTheme,
@@ -53,7 +53,7 @@ async function main() {
 
   if (initHook) {
     await initPreCommitHook(rootDir);
-    process.exit(0);
+    process.exit(ExitCode.SUCCESS);
   }
 
   if (ciSubcommand) {
@@ -61,7 +61,7 @@ async function main() {
     await new Promise<void>((resolve, reject) => {
       process.stdout.write(JSON.stringify(result, null, 2) + "\n", (err) => (err ? reject(err) : resolve()));
     });
-    process.exit(0);
+    process.exit(ExitCode.SUCCESS);
   }
 
   const PROJECT_MARKERS = [
@@ -171,7 +171,7 @@ main().catch((err) => {
     console.error(t.error("File not found:"), msg);
   } else if (msg.includes("ETIMEDOUT") || /\btimeout\b/i.test(msg)) {
     console.error(t.error("Git operation timed out. Try reducing the analysis window with staleDays in .clarte.json."));
-  } else if (msg.includes("TOML") || /\bparse\b/i.test(msg)) {
+  } else if (msg.includes("TOML") || msg.includes("SyntaxError") || msg.includes("Unexpected token")) {
     console.error(t.error("Failed to parse config file:"), msg);
   } else {
     console.error(t.error("Fatal error:"), err);
@@ -179,5 +179,5 @@ main().catch((err) => {
 
   unpatchPicocolors();
   resetTerminalColors();
-  process.exit(1);
+  process.exit(ExitCode.FAILURE);
 });

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { ClarteError } from "../errors.js";
+import { ClarteError, ExitCode } from "../errors.js";
 import { theme as t, initTheme, resetTerminalColors } from "../theme.js";
 import type { SectionFilterOptions } from "../templates/main-context.js";
 
@@ -235,12 +235,12 @@ export function handleEarlyExits(rawArgs: string[]): boolean {
     initTheme("dark");
     printHelp();
     resetTerminalColors();
-    process.exit(0);
+    process.exit(ExitCode.SUCCESS);
   }
 
   if (rawArgs.includes("--version") || rawArgs.includes("-V")) {
     console.log(VERSION);
-    process.exit(0);
+    process.exit(ExitCode.SUCCESS);
   }
 
   return false;
