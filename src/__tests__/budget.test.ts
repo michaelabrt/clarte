@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildMainContext, buildSections, applyBudget, applyCharBudget } from "../templates/main-context.js";
+import { buildMainContext, buildSections } from "../templates/main-context.js";
+import { applyBudget, applyCharBudget } from "../templates/budget.js";
 import { trimSnapshotToChars, renderSnapshot } from "../snapshot/snapshot.js";
 import type {
   CodeSnapshot,

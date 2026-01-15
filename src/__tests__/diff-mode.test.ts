@@ -236,14 +236,8 @@ describe("runDiffMode", () => {
 
     await runDiffMode("/tmp/test", "main");
 
-    expect(mockGitExec).toHaveBeenCalledWith(
-      ["diff", "--name-only", "main...HEAD"],
-      expect.any(Object),
-    );
-    expect(mockGitExecSafe).toHaveBeenCalledWith(
-      ["diff", "--numstat", "main...HEAD"],
-      expect.any(Object),
-    );
+    expect(mockGitExec).toHaveBeenCalledWith(["diff", "--name-only", "main...HEAD"], expect.any(Object));
+    expect(mockGitExecSafe).toHaveBeenCalledWith(["diff", "--numstat", "main...HEAD"], expect.any(Object));
   });
 
   it("throws ClarteError for bad ref", async () => {

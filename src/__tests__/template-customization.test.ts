@@ -385,14 +385,28 @@ describe("Key Files instability rendering", () => {
   it("suppresses ⚠️ for Orchestrator files with high instability", async () => {
     const analysis: ContextAnalysis = {
       hubFiles: [
-        { path: "src/index.ts", centrality: 0.9, authority: 0.1, hubScore: 0.9, role: "Orchestrator", importedBy: 1, imports: 20 },
+        {
+          path: "src/index.ts",
+          centrality: 0.9,
+          authority: 0.1,
+          hubScore: 0.9,
+          role: "Orchestrator",
+          importedBy: 1,
+          imports: 20,
+        },
         // Foundation files have low instability and won't appear in instabilities array
-        { path: "src/types.ts", centrality: 1.0, authority: 1.0, hubScore: 0.1, role: "Foundation", importedBy: 40, imports: 0 },
+        {
+          path: "src/types.ts",
+          centrality: 1.0,
+          authority: 1.0,
+          hubScore: 0.1,
+          role: "Foundation",
+          importedBy: 40,
+          imports: 0,
+        },
       ],
       // Only high-instability files appear here (> 0.8 threshold, fanIn >= 1)
-      instabilities: [
-        { path: "src/index.ts", fanIn: 1, fanOut: 20, instability: 0.95 },
-      ],
+      instabilities: [{ path: "src/index.ts", fanIn: 1, fanOut: 20, instability: 0.95 }],
       circularDeps: [],
       layers: [],
       layerEdges: [],
@@ -420,11 +434,17 @@ describe("Key Files instability rendering", () => {
   it("shows ⚠️ for Foundation files with high instability", async () => {
     const analysis: ContextAnalysis = {
       hubFiles: [
-        { path: "src/types.ts", centrality: 1.0, authority: 1.0, hubScore: 0.1, role: "Foundation", importedBy: 40, imports: 0 },
+        {
+          path: "src/types.ts",
+          centrality: 1.0,
+          authority: 1.0,
+          hubScore: 0.1,
+          role: "Foundation",
+          importedBy: 40,
+          imports: 0,
+        },
       ],
-      instabilities: [
-        { path: "src/types.ts", fanIn: 3, fanOut: 10, instability: 0.77 },
-      ],
+      instabilities: [{ path: "src/types.ts", fanIn: 3, fanOut: 10, instability: 0.77 }],
       circularDeps: [],
       layers: [],
       layerEdges: [],

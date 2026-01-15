@@ -295,7 +295,10 @@ function technicalDebtFlags(analysis: ContextAnalysis): string[] {
     if (factors.includes("high instability")) advice.push("Stabilize the API");
     const churnSuffix = factors.includes("high churn") ? " before making large changes" : "";
 
-    const actionStr = advice.length > 0 ? ` ${advice.join(" and ")}${churnSuffix}.` : `${churnSuffix ? ` Review carefully${churnSuffix}.` : ""}`;
+    const actionStr =
+      advice.length > 0
+        ? ` ${advice.join(" and ")}${churnSuffix}.`
+        : `${churnSuffix ? ` Review carefully${churnSuffix}.` : ""}`;
     return `\`${file}\` has multiple risk factors (${factorList}).${actionStr}`;
   });
 }

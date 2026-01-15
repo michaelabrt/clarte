@@ -7,7 +7,6 @@ import type { ContextAnalysis, ImportGraph } from "../types.js";
 import { PERSISTED_GRAPH_VERSION, type EdgeRecord, type FileRecord, type PersistedGraph } from "./types.js";
 
 const GRAPH_PATH = ".clarte/graph.json";
-const STALE_HOURS = 24;
 
 /**
  * Build a PersistedGraph from an ImportGraph and ContextAnalysis.
@@ -155,29 +154,4 @@ export async function loadPersistedGraph(rootDir: string): Promise<PersistedGrap
   } catch {
     return null;
   }
-}
-
-interface StalenessResult {
-  isStale: boolean;
-  reason?: string;
-  ageHours: number;
-}
-
-/**
- * Check whether a persisted graph is stale.
- * Stale if >24h old OR headCommit differs from current.
- */
-function checkStaleness(persisted: PersistedGraph, currentHead?: string): StalenessResult {
-  const ageMs = Date.now() - new Date(persisted.timestamp).getTime();
-  const ageHours = Math.round(ageMs / (1000 * 60 * 60));
-
-  if (ageHours > STALE_HOURS) {
-    return { isStale: true, reason: `analysis from ${ageHours}h ago`, ageHours };
-  }
-
-  if (currentHead && persisted.headCommit && persisted.headCommit !== currentHead) {
-    return { isStale: true, reason: `analysis from ${ageHours}h ago (different commit)`, ageHours };
-  }
-
-  return { isStale: false, ageHours };
 }
