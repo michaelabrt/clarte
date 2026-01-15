@@ -1,35 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ContextAnalysis, GeneratedFile, CodeSnapshot } from "../types.js";
 
-// Mock @clack/prompts to capture log calls
-const logCalls: Array<{ method: string; args: unknown[] }> = [];
-vi.mock("@clack/prompts", () => ({
-  log: {
-    info: (...args: unknown[]) => logCalls.push({ method: "info", args }),
-    message: (...args: unknown[]) => logCalls.push({ method: "message", args }),
-    success: (...args: unknown[]) => logCalls.push({ method: "success", args }),
-    warn: (...args: unknown[]) => logCalls.push({ method: "warn", args }),
-  },
+const clackMock = vi.hoisted(() => ({
+  logCalls: [] as Array<{ method: string; args: unknown[] }>,
 }));
 
-// Mock theme to strip ANSI -- return plain text
-vi.mock("../theme.js", () => ({
-  theme: {
-    brandBold: (s: string) => s,
-    textBold: (s: string) => s,
-    text: (s: string) => s,
-    muted: (s: string) => s,
-    success: (s: string) => s,
-    warn: (s: string) => s,
-    brand: (s: string) => s,
-    accent: (s: string) => s,
-  },
-}));
+vi.mock("@clack/prompts", async () => {
+  const { createClackMock } = await import("./helpers/mocks.js");
+  const m = createClackMock({ captureLogs: true });
+  clackMock.logCalls = m.logCalls;
+  return m.mock;
+});
+
+vi.mock("../theme.js", async () => {
+  const { THEME_MOCK } = await import("./helpers/mocks.js");
+  return { theme: THEME_MOCK };
+});
 
 import { printSummary } from "../cli/summary.js";
 
 function allOutput(): string {
-  return logCalls.map((c) => String(c.args[0])).join("\n");
+  return clackMock.logCalls.map((c) => String(c.args[0])).join("\n");
 }
 
 function makeFile(filePath: string, content: string, existed = false): GeneratedFile {
@@ -50,13 +41,13 @@ function makeAnalysis(overrides: Partial<ContextAnalysis> = {}): ContextAnalysis
 }
 
 beforeEach(() => {
-  logCalls.length = 0;
+  clackMock.logCalls.length = 0;
 });
 
 describe("printSummary", () => {
   it("returns early with no log calls for empty file list", () => {
     printSummary([]);
-    expect(logCalls).toHaveLength(0);
+    expect(clackMock.logCalls).toHaveLength(0);
   });
 
   it("renders a single main file with bytes and token estimate", () => {

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { ClarteError } from "../errors.js";
+import { makeDetectedContext } from "./helpers/mocks.js";
 
 // Mock heavy dependencies
 vi.mock("../cli/animations.js", () => ({
@@ -12,20 +13,7 @@ vi.mock("../cli/animations.js", () => ({
   }),
 }));
 
-const mockDetectContext = vi.fn().mockResolvedValue({
-  rootDir: "/tmp/test",
-  language: "typescript",
-  hasTypeScript: true,
-  packageManager: "npm",
-  linter: "eslint",
-  frameworks: [],
-  directories: ["src"],
-  dependencies: [],
-  isGitRepo: true,
-  totalSourceBytes: 10000,
-  sourceFileCount: 50,
-  monorepo: null,
-});
+const mockDetectContext = vi.fn().mockResolvedValue(makeDetectedContext());
 
 vi.mock("../detect/detect.js", () => ({
   detectContext: (...args: unknown[]) => mockDetectContext(...args),
@@ -62,29 +50,22 @@ vi.mock("../config/config.js", () => ({
 }));
 
 // Track clack log calls
-const logCalls: Array<{ method: string; args: unknown[] }> = [];
+const clackMock = vi.hoisted(() => ({
+  logCalls: [] as Array<{ method: string; args: unknown[] }>,
+}));
 const exitSpy = vi.fn();
 
-vi.mock("@clack/prompts", () => ({
-  log: {
-    info: (...args: unknown[]) => logCalls.push({ method: "info", args }),
-    message: (...args: unknown[]) => logCalls.push({ method: "message", args }),
-    success: (...args: unknown[]) => logCalls.push({ method: "success", args }),
-    warn: (...args: unknown[]) => logCalls.push({ method: "warn", args }),
-    error: (...args: unknown[]) => logCalls.push({ method: "error", args }),
-    step: (...args: unknown[]) => logCalls.push({ method: "step", args }),
-  },
-}));
+vi.mock("@clack/prompts", async () => {
+  const { createClackMock } = await import("./helpers/mocks.js");
+  const m = createClackMock({ captureLogs: true });
+  clackMock.logCalls = m.logCalls;
+  return m.mock;
+});
 
-vi.mock("../theme.js", () => ({
-  theme: {
-    text: (s: string) => s,
-    accent: (s: string) => s,
-    textBold: (s: string) => s,
-    muted: (s: string) => s,
-    brand: (s: string) => s,
-  },
-}));
+vi.mock("../theme.js", async () => {
+  const { THEME_MOCK } = await import("./helpers/mocks.js");
+  return { theme: THEME_MOCK };
+});
 
 import { refreshSnapshot } from "../modes/refresh.js";
 
@@ -92,7 +73,7 @@ let tmpDir: string;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-refresh-"));
-  logCalls.length = 0;
+  clackMock.logCalls.length = 0;
   vi.clearAllMocks();
   exitSpy.mockReset();
 });
