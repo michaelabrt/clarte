@@ -35,38 +35,26 @@ vi.mock("@clack/prompts", () => ({
   cancel: vi.fn(),
 }));
 
-vi.mock("../theme.js", () => ({
-  theme: {
-    text: (s: string) => s,
-    soft: (s: string) => s,
-    muted: (s: string) => s,
-    accent: (s: string) => s,
-    brand: (s: string) => s,
-  },
-}));
+vi.mock("../theme.js", async () => {
+  const { THEME_MOCK } = await import("./helpers/mocks.js");
+  return { theme: THEME_MOCK };
+});
 
 vi.mock("../detect/detect.js", () => ({
   summarizeDetection: () => "TypeScript + React + Vitest",
 }));
 
 import { runPrompts } from "../cli/prompts.js";
+import { makeDetectedContext } from "./helpers/mocks.js";
 
 function makeDetected(overrides: Partial<DetectedContext> = {}): DetectedContext {
-  return {
-    rootDir: "/tmp/test",
-    language: "typescript",
-    hasTypeScript: true,
-    packageManager: "npm",
-    linter: "eslint",
+  return makeDetectedContext({
     frameworks: [{ name: "React" }],
-    directories: ["src"],
     dependencies: ["react", "vitest"],
-    isGitRepo: true,
     totalSourceBytes: 50000,
     sourceFileCount: 100,
-    monorepo: null,
     ...overrides,
-  };
+  });
 }
 
 beforeEach(() => {

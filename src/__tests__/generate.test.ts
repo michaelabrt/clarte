@@ -76,28 +76,15 @@ vi.mock("../snapshot/snapshot.js", () => ({
 }));
 
 // Mock @clack/prompts
-vi.mock("@clack/prompts", () => ({
-  log: {
-    info: vi.fn(),
-    message: vi.fn(),
-    success: vi.fn(),
-    warn: vi.fn(),
-  },
-  confirm: vi.fn().mockResolvedValue(true),
-  isCancel: () => false,
-}));
+vi.mock("@clack/prompts", async () => {
+  const { createClackMock } = await import("./helpers/mocks.js");
+  return createClackMock().mock;
+});
 
-vi.mock("../theme.js", () => ({
-  theme: {
-    text: (s: string) => s,
-    textBold: (s: string) => s,
-    warn: (s: string) => s,
-    soft: (s: string) => s,
-    accent: (s: string) => s,
-    muted: (s: string) => s,
-    brand: (s: string) => s,
-  },
-}));
+vi.mock("../theme.js", async () => {
+  const { THEME_MOCK } = await import("./helpers/mocks.js");
+  return { theme: THEME_MOCK };
+});
 
 import { generateFiles, extractUserSections, mergeUserSections } from "../core/generate.js";
 

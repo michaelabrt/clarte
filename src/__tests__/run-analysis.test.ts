@@ -1,30 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { makeDetectedContext } from "./helpers/mocks.js";
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
-vi.mock("@clack/prompts", () => ({
-  log: {
-    info: vi.fn(),
-    step: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    message: vi.fn(),
-    success: vi.fn(),
-  },
-}));
+vi.mock("@clack/prompts", async () => {
+  const { createClackMock } = await import("./helpers/mocks.js");
+  return createClackMock().mock;
+});
 
-vi.mock("../theme.js", () => ({
-  theme: {
-    text: (s: string) => s,
-    textBold: (s: string) => s,
-    accent: (s: string) => s,
-    muted: (s: string) => s,
-    brand: (s: string) => s,
-    warn: (s: string) => s,
-    check: () => "✓",
-    bold: (s: string) => s,
-  },
-}));
+vi.mock("../theme.js", async () => {
+  const { THEME_MOCK } = await import("./helpers/mocks.js");
+  return { theme: THEME_MOCK };
+});
 
 const mockFileExists = vi.fn().mockResolvedValue(true);
 vi.mock("../utils.js", () => ({
@@ -163,23 +150,7 @@ function makeGraph(edgeCount = 0): ImportGraph {
   };
 }
 
-function makeDetected(overrides: Partial<DetectedContext> = {}): DetectedContext {
-  return {
-    rootDir: "/tmp/test",
-    language: "typescript",
-    hasTypeScript: true,
-    packageManager: "npm",
-    linter: "eslint",
-    frameworks: [],
-    directories: ["src"],
-    dependencies: [],
-    isGitRepo: true,
-    totalSourceBytes: 10000,
-    sourceFileCount: 50,
-    monorepo: null,
-    ...overrides,
-  };
-}
+const makeDetected = makeDetectedContext;
 
 const noopProgress = () => {};
 

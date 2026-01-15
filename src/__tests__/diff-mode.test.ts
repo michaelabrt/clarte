@@ -9,37 +9,21 @@ vi.mock("../cli/animations.js", () => ({
   }),
 }));
 
-const logCalls: Array<{ method: string; args: unknown[] }> = [];
-
-vi.mock("@clack/prompts", () => ({
-  log: {
-    info: (...args: unknown[]) => logCalls.push({ method: "info", args }),
-    step: (...args: unknown[]) => logCalls.push({ method: "step", args }),
-    warn: (...args: unknown[]) => logCalls.push({ method: "warn", args }),
-    error: (...args: unknown[]) => logCalls.push({ method: "error", args }),
-    message: (...args: unknown[]) => logCalls.push({ method: "message", args }),
-    success: (...args: unknown[]) => logCalls.push({ method: "success", args }),
-  },
-  note: vi.fn(),
-  outro: vi.fn(),
+const clackMock = vi.hoisted(() => ({
+  logCalls: [] as Array<{ method: string; args: unknown[] }>,
 }));
 
-vi.mock("../theme.js", () => ({
-  theme: {
-    text: (s: string) => s,
-    textBold: (s: string) => s,
-    accent: (s: string) => s,
-    muted: (s: string) => s,
-    brand: (s: string) => s,
-    warn: (s: string) => s,
-    success: (s: string) => s,
-    error: (s: string) => s,
-    check: () => "✓",
-    bold: (s: string) => s,
-    soft: (s: string) => s,
-  },
-  unpatchPicocolors: vi.fn(),
-}));
+vi.mock("@clack/prompts", async () => {
+  const { createClackMock } = await import("./helpers/mocks.js");
+  const m = createClackMock({ captureLogs: true });
+  clackMock.logCalls = m.logCalls;
+  return m.mock;
+});
+
+vi.mock("../theme.js", async () => {
+  const { THEME_MOCK } = await import("./helpers/mocks.js");
+  return { theme: THEME_MOCK, unpatchPicocolors: vi.fn() };
+});
 
 const mockGitExec = vi.fn();
 const mockGitExecSafe = vi.fn();
@@ -169,7 +153,7 @@ function setupGitMocks(nameOnlyOutput: string, numstatOutput: string | null = ""
 // ── Tests ───────────────────────────────────────────────────────────
 
 beforeEach(() => {
-  logCalls.length = 0;
+  clackMock.logCalls.length = 0;
   vi.clearAllMocks();
   mockDetectContext.mockResolvedValue({
     rootDir: "/tmp/test",
@@ -226,7 +210,7 @@ describe("runDiffMode", () => {
 
     await runDiffMode("/tmp/test");
 
-    const infoLogs = logCalls.filter((c) => c.method === "info");
+    const infoLogs = clackMock.logCalls.filter((c) => c.method === "info");
     expect(infoLogs.some((c) => String(c.args[0]).includes("No changed files"))).toBe(true);
     expect(mockBuildGraphWithCache).not.toHaveBeenCalled();
   });
@@ -261,7 +245,7 @@ describe("runDiffMode", () => {
 
     await runDiffMode("/tmp/test", "$(whoami)");
 
-    const errorLogs = logCalls.filter((c) => c.method === "error");
+    const errorLogs = clackMock.logCalls.filter((c) => c.method === "error");
     expect(errorLogs.length).toBeGreaterThan(0);
     expect(mockGitExec).not.toHaveBeenCalled();
   });
@@ -281,7 +265,7 @@ describe("runDiffMode", () => {
 
     await runDiffMode("/tmp/test");
 
-    const stepLogs = logCalls.filter((c) => c.method === "step");
+    const stepLogs = clackMock.logCalls.filter((c) => c.method === "step");
     expect(stepLogs.some((c) => String(c.args[0]).includes("2 changed file"))).toBe(true);
 
     stdoutWrite.mockRestore();

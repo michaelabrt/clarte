@@ -9,40 +9,24 @@ vi.mock("../cli/animations.js", () => ({
   }),
 }));
 
-const logCalls: Array<{ method: string; args: unknown[] }> = [];
+const clackMock = vi.hoisted(() => ({
+  logCalls: [] as Array<{ method: string; args: unknown[] }>,
+}));
 const mockConfirm = vi.fn().mockResolvedValue(false);
 
-vi.mock("@clack/prompts", () => ({
-  log: {
-    info: (...args: unknown[]) => logCalls.push({ method: "info", args }),
-    step: (...args: unknown[]) => logCalls.push({ method: "step", args }),
-    warn: (...args: unknown[]) => logCalls.push({ method: "warn", args }),
-    error: (...args: unknown[]) => logCalls.push({ method: "error", args }),
-    message: (...args: unknown[]) => logCalls.push({ method: "message", args }),
-    success: (...args: unknown[]) => logCalls.push({ method: "success", args }),
-  },
-  note: vi.fn(),
-  outro: vi.fn(),
-  confirm: (...args: unknown[]) => mockConfirm(...args),
-  isCancel: () => false,
-}));
+vi.mock("@clack/prompts", async () => {
+  const { createClackMock } = await import("./helpers/mocks.js");
+  const m = createClackMock({ captureLogs: true });
+  clackMock.logCalls = m.logCalls;
+  const mock = m.mock;
+  mock.confirm = (...args: unknown[]) => mockConfirm(...args);
+  return mock;
+});
 
-vi.mock("../theme.js", () => ({
-  theme: {
-    text: (s: string) => s,
-    textBold: (s: string) => s,
-    accent: (s: string) => s,
-    muted: (s: string) => s,
-    brand: (s: string) => s,
-    warn: (s: string) => s,
-    success: (s: string) => s,
-    check: () => "✓",
-    bold: (s: string) => s,
-    soft: (s: string) => s,
-  },
-  unpatchPicocolors: vi.fn(),
-  resetTerminalColors: vi.fn(),
-}));
+vi.mock("../theme.js", async () => {
+  const { THEME_MOCK } = await import("./helpers/mocks.js");
+  return { theme: THEME_MOCK, unpatchPicocolors: vi.fn(), resetTerminalColors: vi.fn() };
+});
 
 // Detection mocks
 const mockDetectContext = vi.fn().mockResolvedValue({
@@ -237,7 +221,7 @@ function makeOpts(overrides: Partial<Parameters<typeof runGenerateMode>[0]> = {}
 // ── Tests ───────────────────────────────────────────────────────────
 
 beforeEach(() => {
-  logCalls.length = 0;
+  clackMock.logCalls.length = 0;
   vi.clearAllMocks();
   mockDetectContext.mockResolvedValue({
     rootDir: "/tmp/test",
