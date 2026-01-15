@@ -35,17 +35,35 @@ import {
   renderDeltaSection,
 } from "../analysis/delta.js";
 import type {
+  AnalysisCacheData,
+  ArchitecturalLayer,
+  Chokepoint,
+  CircularDependency,
+  Community,
   ContextAnalysis,
+  CrossCuttingFile,
   DetectedContext,
+  FileInstability,
+  GraphTopology,
+  HubFile,
   ImportGraph,
+  LayerConsistency,
+  LayerEdge,
   PackageHubFile,
   ProgressCallback,
   ProjectConfig,
+  TightCoupling,
 } from "../types.js";
 
 export interface AnalysisResult {
   analysis: ContextAnalysis;
   deltaSection: string | null;
+}
+
+/** Shared logging context for phase helpers */
+interface LogCtx {
+  jsonMode: boolean;
+  verbose: boolean;
 }
 
 export async function runAnalysis(
@@ -61,11 +79,79 @@ export async function runAnalysis(
   const analysisDays = savedConfig?.analysisDays ?? 90;
   const analysisCacheKey = computeAnalysisCacheKey(graph, savedConfig?.layers);
   const analysisCache = await loadAnalysisCache(rootDir);
-  const useAnalysisCache = analysisCache !== null && analysisCache.cacheKey === analysisCacheKey;
+  const useCache = analysisCache !== null && analysisCache.cacheKey === analysisCacheKey;
+  const log: LogCtx = { jsonMode, verbose };
 
-  // Hub files (HITS analysis)
-  const hubFiles = useAnalysisCache ? analysisCache.hubFiles : getHubFiles(graph);
-  if (!jsonMode) {
+  const graphResults = runGraphPhase(graph, savedConfig, useCache ? analysisCache : null, log);
+
+  const gitActivity = await runGitPhase(rootDir, detected, analysisDays, verbose ? verboseLog : noopProgress, log);
+
+  const projectResults = await runProjectPhase(rootDir, graph, detected, graphResults, gitActivity, log);
+
+  const analysis: ContextAnalysis = {
+    ...graphResults,
+    gitActivity,
+    ...projectResults,
+    analysisDays,
+  };
+
+  if (!useCache) {
+    try {
+      await saveAnalysisCache(rootDir, {
+        version: ANALYSIS_CACHE_VERSION,
+        cacheKey: analysisCacheKey,
+        hubFiles: graphResults.hubFiles,
+        circularDeps: graphResults.circularDeps,
+        layers: graphResults.layers,
+        layerEdges: graphResults.layerEdges,
+        instabilities: graphResults.instabilities,
+        communities: graphResults.communities,
+        deadFiles: graphResults.deadFiles,
+        crossCuttingFiles: graphResults.crossCuttingFiles ?? [],
+        layerConsistency: graphResults.layerConsistency,
+        chokepoints: graphResults.chokepoints,
+        tightCouplings: graphResults.tightCouplings ?? [],
+        graphTopology: graphResults.graphTopology,
+      });
+    } catch {
+      // Cache save failed; non-critical
+    }
+  }
+
+  const deltaSection = await runDeltaPhase(rootDir, analysis, log);
+
+  return { analysis, deltaSection };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1: Graph analysis (cacheable)
+// ---------------------------------------------------------------------------
+
+interface GraphPhaseResult {
+  hubFiles: HubFile[];
+  circularDeps: CircularDependency[];
+  layers: ArchitecturalLayer[];
+  layerEdges: LayerEdge[];
+  instabilities: FileInstability[];
+  communities: Community[];
+  deadFiles: string[];
+  crossCuttingFiles: CrossCuttingFile[];
+  layerConsistency?: LayerConsistency;
+  chokepoints: Chokepoint[];
+  graphTopology: GraphTopology;
+  structuralMismatches?: ReturnType<typeof findStructuralTemporalMismatches>;
+  tightCouplings?: TightCoupling[];
+  archViolations?: ContextAnalysis["archViolations"];
+}
+
+function runGraphPhase(
+  graph: ImportGraph,
+  savedConfig: ProjectConfig | null,
+  cache: AnalysisCacheData | null,
+  log: LogCtx,
+): GraphPhaseResult {
+  const hubFiles = cache ? cache.hubFiles : getHubFiles(graph);
+  if (!log.jsonMode) {
     const topHubName = hubFiles[0]?.path ?? "";
     p.log.step(
       hubFiles.length > 0
@@ -73,7 +159,7 @@ export async function runAnalysis(
             (topHubName ? t.muted(` (top: ${topHubName})`) : "")
         : `${t.brand("Key files")}      ${t.muted("no key files detected")}`,
     );
-    if (verbose && hubFiles.length > 0) {
+    if (log.verbose && hubFiles.length > 0) {
       for (const h of hubFiles.slice(0, 5)) {
         p.log.info(
           t.muted(`  ${h.path} (auth: ${h.authority.toFixed(3)}, hub: ${h.hubScore.toFixed(3)}, role: ${h.role})`),
@@ -82,69 +168,175 @@ export async function runAnalysis(
     }
   }
 
-  // Circular dependency detection (Tarjan SCC)
-  const circularDeps = useAnalysisCache ? analysisCache.circularDeps : findCircularDeps(graph);
-  if (!jsonMode) {
+  const circularDeps = cache ? cache.circularDeps : findCircularDeps(graph);
+  if (!log.jsonMode) {
     p.log.step(
       circularDeps.length === 0
         ? `${t.brand("Circular deps")}  no cycles found ${t.check()}`
         : `${t.brand("Circular deps")}  ${t.textBold(String(circularDeps.length))} cycle${circularDeps.length === 1 ? "" : "s"} found ${t.warn("\u26A0")}`,
     );
-    if (verbose && circularDeps.length > 0) {
+    if (log.verbose && circularDeps.length > 0) {
       for (const c of circularDeps.slice(0, 3)) {
         p.log.info(t.muted(`  ${c.chain.join(" \u2192 ")}`));
       }
     }
   }
 
-  const { layers, layerEdges } = useAnalysisCache
-    ? { layers: analysisCache.layers, layerEdges: analysisCache.layerEdges }
+  const { layers, layerEdges } = cache
+    ? { layers: cache.layers, layerEdges: cache.layerEdges }
     : detectArchitecturalLayers(graph, savedConfig?.layers);
-  if (!jsonMode) {
+  if (!log.jsonMode) {
     p.log.step(
       layers.length > 0
         ? `${t.brand("Layers")}         ${layers.map((l) => l.name).join(" \u2192 ")}`
         : `${t.brand("Layers")}         ${t.muted("no clear layers detected")}`,
     );
-    if (verbose && layers.length > 0) {
+    if (log.verbose && layers.length > 0) {
       for (const l of layers) {
         p.log.info(t.muted(`  ${l.name}: ${l.files.length} files, depends on: ${l.dependsOn.join(", ") || "none"}`));
       }
     }
   }
 
-  const instabilities = useAnalysisCache ? analysisCache.instabilities : computeInstability(graph);
-  if (!jsonMode) {
+  const instabilities = cache ? cache.instabilities : computeInstability(graph);
+  if (!log.jsonMode) {
     const highInstability = instabilities.filter((f) => f.instability > INSTABILITY_THRESHOLD);
     p.log.step(
       highInstability.length > 0
         ? `${t.brand("Instability")}    ${t.textBold(String(highInstability.length))} high-risk file${highInstability.length === 1 ? "" : "s"} ${t.warn("\u26A0")}`
         : `${t.brand("Instability")}    ${t.muted("all files within healthy range")} ${t.check()}`,
     );
-    if (verbose && highInstability.length > 0) {
+    if (log.verbose && highInstability.length > 0) {
       for (const f of highInstability.slice(0, 5)) {
         p.log.info(t.muted(`  ${f.path} (I=${f.instability.toFixed(2)}, fan-in=${f.fanIn}, fan-out=${f.fanOut})`));
       }
     }
   }
 
-  const communities = useAnalysisCache ? analysisCache.communities : detectCommunities(graph);
-  if (!jsonMode) {
+  const communities = cache ? cache.communities : detectCommunities(graph);
+  if (!log.jsonMode) {
     p.log.step(
       communities.length > 0
         ? `${t.brand("Clusters")}       ${t.textBold(String(communities.length))} module cluster${communities.length === 1 ? "" : "s"}`
         : `${t.brand("Clusters")}       ${t.muted("single cohesive module")}`,
     );
-    if (verbose && communities.length > 0) {
+    if (log.verbose && communities.length > 0) {
       for (const c of communities.slice(0, 5)) {
         p.log.info(t.muted(`  ${c.label} (${c.files.length} files)`));
       }
     }
   }
 
-  const gitActivity = detected.isGitRepo
-    ? await analyzeGitActivity(rootDir, verbose ? verboseLog : noopProgress, analysisDays)
-    : null;
+  const deadFiles = cache ? cache.deadFiles : findDeadFiles(graph);
+  if (!log.jsonMode && deadFiles.length > 0) {
+    p.log.step(
+      `${t.brand("Dead files")}     ${t.textBold(String(deadFiles.length))} file${deadFiles.length === 1 ? "" : "s"} not imported by anything ${t.warn("\u26A0")}`,
+    );
+    if (log.verbose) {
+      for (const f of deadFiles.slice(0, 5)) {
+        p.log.info(t.muted(`  ${f}`));
+      }
+    }
+  }
+
+  const crossCuttingFiles = cache ? cache.crossCuttingFiles : findCrossCuttingFiles(graph, layers);
+  if (!log.jsonMode && crossCuttingFiles.length > 0) {
+    p.log.step(
+      `${t.brand("Cross-cutting")}  ${t.textBold(String(crossCuttingFiles.length))} file${crossCuttingFiles.length === 1 ? "" : "s"} span ${t.textBold("3+")} layers`,
+    );
+    if (log.verbose) {
+      for (const f of crossCuttingFiles.slice(0, 5)) {
+        p.log.info(t.muted(`  ${f.file} (${f.layerSpread} layers: ${f.layers.join(", ")})`));
+      }
+    }
+  }
+
+  const layerConsistency = cache
+    ? cache.layerConsistency
+    : layers.length >= 2
+      ? computeLayerConsistency(graph, layers, layerEdges)
+      : undefined;
+  if (!log.jsonMode && layerConsistency) {
+    const pct = (layerConsistency.consistency * 100).toFixed(0);
+    const violationCount = layerConsistency.violations.length;
+    p.log.step(
+      violationCount === 0
+        ? `${t.brand("Layer order")}    ${pct}% consistent ${t.check()}`
+        : `${t.brand("Layer order")}    ${pct}% consistent, ${t.textBold(String(violationCount))} violation${violationCount === 1 ? "" : "s"} ${t.warn("\u26A0")}`,
+    );
+    if (log.verbose && violationCount > 0) {
+      for (const v of layerConsistency.violations.slice(0, 3)) {
+        p.log.info(t.muted(`  ${v.from} (${v.fromLayer}) imports ${v.to} (${v.toLayer})`));
+      }
+    }
+  }
+
+  const chokepoints = cache ? cache.chokepoints : findChokepoints(graph);
+  if (!log.jsonMode && chokepoints.length > 0) {
+    p.log.step(
+      `${t.brand("Chokepoints")}    ${t.textBold(String(chokepoints.length))} structural chokepoint${chokepoints.length === 1 ? "" : "s"}`,
+    );
+    if (log.verbose) {
+      for (const cp of chokepoints.slice(0, 5)) {
+        p.log.info(
+          t.muted(
+            `  ${cp.file} (${cp.upstreamCount ?? cp.separates} dependents, ${cp.downstreamCount ?? 0} dependencies)`,
+          ),
+        );
+      }
+    }
+  }
+
+  const graphTopology = cache ? cache.graphTopology : computeGraphTopology(graph);
+  if (!log.jsonMode) {
+    if (graphTopology.isFragmented) {
+      p.log.step(
+        `${t.brand("Topology")}       ${t.textBold(String(graphTopology.componentCount))} connected component${graphTopology.componentCount === 1 ? "" : "s"} (fragmented) ${t.warn("\u26A0")}`,
+      );
+      if (log.verbose) {
+        const sizes = graphTopology.componentSizes.slice(0, 5).join(", ");
+        p.log.info(t.muted(`  Component sizes: ${sizes}${graphTopology.componentSizes.length > 5 ? ", ..." : ""}`));
+        p.log.info(t.muted(`  Approximate diameter: ${graphTopology.approximateDiameter} hops`));
+      }
+    } else if (log.verbose) {
+      p.log.step(
+        `${t.brand("Topology")}       single connected graph, diameter ~${graphTopology.approximateDiameter} hops`,
+      );
+    }
+  }
+
+  const tightCouplings = cache ? cache.tightCouplings : findTightCouplings(graph);
+  const archViolations = layers.length >= 2 ? checkArchitecturalFitness(graph, layers, layerEdges) : [];
+
+  return {
+    hubFiles,
+    circularDeps,
+    layers,
+    layerEdges,
+    instabilities,
+    communities,
+    deadFiles,
+    crossCuttingFiles,
+    layerConsistency,
+    chokepoints,
+    graphTopology,
+    tightCouplings: tightCouplings.length ? tightCouplings : undefined,
+    archViolations: archViolations.length ? archViolations : undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: Git analysis
+// ---------------------------------------------------------------------------
+
+async function runGitPhase(
+  rootDir: string,
+  detected: DetectedContext,
+  analysisDays: number,
+  onProgress: ProgressCallback,
+  log: LogCtx,
+): Promise<ContextAnalysis["gitActivity"]> {
+  const gitActivity = detected.isGitRepo ? await analyzeGitActivity(rootDir, onProgress, analysisDays) : null;
 
   if (gitActivity) {
     const filesToCheck = new Set<string>();
@@ -170,13 +362,13 @@ export async function runAnalysis(
     }
   }
 
-  if (!jsonMode) {
+  if (!log.jsonMode) {
     if (gitActivity) {
       const coupledPairs = gitActivity.changeCoupling.length;
       p.log.step(
         `${t.brand(`Git (${analysisDays}d)`)}      ${t.textBold(String(gitActivity.hotFiles.length))} active file${gitActivity.hotFiles.length === 1 ? "" : "s"}, ${t.textBold(String(coupledPairs))} coupled pair${coupledPairs === 1 ? "" : "s"}`,
       );
-      if (verbose) {
+      if (log.verbose) {
         for (const h of gitActivity.hotFiles.slice(0, 5)) {
           p.log.info(t.muted(`  ${h.path} (${h.commits} commits, last: ${h.lastChanged})`));
         }
@@ -186,68 +378,32 @@ export async function runAnalysis(
     }
   }
 
-  const deadFiles = useAnalysisCache ? analysisCache.deadFiles : findDeadFiles(graph);
-  if (!jsonMode && deadFiles.length > 0) {
-    p.log.step(
-      `${t.brand("Dead files")}     ${t.textBold(String(deadFiles.length))} file${deadFiles.length === 1 ? "" : "s"} not imported by anything ${t.warn("\u26A0")}`,
-    );
-    if (verbose) {
-      for (const f of deadFiles.slice(0, 5)) {
-        p.log.info(t.muted(`  ${f}`));
-      }
-    }
-  }
+  return gitActivity;
+}
 
-  const crossCuttingFiles = useAnalysisCache ? analysisCache.crossCuttingFiles : findCrossCuttingFiles(graph, layers);
-  if (!jsonMode && crossCuttingFiles.length > 0) {
-    p.log.step(
-      `${t.brand("Cross-cutting")}  ${t.textBold(String(crossCuttingFiles.length))} file${crossCuttingFiles.length === 1 ? "" : "s"} span ${t.textBold("3+")} layers`,
-    );
-    if (verbose) {
-      for (const f of crossCuttingFiles.slice(0, 5)) {
-        p.log.info(t.muted(`  ${f.file} (${f.layerSpread} layers: ${f.layers.join(", ")})`));
-      }
-    }
-  }
+// ---------------------------------------------------------------------------
+// Phase 3: Project analysis (config, conventions, tests, monorepo, impact)
+// ---------------------------------------------------------------------------
 
-  const layerConsistency = useAnalysisCache
-    ? analysisCache.layerConsistency
-    : layers.length >= 2
-      ? computeLayerConsistency(graph, layers, layerEdges)
-      : undefined;
-  if (!jsonMode && layerConsistency) {
-    const pct = (layerConsistency.consistency * 100).toFixed(0);
-    const violationCount = layerConsistency.violations.length;
-    p.log.step(
-      violationCount === 0
-        ? `${t.brand("Layer order")}    ${pct}% consistent ${t.check()}`
-        : `${t.brand("Layer order")}    ${pct}% consistent, ${t.textBold(String(violationCount))} violation${violationCount === 1 ? "" : "s"} ${t.warn("\u26A0")}`,
-    );
-    if (verbose && violationCount > 0) {
-      for (const v of layerConsistency.violations.slice(0, 3)) {
-        p.log.info(t.muted(`  ${v.from} (${v.fromLayer}) imports ${v.to} (${v.toLayer})`));
-      }
-    }
-  }
+interface ProjectPhaseResult {
+  configConstraints: ContextAnalysis["configConstraints"];
+  conventions?: ContextAnalysis["conventions"];
+  testMapping?: ContextAnalysis["testMapping"];
+  structuralMismatches?: ContextAnalysis["structuralMismatches"];
+  monorepoAnalysis?: ContextAnalysis["monorepoAnalysis"];
+  changeImpact?: ContextAnalysis["changeImpact"];
+}
 
-  const chokepoints = useAnalysisCache ? analysisCache.chokepoints : findChokepoints(graph);
-  if (!jsonMode && chokepoints.length > 0) {
-    p.log.step(
-      `${t.brand("Chokepoints")}    ${t.textBold(String(chokepoints.length))} structural chokepoint${chokepoints.length === 1 ? "" : "s"}`,
-    );
-    if (verbose) {
-      for (const cp of chokepoints.slice(0, 5)) {
-        p.log.info(
-          t.muted(
-            `  ${cp.file} (${cp.upstreamCount ?? cp.separates} dependents, ${cp.downstreamCount ?? 0} dependencies)`,
-          ),
-        );
-      }
-    }
-  }
-
+async function runProjectPhase(
+  rootDir: string,
+  graph: ImportGraph,
+  detected: DetectedContext,
+  graphResults: GraphPhaseResult,
+  gitActivity: ContextAnalysis["gitActivity"],
+  log: LogCtx,
+): Promise<ProjectPhaseResult> {
   const configConstraints = await scanConfigConstraints(rootDir, detected);
-  if (!jsonMode) {
+  if (!log.jsonMode) {
     const hasConstraints = configConstraints.typescript || configConstraints.linter || configConstraints.formatter;
     if (hasConstraints) {
       const parts: string[] = [];
@@ -260,7 +416,7 @@ export async function runAnalysis(
   }
 
   const conventions = await inferConventions(rootDir, graph, configConstraints);
-  if (!jsonMode && conventions) {
+  if (!log.jsonMode && conventions) {
     const parts: string[] = [];
     if (Object.values(conventions.naming).some((v) => v !== "mixed")) parts.push("naming");
     if (conventions.exportStyle.preferNamed) parts.push("exports");
@@ -271,45 +427,23 @@ export async function runAnalysis(
   }
 
   const testMapping = buildTestMapping(graph, detected);
-  if (!jsonMode && testMapping) {
+  if (!log.jsonMode && testMapping) {
     const coveredCount = testMapping.sourceToTests.size;
     const untestedCount = testMapping.untestedFiles.length;
     p.log.step(
       `${t.brand("Test map")}       ${t.textBold(String(coveredCount))} source file${coveredCount === 1 ? "" : "s"} with tests` +
         (untestedCount > 0 ? `, ${t.warn(String(untestedCount))} untested` : ` ${t.check()}`),
     );
-    if (verbose && untestedCount > 0) {
+    if (log.verbose && untestedCount > 0) {
       for (const f of testMapping.untestedFiles.slice(0, 5)) {
         p.log.info(t.muted(`  untested: ${f}`));
       }
     }
   }
 
-  const graphTopology = useAnalysisCache ? analysisCache.graphTopology : computeGraphTopology(graph);
-  if (!jsonMode) {
-    if (graphTopology.isFragmented) {
-      p.log.step(
-        `${t.brand("Topology")}       ${t.textBold(String(graphTopology.componentCount))} connected component${graphTopology.componentCount === 1 ? "" : "s"} (fragmented) ${t.warn("\u26A0")}`,
-      );
-      if (verbose) {
-        const sizes = graphTopology.componentSizes.slice(0, 5).join(", ");
-        p.log.info(t.muted(`  Component sizes: ${sizes}${graphTopology.componentSizes.length > 5 ? ", ..." : ""}`));
-        p.log.info(t.muted(`  Approximate diameter: ${graphTopology.approximateDiameter} hops`));
-      }
-    } else if (verbose) {
-      p.log.step(
-        `${t.brand("Topology")}       single connected graph, diameter ~${graphTopology.approximateDiameter} hops`,
-      );
-    }
-  }
-
   const structuralMismatches = gitActivity
     ? findStructuralTemporalMismatches(graph, gitActivity.changeCoupling)
     : undefined;
-
-  const tightCouplings = useAnalysisCache ? analysisCache.tightCouplings : findTightCouplings(graph);
-
-  const archViolations = layers.length >= 2 ? checkArchitecturalFitness(graph, layers, layerEdges) : [];
 
   const monorepoAnalysis = detected.monorepo
     ? await analyzeMonorepoGraph(rootDir, graph, detected.monorepo)
@@ -329,7 +463,7 @@ export async function runAnalysis(
     }
     monorepoAnalysis.packageHubFiles = packageHubFiles;
   }
-  if (!jsonMode && monorepoAnalysis) {
+  if (!log.jsonMode && monorepoAnalysis) {
     const edgeCount = monorepoAnalysis.crossPackageEdges.length;
     const violationCount = monorepoAnalysis.encapsulationViolations.length;
     if (edgeCount > 0) {
@@ -339,7 +473,7 @@ export async function runAnalysis(
             ? `, ${t.warn(String(violationCount))} encapsulation violation${violationCount === 1 ? "" : "s"}`
             : ` ${t.check()}`),
       );
-      if (verbose && violationCount > 0) {
+      if (log.verbose && violationCount > 0) {
         for (const v of monorepoAnalysis.encapsulationViolations.slice(0, 5)) {
           p.log.info(t.muted(`  ${v.from} -> ${v.to} (${v.fromPackage} -> ${v.toPackage})`));
         }
@@ -348,8 +482,8 @@ export async function runAnalysis(
   }
 
   let changeImpact: Map<string, Array<{ file: string; score: number }>> | undefined;
-  if (hubFiles.length > 0) {
-    const topHubs = hubFiles
+  if (graphResults.hubFiles.length > 0) {
+    const topHubs = graphResults.hubFiles
       .slice()
       .sort((a, b) => b.authority - a.authority || a.path.localeCompare(b.path))
       .slice(0, 5);
@@ -363,64 +497,32 @@ export async function runAnalysis(
     if (impactMap.size > 0) changeImpact = impactMap;
   }
 
-  const analysis: ContextAnalysis = {
-    hubFiles,
-    circularDeps,
-    layers,
-    layerEdges,
-    gitActivity,
-    instabilities,
-    communities,
-    deadFiles,
+  return {
     configConstraints,
-    crossCuttingFiles,
-    layerConsistency,
-    chokepoints,
     conventions: conventions ?? undefined,
     testMapping: testMapping ?? undefined,
-    graphTopology,
     structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined,
-    tightCouplings: tightCouplings.length ? tightCouplings : undefined,
-    archViolations: archViolations.length ? archViolations : undefined,
     monorepoAnalysis,
     changeImpact,
-    analysisDays,
   };
+}
 
-  if (!useAnalysisCache) {
-    try {
-      await saveAnalysisCache(rootDir, {
-        version: ANALYSIS_CACHE_VERSION,
-        cacheKey: analysisCacheKey,
-        hubFiles,
-        circularDeps,
-        layers,
-        layerEdges,
-        instabilities,
-        communities,
-        deadFiles,
-        crossCuttingFiles: crossCuttingFiles ?? [],
-        layerConsistency,
-        chokepoints,
-        tightCouplings,
-        graphTopology,
-      });
-    } catch {
-      // Cache save failed; non-critical
-    }
-  }
+// ---------------------------------------------------------------------------
+// Phase 4: Delta detection
+// ---------------------------------------------------------------------------
 
-  // Delta detection
+async function runDeltaPhase(rootDir: string, analysis: ContextAnalysis, log: LogCtx): Promise<string | null> {
   const currentAnalysisSnapshot = extractSnapshot(analysis);
   const prevSnapshot = await loadPreviousSnapshot(rootDir);
   let deltaSection: string | null = null;
+
   if (prevSnapshot) {
     const delta = computeDelta(prevSnapshot, currentAnalysisSnapshot);
     if (!isDeltaEmpty(delta)) {
       deltaSection = renderDeltaSection(delta);
-      if (!jsonMode && deltaSection) {
+      if (!log.jsonMode && deltaSection) {
         p.log.step(`${t.brand("Delta")}          architecture changes detected since last run`);
-        if (verbose) {
+        if (log.verbose) {
           for (const line of deltaSection.split("\n").filter((l) => l.startsWith("- "))) {
             p.log.info(t.muted(`  ${line.slice(2)}`));
           }
@@ -428,11 +530,12 @@ export async function runAnalysis(
       }
     }
   }
+
   try {
     await saveSnapshot(rootDir, currentAnalysisSnapshot);
   } catch {
     // Snapshot save failed; non-critical
   }
 
-  return { analysis, deltaSection };
+  return deltaSection;
 }

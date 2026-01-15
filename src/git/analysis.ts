@@ -150,50 +150,60 @@ export function analyzeGitActivity(
     if (commits.length === 0) return null;
 
     onProgress?.(`Parsed ${commits.length} commits`);
-
-    const commitCounts = new Map<string, number>();
-    const lastChanged = new Map<string, string>();
-
-    for (const commit of commits) {
-      for (const file of commit.files) {
-        commitCounts.set(file, (commitCounts.get(file) ?? 0) + 1);
-        // First seen commit is the most recent (git log outputs newest first)
-        if (!lastChanged.has(file)) {
-          lastChanged.set(file, commit.relativeDate);
-        }
-      }
-    }
-
-    if (commitCounts.size === 0) return null;
-
-    onProgress?.(`Found activity in ${commitCounts.size} files`);
-
-    const sorted = [...commitCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-    const hotFiles: GitAnalysis["hotFiles"] = sorted.slice(0, 15).map(([filePath, commitCount]) => ({
-      path: filePath,
-      commits: commitCount,
-      lastChanged: lastChanged.get(filePath) ?? "",
-    }));
-
-    onProgress?.("Analyzing change coupling...");
-    const changeCoupling = computeChangeCoupling(commits, analysisDays);
-
-    const lagCouplings = computeLagCoupling(commits, changeCoupling);
+    const result = processCommits(commits, analysisDays, onProgress);
+    if (!result) return null;
 
     const fileChurn = computeFileChurn(rootDir, window);
-
-    return {
-      commitCounts,
-      hotFiles,
-      changeCoupling,
-      lagCouplings: lagCouplings.length > 0 ? lagCouplings : undefined,
-      fileChurn: fileChurn && fileChurn.size > 0 ? fileChurn : undefined,
-    };
+    return { ...result, fileChurn: fileChurn && fileChurn.size > 0 ? fileChurn : undefined };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     onProgress?.(`Warning: git analysis failed: ${msg}`);
     return null;
   }
+}
+
+/**
+ * Process parsed commits into hot files, coupling and lag analysis.
+ * Shared between sync and async git analysis paths.
+ */
+function processCommits(
+  commits: ParsedCommit[],
+  analysisDays: number,
+  onProgress?: ProgressCallback,
+): Omit<GitAnalysis, "fileChurn"> | null {
+  const commitCounts = new Map<string, number>();
+  const lastChanged = new Map<string, string>();
+
+  for (const commit of commits) {
+    for (const file of commit.files) {
+      commitCounts.set(file, (commitCounts.get(file) ?? 0) + 1);
+      if (!lastChanged.has(file)) {
+        lastChanged.set(file, commit.relativeDate);
+      }
+    }
+  }
+
+  if (commitCounts.size === 0) return null;
+
+  onProgress?.(`Found activity in ${commitCounts.size} files`);
+
+  const sorted = [...commitCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const hotFiles: GitAnalysis["hotFiles"] = sorted.slice(0, 15).map(([filePath, commitCount]) => ({
+    path: filePath,
+    commits: commitCount,
+    lastChanged: lastChanged.get(filePath) ?? "",
+  }));
+
+  onProgress?.("Analyzing change coupling...");
+  const changeCoupling = computeChangeCoupling(commits, analysisDays);
+  const lagCouplings = computeLagCoupling(commits, changeCoupling);
+
+  return {
+    commitCounts,
+    hotFiles,
+    changeCoupling,
+    lagCouplings: lagCouplings.length > 0 ? lagCouplings : undefined,
+  };
 }
 
 /**
@@ -577,42 +587,11 @@ export async function analyzeGitActivityAsync(
     if (commits.length === 0) return null;
 
     onProgress?.(`Parsed ${commits.length} commits`);
+    const result = processCommits(commits, analysisDays, onProgress);
+    if (!result) return null;
 
-    const commitCounts = new Map<string, number>();
-    const lastChanged = new Map<string, string>();
-
-    for (const commit of commits) {
-      for (const file of commit.files) {
-        commitCounts.set(file, (commitCounts.get(file) ?? 0) + 1);
-        if (!lastChanged.has(file)) {
-          lastChanged.set(file, commit.relativeDate);
-        }
-      }
-    }
-
-    if (commitCounts.size === 0) return null;
-
-    onProgress?.(`Found activity in ${commitCounts.size} files`);
-
-    const sorted = [...commitCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-    const hotFiles: GitAnalysis["hotFiles"] = sorted.slice(0, 15).map(([filePath, commitCount]) => ({
-      path: filePath,
-      commits: commitCount,
-      lastChanged: lastChanged.get(filePath) ?? "",
-    }));
-
-    onProgress?.("Analyzing change coupling...");
-    const changeCoupling = computeChangeCoupling(commits, analysisDays);
-    const lagCouplings = computeLagCoupling(commits, changeCoupling);
     const fileChurn = await computeFileChurnAsync(rootDir, window);
-
-    return {
-      commitCounts,
-      hotFiles,
-      changeCoupling,
-      lagCouplings: lagCouplings.length > 0 ? lagCouplings : undefined,
-      fileChurn: fileChurn && fileChurn.size > 0 ? fileChurn : undefined,
-    };
+    return { ...result, fileChurn: fileChurn && fileChurn.size > 0 ? fileChurn : undefined };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     onProgress?.(`Warning: git analysis failed: ${msg}`);
