@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  normalizePath,
-  buildReverseAdjacency,
-  findTransitiveTests,
-  getFileGraphData,
-} from "../graph/data.js";
+import { normalizePath, buildReverseAdjacency, findTransitiveTests, getFileGraphData } from "../graph/data.js";
 import type { PersistedGraph, FileRecord, EdgeRecord } from "../graph/types.js";
 
 // ── Factories ────────────────────────────────────────────────────────
@@ -251,7 +246,10 @@ describe("getFileGraphData", () => {
       files: {
         "src/utils.ts": makeFile({ testFiles: ["src/__tests__/utils.test.ts"] }),
       },
-      edges: [makeEdge("src/consumer.ts", "src/utils.ts"), makeEdge("src/__tests__/integration.test.ts", "src/consumer.ts")],
+      edges: [
+        makeEdge("src/consumer.ts", "src/utils.ts"),
+        makeEdge("src/__tests__/integration.test.ts", "src/consumer.ts"),
+      ],
     });
     const rev = buildReverseAdjacency(graph);
     const data = getFileGraphData(graph, "src/utils.ts", rev);
