@@ -135,7 +135,7 @@ vi.mock("../analysis/delta.js", () => ({
 // ── Import under test (after mocks) ────────────────────────────────
 
 import { runAnalysis } from "../core/run-analysis.js";
-import type { DetectedContext, ImportGraph } from "../types.js";
+import type { ImportGraph } from "../types.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

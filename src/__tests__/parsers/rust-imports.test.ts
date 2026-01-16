@@ -69,7 +69,7 @@ describe("parseImportsAst - Rust edge cases", () => {
   });
 
   it("handles file with no imports", () => {
-    const result = parseImportsAst("fn main() { println!(\"hello\"); }", "rust");
+    const result = parseImportsAst('fn main() { println!("hello"); }', "rust");
     expect(result).toHaveLength(0);
   });
 
