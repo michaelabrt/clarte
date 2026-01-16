@@ -52,7 +52,7 @@ export function renderDiffContext(ctx: DiffRenderContext): string {
   renderCircularDeps(sections, relevantCycles);
   renderNeighbors(sections, neighborhood, hubFileMap, graph);
   renderRelatedTests(sections, testFiles);
-  renderSignatures(sections, changedSet, neighborSet, entryIndex, graph);
+  renderSignatures(sections, changedSet, neighborSet, entryIndex, graph, detected.language);
   renderScopedDirectives(sections, changedFiles, analysis, detected);
 
   if (isSingleFile && hop1Set.size === 0 && testFiles.size === 0) {
@@ -269,12 +269,22 @@ function renderRelatedTests(sections: string[], testFiles: Set<string>): void {
   sections.push("");
 }
 
+const LANG_FENCE: Record<string, string> = {
+  typescript: "ts",
+  javascript: "js",
+  python: "py",
+  go: "go",
+  rust: "rs",
+  java: "java",
+};
+
 function renderSignatures(
   sections: string[],
   changedSet: Set<string>,
   neighborSet: Set<string>,
   entryIndex: Map<string, SnapshotEntry[]>,
   graph: ImportGraph,
+  language: string,
 ): void {
   const filesWithEntries = [...changedSet, ...neighborSet]
     .filter((f) => entryIndex.has(f))
@@ -286,7 +296,7 @@ function renderSignatures(
   sections.push("");
   sections.push("Key type signatures and function declarations from changed and neighbor files.");
   sections.push("");
-  sections.push("```ts");
+  sections.push(`\`\`\`${LANG_FENCE[language] ?? "ts"}`);
   for (const f of filesWithEntries.slice(0, 20)) {
     const entries = entryIndex.get(f) ?? [];
     if (entries.length === 0) continue;

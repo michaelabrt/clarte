@@ -62,7 +62,6 @@ export function printHelp(): void {
     `    ${t.accent("--watch")}                 ${t.text("Watch for file changes and re-analyze continuously")}`,
   );
   console.log(`    ${t.accent("-v, --verbose")}           ${t.text("Show detailed progress output")}`);
-  console.log(`    ${t.accent("--mcp")}                   ${t.text("Start MCP server for on-demand graph queries")}`);
   console.log("");
   console.log(`  ${t.textBold("Subcommands:")}`);
   console.log(
@@ -197,6 +196,59 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
 
   if (diffFile && !diffMode) {
     console.error("[clarte] --diff-file requires --diff mode; ignoring.");
+  }
+
+  // Validate conflicting flag combinations
+  if (diffMode && watchMode) {
+    throw new ClarteError("--diff and --watch cannot be used together.", ExitCode.FAILURE);
+  }
+  if (diffMode && check) {
+    throw new ClarteError("--diff and --check cannot be used together.", ExitCode.FAILURE);
+  }
+  if (watchMode && check) {
+    throw new ClarteError("--watch and --check cannot be used together.", ExitCode.FAILURE);
+  }
+  if (dryRun && check) {
+    throw new ClarteError("--dry-run and --check cannot be used together.", ExitCode.FAILURE);
+  }
+
+  // Warn on unknown flags
+  const knownFlags = new Set([
+    "--force",
+    "--dry-run",
+    "--refresh-snapshot",
+    "--reconfigure",
+    "--diff",
+    "--check",
+    "--ci",
+    "--verbose",
+    "-v",
+    "--watch",
+    "--full",
+    "--init-hook",
+    "--help",
+    "-h",
+    "--version",
+    "-V",
+  ]);
+  const knownPrefixes = [
+    "--diff=",
+    "--diff-file=",
+    "--check=",
+    "--max-tokens=",
+    "--format=",
+    "--budget=",
+    "--include=",
+    "--exclude=",
+    "--max-chars=",
+    "--base=",
+    "--changed-files=",
+  ];
+  for (const arg of rawArgs) {
+    if (!arg.startsWith("-")) continue;
+    if (knownFlags.has(arg)) continue;
+    if (knownPrefixes.some((p) => arg.startsWith(p))) continue;
+    console.warn(`[clarte] Unknown flag: ${arg}`);
   }
 
   return {
