@@ -155,4 +155,35 @@ describe("parseCliArgs", () => {
   it("parses --reconfigure", () => {
     expect(parseCliArgs(["--reconfigure"]).reconfigure).toBe(true);
   });
+
+  it("throws on --diff + --watch conflict", () => {
+    expect(() => parseCliArgs(["--diff", "--watch"])).toThrow(ClarteError);
+    expect(() => parseCliArgs(["--diff", "--watch"])).toThrow("cannot be used together");
+  });
+
+  it("throws on --diff + --check conflict", () => {
+    expect(() => parseCliArgs(["--diff", "--check"])).toThrow(ClarteError);
+  });
+
+  it("throws on --watch + --check conflict", () => {
+    expect(() => parseCliArgs(["--watch", "--check"])).toThrow(ClarteError);
+  });
+
+  it("throws on --dry-run + --check conflict", () => {
+    expect(() => parseCliArgs(["--dry-run", "--check"])).toThrow(ClarteError);
+  });
+
+  it("warns on unknown flags", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    parseCliArgs(["--unknown-flag"]);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Unknown flag: --unknown-flag"));
+    warnSpy.mockRestore();
+  });
+
+  it("does not warn on known flags", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    parseCliArgs(["--force", "--verbose", "--dry-run"]);
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
 });

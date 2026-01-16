@@ -10,7 +10,7 @@ const GRAPH_PATH = ".clarte/graph.json";
 
 /**
  * Build a PersistedGraph from an ImportGraph and ContextAnalysis.
- * This creates the serializable graph structure consumed by MCP tools.
+ * This creates the serializable graph structure for persistent storage.
  */
 function buildPersistedGraph(graph: ImportGraph, analysis: ContextAnalysis): PersistedGraph {
   // Build lookup maps from analysis data
