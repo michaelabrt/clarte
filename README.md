@@ -355,7 +355,7 @@ npx clarte [directory] [options]
 | `directory` | Path to analyze (defaults to `.`) |
 | `-h, --help` | Show help message |
 | `-V, --version` | Show version number |
-| `--force` | Overwrite existing files without asking |
+| `--yes` | Overwrite existing files without asking |
 | `--dry-run` | Preview what would be generated |
 | `--diff[=REF] [FILES]` | Generate focused context for changed files (vs HEAD or REF) |
 | `--diff-file=PATH` | Write diff output to a file instead of stdout |

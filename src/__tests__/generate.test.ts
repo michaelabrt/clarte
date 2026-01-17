@@ -137,7 +137,7 @@ describe("generateFiles", () => {
       makeCtx(),
       makeAnswers({ ides: ["claude"] }),
       null,
-      true, // force
+      true, // yes
       true, // dryRun
     );
 
@@ -190,7 +190,7 @@ describe("generateFiles", () => {
       makeCtx(),
       makeAnswers(),
       null,
-      true, // force
+      true, // yes
       false, // not dryRun
     );
 

@@ -10,7 +10,7 @@ import type {
   ProgressCallback,
   UserAnswers,
 } from "../types.js";
-import type { PersistedGraph } from "../graph/types.js";
+import type { PersistedGraph } from "../types/persisted-graph.js";
 import { fileExists, readFileOr, writeFileSafe } from "../utils.js";
 import { buildMainContext, getMainContextFilename, type SectionFilterOptions } from "../templates/main-context.js";
 import { buildCursorRules, buildGraphContextRules, renderCursorRule } from "../templates/cursor-rules.js";
@@ -28,7 +28,7 @@ export async function generateFiles(
   ctx: DetectedContext,
   answers: UserAnswers,
   snapshot: CodeSnapshot | null,
-  force: boolean = false,
+  yes: boolean = false,
   dryRun: boolean = false,
   analysis?: ContextAnalysis,
   generateSkills: boolean = false,
@@ -199,7 +199,7 @@ export async function generateFiles(
   }
 
   const existingFiles = files.filter((f) => f.existed);
-  if (existingFiles.length > 0 && !force) {
+  if (existingFiles.length > 0 && !yes) {
     p.log.warn(
       t.warn("The following files already exist:") +
         "\n" +
