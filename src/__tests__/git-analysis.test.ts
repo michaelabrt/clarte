@@ -312,6 +312,70 @@ describe("computeFileChurn", () => {
   });
 });
 
+describe("computeChangeCoupling asymmetric confidence", () => {
+  it("includes pairs with low Jaccard but high directional confidence", () => {
+    // fileA has 50 commits, fileB has 5 commits, they co-change 4 times.
+    // Jaccard = 4/51 ≈ 0.078 (below MIN_CONFIDENCE of 0.3)
+    // confidenceBA = 4/5 = 0.80 (when B changes, A changes 80% of the time)
+    // Build commits: fileB appears 5 times, always with fileA. fileA appears 50 times total.
+    const commits: ParsedCommit[] = [];
+
+    // 4 commits with both fileA and fileB
+    for (let i = 0; i < 4; i++) {
+      commits.push(makeCommit(["asymA.ts", "asymB.ts"]));
+    }
+    // 46 more commits with only fileA (with other files to make them multi-file)
+    for (let i = 0; i < 46; i++) {
+      commits.push(makeCommit(["asymA.ts", "filler.ts"]));
+    }
+    // 1 commit with only fileB (with filler)
+    commits.push(makeCommit(["asymB.ts", "filler.ts"]));
+
+    const result = computeChangeCoupling(commits);
+
+    const asymPair = result.find(
+      (r) => (r.fileA === "asymA.ts" && r.fileB === "asymB.ts") || (r.fileA === "asymB.ts" && r.fileB === "asymA.ts"),
+    );
+    expect(asymPair).toBeDefined();
+
+    // Jaccard should be low (well below 0.3)
+    expect(asymPair!.confidence).toBeLessThan(0.3);
+
+    // But directional confidence (the B->A direction) should be high
+    const ba = asymPair!.fileA === "asymB.ts" ? (asymPair!.confidenceAB ?? 0) : (asymPair!.confidenceBA ?? 0);
+    expect(ba).toBeGreaterThanOrEqual(0.6);
+  });
+
+  it("computes directional confidences correctly", () => {
+    // 3 co-changes, fileA has 3 total commits, fileB has 6 total commits
+    // confidenceAB = 3/3 = 1.0 (A always changes with B)
+    // confidenceBA = 3/6 = 0.5 (B changes with A half the time)
+    const commits: ParsedCommit[] = [];
+    for (let i = 0; i < 3; i++) {
+      commits.push(makeCommit(["dirA.ts", "dirB.ts"]));
+    }
+    // 3 more commits with only fileB
+    for (let i = 0; i < 3; i++) {
+      commits.push(makeCommit(["dirB.ts", "filler.ts"]));
+    }
+
+    const result = computeChangeCoupling(commits);
+    const pair = result.find(
+      (r) => (r.fileA === "dirA.ts" && r.fileB === "dirB.ts") || (r.fileA === "dirB.ts" && r.fileB === "dirA.ts"),
+    );
+    expect(pair).toBeDefined();
+
+    // When fileA is dirA.ts: confidenceAB = 3/3 = 1.0, confidenceBA = 3/6 = 0.5
+    // When fileA is dirB.ts: confidenceAB = 3/6 = 0.5, confidenceBA = 3/3 = 1.0
+    const isAFirst = pair!.fileA === "dirA.ts";
+    const abValue = isAFirst ? pair!.confidenceAB : pair!.confidenceBA;
+    const baValue = isAFirst ? pair!.confidenceBA : pair!.confidenceAB;
+
+    expect(abValue).toBeCloseTo(1.0, 1);
+    expect(baValue).toBeCloseTo(0.5, 1);
+  });
+});
+
 describe("analyzeGitActivityAsync", () => {
   it("returns null for non-git directories", async () => {
     const result = await analyzeGitActivityAsync("/nonexistent-dir-that-does-not-exist");

@@ -385,11 +385,11 @@ export function computeChangeCoupling(
 
     const support = totalMultiFileCommits > 0 ? rawCount / totalMultiFileCommits : 0;
 
-    if (confidence >= COUPLING.MIN_CONFIDENCE) {
-      // Directional conditional probabilities
-      const confidenceAB = commitsA.size > 0 ? intersection / commitsA.size : 0;
-      const confidenceBA = commitsB.size > 0 ? intersection / commitsB.size : 0;
+    // Directional conditional probabilities (computed before filter)
+    const confidenceAB = commitsA.size > 0 ? intersection / commitsA.size : 0;
+    const confidenceBA = commitsB.size > 0 ? intersection / commitsB.size : 0;
 
+    if (confidence >= COUPLING.MIN_CONFIDENCE || confidenceAB >= 0.6 || confidenceBA >= 0.6) {
       results.push({
         fileA,
         fileB,

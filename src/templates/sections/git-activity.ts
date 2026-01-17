@@ -24,12 +24,23 @@ export function renderGitActivitySections(analysis: ContextAnalysis): ContextSec
     ccLines.push("");
     ccLines.push("Files that frequently change together -- when modifying one, check if the other needs updates too.");
     ccLines.push("");
-    ccLines.push("| File A | File B | Co-changes | Jaccard |");
-    ccLines.push("|--------|--------|------------|---------|");
+    ccLines.push("| File A | File B | Co-changes | Confidence |");
+    ccLines.push("|--------|--------|------------|------------|");
     for (const pair of analysis.gitActivity.changeCoupling) {
-      ccLines.push(
-        `| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${(pair.confidence * 100).toFixed(0)}% |`,
-      );
+      const ab = pair.confidenceAB ?? pair.confidence;
+      const ba = pair.confidenceBA ?? pair.confidence;
+      const diff = Math.abs(ab - ba);
+      let confLabel: string;
+      if (diff >= 0.2 && (ab >= 0.6 || ba >= 0.6)) {
+        if (ab > ba) {
+          confLabel = `A->B ${(ab * 100).toFixed(0)}%`;
+        } else {
+          confLabel = `B->A ${(ba * 100).toFixed(0)}%`;
+        }
+      } else {
+        confLabel = `${(pair.confidence * 100).toFixed(0)}%`;
+      }
+      ccLines.push(`| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${confLabel} |`);
     }
     const ccContent = ccLines.join("\n");
     sections.push({ id: "change-coupling", priority: 7, content: ccContent, tokens: estimateTokens(ccContent) });

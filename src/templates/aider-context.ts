@@ -174,9 +174,21 @@ export async function buildAiderContext(
   // Change coupling
   if (analysis?.gitActivity?.changeCoupling && analysis.gitActivity.changeCoupling.length > 0) {
     for (const pair of analysis.gitActivity.changeCoupling.slice(0, 5)) {
-      lines.push(
-        `  - "CO-CHANGE: ${escapeYaml(pair.fileA)} <-> ${escapeYaml(pair.fileB)} (${pair.coChangeCount} co-changes, ${(pair.confidence * 100).toFixed(0)}% confidence)"`,
-      );
+      const ab = pair.confidenceAB ?? pair.confidence;
+      const ba = pair.confidenceBA ?? pair.confidence;
+      if (ab >= 0.6 && ba < 0.6) {
+        lines.push(
+          `  - "CO-CHANGE: ${escapeYaml(pair.fileA)} -> ${escapeYaml(pair.fileB)} (${pair.coChangeCount} co-changes, A->B ${(ab * 100).toFixed(0)}%)"`,
+        );
+      } else if (ba >= 0.6 && ab < 0.6) {
+        lines.push(
+          `  - "CO-CHANGE: ${escapeYaml(pair.fileB)} -> ${escapeYaml(pair.fileA)} (${pair.coChangeCount} co-changes, B->A ${(ba * 100).toFixed(0)}%)"`,
+        );
+      } else {
+        lines.push(
+          `  - "CO-CHANGE: ${escapeYaml(pair.fileA)} <-> ${escapeYaml(pair.fileB)} (${pair.coChangeCount} co-changes, ${(pair.confidence * 100).toFixed(0)}% confidence)"`,
+        );
+      }
     }
   }
 

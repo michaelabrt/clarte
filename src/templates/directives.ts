@@ -113,7 +113,9 @@ function circularDepGuidance(analysis: ContextAnalysis): string[] {
 function coChangeHints(analysis: ContextAnalysis): string[] {
   if (!analysis.gitActivity?.changeCoupling) return [];
   const directives: string[] = [];
-  const highConfidence = analysis.gitActivity.changeCoupling.filter((c) => c.confidence >= 0.6).slice(0, 5);
+  const highConfidence = analysis.gitActivity.changeCoupling
+    .filter((c) => c.confidence >= 0.6 || (c.confidenceAB ?? 0) >= 0.6 || (c.confidenceBA ?? 0) >= 0.6)
+    .slice(0, 5);
   for (const pair of highConfidence) {
     const ab = pair.confidenceAB ?? pair.confidence;
     const ba = pair.confidenceBA ?? pair.confidence;
