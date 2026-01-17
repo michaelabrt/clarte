@@ -123,6 +123,99 @@ describe("buildDirectives", () => {
     expect(directives.some((d) => d.includes("c.ts"))).toBe(false);
   });
 
+  it("includes asymmetric pair with low Jaccard but high confidenceAB", () => {
+    const analysis = emptyAnalysis({
+      gitActivity: {
+        commitCounts: new Map(),
+        hotFiles: [],
+        changeCoupling: [
+          // Low Jaccard (0.1) but confidenceAB = 0.9 (when A changes, B changes 90% of the time)
+          {
+            fileA: "core.ts",
+            fileB: "spec.ts",
+            coChangeCount: 9,
+            support: 0.1,
+            confidence: 0.1,
+            confidenceAB: 0.9,
+            confidenceBA: 0.15,
+          },
+        ],
+      },
+    });
+    const directives = buildDirectives(analysis, mockCtx());
+    expect(directives.some((d) => d.includes("core.ts") && d.includes("90%"))).toBe(true);
+  });
+
+  it("includes asymmetric pair with high confidenceBA, generates directional directive", () => {
+    const analysis = emptyAnalysis({
+      gitActivity: {
+        commitCounts: new Map(),
+        hotFiles: [],
+        changeCoupling: [
+          // Low Jaccard but confidenceBA = 0.85 (when B changes, A changes 85% of the time)
+          {
+            fileA: "big.ts",
+            fileB: "small.ts",
+            coChangeCount: 17,
+            support: 0.05,
+            confidence: 0.1,
+            confidenceAB: 0.1,
+            confidenceBA: 0.85,
+          },
+        ],
+      },
+    });
+    const directives = buildDirectives(analysis, mockCtx());
+    // Should mention small.ts as the trigger (when small changes, check big)
+    expect(directives.some((d) => d.includes("small.ts") && d.includes("85%"))).toBe(true);
+  });
+
+  it("generates symmetric directive when both directions are high", () => {
+    const analysis = emptyAnalysis({
+      gitActivity: {
+        commitCounts: new Map(),
+        hotFiles: [],
+        changeCoupling: [
+          {
+            fileA: "x.ts",
+            fileB: "y.ts",
+            coChangeCount: 8,
+            support: 0.4,
+            confidence: 0.8,
+            confidenceAB: 0.8,
+            confidenceBA: 0.8,
+          },
+        ],
+      },
+    });
+    const directives = buildDirectives(analysis, mockCtx());
+    // Both are >= 0.6 and equal, so the directive mentions x.ts with the higher of ab/ba
+    expect(directives.some((d) => d.includes("x.ts") && d.includes("y.ts"))).toBe(true);
+  });
+
+  it("does not include pair with low Jaccard and both directional values below threshold", () => {
+    const analysis = emptyAnalysis({
+      gitActivity: {
+        commitCounts: new Map(),
+        hotFiles: [],
+        changeCoupling: [
+          {
+            fileA: "p.ts",
+            fileB: "q.ts",
+            coChangeCount: 3,
+            support: 0.05,
+            confidence: 0.2,
+            confidenceAB: 0.3,
+            confidenceBA: 0.2,
+          },
+        ],
+      },
+    });
+    const directives = buildDirectives(analysis, mockCtx());
+    expect(directives.some((d) => d.includes("p.ts"))).toBe(false);
+    expect(directives.some((d) => d.includes("q.ts"))).toBe(false);
+  });
+
   it("generates chokepoint caution directives", () => {
     const analysis = emptyAnalysis({
       chokepoints: [{ file: "src/graph.ts", separates: 3, importedBy: 6, upstreamCount: 3, downstreamCount: 0 }],
