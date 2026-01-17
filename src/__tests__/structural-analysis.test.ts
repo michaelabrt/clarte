@@ -3,7 +3,7 @@ import { findCrossCuttingFiles } from "../graph/cross-cutting.js";
 import { computeLayerConsistency, detectArchitecturalLayers } from "../graph/layers.js";
 import { findChokepoints } from "../graph/chokepoints.js";
 import type { ArchitecturalLayer, ImportEdge, LayerEdge } from "../types.js";
-import { makeGraph, edge } from "./eval/helpers.js";
+import { makeGraph, edge } from "./algorithm/helpers.js";
 
 function makeLayers(defs: Array<{ name: string; files: string[] }>): ArchitecturalLayer[] {
   return defs.map((d) => ({

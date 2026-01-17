@@ -14,7 +14,7 @@
  *   git clone --depth=1 https://github.com/drizzle-team/drizzle-orm.git /tmp/clarte-test-drizzle
  *
  * Run:
- *   REAL_PROJECT_EVAL=1 npx vitest run src/__tests__/eval/betweenness-real-projects.test.ts
+ *   REAL_PROJECT_EVAL=1 npx vitest run src/__tests__/integration/betweenness-real-projects.test.ts
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
