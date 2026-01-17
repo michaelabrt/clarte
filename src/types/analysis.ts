@@ -34,8 +34,6 @@ export interface LayerConsistency {
 export interface Chokepoint {
   /** Relative file path */
   file: string;
-  /** Backward compat: equals upstreamCount */
-  separates: number;
   /** Number of files that import this file */
   importedBy: number;
   /** Number of files that transitively depend on this file */

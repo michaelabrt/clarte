@@ -1,24 +1,20 @@
 import type { FileInstability, ImportGraph } from "../types.js";
+import { INSTABILITY_TYPE_ONLY_WEIGHT, INSTABILITY_THRESHOLD } from "../config/thresholds.js";
 
-/** Instability metric parameters */
-const INSTABILITY = {
-  /**
-   * Type-only imports carry less coupling risk (erased at runtime).
-   * Rationale: 0.3 means a type-only import counts as ~1/3 of a value import.
-   * This acknowledges that type changes can still break dependents at compile time
-   * while recognizing there is no runtime coupling.
-   */
-  TYPE_ONLY_WEIGHT: 0.3,
-} as const;
+export { INSTABILITY_THRESHOLD };
 
-/**
- * Threshold above which a file is considered high-instability.
- * Rationale: Martin's Stable Dependencies Principle flags files with I > 0.5 as
- * unstable. We use 0.8 (stricter) to only surface files that are both heavily
- * depended upon AND have many outgoing dependencies, a genuinely risky combination.
- * Lower thresholds produced too many false positives in practice.
- */
-export const INSTABILITY_THRESHOLD = 0.8;
+function computeFanMaps(graph: ImportGraph): { fanOutMap: Map<string, number>; fanInMap: Map<string, number> } {
+  const fanOutMap = new Map<string, number>();
+  const fanInMap = new Map<string, number>();
+  for (const edge of graph.edges) {
+    if (!edge.isExternal) {
+      const weight = edge.isTypeOnly ? INSTABILITY_TYPE_ONLY_WEIGHT : 1;
+      fanOutMap.set(edge.from, (fanOutMap.get(edge.from) ?? 0) + weight);
+      fanInMap.set(edge.to, (fanInMap.get(edge.to) ?? 0) + weight);
+    }
+  }
+  return { fanOutMap, fanInMap };
+}
 
 /**
  * Compute instability metric (Robert C. Martin) for each file.
@@ -26,25 +22,7 @@ export const INSTABILITY_THRESHOLD = 0.8;
  * Returns files with instability > INSTABILITY_THRESHOLD and fanIn >= 1 (high-risk zones).
  */
 export function computeInstability(graph: ImportGraph): FileInstability[] {
-  const TYPE_ONLY_WEIGHT = INSTABILITY.TYPE_ONLY_WEIGHT;
-
-  // Count weighted outgoing internal edges per file
-  const fanOutMap = new Map<string, number>();
-  for (const edge of graph.edges) {
-    if (!edge.isExternal) {
-      const weight = edge.isTypeOnly ? TYPE_ONLY_WEIGHT : 1;
-      fanOutMap.set(edge.from, (fanOutMap.get(edge.from) ?? 0) + weight);
-    }
-  }
-
-  // Count weighted incoming internal edges per file
-  const fanInMap = new Map<string, number>();
-  for (const edge of graph.edges) {
-    if (!edge.isExternal) {
-      const weight = edge.isTypeOnly ? TYPE_ONLY_WEIGHT : 1;
-      fanInMap.set(edge.to, (fanInMap.get(edge.to) ?? 0) + weight);
-    }
-  }
+  const { fanOutMap, fanInMap } = computeFanMaps(graph);
 
   // Collect all files from both inDegree and fanOutMap to catch pure orchestrators
   // (files with outgoing edges but zero incoming edges)
@@ -73,17 +51,7 @@ export function computeInstability(graph: ImportGraph): FileInstability[] {
  * Files with zero total connections are omitted.
  */
 export function computeAllInstabilities(graph: ImportGraph): Map<string, number> {
-  const TYPE_ONLY_WEIGHT = INSTABILITY.TYPE_ONLY_WEIGHT;
-
-  const fanOutMap = new Map<string, number>();
-  const fanInMap = new Map<string, number>();
-  for (const edge of graph.edges) {
-    if (!edge.isExternal) {
-      const weight = edge.isTypeOnly ? TYPE_ONLY_WEIGHT : 1;
-      fanOutMap.set(edge.from, (fanOutMap.get(edge.from) ?? 0) + weight);
-      fanInMap.set(edge.to, (fanInMap.get(edge.to) ?? 0) + weight);
-    }
-  }
+  const { fanOutMap, fanInMap } = computeFanMaps(graph);
 
   const allFiles = new Set([...graph.inDegree.keys(), ...fanOutMap.keys()]);
   const result = new Map<string, number>();

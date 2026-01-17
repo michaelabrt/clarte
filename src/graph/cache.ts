@@ -24,9 +24,11 @@ import {
 import { initForLanguage } from "../parsers/init.js";
 import { readFileOr } from "../utils.js";
 import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "../types.js";
+import { HASH_CONCURRENCY } from "../config/thresholds.js";
+import { CLARTE_DIR } from "../config/config.js";
 
 const CACHE_VERSION = 2;
-const CACHE_DIR = ".clarte";
+const CACHE_DIR = CLARTE_DIR;
 const CACHE_FILE = "cache.json";
 
 interface SerializedEdge {
@@ -92,7 +94,6 @@ export async function computeFileHashes(rootDir: string, language: Language): Pr
     throw err;
   }
 
-  const HASH_CONCURRENCY = 32;
   const hashes = new Map<string, string>();
 
   for (let i = 0; i < files.length; i += HASH_CONCURRENCY) {
@@ -399,8 +400,8 @@ export async function buildGraphWithCache(
           edges: serializeEdges(graph.edges),
           barrelFiles: [...(graph.barrelFiles ?? [])],
         });
-      } catch {
-        // Cache save failed; non-critical
+      } catch (err) {
+        onProgress?.(`Warning: cache save failed: ${err instanceof Error ? err.message : String(err)}`);
       }
 
       return graph;
@@ -422,8 +423,8 @@ export async function buildGraphWithCache(
       edges: serializeEdges(graph.edges),
       barrelFiles: [...(graph.barrelFiles ?? [])],
     });
-  } catch {
-    // Cache save failed; non-critical
+  } catch (err) {
+    onProgress?.(`Warning: cache save failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return graph;

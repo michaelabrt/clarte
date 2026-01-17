@@ -16,7 +16,9 @@ import type {
   TightCoupling,
 } from "../types.js";
 
-const CACHE_DIR = ".clarte";
+import { CLARTE_DIR } from "../config/config.js";
+
+const CACHE_DIR = CLARTE_DIR;
 const ANALYSIS_CACHE_FILE = "analysis-cache.json";
 
 export const ANALYSIS_CACHE_VERSION = 3;

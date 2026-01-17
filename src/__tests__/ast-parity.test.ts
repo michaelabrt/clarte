@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { initTreeSitter } from "../parsers/init.js";
 import { parseImportsAst } from "../parsers/parse-imports.js";
 import { extractSnapshotAst } from "../parsers/extract-snapshot.js";
-import type { RawImport } from "../parsers/types.js";
+import type { RawImport } from "../types/parser.js";
 import type { Language } from "../types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

@@ -18,7 +18,9 @@ import { buildTestMapping } from "../analysis/test-map.js";
 import { generateSnapshot } from "../snapshot/snapshot.js";
 import { startShimmer } from "../cli/animations.js";
 import { renderDiffContext } from "./diff-render.js";
-import type { ContextAnalysis, ProgressCallback } from "../types.js";
+import type { ContextAnalysis, NeighborhoodResult, ProgressCallback } from "../types.js";
+
+export type { NeighborhoodResult };
 
 export async function runDiffMode(
   rootDir: string,
@@ -200,21 +202,6 @@ function isDiffTestFile(filePath: string): boolean {
     /\/test_[^/]+\.py$/.test(filePath) ||
     /\/tests\//.test(filePath)
   );
-}
-
-export interface NeighborhoodResult {
-  /** All direct neighbors (union of importers + dependencies) */
-  hop1: Set<string>;
-  /** All 2-hop neighbors */
-  hop2: Set<string>;
-  /** Files that import a changed file (downstream dependents) */
-  hop1Importers: Set<string>;
-  /** Files imported by a changed file (upstream dependencies) */
-  hop1Dependencies: Set<string>;
-  /** 2-hop files that are downstream of hop1 */
-  hop2Importers: Set<string>;
-  /** 2-hop files that are upstream of hop1 */
-  hop2Dependencies: Set<string>;
 }
 
 /**

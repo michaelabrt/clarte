@@ -116,7 +116,7 @@ function collectChokepoints(changedFilesSet: Set<string>, chokepointMap: Map<str
   for (const file of changedFilesSet) {
     const cp = chokepointMap.get(file);
     if (cp) {
-      results.push({ file: cp.file, separates: cp.separates, importedBy: cp.importedBy });
+      results.push({ file: cp.file, separates: cp.upstreamCount, importedBy: cp.importedBy });
     }
   }
   return results;

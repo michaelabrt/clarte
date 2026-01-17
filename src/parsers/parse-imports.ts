@@ -1,5 +1,5 @@
 import type { Language as ClarteLanguage } from "../types.js";
-import type { RawImport } from "./types.js";
+import type { RawImport } from "../types/parser.js";
 import { parseSource } from "./init.js";
 import { parseJsImportsAst } from "./ts-imports.js";
 import { parsePythonImportsAst } from "./python-imports.js";
@@ -26,6 +26,6 @@ export function parseImportsAst(content: string, lang: ClarteLanguage, filePath?
     case "java":
       return parseJavaImportsAst(root);
     default:
-      return parseJsImportsAst(root);
+      return [];
   }
 }

@@ -150,7 +150,7 @@ function coChangeHints(analysis: ContextAnalysis): string[] {
 function chokepointCaution(analysis: ContextAnalysis): string[] {
   if (!analysis.chokepoints) return [];
   return analysis.chokepoints.slice(0, 3).map((cp) => {
-    const count = cp.upstreamCount ?? cp.separates;
+    const count = cp.upstreamCount;
     return `When modifying \`${cp.file}\`, note that ${count} files transitively depend on it -- API changes will cascade to all upstream dependents.`;
   });
 }

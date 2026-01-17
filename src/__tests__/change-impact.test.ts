@@ -1,29 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { predictChangeImpact } from "../analysis/change-impact.js";
-import type { GitAnalysis, ImportGraph } from "../types.js";
+import type { GitAnalysis } from "../types.js";
+import { makeImportGraph } from "./helpers/factories.js";
 
-function makeGraph(edges: Array<{ from: string; to: string }>): ImportGraph {
-  const edgeObjs = edges.map((e) => ({
-    from: e.from,
-    to: e.to,
-    isExternal: false,
-    specifier: `./${e.to}`,
-    importedNames: [],
-  }));
-
-  const inDegree = new Map<string, number>();
-  for (const e of edgeObjs) {
-    inDegree.set(e.to, (inDegree.get(e.to) ?? 0) + 1);
-  }
-
-  return {
-    edges: edgeObjs,
-    inDegree,
-    centrality: new Map(),
-    externalImportCounts: new Map(),
-    authority: new Map(),
-    hubScores: new Map(),
-  };
+function makeGraph(edges: Array<{ from: string; to: string }>) {
+  return makeImportGraph(edges);
 }
 
 describe("predictChangeImpact", () => {

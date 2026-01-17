@@ -39,7 +39,6 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
     const directDeps = [...(reverse.get(file) ?? [])].sort();
     results.push({
       file,
-      separates: upstreamCount,
       importedBy: graph.inDegree.get(file) ?? 0,
       upstreamCount,
       downstreamCount,

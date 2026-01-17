@@ -5,6 +5,7 @@ import { glob } from "tinyglobby";
 import type { Language, ProjectConfig, UserAnswers } from "../types.js";
 import { readFileOr, readJsonFile, writeFileSafe } from "../utils.js";
 
+export const CLARTE_DIR = ".clarte";
 const CONFIG_FILENAME = ".clarte.json";
 const CONFIG_VERSION = 2;
 

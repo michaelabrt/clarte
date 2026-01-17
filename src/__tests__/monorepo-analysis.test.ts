@@ -3,23 +3,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { analyzeMonorepoGraph, annotateCrossPackageEdges, computePackageCentrality } from "../analysis/monorepo.js";
-import type { ImportEdge, ImportGraph, MonorepoInfo } from "../types.js";
+import type { ImportEdge, MonorepoInfo } from "../types.js";
+import { makeImportGraph } from "./helpers/factories.js";
 
-/** Helper to create a minimal ImportGraph from edges */
-function makeGraph(edges: ImportEdge[]): ImportGraph {
-  const inDegree = new Map<string, number>();
-  const centrality = new Map<string, number>();
-  const externalImportCounts = new Map<string, number>();
-  const authority = new Map<string, number>();
-  const hubScores = new Map<string, number>();
-
-  for (const edge of edges) {
-    if (!edge.isExternal) {
-      inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1);
-    }
-  }
-
-  return { edges, inDegree, centrality, externalImportCounts, authority, hubScores };
+function makeGraph(edges: ImportEdge[]) {
+  return makeImportGraph(edges);
 }
 
 /** Helper to create an internal ImportEdge */

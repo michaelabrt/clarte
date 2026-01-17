@@ -60,6 +60,22 @@ export interface ClaudeSkill {
   body: string;
 }
 
+/** 2-hop neighborhood of changed files in an import graph */
+export interface NeighborhoodResult {
+  /** All direct neighbors (union of importers + dependencies) */
+  hop1: Set<string>;
+  /** All 2-hop neighbors */
+  hop2: Set<string>;
+  /** Files that import a changed file (downstream dependents) */
+  hop1Importers: Set<string>;
+  /** Files imported by a changed file (upstream dependencies) */
+  hop1Dependencies: Set<string>;
+  /** 2-hop files that are downstream of hop1 */
+  hop2Importers: Set<string>;
+  /** 2-hop files that are upstream of hop1 */
+  hop2Dependencies: Set<string>;
+}
+
 /** Bundle of all structural analysis results */
 export interface ContextAnalysis {
   hubFiles: HubFile[];

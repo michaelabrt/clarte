@@ -1,4 +1,4 @@
-import type { FileRole } from "../types.js";
+import type { FileRole } from "./detection.js";
 
 export const PERSISTED_GRAPH_VERSION = 1;
 

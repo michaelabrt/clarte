@@ -1,79 +1,6 @@
 import type { FileRole, ImportEdge, ImportGraph } from "../types.js";
 import { buildAdjacency } from "../utils.js";
-
-/** HITS edge-weighting parameters */
-const HITS = {
-  /**
-   * Teleportation smoothing factor (prevents extreme score distributions in star graphs).
-   * Rationale: 0.15 matches the standard PageRank damping convention (1-0.85).
-   * Ensures every node keeps a minimum baseline score even in star topologies.
-   */
-  TELEPORT_ALPHA: 0.15,
-  /**
-   * Weight discount for type-only imports (e.g. `import type { Foo }`).
-   * Rationale: type-only imports are erased at runtime, so they represent weaker
-   * coupling than value imports. 0.7 discount (30% weight) balances acknowledging
-   * the structural relationship while downweighting the runtime irrelevance.
-   */
-  TYPE_ONLY_DISCOUNT: 0.7,
-  /**
-   * Weight multiplier for dynamic imports (`import()`).
-   * Rationale: dynamic imports indicate optional/lazy dependencies that are less
-   * likely to cause cascading breakage. 0.5 halves their influence on role scores.
-   */
-  DYNAMIC_MULTIPLIER: 0.5,
-  /**
-   * Minimum specificity for any edge (floor).
-   * Rationale: even a bare `import "./foo"` (0 named imports) should carry some
-   * weight. 0.2 prevents zero-weight edges from making files invisible to HITS.
-   */
-  MIN_SPECIFICITY: 0.2,
-  /**
-   * Log base for specificity scaling: log2(nameCount+1) / log2(BASE).
-   * Rationale: log base 6 gives diminishing returns past ~5 named imports
-   * (log2(6)/log2(6) = 1.0). This avoids letting a single edge with 20+ names
-   * dominate the graph while still rewarding more specific imports.
-   */
-  SPECIFICITY_LOG_BASE: 6,
-  /**
-   * Authority/hub discount for edges involving barrel files.
-   * Rationale: barrel files (index.ts re-exports) inflate authority scores by
-   * accumulating transitive imports. 0.3 (70% discount) prevents barrels from
-   * outranking the files that contain the actual logic.
-   */
-  BARREL_DISCOUNT: 0.3,
-} as const;
-
-/**
- * Thresholds for deriving file roles from HITS authority and hub scores.
- * Empirically tuned for typical project distributions after min-max normalization.
- * Boundary instability is expected in small graphs (<10 files).
- *
- * Rationale for the 0.6/0.3/0.4 split: roles occupy non-overlapping quadrants
- * of the authority-hub space. Foundation (high auth, low hub) and Orchestrator
- * (high hub, low auth) are the extremes. Bridge occupies the center (both > 0.4).
- * Utility fills the moderate-authority band below Foundation. The 0.6 threshold
- * was validated against 12 open-source projects where known utility files
- * (lodash-style helpers) consistently scored in the 0.3-0.6 authority range.
- */
-const ROLE_THRESHOLDS = {
-  /** Minimum authority for Foundation role */
-  FOUNDATION_AUTH: 0.6,
-  /** Maximum hub score for Foundation role */
-  FOUNDATION_HUB_MAX: 0.3,
-  /** Minimum hub score for Orchestrator role */
-  ORCHESTRATOR_HUB: 0.6,
-  /** Maximum authority for Orchestrator role */
-  ORCHESTRATOR_AUTH_MAX: 0.3,
-  /** Minimum authority AND hub for Bridge role */
-  BRIDGE_MIN: 0.4,
-  /** Minimum authority for Utility role */
-  UTILITY_AUTH_MIN: 0.3,
-  /** Maximum authority for Utility role */
-  UTILITY_AUTH_MAX: 0.6,
-  /** Maximum hub score for Utility role */
-  UTILITY_HUB_MAX: 0.3,
-} as const;
+import { HITS, ROLE_THRESHOLDS } from "../config/thresholds.js";
 
 /**
  * Compute HITS authority and hub scores for all files.
@@ -141,7 +68,11 @@ export function computeHITS(
       weight *= HITS.BARREL_DISCOUNT;
     }
 
-    // Barrel outgoing discount: re-exports contribute less authority to targets
+    // Barrel outgoing discount: re-exports contribute less authority to targets.
+    // If both edge.from and edge.to are barrels, the discount compounds to
+    // BARREL_DISCOUNT^2 (e.g. 0.3 * 0.3 = 0.09). This is intentional:
+    // barrel-to-barrel edges (a re-export file re-exporting from another re-export
+    // file) are very low signal and should contribute negligibly to scores.
     if (barrels.has(edge.from)) {
       weight *= HITS.BARREL_DISCOUNT;
     }

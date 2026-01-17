@@ -1,33 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { analyzeForCI } from "../analysis/ci.js";
-import type { ContextAnalysis, ImportGraph } from "../types.js";
+import type { ContextAnalysis } from "../types.js";
+import { makeImportGraph } from "./helpers/factories.js";
 
-function makeGraph(
-  edges: Array<{ from: string; to: string }>,
-  opts?: { betweenness?: Map<string, number> },
-): ImportGraph {
-  const edgeObjs = edges.map((e) => ({
-    from: e.from,
-    to: e.to,
-    isExternal: false,
-    specifier: `./${e.to}`,
-    importedNames: [],
-  }));
-
-  const inDegree = new Map<string, number>();
-  for (const e of edgeObjs) {
-    inDegree.set(e.to, (inDegree.get(e.to) ?? 0) + 1);
+function makeGraph(edges: Array<{ from: string; to: string }>, opts?: { betweenness?: Map<string, number> }) {
+  const graph = makeImportGraph(edges);
+  if (opts?.betweenness) {
+    return { ...graph, betweennessScores: opts.betweenness };
   }
-
-  return {
-    edges: edgeObjs,
-    inDegree,
-    centrality: new Map(),
-    externalImportCounts: new Map(),
-    authority: new Map(),
-    hubScores: new Map(),
-    betweennessScores: opts?.betweenness,
-  };
+  return graph;
 }
 
 function makeAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
@@ -170,7 +151,7 @@ describe("analyzeForCI", () => {
     it("alerts when a chokepoint is in the diff", async () => {
       const graph = makeGraph([]);
       const analysis = makeAnalysis({
-        chokepoints: [{ file: "choke.ts", separates: 5, importedBy: 10, upstreamCount: 5, downstreamCount: 0 }],
+        chokepoints: [{ file: "choke.ts", importedBy: 10, upstreamCount: 5, downstreamCount: 0 }],
       });
 
       const result = await analyzeForCI("/tmp", ["choke.ts"], analysis, graph);
@@ -183,7 +164,7 @@ describe("analyzeForCI", () => {
     it("ignores chokepoints not in the diff", async () => {
       const graph = makeGraph([]);
       const analysis = makeAnalysis({
-        chokepoints: [{ file: "choke.ts", separates: 5, importedBy: 10, upstreamCount: 5, downstreamCount: 0 }],
+        chokepoints: [{ file: "choke.ts", importedBy: 10, upstreamCount: 5, downstreamCount: 0 }],
       });
 
       const result = await analyzeForCI("/tmp", ["other.ts"], analysis, graph);

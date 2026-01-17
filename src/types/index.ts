@@ -5,3 +5,5 @@ export * from "./graph.js";
 export * from "./git.js";
 export * from "./analysis.js";
 export * from "./output.js";
+export * from "./persisted-graph.js";
+export * from "./parser.js";

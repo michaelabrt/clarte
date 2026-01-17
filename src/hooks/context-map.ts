@@ -1,5 +1,5 @@
 import { buildReverseAdjacency, getFileGraphData, type FileGraphData } from "../graph/data.js";
-import type { PersistedGraph } from "../graph/types.js";
+import type { PersistedGraph } from "../types/persisted-graph.js";
 
 export const BETWEENNESS_THRESHOLD = 0.1;
 

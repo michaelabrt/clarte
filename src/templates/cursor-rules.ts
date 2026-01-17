@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
-import type { PersistedGraph } from "../graph/types.js";
+import type { PersistedGraph } from "../types/persisted-graph.js";
 import { buildReverseAdjacency, getFileGraphData } from "../graph/data.js";
 import { isSignificantFile, formatFileContext } from "../hooks/context-map.js";
 import { getFrameworkHints } from "./framework-hints.js";
