@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildSections, resetProjectNameCache } from "../templates/main-context.js";
 import { buildAiderContext } from "../templates/aider-context.js";
 import { renderArchitectureSections } from "../templates/sections/architecture.js";
-import type { ContextAnalysis, DetectedContext, UserAnswers } from "../types.js";
+import type { ContextAnalysis, DetectedContext, ImportGraph, UserAnswers } from "../types.js";
 
 function mockCtx(overrides?: Partial<DetectedContext>): DetectedContext {
   return {
@@ -382,7 +382,7 @@ describe("Key Files instability rendering", () => {
     };
   }
 
-  it("suppresses ⚠️ for Orchestrator files with high instability", async () => {
+  it("renders I= notation without ⚠️ when no graph is provided", async () => {
     const analysis: ContextAnalysis = {
       hubFiles: [
         {
@@ -418,20 +418,20 @@ describe("Key Files instability rendering", () => {
     const keyFiles = sections.find((s) => s.id === "key-files");
     expect(keyFiles).toBeDefined();
 
-    // Orchestrator row: has instability number but no ⚠️
-    expect(keyFiles!.content).toContain("95% unstable");
+    // Orchestrator row: uses I= notation, no ⚠️ (no graph → no SDP detection)
+    expect(keyFiles!.content).toContain("I=95%");
     const orchestratorRow = keyFiles!.content.split("\n").find((l) => l.includes("src/index.ts"));
     expect(orchestratorRow).toBeDefined();
     expect(orchestratorRow).not.toContain("⚠️");
 
-    // Foundation row: no instability score (not in instabilities array) → shows "stable"
+    // Foundation row: not in instabilities array → shows "stable"
     const foundationRow = keyFiles!.content.split("\n").find((l) => l.includes("src/types.ts"));
     expect(foundationRow).toBeDefined();
     expect(foundationRow).toContain("stable");
     expect(foundationRow).not.toContain("⚠️");
   });
 
-  it("shows ⚠️ for Foundation files with high instability", async () => {
+  it("shows ⚠️ only for actual SDP violations (stable file depends on unstable one)", async () => {
     const analysis: ContextAnalysis = {
       hubFiles: [
         {
@@ -452,11 +452,45 @@ describe("Key Files instability rendering", () => {
       communities: [],
     };
 
-    const sections = await renderArchitectureSections(analysis, minimalCtx());
-    const keyFiles = sections.find((s) => s.id === "key-files");
-    expect(keyFiles).toBeDefined();
-    const foundationRow = keyFiles!.content.split("\n").find((l) => l.includes("src/types.ts"));
-    expect(foundationRow).toBeDefined();
-    expect(foundationRow).toContain("⚠️");
+    // Without a graph, SDP detection is skipped — no ⚠️ in table rows even for high-instability files.
+    const sectionsNoGraph = await renderArchitectureSections(analysis, minimalCtx());
+    const keyFilesNoGraph = sectionsNoGraph.find((s) => s.id === "key-files");
+    const typesRowNoGraph = keyFilesNoGraph!.content.split("\n").find((l) => l.includes("src/types.ts"));
+    expect(typesRowNoGraph).toBeDefined();
+    expect(typesRowNoGraph).not.toContain("⚠️");
+
+    // With a graph where stable.ts (I≈0.25) imports types.ts (I≈0.83) → SDP violation.
+    // stable.ts: fanIn=3 (from a, b, c), fanOut=1 (to types.ts) → I=1/4=0.25
+    // types.ts:  fanIn=1 (from stable.ts), fanOut=5 (to d1..d5) → I=5/6≈0.83
+    const makeEdge = (from: string, to: string): ImportGraph["edges"][number] => ({
+      from,
+      to,
+      isExternal: false,
+      specifier: to,
+      importedNames: [],
+    });
+    const graph: ImportGraph = {
+      edges: [
+        makeEdge("a.ts", "src/stable.ts"),
+        makeEdge("b.ts", "src/stable.ts"),
+        makeEdge("c.ts", "src/stable.ts"),
+        makeEdge("src/stable.ts", "src/types.ts"),
+        makeEdge("src/types.ts", "d1.ts"),
+        makeEdge("src/types.ts", "d2.ts"),
+        makeEdge("src/types.ts", "d3.ts"),
+        makeEdge("src/types.ts", "d4.ts"),
+        makeEdge("src/types.ts", "d5.ts"),
+      ],
+      inDegree: new Map(),
+      centrality: new Map(),
+      externalImportCounts: new Map(),
+      authority: new Map(),
+      hubScores: new Map(),
+    };
+    const sectionsWithGraph = await renderArchitectureSections(analysis, minimalCtx(), graph);
+    const keyFilesWithGraph = sectionsWithGraph.find((s) => s.id === "key-files");
+    const typesRow = keyFilesWithGraph!.content.split("\n").find((l) => l.includes("src/types.ts"));
+    expect(typesRow).toBeDefined();
+    expect(typesRow).toContain("- SDP ⚠️");
   });
 });

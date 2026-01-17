@@ -7,6 +7,7 @@ import type {
   LayerEdge,
 } from "../../types.js";
 import { estimateTokens } from "../../utils.js";
+import { computeAllInstabilities } from "../../graph/instability.js";
 import { renderDirectivesSection } from "../directives.js";
 import { renderConstraintsSection } from "../../config/scan.js";
 
@@ -46,23 +47,37 @@ export async function renderArchitectureSections(
         instabilityMap.set(inst.path, inst.instability);
       }
     }
+
+    // Detect SDP violations: a stable file (low I) importing an unstable file (high I).
+    // Requires the full graph; without it we emit no warnings to avoid false positives.
+    const sdpViolations = new Set<string>();
+    if (graph) {
+      const allInstabilities = computeAllInstabilities(graph);
+      for (const edge of graph.edges) {
+        if (edge.isExternal) continue;
+        const importerI = allInstabilities.get(edge.from) ?? 0;
+        const importedI = allInstabilities.get(edge.to) ?? 0;
+        if (importerI < importedI) {
+          sdpViolations.add(edge.to);
+        }
+      }
+    }
+
     const keyLines: string[] = [];
     keyLines.push("## Key Files");
     keyLines.push("");
     keyLines.push("These are the most interconnected files. Read these first for architectural understanding.");
     keyLines.push("");
-    keyLines.push("| File | Imported By | Stability |");
-    keyLines.push("|------|-------------|-----------|");
+    keyLines.push("| File | Imported By | I |");
+    keyLines.push("|------|-------------|---|");
     for (const hub of analysis.hubFiles) {
       const inst = instabilityMap.get(hub.path);
-      // Orchestrators sit at the top of the dependency tree by design — high instability is expected, not a warning.
-      const isOrchestrator = hub.role === "Orchestrator";
       const stabilityCell =
         inst == null
           ? "stable"
-          : isOrchestrator
-            ? `${(inst * 100).toFixed(0)}% unstable`
-            : `${(inst * 100).toFixed(0)}% unstable \u26A0\uFE0F`;
+          : sdpViolations.has(hub.path)
+            ? `I=${(inst * 100).toFixed(0)}% - SDP \u26A0\uFE0F`
+            : `I=${(inst * 100).toFixed(0)}%`;
       const roleTag = hub.role !== "Leaf" ? ` (${hub.role})` : "";
       keyLines.push(
         `| \`${hub.path}\`${roleTag} | ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"} | ${stabilityCell} |`,
