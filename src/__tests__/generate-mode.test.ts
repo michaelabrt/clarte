@@ -208,7 +208,7 @@ import type { ProjectConfig } from "../types.js";
 function makeOpts(overrides: Partial<Parameters<typeof runGenerateMode>[0]> = {}) {
   return {
     rootDir: "/tmp/test",
-    force: false,
+    yes: false,
     dryRun: false,
     reconfigure: false,
     verbose: false,

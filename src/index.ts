@@ -27,7 +27,7 @@ async function main() {
 
   const {
     rootDir,
-    force,
+    yes,
     dryRun,
     refresh,
     reconfigure,
@@ -141,7 +141,7 @@ async function main() {
 
   await runGenerateMode({
     rootDir,
-    force,
+    yes,
     dryRun,
     reconfigure,
     verbose,

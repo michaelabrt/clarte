@@ -67,3 +67,24 @@ export interface ProjectConfig {
   /** Whether to generate Claude Code hooks for graph context delivery (default: true) */
   hooks?: boolean;
 }
+
+/** Section include/exclude filter for context generation */
+export interface SectionFilter {
+  include?: Set<string>;
+  exclude?: Set<string>;
+}
+
+/** Options for the generate mode */
+export interface GenerateOptions {
+  rootDir: string;
+  yes: boolean;
+  dryRun: boolean;
+  reconfigure: boolean;
+  verbose: boolean;
+  jsonMode: boolean;
+  maxTokens?: number;
+  effectiveBudget?: number;
+  sectionFilter?: SectionFilter;
+  maxChars?: number;
+  savedConfig: ProjectConfig | null;
+}

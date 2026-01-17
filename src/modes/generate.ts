@@ -14,6 +14,7 @@ import type {
   GeneratedFile,
   HubFile,
   ImportGraph,
+  PersistedGraph,
   ProgressCallback,
   ProjectConfig,
 } from "../types.js";
@@ -27,10 +28,11 @@ import { startShimmer } from "../cli/animations.js";
 import { serializeAnalysis } from "../analysis/serialize.js";
 import { buildDirectives } from "../templates/directives.js";
 import { runAnalysis } from "../core/run-analysis.js";
+import { HITS } from "../config/thresholds.js";
 
 export interface GenerateOptions {
   rootDir: string;
-  force: boolean;
+  yes: boolean;
   dryRun: boolean;
   reconfigure: boolean;
   verbose: boolean;
@@ -54,7 +56,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
   const startTime = performance.now();
   const {
     rootDir,
-    force,
+    yes,
     dryRun,
     reconfigure,
     verbose,
@@ -103,7 +105,13 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       }
       // Recompute HITS and betweenness on merged graph (per-language scores are incommensurable)
       const allFiles = [...graph.inDegree.keys()];
-      const { authority, hub } = computeHITS(allFiles, graph.edges, 30, 1e-6, graph.barrelFiles);
+      const { authority, hub } = computeHITS(
+        allFiles,
+        graph.edges,
+        HITS.MAX_ITERATIONS,
+        HITS.EPSILON,
+        graph.barrelFiles,
+      );
       graph.authority = authority;
       graph.hubScores = hub;
       graph.centrality = authority;
@@ -173,7 +181,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
   );
 
   // Persist analysis graph for hooks and cursor rules (non-critical)
-  let persistedGraph: import("../graph/types.js").PersistedGraph | null = null;
+  let persistedGraph: PersistedGraph | null = null;
   try {
     const { persistGraph, loadPersistedGraph } = await import("../graph/persist.js");
     await persistGraph(rootDir, graph, analysis);
@@ -338,7 +346,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       detected,
       answers,
       snapshot,
-      force,
+      yes,
       dryRun,
       analysis,
       generateSkills,

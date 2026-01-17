@@ -13,7 +13,7 @@ beforeEach(() => {
 describe("parseCliArgs", () => {
   it("parses empty args to defaults", () => {
     const result = parseCliArgs([]);
-    expect(result.force).toBe(false);
+    expect(result.yes).toBe(false);
     expect(result.dryRun).toBe(false);
     expect(result.refresh).toBe(false);
     expect(result.reconfigure).toBe(false);
@@ -34,8 +34,8 @@ describe("parseCliArgs", () => {
   });
 
   it("parses boolean flags", () => {
-    const result = parseCliArgs(["--force", "--dry-run", "--verbose", "--ci", "--watch"]);
-    expect(result.force).toBe(true);
+    const result = parseCliArgs(["--yes", "--dry-run", "--verbose", "--ci", "--watch"]);
+    expect(result.yes).toBe(true);
     expect(result.dryRun).toBe(true);
     expect(result.verbose).toBe(true);
     expect(result.ciMode).toBe(true);
@@ -182,7 +182,7 @@ describe("parseCliArgs", () => {
 
   it("does not warn on known flags", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    parseCliArgs(["--force", "--verbose", "--dry-run"]);
+    parseCliArgs(["--yes", "--verbose", "--dry-run"]);
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });

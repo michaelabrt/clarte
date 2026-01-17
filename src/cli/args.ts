@@ -21,7 +21,7 @@ export function printHelp(): void {
   console.log(`  ${t.textBold("Options:")}`);
   console.log(`    ${t.accent("-h, --help")}              ${t.text("Show this help message")}`);
   console.log(`    ${t.accent("-V, --version")}           ${t.text("Show version number")}`);
-  console.log(`    ${t.accent("--force")}                 ${t.text("Overwrite existing files without asking")}`);
+  console.log(`    ${t.accent("--yes")}                   ${t.text("Overwrite existing files without asking")}`);
   console.log(`    ${t.accent("--dry-run")}               ${t.text("Preview what would be generated")}`);
   console.log(
     `    ${t.accent("--diff[=REF] [FILES]")}    ${t.text("Generate focused context for changed files (vs HEAD or REF)")}`,
@@ -102,7 +102,7 @@ export function printHelp(): void {
 
 export interface CliArgs {
   rootDir: string;
-  force: boolean;
+  yes: boolean;
   dryRun: boolean;
   refresh: boolean;
   reconfigure: boolean;
@@ -127,7 +127,7 @@ export interface CliArgs {
 }
 
 export function parseCliArgs(rawArgs: string[]): CliArgs {
-  const force = rawArgs.includes("--force");
+  const yes = rawArgs.includes("--yes");
   const dryRun = rawArgs.includes("--dry-run");
   const refresh = rawArgs.includes("--refresh-snapshot");
   const reconfigure = rawArgs.includes("--reconfigure");
@@ -214,7 +214,7 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
 
   // Warn on unknown flags
   const knownFlags = new Set([
-    "--force",
+    "--yes",
     "--dry-run",
     "--refresh-snapshot",
     "--reconfigure",
@@ -253,7 +253,7 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
 
   return {
     rootDir,
-    force,
+    yes,
     dryRun,
     refresh,
     reconfigure,
