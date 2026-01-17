@@ -1,9 +1,10 @@
 import path from "node:path";
 import { readJsonFile, writeFileSafe } from "../utils.js";
-import type { PersistedGraph } from "../graph/types.js";
+import type { PersistedGraph } from "../types/persisted-graph.js";
 import { buildContextMap } from "./context-map.js";
+import { CLARTE_DIR } from "../config/config.js";
 
-const HOOKS_DIR = ".clarte/hooks";
+const HOOKS_DIR = `${CLARTE_DIR}/hooks`;
 const CONTEXT_MAP_FILE = "context-map.json";
 const SETTINGS_PATH = ".claude/settings.json";
 
@@ -89,7 +90,7 @@ interface ClaudeSettings {
 }
 
 function upsertHookEntry(entries: MatchedHookGroup[], newEntry: MatchedHookGroup): void {
-  const existingIdx = entries.findIndex((entry) => entry.hooks?.some((h) => h.command?.includes(".clarte/hooks/")));
+  const existingIdx = entries.findIndex((entry) => entry.hooks?.some((h) => h.command?.includes(`${HOOKS_DIR}/`)));
   if (existingIdx >= 0) {
     entries[existingIdx] = newEntry;
   } else {

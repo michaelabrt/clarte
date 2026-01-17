@@ -95,7 +95,6 @@
   "chokepoints": [
     {
       "file": "app/services/auth.py",
-      "separates": 4,
       "upstreamCount": 4,
       "downstreamCount": 1
     }

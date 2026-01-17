@@ -1,5 +1,5 @@
 import type { Node } from "web-tree-sitter";
-import type { RawImport } from "./types.js";
+import type { RawImport } from "../types/parser.js";
 
 export function parsePythonImportsAst(root: Node): RawImport[] {
   const imports: RawImport[] = [];

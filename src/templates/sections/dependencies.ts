@@ -90,7 +90,7 @@ export function renderDependencySections(analysis: ContextAnalysis): ContextSect
     cpLines.push("| File | Upstream (dependents) | Downstream (deps) |");
     cpLines.push("|------|-----------------------|-------------------|");
     for (const cp of analysis.chokepoints.slice(0, 5)) {
-      const upstream = cp.upstreamCount ?? cp.separates;
+      const upstream = cp.upstreamCount;
       const downstream = cp.downstreamCount ?? 0;
       cpLines.push(`| \`${cp.file}\` | ${upstream} files | ${downstream} files |`);
     }

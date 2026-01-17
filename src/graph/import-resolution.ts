@@ -5,8 +5,8 @@ import { parseImportsAst } from "../parsers/parse-imports.js";
 import { resolveBarrelExportsAst } from "../parsers/barrel.js";
 import type { Language } from "../types.js";
 
-export type { RawImport } from "../parsers/types.js";
-type RawImport = import("../parsers/types.js").RawImport;
+export type { RawImport } from "../types/parser.js";
+type RawImport = import("../types/parser.js").RawImport;
 
 /**
  * Resolution priority: .ts > .tsx > .js > .jsx > .mjs

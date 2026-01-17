@@ -138,8 +138,8 @@ Files not imported by any other source file. Candidates for removal or missing e
 - `scripts/copy-wasm.js`
 - `src/config/scan-rules.ts`
 - `src/conventions/naming.ts`
-- `src/graph/persist.ts`
-- `src/types.ts`
+- `src/graph/persist.ts` (dynamically imported from `src/modes/generate.ts` — not a dead file, false positive)
+- `src/types.ts` (re-export barrel, imported by 40+ test files — not a dead file, false positive)
 
 ## Cross-Cutting Files
 

@@ -60,7 +60,6 @@
   "chokepoints": [
     {
       "file": "internal/repository/product_repo.go",
-      "separates": 3,
       "upstreamCount": 3,
       "downstreamCount": 1
     }

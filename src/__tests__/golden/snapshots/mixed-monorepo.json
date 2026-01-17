@@ -70,13 +70,11 @@
   "chokepoints": [
     {
       "file": "packages/core/src/events.ts",
-      "separates": 5,
       "upstreamCount": 5,
       "downstreamCount": 1
     },
     {
       "file": "packages/core/src/utils.ts",
-      "separates": 5,
       "upstreamCount": 5,
       "downstreamCount": 1
     }

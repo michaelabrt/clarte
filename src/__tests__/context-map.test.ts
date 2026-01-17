@@ -4,7 +4,7 @@ import os from "node:os";
 import { describe, expect, it, afterEach } from "vitest";
 import { buildContextMap } from "../hooks/context-map.js";
 import { generateHookFiles, configureClaudeHooks } from "../hooks/generate-hooks.js";
-import type { PersistedGraph } from "../graph/types.js";
+import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
 
 async function makeTmpDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "clarte-hooks-"));
@@ -14,50 +14,20 @@ async function cleanup(dir: string) {
   await fs.rm(dir, { recursive: true, force: true });
 }
 
-function makeGraph(overrides: Partial<PersistedGraph> = {}): PersistedGraph {
-  return {
-    version: 1,
-    timestamp: new Date().toISOString(),
-    files: {},
-    edges: [],
-    communities: [],
-    changeCoupling: [],
-    structuralMismatches: [],
-    testMapping: {},
-    lagCouplings: [],
-    ...overrides,
-  };
-}
-
-function makeFile(overrides: Partial<PersistedGraph["files"][string]> = {}): PersistedGraph["files"][string] {
-  return {
-    role: "Leaf",
-    authority: 0,
-    hubScore: 0,
-    betweenness: 0,
-    instability: null,
-    importedByCount: 0,
-    isChokepoint: false,
-    separatesComponents: 0,
-    isCrossCutting: false,
-    layerSpread: 0,
-    layers: [],
-    hasTests: false,
-    testFiles: [],
-    communityId: null,
-    ...overrides,
-  };
-}
-
 // ── buildContextMap ─────────────────────────────────────────────────────────
 
 describe("buildContextMap", () => {
   it("produces entries only for files above thresholds", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/utils.ts": makeFile({ role: "Foundation", betweenness: 0.85, isChokepoint: true, separatesComponents: 5 }),
-        "src/leaf.ts": makeFile({ betweenness: 0.01 }),
-        "src/mid.ts": makeFile({ betweenness: 0.05 }),
+        "src/utils.ts": makeFileRecord({
+          role: "Foundation",
+          betweenness: 0.85,
+          isChokepoint: true,
+          separatesComponents: 5,
+        }),
+        "src/leaf.ts": makeFileRecord({ betweenness: 0.01 }),
+        "src/mid.ts": makeFileRecord({ betweenness: 0.05 }),
       },
     });
 
@@ -66,10 +36,10 @@ describe("buildContextMap", () => {
   });
 
   it("produces no entries when all files are below thresholds", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/a.ts": makeFile({ betweenness: 0.05 }),
-        "src/b.ts": makeFile({ betweenness: 0.01 }),
+        "src/a.ts": makeFileRecord({ betweenness: 0.05 }),
+        "src/b.ts": makeFileRecord({ betweenness: 0.01 }),
       },
     });
 
@@ -78,10 +48,10 @@ describe("buildContextMap", () => {
   });
 
   it("includes files with co-change partners even if betweenness is low", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/a.ts": makeFile({ betweenness: 0.05 }),
-        "src/b.ts": makeFile({ betweenness: 0.02 }),
+        "src/a.ts": makeFileRecord({ betweenness: 0.05 }),
+        "src/b.ts": makeFileRecord({ betweenness: 0.02 }),
       },
       changeCoupling: [{ fileA: "src/a.ts", fileB: "src/b.ts", confidence: 0.7, coChangeCount: 10 }],
     });
@@ -92,11 +62,11 @@ describe("buildContextMap", () => {
   });
 
   it("includes files with integration tests even if betweenness is low", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/a.ts": makeFile({ betweenness: 0.05, testFiles: ["src/__tests__/a.test.ts"] }),
-        "src/b.ts": makeFile({ betweenness: 0.05 }),
-        "src/__tests__/integration.test.ts": makeFile(),
+        "src/a.ts": makeFileRecord({ betweenness: 0.05, testFiles: ["src/__tests__/a.test.ts"] }),
+        "src/b.ts": makeFileRecord({ betweenness: 0.05 }),
+        "src/__tests__/integration.test.ts": makeFileRecord(),
       },
       edges: [
         { from: "src/b.ts", to: "src/a.ts", importedNames: [] },
@@ -111,9 +81,9 @@ describe("buildContextMap", () => {
   });
 
   it("formats context with role and betweenness", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/utils.ts": makeFile({ role: "Foundation", betweenness: 0.85 }),
+        "src/utils.ts": makeFileRecord({ role: "Foundation", betweenness: 0.85 }),
       },
     });
 
@@ -123,9 +93,9 @@ describe("buildContextMap", () => {
   });
 
   it("formats chokepoint info", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/router.ts": makeFile({ betweenness: 0.5, isChokepoint: true, separatesComponents: 7 }),
+        "src/router.ts": makeFileRecord({ betweenness: 0.5, isChokepoint: true, separatesComponents: 7 }),
       },
     });
 
@@ -134,10 +104,10 @@ describe("buildContextMap", () => {
   });
 
   it("formats co-change partners", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/a.ts": makeFile({ betweenness: 0.05 }),
-        "src/b.ts": makeFile({ betweenness: 0.05 }),
+        "src/a.ts": makeFileRecord({ betweenness: 0.05 }),
+        "src/b.ts": makeFileRecord({ betweenness: 0.05 }),
       },
       changeCoupling: [{ fileA: "src/a.ts", fileB: "src/b.ts", confidence: 0.55, coChangeCount: 8 }],
     });
@@ -157,9 +127,9 @@ describe("generateHookFiles", () => {
 
   it("generates context-map.json and on-read.mjs", async () => {
     tmpDir = await makeTmpDir();
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/utils.ts": makeFile({ role: "Foundation", betweenness: 0.85 }),
+        "src/utils.ts": makeFileRecord({ role: "Foundation", betweenness: 0.85 }),
       },
     });
 
@@ -176,7 +146,7 @@ describe("generateHookFiles", () => {
 
   it("produces valid ESM hook script with expected structure", async () => {
     tmpDir = await makeTmpDir();
-    const graph = makeGraph({ files: {} });
+    const graph = makePersistedGraph({ files: {} });
 
     await generateHookFiles(tmpDir, graph);
 
@@ -191,7 +161,7 @@ describe("generateHookFiles", () => {
 
   it("generates on-session-start.mjs with model gate", async () => {
     tmpDir = await makeTmpDir();
-    const graph = makeGraph({ files: {} });
+    const graph = makePersistedGraph({ files: {} });
 
     await generateHookFiles(tmpDir, graph);
 
@@ -204,7 +174,7 @@ describe("generateHookFiles", () => {
 
   it("on-read script checks CLARTE_HOOKS_DISABLED", async () => {
     tmpDir = await makeTmpDir();
-    const graph = makeGraph({ files: {} });
+    const graph = makePersistedGraph({ files: {} });
 
     await generateHookFiles(tmpDir, graph);
 

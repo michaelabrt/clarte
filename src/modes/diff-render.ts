@@ -1,6 +1,12 @@
-import type { ContextAnalysis, DetectedContext, HubFile, ImportGraph, SnapshotEntry } from "../types.js";
+import type {
+  ContextAnalysis,
+  DetectedContext,
+  HubFile,
+  ImportGraph,
+  NeighborhoodResult,
+  SnapshotEntry,
+} from "../types.js";
 import { buildDirectives } from "../templates/directives.js";
-import type { NeighborhoodResult } from "./diff.js";
 
 export interface DiffRenderContext {
   changedFiles: string[];

@@ -1,12 +1,9 @@
 import { isTestFile } from "../utils.js";
-import type { PersistedGraph } from "./types.js";
-
-const MAX_INTEGRATION_TESTS = 5;
-const MAX_COCHANGE = 3;
-const MAX_BFS_DEPTH = 10;
+import type { PersistedGraph } from "../types/persisted-graph.js";
+import { GRAPH_DATA } from "../config/thresholds.js";
 
 export function normalizePath(p: string): string {
-  return p.replace(/^\.\//, "").replace(/\\/g, "/");
+  return p.replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
 /**
@@ -42,9 +39,9 @@ export function findTransitiveTests(
     queue.push({ file: importer, depth: 1 });
   }
 
-  while (queue.length > 0 && results.length < MAX_INTEGRATION_TESTS) {
+  while (queue.length > 0 && results.length < GRAPH_DATA.MAX_INTEGRATION_TESTS) {
     const { file, depth } = queue.shift()!;
-    if (visited.has(file) || depth > MAX_BFS_DEPTH) continue;
+    if (visited.has(file) || depth > GRAPH_DATA.MAX_BFS_DEPTH) continue;
     visited.add(file);
 
     if (isTestFile(file) && !directTests.has(file)) {
@@ -93,7 +90,7 @@ export function getFileGraphData(
       confidence: c.confidence,
     }))
     .sort((a, b) => b.confidence - a.confidence)
-    .slice(0, MAX_COCHANGE);
+    .slice(0, GRAPH_DATA.MAX_COCHANGE);
 
   return {
     role: file.role ?? "Leaf",

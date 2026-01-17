@@ -215,7 +215,7 @@ export async function buildAiderContext(
   // Chokepoints
   if (analysis?.chokepoints && analysis.chokepoints.length > 0) {
     for (const cp of analysis.chokepoints.slice(0, 5)) {
-      const count = cp.upstreamCount ?? cp.separates;
+      const count = cp.upstreamCount;
       lines.push(
         `  - "CHOKEPOINT: ${escapeYaml(cp.file)} has ${count} transitive dependents, refactor with extreme care"`,
       );

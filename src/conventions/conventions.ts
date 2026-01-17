@@ -2,6 +2,7 @@ import path from "node:path";
 import { isTestFile, readFileOr } from "../utils.js";
 import type { ConfigConstraints, ImportGraph, InferredConventions } from "../types.js";
 import { detectImportOrderingDetailed } from "./imports.js";
+import { MAJORITY_THRESHOLD, STRONG_MAJORITY_THRESHOLD } from "../config/thresholds.js";
 
 const CAMEL_CASE = /^[a-z][a-zA-Z0-9]*$/;
 const PASCAL_CASE = /^[A-Z][a-zA-Z0-9]*$/;
@@ -28,11 +29,6 @@ function classifyFilename(name: string): string | null {
   if (CAMEL_CASE.test(base)) return "camelCase";
   return null;
 }
-
-/** Minimum ratio for a style to be reported as a convention. */
-const MAJORITY_THRESHOLD = 0.6;
-/** Stricter threshold for per-directory overrides. */
-const STRONG_MAJORITY_THRESHOLD = 0.8;
 
 function majorityStyle(counts: Map<string, number>, threshold = MAJORITY_THRESHOLD): string {
   let best = "mixed";

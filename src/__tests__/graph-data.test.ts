@@ -1,47 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { normalizePath, buildReverseAdjacency, findTransitiveTests, getFileGraphData } from "../graph/data.js";
-import type { PersistedGraph, FileRecord, EdgeRecord } from "../graph/types.js";
-
-// ── Factories ────────────────────────────────────────────────────────
-
-function makeGraph(overrides: Partial<PersistedGraph> = {}): PersistedGraph {
-  return {
-    version: 1,
-    timestamp: new Date().toISOString(),
-    files: {},
-    edges: [],
-    communities: [],
-    changeCoupling: [],
-    structuralMismatches: [],
-    testMapping: {},
-    lagCouplings: [],
-    ...overrides,
-  };
-}
-
-function makeFile(overrides: Partial<FileRecord> = {}): FileRecord {
-  return {
-    role: "Leaf",
-    authority: 0,
-    hubScore: 0,
-    betweenness: 0,
-    instability: null,
-    importedByCount: 0,
-    isChokepoint: false,
-    separatesComponents: 0,
-    isCrossCutting: false,
-    layerSpread: 0,
-    layers: [],
-    hasTests: false,
-    testFiles: [],
-    communityId: null,
-    ...overrides,
-  };
-}
-
-function makeEdge(from: string, to: string): EdgeRecord {
-  return { from, to, importedNames: [] };
-}
+import { makePersistedGraph, makeFileRecord, makeEdgeRecord } from "./helpers/factories.js";
 
 // ── normalizePath ────────────────────────────────────────────────────
 
@@ -54,11 +13,10 @@ describe("normalizePath", () => {
     expect(normalizePath("src\\utils\\helpers.ts")).toBe("src/utils/helpers.ts");
   });
 
-  it("strips ./ before converting backslashes (order matters)", () => {
-    // normalizePath strips ^./ first, then converts backslashes
-    // So ".\\src" has no leading "./" to strip, only backslash conversion
-    expect(normalizePath(".\\src\\utils.ts")).toBe("./src/utils.ts");
-    // But "./src\\utils.ts" strips ./ then converts backslashes
+  it("handles backslash-prefixed relative paths", () => {
+    // normalizePath converts backslashes first, then strips leading ./
+    // So ".\\src\\utils.ts" becomes "./src/utils.ts" then "src/utils.ts"
+    expect(normalizePath(".\\src\\utils.ts")).toBe("src/utils.ts");
     expect(normalizePath("./src\\utils.ts")).toBe("src/utils.ts");
   });
 
@@ -79,21 +37,21 @@ describe("normalizePath", () => {
 
 describe("buildReverseAdjacency", () => {
   it("returns empty map for graph with no edges", () => {
-    const rev = buildReverseAdjacency(makeGraph());
+    const rev = buildReverseAdjacency(makePersistedGraph());
     expect(rev.size).toBe(0);
   });
 
   it("inverts edges correctly", () => {
-    const graph = makeGraph({
-      edges: [makeEdge("a.ts", "b.ts"), makeEdge("c.ts", "b.ts")],
+    const graph = makePersistedGraph({
+      edges: [makeEdgeRecord("a.ts", "b.ts"), makeEdgeRecord("c.ts", "b.ts")],
     });
     const rev = buildReverseAdjacency(graph);
     expect(rev.get("b.ts")).toEqual(["a.ts", "c.ts"]);
   });
 
   it("handles multiple targets from same source", () => {
-    const graph = makeGraph({
-      edges: [makeEdge("a.ts", "b.ts"), makeEdge("a.ts", "c.ts")],
+    const graph = makePersistedGraph({
+      edges: [makeEdgeRecord("a.ts", "b.ts"), makeEdgeRecord("a.ts", "c.ts")],
     });
     const rev = buildReverseAdjacency(graph);
     expect(rev.get("b.ts")).toEqual(["a.ts"]);
@@ -101,8 +59,8 @@ describe("buildReverseAdjacency", () => {
   });
 
   it("includes duplicate edges", () => {
-    const graph = makeGraph({
-      edges: [makeEdge("a.ts", "b.ts"), makeEdge("a.ts", "b.ts")],
+    const graph = makePersistedGraph({
+      edges: [makeEdgeRecord("a.ts", "b.ts"), makeEdgeRecord("a.ts", "b.ts")],
     });
     const rev = buildReverseAdjacency(graph);
     expect(rev.get("b.ts")).toEqual(["a.ts", "a.ts"]);
@@ -169,15 +127,15 @@ describe("findTransitiveTests", () => {
 
 describe("getFileGraphData", () => {
   it("returns null for unknown file", () => {
-    const graph = makeGraph();
+    const graph = makePersistedGraph();
     const rev = buildReverseAdjacency(graph);
     expect(getFileGraphData(graph, "unknown.ts", rev)).toBeNull();
   });
 
   it("returns correct data for known file", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/utils.ts": makeFile({
+        "src/utils.ts": makeFileRecord({
           role: "Foundation",
           betweenness: 0.5,
           isChokepoint: true,
@@ -195,9 +153,9 @@ describe("getFileGraphData", () => {
   });
 
   it("defaults role to Leaf when null", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/leaf.ts": makeFile({ role: null }),
+        "src/leaf.ts": makeFileRecord({ role: null }),
       },
     });
     const rev = buildReverseAdjacency(graph);
@@ -206,8 +164,8 @@ describe("getFileGraphData", () => {
   });
 
   it("includes co-change data sorted by confidence", () => {
-    const graph = makeGraph({
-      files: { "src/a.ts": makeFile() },
+    const graph = makePersistedGraph({
+      files: { "src/a.ts": makeFileRecord() },
       changeCoupling: [
         { fileA: "src/a.ts", fileB: "src/b.ts", confidence: 0.3, coChangeCount: 5 },
         { fileA: "src/c.ts", fileB: "src/a.ts", confidence: 0.8, coChangeCount: 10 },
@@ -230,8 +188,8 @@ describe("getFileGraphData", () => {
       confidence: (i + 1) * 0.1,
       coChangeCount: i + 1,
     }));
-    const graph = makeGraph({
-      files: { "src/a.ts": makeFile() },
+    const graph = makePersistedGraph({
+      files: { "src/a.ts": makeFileRecord() },
       changeCoupling: coupling,
     });
     const rev = buildReverseAdjacency(graph);
@@ -242,13 +200,13 @@ describe("getFileGraphData", () => {
   });
 
   it("includes integration tests from transitive BFS", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/utils.ts": makeFile({ testFiles: ["src/__tests__/utils.test.ts"] }),
+        "src/utils.ts": makeFileRecord({ testFiles: ["src/__tests__/utils.test.ts"] }),
       },
       edges: [
-        makeEdge("src/consumer.ts", "src/utils.ts"),
-        makeEdge("src/__tests__/integration.test.ts", "src/consumer.ts"),
+        makeEdgeRecord("src/consumer.ts", "src/utils.ts"),
+        makeEdgeRecord("src/__tests__/integration.test.ts", "src/consumer.ts"),
       ],
     });
     const rev = buildReverseAdjacency(graph);
@@ -257,8 +215,8 @@ describe("getFileGraphData", () => {
   });
 
   it("returns empty coChange when no coupling data", () => {
-    const graph = makeGraph({
-      files: { "src/a.ts": makeFile() },
+    const graph = makePersistedGraph({
+      files: { "src/a.ts": makeFileRecord() },
     });
     const rev = buildReverseAdjacency(graph);
     const data = getFileGraphData(graph, "src/a.ts", rev);

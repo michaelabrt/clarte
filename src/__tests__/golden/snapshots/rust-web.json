@@ -72,7 +72,6 @@
   "chokepoints": [
     {
       "file": "src/db/queries.rs",
-      "separates": 4,
       "upstreamCount": 4,
       "downstreamCount": 3
     }

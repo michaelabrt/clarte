@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildTestMapping, classifyTestType, renderTestMappingSection } from "../analysis/test-map.js";
-import type { DetectedContext, ImportGraph, TestMapping } from "../types.js";
+import type { DetectedContext, TestMapping } from "../types.js";
+import { makeImportGraph } from "./helpers/factories.js";
 
 function makeCtx(overrides: Partial<DetectedContext> = {}): DetectedContext {
   return {
@@ -20,39 +21,8 @@ function makeCtx(overrides: Partial<DetectedContext> = {}): DetectedContext {
   };
 }
 
-function makeGraph(files: string[], edges: Array<{ from: string; to: string }>): ImportGraph {
-  const inDegree = new Map<string, number>();
-  const centrality = new Map<string, number>();
-  const authority = new Map<string, number>();
-  const hubScores = new Map<string, number>();
-
-  for (const file of files) {
-    inDegree.set(file, 0);
-    centrality.set(file, 0.5);
-    authority.set(file, 0.5);
-    hubScores.set(file, 0.5);
-  }
-
-  const importEdges = edges.map((e) => ({
-    from: e.from,
-    to: e.to,
-    isExternal: false,
-    specifier: `./${e.to}`,
-    importedNames: [],
-  }));
-
-  for (const edge of importEdges) {
-    inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1);
-  }
-
-  return {
-    edges: importEdges,
-    inDegree,
-    centrality,
-    externalImportCounts: new Map(),
-    authority,
-    hubScores,
-  };
+function makeGraph(files: string[], edges: Array<{ from: string; to: string }>) {
+  return makeImportGraph(edges, files);
 }
 
 describe("buildTestMapping — basic mapping", () => {

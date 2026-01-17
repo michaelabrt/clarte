@@ -115,7 +115,6 @@ async function analyzeFixture(fixtureDir: string, language: Language): Promise<G
     chokepoints: chokepoints
       .map((c) => ({
         file: c.file,
-        separates: c.separates,
         upstreamCount: c.upstreamCount,
         downstreamCount: c.downstreamCount,
       }))

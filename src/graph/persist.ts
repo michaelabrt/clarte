@@ -4,9 +4,15 @@ import { gitExecSafe } from "../git/git.js";
 import { deriveRole } from "./centrality.js";
 import { computeAllInstabilities } from "./instability.js";
 import type { ContextAnalysis, ImportGraph } from "../types.js";
-import { PERSISTED_GRAPH_VERSION, type EdgeRecord, type FileRecord, type PersistedGraph } from "./types.js";
+import {
+  PERSISTED_GRAPH_VERSION,
+  type EdgeRecord,
+  type FileRecord,
+  type PersistedGraph,
+} from "../types/persisted-graph.js";
+import { CLARTE_DIR } from "../config/config.js";
 
-const GRAPH_PATH = ".clarte/graph.json";
+const GRAPH_PATH = `${CLARTE_DIR}/graph.json`;
 
 /**
  * Build a PersistedGraph from an ImportGraph and ContextAnalysis.
@@ -51,7 +57,7 @@ function buildPersistedGraph(graph: ImportGraph, analysis: ContextAnalysis): Per
       instability: instabilityMap.get(filePath) ?? null,
       importedByCount: graph.inDegree.get(filePath) ?? 0,
       isChokepoint: !!chokepoint,
-      separatesComponents: chokepoint?.separates ?? 0,
+      separatesComponents: chokepoint?.upstreamCount ?? 0,
       isCrossCutting: !!crossCutting,
       layerSpread: crossCutting?.layerSpread ?? 0,
       layers: crossCutting?.layers ?? [],

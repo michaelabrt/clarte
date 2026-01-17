@@ -1,8 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { ContextAnalysis } from "../types.js";
-
-const CLARTE_DIR = ".clarte";
+import { CLARTE_DIR } from "../config/config.js";
 const HISTORY_FILE = "history.json";
 
 export interface AnalysisSnapshot {
