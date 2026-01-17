@@ -6,7 +6,7 @@ import { findStructuralTemporalMismatches } from "../graph/mismatches.js";
 import { findTightCouplings } from "../graph/tight-coupling.js";
 import { checkArchitecturalFitness } from "../graph/fitness.js";
 import type { ArchitecturalLayer, ImportEdge, LayerEdge } from "../types.js";
-import { makeGraph, edge } from "./eval/helpers.js";
+import { makeGraph, edge } from "./algorithm/helpers.js";
 
 function dynamicEdge(from: string, to: string, names: string[] = []): ImportEdge {
   return { from, to, isExternal: false, specifier: `./${to}`, importedNames: names, isDynamic: true };
