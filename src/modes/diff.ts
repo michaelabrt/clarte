@@ -3,7 +3,7 @@ import * as p from "@clack/prompts";
 import { ClarteError } from "../errors.js";
 import { gitExec, gitExecSafe } from "../git/git.js";
 import { theme as t, unpatchPicocolors } from "../theme.js";
-import { writeFileSafe } from "../utils.js";
+import { writeFileSafe, isTestFile } from "../utils.js";
 import { detectContext, enrichFrameworksWithUsage } from "../detect/detect.js";
 import { buildGraphWithCache } from "../graph/cache.js";
 import { buildImportGraph, mergeGraph } from "../graph/build.js";
@@ -122,7 +122,7 @@ export async function runDiffMode(
   }
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
-    if (changedSet.has(edge.to) && isDiffTestFile(edge.from)) {
+    if (changedSet.has(edge.to) && isTestFile(edge.from)) {
       testFiles.add(edge.from);
     }
   }
@@ -135,7 +135,9 @@ export async function runDiffMode(
   const { layers, layerEdges } = detectArchitecturalLayers(graph, customLayers);
   const instabilities = computeInstability(graph);
   const communities = detectCommunities(graph);
-  const gitActivity = detected.isGitRepo ? analyzeGitActivity(rootDir, verboseLog) : null;
+  const gitActivity = detected.isGitRepo
+    ? analyzeGitActivity(rootDir, verboseLog, diffConfig?.analysisDays ?? 90)
+    : null;
 
   const relevantHub = scopeHubFiles(allHubFiles, changedSet, hop1Set, hop2Set);
   const relevantCycles = scopeCircularDeps(allCircularDeps, changedSet, hop1Set);
@@ -160,7 +162,7 @@ export async function runDiffMode(
     }
   }
 
-  const allRelevant = [...changedSet, ...neighborSet, ...testFiles];
+  const allRelevant = [...new Set([...changedSet, ...neighborSet, ...testFiles])];
 
   p.log.step(
     t.text(
@@ -193,18 +195,6 @@ export async function runDiffMode(
 
   p.outro(t.success("Diff context ready. ") + t.muted(`${allRelevant.length} files in scope.`));
   unpatchPicocolors();
-}
-
-export function isDiffTestFile(filePath: string): boolean {
-  return (
-    /\.(test|spec)\.[jt]sx?$/.test(filePath) || // .test.ts, .test.tsx, .test.js, .test.jsx
-    /\.(test|spec)\.m[jt]s$/.test(filePath) || // .test.mts, .test.mjs (ESM)
-    /\.(test|spec)\.c[jt]s$/.test(filePath) || // .test.cts, .test.cjs (CJS)
-    /\/__tests__\//.test(filePath) || // __tests__ directory
-    /\/tests?\//.test(filePath) || // /test/ or /tests/ directory
-    /\/test_[^/]+\.py$/.test(filePath) || // test_foo.py (Python underscore convention)
-    /\/test[^_/][^/]*\.py$/.test(filePath) // testfoo.py (Python no-underscore)
-  );
 }
 
 /**

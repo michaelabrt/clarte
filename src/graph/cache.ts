@@ -160,7 +160,7 @@ async function parseFileEdges(
           isDynamic: raw.isDynamic,
         });
       } else {
-        const pkgName = getPackageName(raw.specifier);
+        const pkgName = getPackageName(raw.specifier, language);
         edges.push({
           from: file,
           to: pkgName,
@@ -190,7 +190,7 @@ function rebuildGraph(edges: ImportEdge[], allFiles: string[], barrelFiles: Set<
   for (const edge of edges) {
     if (!edge.isExternal) {
       inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1);
-      if (!edge.isBarrelRouted) {
+      if (!barrelFiles.has(edge.from)) {
         directInDegree.set(edge.to, (directInDegree.get(edge.to) ?? 0) + 1);
       }
     } else {

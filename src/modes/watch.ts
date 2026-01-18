@@ -18,6 +18,7 @@ import { findStructuralTemporalMismatches } from "../graph/mismatches.js";
 import { findTightCouplings } from "../graph/tight-coupling.js";
 import { buildGraphWithCache } from "../graph/cache.js";
 import { analyzeGitActivityAsync } from "../git/analysis.js";
+import { fileExists } from "../utils.js";
 import { scanConfigConstraints } from "../config/scan.js";
 import { inferConventions } from "../conventions/conventions.js";
 import { buildTestMapping } from "../analysis/test-map.js";
@@ -130,9 +131,11 @@ export async function runWatchMode(rootDir: string, verbose: boolean): Promise<v
   const answers = configToAnswers(config);
   let previousSnapshot = await loadPreviousSnapshot(rootDir);
 
+  const analysisDays = config.analysisDays ?? 90;
+
   // 2. Run initial analysis
   console.log(`[clarte] ${timeStamp()} - starting initial analysis...`);
-  await runAnalysis(rootDir, answers, verbose, verboseLog, previousSnapshot);
+  await runAnalysis(rootDir, answers, verbose, verboseLog, previousSnapshot, analysisDays);
   previousSnapshot = await loadPreviousSnapshot(rootDir);
 
   // 3. Start watching
@@ -154,7 +157,7 @@ export async function runWatchMode(rootDir: string, verbose: boolean): Promise<v
     );
 
     try {
-      await runAnalysis(rootDir, answers, verbose, verboseLog, previousSnapshot);
+      await runAnalysis(rootDir, answers, verbose, verboseLog, previousSnapshot, analysisDays);
       previousSnapshot = await loadPreviousSnapshot(rootDir);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -193,6 +196,7 @@ export async function runWatchMode(rootDir: string, verbose: boolean): Promise<v
     watcher.close();
     process.exit(ExitCode.SUCCESS);
   };
+  // Note: terminal color reset not needed here; watch mode uses console.log, not picocolors
 
   process.on("SIGINT", cleanup);
   process.on("SIGTERM", cleanup);
@@ -209,6 +213,7 @@ async function runAnalysis(
   verbose: boolean,
   verboseLog: ProgressCallback,
   previousSnapshot: AnalysisSnapshot | null,
+  analysisDays: number,
 ): Promise<void> {
   const startTime = performance.now();
   const noopProgress: ProgressCallback = () => {};
@@ -236,7 +241,30 @@ async function runAnalysis(
   const { layers, layerEdges } = detectArchitecturalLayers(graph, answers.layers);
   const instabilities = computeInstability(graph);
   const communities = detectCommunities(graph);
-  const gitActivity = detected.isGitRepo ? await analyzeGitActivityAsync(rootDir, noopProgress) : null;
+  const gitActivity = detected.isGitRepo ? await analyzeGitActivityAsync(rootDir, noopProgress, analysisDays) : null;
+  if (gitActivity) {
+    const filesToCheck = new Set<string>();
+    for (const h of gitActivity.hotFiles) filesToCheck.add(h.path);
+    for (const c of gitActivity.changeCoupling) {
+      filesToCheck.add(c.fileA);
+      filesToCheck.add(c.fileB);
+    }
+    if (gitActivity.lagCouplings) {
+      for (const c of gitActivity.lagCouplings) {
+        filesToCheck.add(c.fileA);
+        filesToCheck.add(c.fileB);
+      }
+    }
+    const checks = await Promise.all(
+      [...filesToCheck].map(async (f) => [f, await fileExists(path.join(rootDir, f))] as const),
+    );
+    const alive = new Set(checks.filter(([, ok]) => ok).map(([f]) => f));
+    gitActivity.hotFiles = gitActivity.hotFiles.filter((h) => alive.has(h.path));
+    gitActivity.changeCoupling = gitActivity.changeCoupling.filter((c) => alive.has(c.fileA) && alive.has(c.fileB));
+    if (gitActivity.lagCouplings) {
+      gitActivity.lagCouplings = gitActivity.lagCouplings.filter((c) => alive.has(c.fileA) && alive.has(c.fileB));
+    }
+  }
   const deadFiles = findDeadFiles(graph);
   const crossCuttingFiles = findCrossCuttingFiles(graph, layers);
   const layerConsistency = layers.length >= 2 ? computeLayerConsistency(graph, layers, layerEdges) : undefined;
@@ -268,6 +296,7 @@ async function runAnalysis(
     graphTopology,
     structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined,
     tightCouplings: tightCouplings.length ? tightCouplings : undefined,
+    analysisDays,
   };
 
   // Delta tracking
