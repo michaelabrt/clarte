@@ -12,7 +12,7 @@ import { getHubFiles } from "../graph/hub-files.js";
 import { detectArchitecturalLayers, computeLayerConsistency } from "../graph/layers.js";
 import { computeInstability } from "../graph/instability.js";
 import { detectCommunities } from "../graph/communities.js";
-import { findDeadFiles } from "../graph/dead-files.js";
+import { findDeadFiles, readPackageEntryPoints } from "../graph/dead-files.js";
 import { findCrossCuttingFiles } from "../graph/cross-cutting.js";
 import { findChokepoints } from "../graph/chokepoints.js";
 import { computeGraphTopology } from "../graph/topology.js";
@@ -82,7 +82,8 @@ export async function runAnalysis(
   const useCache = analysisCache !== null && analysisCache.cacheKey === analysisCacheKey;
   const log: LogCtx = { jsonMode, verbose };
 
-  const graphResults = runGraphPhase(graph, savedConfig, useCache ? analysisCache : null, log);
+  const entryPoints = readPackageEntryPoints(rootDir);
+  const graphResults = runGraphPhase(graph, savedConfig, useCache ? analysisCache : null, log, entryPoints);
 
   const gitActivity = await runGitPhase(rootDir, detected, analysisDays, verbose ? verboseLog : noopProgress, log);
 
@@ -133,6 +134,7 @@ function runGraphPhase(
   savedConfig: ProjectConfig | null,
   cache: AnalysisCacheData | null,
   log: LogCtx,
+  entryPoints: string[] = [],
 ): GraphPhaseResult {
   const hubFiles = cache ? cache.hubFiles : getHubFiles(graph);
   logHubFiles(hubFiles, log);
@@ -151,7 +153,7 @@ function runGraphPhase(
   const communities = cache ? cache.communities : detectCommunities(graph);
   logCommunities(communities, log);
 
-  const deadFiles = cache ? cache.deadFiles : findDeadFiles(graph);
+  const deadFiles = cache ? cache.deadFiles : findDeadFiles(graph, entryPoints);
   logDeadFiles(deadFiles, log);
 
   const crossCuttingFiles = cache ? cache.crossCuttingFiles : findCrossCuttingFiles(graph, layers);

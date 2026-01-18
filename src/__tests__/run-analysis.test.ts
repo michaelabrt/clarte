@@ -88,6 +88,7 @@ vi.mock("../graph/communities.js", () => ({
 }));
 vi.mock("../graph/dead-files.js", () => ({
   findDeadFiles: (...args: unknown[]) => mockFindDeadFiles(...args),
+  readPackageEntryPoints: () => [],
 }));
 vi.mock("../graph/cross-cutting.js", () => ({
   findCrossCuttingFiles: (...args: unknown[]) => mockFindCrossCuttingFiles(...args),
