@@ -95,7 +95,8 @@ export function checkArchitecturalFitness(
 
   // Test file patterns
   const testFilePattern = /(?:\.test\.|\.spec\.|__tests__\/|tests?\/)/;
-  const testUtilPattern = /(?:__fixtures__|test[-_]?utils?|test[-_]?helpers?|test[-_]?setup|fixtures)/;
+  const testUtilPattern =
+    /(?:__fixtures__|test[-_]?utils?|test[-_]?helpers?|helpers?|test[-_]?setup|fixtures|generators?)/;
 
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
