@@ -252,8 +252,11 @@ async function readBiomeConfig(rootDir: string): Promise<Record<string, unknown>
   const biomeJsonc = await readFileOr(path.join(rootDir, "biome.jsonc"));
   if (biomeJsonc) {
     try {
-      // Strip single-line comments and trailing commas for JSONC
-      const cleaned = biomeJsonc.replace(/\/\/.*$/gm, "").replace(/,\s*([\]}])/g, "$1");
+      // Strip block and single-line comments and trailing commas for JSONC
+      const cleaned = biomeJsonc
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/.*$/gm, "")
+        .replace(/,\s*([\]}])/g, "$1");
       return JSON.parse(cleaned);
     } catch {
       return null;

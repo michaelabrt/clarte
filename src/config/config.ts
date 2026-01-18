@@ -4,6 +4,7 @@ import path from "node:path";
 import { glob } from "tinyglobby";
 import type { Language, ProjectConfig, UserAnswers } from "../types.js";
 import { readFileOr, readJsonFile, writeFileSafe } from "../utils.js";
+import { HASH_CONCURRENCY } from "./thresholds.js";
 
 export const CLARTE_DIR = ".clarte";
 const CONFIG_FILENAME = ".clarte.json";
@@ -221,13 +222,18 @@ export async function computeSnapshotHash(rootDir: string, language: Language): 
   });
 
   // Sort by path for deterministic hashing (content-based, not mtime)
-  const entries = await Promise.all(
-    files.map(async (f) => {
-      const content = await fs.readFile(path.join(rootDir, f), "utf-8").catch(() => "");
-      const fileHash = createHash("md5").update(content).digest("hex");
-      return `${f}:${fileHash}`;
-    }),
-  );
+  const entries: string[] = [];
+  for (let i = 0; i < files.length; i += HASH_CONCURRENCY) {
+    const batch = files.slice(i, i + HASH_CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(async (f) => {
+        const content = await fs.readFile(path.join(rootDir, f), "utf-8").catch(() => "");
+        const fileHash = createHash("md5").update(content).digest("hex");
+        return `${f}:${fileHash}`;
+      }),
+    );
+    entries.push(...results);
+  }
   entries.sort();
 
   // Include manifest file content so dependency changes invalidate the hash

@@ -44,7 +44,7 @@ export async function runPrompts(
 
   if (p.isCancel(ides)) {
     p.cancel("Cancelled.");
-    process.exit(ExitCode.SUCCESS);
+    process.exit(ExitCode.FAILURE);
   }
 
   // 2. Stack corrections (only on --reconfigure)

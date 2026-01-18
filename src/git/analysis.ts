@@ -493,7 +493,7 @@ function buildGitLogArgs(window: TimeWindow): string[] {
     "log",
     "--no-merges",
     rangeArg,
-    "--diff-filter=ACDMRT",
+    "--diff-filter=ACMRT",
     "--name-only",
     `--format=${SEP}%H${US}%aI${US}%ar${US}%s`,
   ];

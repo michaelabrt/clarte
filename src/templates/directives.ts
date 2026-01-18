@@ -35,7 +35,7 @@ export async function computeFileComplexity(rootDir: string, hubFiles: HubFile[]
         /\bcatch\b/g,
         /&&/g,
         /\|\|/g,
-        /\?\s*[^?]/g, // ternary (? not followed by ?)
+        /\?(?!\s*[.:])\s*[^?]/g, // ternary (? not followed by ?, ., or :)
       ];
 
       let branchPoints = 0;

@@ -99,7 +99,7 @@ export async function buildAiderContext(
   // Key patterns
   if (answers.keyPatterns) {
     const patterns = answers.keyPatterns
-      .split(/[.\n]/)
+      .split(/\n/)
       .map((s) => s.trim())
       .filter(Boolean);
     for (const p of patterns) {
@@ -110,7 +110,7 @@ export async function buildAiderContext(
   // Gotchas
   if (answers.gotchas) {
     const gotchas = answers.gotchas
-      .split(/[.\n]/)
+      .split(/\n/)
       .map((s) => s.trim())
       .filter(Boolean);
     for (const g of gotchas) {
@@ -300,5 +300,5 @@ export async function buildAiderContext(
  * Escape a string for use inside double-quoted YAML values.
  */
 function escapeYaml(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\t/g, "\\t");
 }

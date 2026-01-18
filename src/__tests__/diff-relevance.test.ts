@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { computeNeighborhood, scopeHubFiles, scopeCircularDeps, isDiffTestFile } from "../modes/diff.js";
+import { computeNeighborhood, scopeHubFiles, scopeCircularDeps } from "../modes/diff.js";
+import { isTestFile } from "../utils.js";
 
-// ── isDiffTestFile ────────────────────────────────────────────────────
+// ── isTestFile (via diff) ────────────────────────────────────────────────────
 
-describe("isDiffTestFile", () => {
+describe("isTestFile", () => {
   it.each([
     // Standard TS/JS extensions
     ["src/utils.test.ts", true],
@@ -30,13 +31,18 @@ describe("isDiffTestFile", () => {
     // Python no-underscore convention
     ["lib/testfoo.py", true],
     ["lib/testBar.py", true],
+    // Go test files
+    ["pkg/handler_test.go", true],
+    // Java test files
+    ["src/UserServiceTest.java", true],
+    ["src/UserServiceTests.java", true],
     // Negative cases
     ["src/protest.ts", false],
     ["src/latest.py", false],
     ["src/utils.ts", false],
     ["src/testing/foo.ts", false],
   ])("%s -> %s", (filePath, expected) => {
-    expect(isDiffTestFile(filePath)).toBe(expected);
+    expect(isTestFile(filePath)).toBe(expected);
   });
 });
 

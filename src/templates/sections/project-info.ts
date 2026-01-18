@@ -49,7 +49,7 @@ export async function getProjectName(ctx: DetectedContext): Promise<string> {
   }
 
   if (!name) {
-    const dirName = ctx.rootDir.split("/").pop() ?? "Project";
+    const dirName = path.basename(ctx.rootDir) || "Project";
     name = dirName.charAt(0).toUpperCase() + dirName.slice(1);
   }
 
