@@ -122,17 +122,6 @@ function extractJavaClassMethods(body: Node, relPath: string, entries: SnapshotE
 }
 
 function extractJavaMethodSig(node: Node): string {
-  // Get annotations from modifiers
-  const modifiers = node.namedChildren.find((c) => c.type === "modifiers");
-  const annotations: string[] = [];
-  if (modifiers) {
-    for (const child of modifiers.namedChildren) {
-      if (child.type === "marker_annotation" || child.type === "annotation") {
-        annotations.push(child.text);
-      }
-    }
-  }
-
   const body = node.childForFieldName("body");
   let sig: string;
   if (body) {

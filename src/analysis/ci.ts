@@ -175,12 +175,12 @@ function collectTightCouplings(
 
 // ── Public API ──────────────────────────────────────────────────────
 
-export async function analyzeForCI(
+export function analyzeForCI(
   _rootDir: string,
   changedFiles: string[],
   analysis: ContextAnalysis,
   graph: ImportGraph,
-): Promise<CIAnalysisResult> {
+): CIAnalysisResult {
   const changedFilesSet = new Set(changedFiles);
 
   // Pre-compute lookup maps

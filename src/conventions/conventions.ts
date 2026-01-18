@@ -571,11 +571,6 @@ function filterCoveredConventions(
     result.importOrdering = undefined;
   }
 
-  const hasTypeImport = configConstraints.linter?.keyRules.some(
-    (r) => r.rule.includes("consistent-type-imports") || r.rule.includes("useImportType"),
-  );
-  void hasTypeImport;
-
   const hasNaming = Object.values(result.naming).some((v) => v !== "mixed");
   const hasExport = result.exportStyle.defaultExportPercent < 90;
   const hasImport = !!result.importOrdering;

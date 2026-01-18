@@ -41,7 +41,6 @@ export interface GraphPhaseResult {
   layerConsistency?: LayerConsistency;
   chokepoints: Chokepoint[];
   graphTopology: GraphTopology;
-  structuralMismatches?: StructuralTemporalMismatch[];
   tightCouplings?: TightCoupling[];
   archViolations?: ArchViolation[];
 }

@@ -6,12 +6,6 @@ export function extractRustSnapshot(root: Node, content: string, relPath: string
   const entries: SnapshotEntry[] = [];
 
   for (const node of root.namedChildren) {
-    // Skip #[cfg(test)] modules
-    if (node.type === "attribute_item" && node.text.includes("cfg(test)")) {
-      // The next sibling should be a mod_item; skip it
-      continue;
-    }
-
     if (node.type === "mod_item") {
       // Check if preceded by #[cfg(test)]
       const prev = node.previousNamedSibling;
