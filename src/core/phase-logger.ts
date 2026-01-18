@@ -5,7 +5,7 @@
  */
 import * as p from "@clack/prompts";
 import { theme as t } from "../theme.js";
-import { INSTABILITY_THRESHOLD } from "../graph/instability.js";
+import { INSTABILITY_THRESHOLD } from "../config/thresholds.js";
 import type {
   ArchitecturalLayer,
   Chokepoint,

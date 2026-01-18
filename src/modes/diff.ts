@@ -195,12 +195,15 @@ export async function runDiffMode(
   unpatchPicocolors();
 }
 
-function isDiffTestFile(filePath: string): boolean {
+export function isDiffTestFile(filePath: string): boolean {
   return (
-    /\.(test|spec)\.[jt]sx?$/.test(filePath) ||
-    /\/__tests__\//.test(filePath) ||
-    /\/test_[^/]+\.py$/.test(filePath) ||
-    /\/tests\//.test(filePath)
+    /\.(test|spec)\.[jt]sx?$/.test(filePath) || // .test.ts, .test.tsx, .test.js, .test.jsx
+    /\.(test|spec)\.m[jt]s$/.test(filePath) || // .test.mts, .test.mjs (ESM)
+    /\.(test|spec)\.c[jt]s$/.test(filePath) || // .test.cts, .test.cjs (CJS)
+    /\/__tests__\//.test(filePath) || // __tests__ directory
+    /\/tests?\//.test(filePath) || // /test/ or /tests/ directory
+    /\/test_[^/]+\.py$/.test(filePath) || // test_foo.py (Python underscore convention)
+    /\/test[^_/][^/]*\.py$/.test(filePath) // testfoo.py (Python no-underscore)
   );
 }
 

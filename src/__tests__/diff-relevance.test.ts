@@ -1,5 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { computeNeighborhood, scopeHubFiles, scopeCircularDeps } from "../modes/diff.js";
+import { computeNeighborhood, scopeHubFiles, scopeCircularDeps, isDiffTestFile } from "../modes/diff.js";
+
+// ── isDiffTestFile ────────────────────────────────────────────────────
+
+describe("isDiffTestFile", () => {
+  it.each([
+    // Standard TS/JS extensions
+    ["src/utils.test.ts", true],
+    ["src/utils.spec.tsx", true],
+    ["src/utils.test.js", true],
+    ["src/utils.spec.jsx", true],
+    // ESM extensions
+    ["src/utils.test.mts", true],
+    ["src/utils.test.mjs", true],
+    ["src/utils.spec.mts", true],
+    // CJS extensions
+    ["src/utils.test.cts", true],
+    ["src/utils.test.cjs", true],
+    ["src/utils.spec.cjs", true],
+    // __tests__ directory
+    ["src/__tests__/foo.ts", true],
+    // /tests/ directory
+    ["src/tests/helpers.ts", true],
+    // /test/ singular directory
+    ["src/test/helpers.ts", true],
+    // Python underscore convention
+    ["lib/test_auth.py", true],
+    ["lib/test_foo.py", true],
+    // Python no-underscore convention
+    ["lib/testfoo.py", true],
+    ["lib/testBar.py", true],
+    // Negative cases
+    ["src/protest.ts", false],
+    ["src/latest.py", false],
+    ["src/utils.ts", false],
+    ["src/testing/foo.ts", false],
+  ])("%s -> %s", (filePath, expected) => {
+    expect(isDiffTestFile(filePath)).toBe(expected);
+  });
+});
 
 // ── computeNeighborhood: 2-hop expansion ──────────────────────────────
 

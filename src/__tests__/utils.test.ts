@@ -7,6 +7,7 @@ import {
   estimateTokens,
   fileExists,
   formatBytes,
+  isTestFile,
   readDirSafe,
   readFileOr,
   readJsonFile,
@@ -17,6 +18,39 @@ const TMP = path.join(path.dirname(fileURLToPath(import.meta.url)), ".tmp-utils-
 
 afterEach(async () => {
   await fs.rm(TMP, { recursive: true, force: true });
+});
+
+describe("isTestFile", () => {
+  it.each([
+    // Standard TS/JS patterns
+    ["src/foo.test.ts", true],
+    ["src/foo.spec.tsx", true],
+    ["src/foo.test.js", true],
+    // ESM/CJS extensions
+    ["src/foo.test.mts", true],
+    ["src/foo.test.mjs", true],
+    ["src/foo.test.cts", true],
+    ["src/foo.test.cjs", true],
+    // __tests__ directory
+    ["src/__tests__/foo.ts", true],
+    // /test/ and /tests/ directories
+    ["src/test/helpers.ts", true],
+    ["src/tests/helpers.ts", true],
+    // Go test files
+    ["pkg/auth_test.go", true],
+    // Python underscore convention
+    ["lib/test_auth.py", true],
+    // Python no-underscore convention
+    ["lib/testfoo.py", true],
+    ["lib/testBar.py", true],
+    // Negative cases
+    ["src/utils.ts", false],
+    ["src/protest.ts", false],
+    ["src/latest.py", false],
+    ["src/testing/foo.ts", false],
+  ])("%s -> %s", (filePath, expected) => {
+    expect(isTestFile(filePath)).toBe(expected);
+  });
 });
 
 describe("estimateTokens", () => {

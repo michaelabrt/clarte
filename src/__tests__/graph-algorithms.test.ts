@@ -494,6 +494,43 @@ describe("deriveRole with barrel files", () => {
   });
 });
 
+describe("findCircularDeps regression: barrel routing", () => {
+  it("no cycle when A value-imports B and both import types from C", () => {
+    // Simulates the fixed diff.ts / diff-render.ts pattern:
+    // diff.ts -> diff-render.ts (value, renderDiffContext)
+    // diff-render.ts -> types (type-only, NeighborhoodResult)
+    // diff.ts -> types (type-only, NeighborhoodResult)
+    // Expected: 0 cycles (NeighborhoodResult lives in types, not in diff.ts)
+    const graph = makeGraph(
+      ["diff", "diff-render", "types"],
+      [
+        edge("diff", "diff-render", ["renderDiffContext"], false), // value import
+        edge("diff-render", "types", ["NeighborhoodResult"], true), // type-only
+        edge("diff", "types", ["NeighborhoodResult"], true), // type-only
+      ],
+    );
+    expect(findCircularDeps(graph)).toHaveLength(0);
+  });
+
+  it("correctly detects cycle when shared type lives in the importer", () => {
+    // Simulates the original buggy scenario where NeighborhoodResult was in diff.ts:
+    // diff.ts -> diff-render.ts (value)
+    // diff-render.ts -> diff.ts (type-only, via barrel routing to diff.ts)
+    // This WAS a real cycle that was fixed by moving the type to types/output.ts
+    const graph = makeGraph(
+      ["diff", "diff-render"],
+      [
+        edge("diff", "diff-render", ["renderDiffContext"], false), // value import
+        edge("diff-render", "diff", ["NeighborhoodResult"], true), // type-only back-edge
+      ],
+    );
+    const deps = findCircularDeps(graph);
+    expect(deps).toHaveLength(1);
+    expect(deps[0].severity).toBeGreaterThan(0);
+    expect(deps[0].severity).toBeLessThan(1); // mixed: one runtime, one type-only
+  });
+});
+
 describe("findCircularDeps with dynamic imports", () => {
   it("assigns lower severity to dynamic-only cycles", () => {
     const graph = makeGraph(["a", "b"], [dynamicEdge("a", "b", ["foo"]), dynamicEdge("b", "a", ["bar"])]);

@@ -17,6 +17,7 @@ import type {
 } from "../types.js";
 
 import { CLARTE_DIR } from "../config/config.js";
+import { BETWEENNESS_K } from "../config/thresholds.js";
 
 const CACHE_DIR = CLARTE_DIR;
 const ANALYSIS_CACHE_FILE = "analysis-cache.json";
@@ -63,7 +64,6 @@ export function computeAnalysisCacheKey(
   const layersPart = layersConfig ? JSON.stringify(layersConfig) : "";
 
   // Include betweenness sample size so cache invalidates if the constant changes
-  const BETWEENNESS_K = 50;
   return createHash("sha256")
     .update(sortedEdges + `|ext:${externalCount}|bk:${BETWEENNESS_K}` + layersPart)
     .digest("hex");
