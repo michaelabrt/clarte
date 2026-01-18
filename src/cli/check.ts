@@ -33,18 +33,16 @@ export async function runCheckMode(rootDir: string, checkTimestamp: boolean, ciM
         }
         process.exit(ExitCode.FAILURE);
       }
-      if (config) {
-        const pathResult = await validateContextPaths(rootDir, config);
-        if (pathResult && pathResult.broken.length > 0) {
-          if (ciMode) {
-            console.log(`stale: ${pathResult.broken.length} broken file reference(s)`);
-          } else {
-            console.log(
-              `clarte: ${pathResult.broken.length} broken file reference(s) in ${pathResult.file}: ${pathResult.broken.join(", ")}`,
-            );
-          }
-          process.exit(ExitCode.FAILURE);
+      const pathResult = await validateContextPaths(rootDir, config);
+      if (pathResult && pathResult.broken.length > 0) {
+        if (ciMode) {
+          console.log(`stale: ${pathResult.broken.length} broken file reference(s)`);
+        } else {
+          console.log(
+            `clarte: ${pathResult.broken.length} broken file reference(s) in ${pathResult.file}: ${pathResult.broken.join(", ")}`,
+          );
         }
+        process.exit(ExitCode.FAILURE);
       }
       if (ciMode) console.log("fresh");
       process.exit(ExitCode.SUCCESS);
@@ -67,7 +65,7 @@ export async function runCheckMode(rootDir: string, checkTimestamp: boolean, ciM
     const currentHash = await computeSnapshotHash(rootDir, lang);
     if (currentHash !== config.snapshotHash) {
       const daysSince = config.snapshotGeneratedAt
-        ? Math.floor((Date.now() - config.snapshotGeneratedAt) / (1000 * 60 * 60 * 24))
+        ? Math.floor((Date.now() - config.snapshotGeneratedAt) / (24 * 60 * 60 * 1000))
         : 0;
       const staleMsg = daysSince > 0 ? ` (last generated ${daysSince}d ago)` : "";
       if (ciMode) {

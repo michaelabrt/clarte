@@ -58,8 +58,6 @@ function extractPythonClassEntry(
   entries: SnapshotEntry[],
   decorators: string[],
 ): void {
-  const _name = node.childForFieldName("name")?.text ?? "";
-
   // Get base classes
   const superclassNode = node.childForFieldName("superclasses");
   const baseList: string[] = [];
@@ -166,8 +164,6 @@ function extractPythonFuncSignature(node: Node, content: string, decorators: str
   }
 
   // Build signature from the def line through the colon
-  const _params = node.childForFieldName("parameters");
-  const _returnType = node.childForFieldName("return_type");
   const body = node.childForFieldName("body");
 
   // Compute signature end: just before the body (the ":" before the block)

@@ -125,9 +125,7 @@ export function printSummary(
               .pop()
               ?.replace(/\.[jt]sx?$/, "") ?? f,
         );
-        findings.push(
-          `${analysis.circularDeps.length > 1 ? "" : ""}${t.textBold("1")} circular dependency chain (${names.slice(0, 2).join(" \u2194 ")})`,
-        );
+        findings.push(`${t.textBold("1")} circular dependency chain (${names.slice(0, 2).join(" \u2194 ")})`);
       }
       if (analysis.circularDeps.length > 1) {
         findings[0] = `${t.textBold(String(analysis.circularDeps.length))} circular dependency chain${analysis.circularDeps.length === 1 ? "" : "s"}`;

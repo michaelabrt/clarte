@@ -282,7 +282,7 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
  * Handle early CLI exits (--help, --version) before main() runs.
  * Returns true if the process should exit.
  */
-export function handleEarlyExits(rawArgs: string[]): boolean {
+export function handleEarlyExits(rawArgs: string[]): void {
   if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
     initTheme("dark");
     printHelp();
@@ -294,6 +294,4 @@ export function handleEarlyExits(rawArgs: string[]): boolean {
     console.log(VERSION);
     process.exit(ExitCode.SUCCESS);
   }
-
-  return false;
 }

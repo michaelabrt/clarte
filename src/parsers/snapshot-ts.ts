@@ -8,7 +8,6 @@ export function extractJsSnapshot(root: Node, content: string, relPath: string):
   const isStore = /stores?[/\\]/.test(relPath);
   const isHook = /hooks?[/\\]/.test(relPath) || relPath.includes("use");
   const isComponent = /components?[/\\]/.test(relPath);
-  const _isType = /types?[/\\]/.test(relPath) || relPath.endsWith(".types.ts");
 
   for (const node of root.namedChildren) {
     if (node.type !== "export_statement") continue;
@@ -111,13 +110,8 @@ export function extractJsSnapshot(root: Node, content: string, relPath: string):
 
       case "class_declaration": {
         const category = isComponent ? "component" : ("type" as const);
-        if (isDefault) {
-          const block = extractNodeBlock(declaration, content, node);
-          entries.push({ file: relPath, category, signature: block });
-        } else {
-          const block = extractNodeBlock(declaration, content, node);
-          entries.push({ file: relPath, category, signature: block });
-        }
+        const block = extractNodeBlock(declaration, content, node);
+        entries.push({ file: relPath, category, signature: block });
         break;
       }
     }
