@@ -5,7 +5,7 @@ import { theme as t } from "../theme.js";
 import { startShimmer } from "../cli/animations.js";
 import { detectContext } from "../detect/detect.js";
 import { generateSnapshot } from "../snapshot/snapshot.js";
-import { buildImportGraph } from "../graph/build.js";
+import { buildImportGraph, mergeGraph } from "../graph/build.js";
 import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "../config/config.js";
 import { fileExists, readFileOr, writeFileSafe } from "../utils.js";
 
@@ -101,6 +101,12 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
 
   // Build import graph for better snapshot quality
   const graph = await buildImportGraph(rootDir, detected.language, (msg) => shimmer.message(msg));
+  if (detected.secondaryLanguages) {
+    for (const secLang of detected.secondaryLanguages) {
+      const secGraph = await buildImportGraph(rootDir, secLang, (msg) => shimmer.message(msg));
+      mergeGraph(graph, secGraph);
+    }
+  }
 
   // Load snapshot paths from config if available
   const config = await loadConfig(rootDir);

@@ -18,7 +18,7 @@ const GRAPH_PATH = `${CLARTE_DIR}/graph.json`;
  * Build a PersistedGraph from an ImportGraph and ContextAnalysis.
  * This creates the serializable graph structure for persistent storage.
  */
-function buildPersistedGraph(graph: ImportGraph, analysis: ContextAnalysis): PersistedGraph {
+function buildPersistedGraph(rootDir: string, graph: ImportGraph, analysis: ContextAnalysis): PersistedGraph {
   // Build lookup maps from analysis data
   const hubByPath = new Map(analysis.hubFiles.map((h) => [h.path, h]));
   const chokepointByPath = new Map((analysis.chokepoints ?? []).map((c) => [c.file, c]));
@@ -113,7 +113,7 @@ function buildPersistedGraph(graph: ImportGraph, analysis: ContextAnalysis): Per
   }));
 
   // Get head commit
-  const headCommit = gitExecSafe(["rev-parse", "HEAD"], { cwd: "." }) ?? undefined;
+  const headCommit = gitExecSafe(["rev-parse", "HEAD"], { cwd: rootDir }) ?? undefined;
 
   return {
     version: PERSISTED_GRAPH_VERSION,
@@ -138,7 +138,7 @@ function buildPersistedGraph(graph: ImportGraph, analysis: ContextAnalysis): Per
  * Non-critical: callers should wrap in try/catch.
  */
 export async function persistGraph(rootDir: string, graph: ImportGraph, analysis: ContextAnalysis): Promise<void> {
-  const persisted = buildPersistedGraph(graph, analysis);
+  const persisted = buildPersistedGraph(rootDir, graph, analysis);
   const filePath = path.join(rootDir, GRAPH_PATH);
   await writeFileSafe(filePath, JSON.stringify(persisted));
 }

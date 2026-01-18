@@ -51,7 +51,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     resetTerminalColors();
     process.exit(ExitCode.FAILURE);
   };
-  process.on("SIGINT", cleanup);
+  process.once("SIGINT", cleanup);
 
   const startTime = performance.now();
   const {
@@ -401,6 +401,8 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
 
   const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
 
+  process.removeListener("SIGINT", cleanup);
+
   if (dryRun) {
     p.outro(
       t.warn("DRY RUN complete. ") + t.muted(`no files were written. Remove --dry-run to generate. (${elapsed}s)`),
@@ -410,6 +412,8 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     return;
   }
 
+  unpatchPicocolors();
+  resetTerminalColors();
   p.outro(
     t.success(`Done in ${elapsed}s!`) +
       "\n\n" +
