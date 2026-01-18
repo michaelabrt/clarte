@@ -135,6 +135,21 @@ export const HASH_CONCURRENCY = 32;
 export const INSTABILITY_THRESHOLD = 0.8;
 
 /**
+ * Sample size for approximate betweenness centrality computation.
+ * Rationale: 50 random sources provide a good approximation for typical codebases
+ * (hundreds of files) with manageable computation time. The value is encoded in the
+ * analysis cache key so changing it automatically invalidates stale cached results.
+ */
+export const BETWEENNESS_K = 50;
+
+/**
+ * Minimum co-change confidence to surface a temporal coupling suggestion in diff output.
+ * Rationale: 0.5 means files must change together in at least 50% of commits to be
+ * worth surfacing. Lower values produce too many low-signal suggestions.
+ */
+export const DIFF_COUPLING_THRESHOLD = 0.5;
+
+/**
  * Graph data computation limits.
  */
 export const GRAPH_DATA = {

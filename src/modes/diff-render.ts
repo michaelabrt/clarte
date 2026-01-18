@@ -7,6 +7,7 @@ import type {
   SnapshotEntry,
 } from "../types.js";
 import { buildDirectives } from "../templates/directives.js";
+import { DIFF_COUPLING_THRESHOLD } from "../config/thresholds.js";
 
 export interface DiffRenderContext {
   changedFiles: string[];
@@ -168,7 +169,6 @@ function renderTemporalCoupling(
   if (!gitActivity?.changeCoupling) return;
   const suggestions: string[] = [];
   for (const f of changedFiles) {
-    const DIFF_COUPLING_THRESHOLD = 0.5;
     const partners = gitActivity.changeCoupling
       .filter(
         (c) =>
@@ -282,6 +282,14 @@ const LANG_FENCE: Record<string, string> = {
   go: "go",
   rust: "rs",
   java: "java",
+  ruby: "rb",
+  c: "c",
+  cpp: "cpp",
+  csharp: "cs",
+  php: "php",
+  swift: "swift",
+  kotlin: "kt",
+  scala: "scala",
 };
 
 function renderSignatures(
@@ -302,7 +310,7 @@ function renderSignatures(
   sections.push("");
   sections.push("Key type signatures and function declarations from changed and neighbor files.");
   sections.push("");
-  sections.push(`\`\`\`${LANG_FENCE[language] ?? "ts"}`);
+  sections.push(`\`\`\`${LANG_FENCE[language] ?? language}`);
   for (const f of filesWithEntries.slice(0, 20)) {
     const entries = entryIndex.get(f) ?? [];
     if (entries.length === 0) continue;

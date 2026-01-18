@@ -1,8 +1,6 @@
 import type { FileInstability, ImportGraph } from "../types.js";
 import { INSTABILITY_TYPE_ONLY_WEIGHT, INSTABILITY_THRESHOLD } from "../config/thresholds.js";
 
-export { INSTABILITY_THRESHOLD };
-
 function computeFanMaps(graph: ImportGraph): { fanOutMap: Map<string, number>; fanInMap: Map<string, number> } {
   const fanOutMap = new Map<string, number>();
   const fanInMap = new Map<string, number>();

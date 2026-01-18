@@ -2,13 +2,15 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const TEST_FILE_PATTERNS = [
-  /\.(test|spec)\.[jt]sx?$/,
-  /\.(test|spec)\.(ts|js)$/,
-  /__tests__\//,
-  /_test\.go$/,
-  /_test\.py$/,
-  /test_[^/]+\.py$/,
-  /tests\/[^/]+\.py$/,
+  /\.(test|spec)\.[jt]sx?$/,   // .test.ts, .test.tsx, .test.js, .test.jsx
+  /\.(test|spec)\.m[jt]s$/,   // .test.mts, .test.mjs (ESM)
+  /\.(test|spec)\.c[jt]s$/,   // .test.cts, .test.cjs (CJS)
+  /__tests__\//,                // __tests__ directory
+  /\/tests?\//,                 // /test/ or /tests/ directory
+  /_test\.go$/,                 // Go test files
+  /_test\.py$/,                 // Python suffix-style test files
+  /test_[^/]+\.py$/,           // test_foo.py (Python underscore convention)
+  /test[^_/][^/]*\.py$/,       // testfoo.py (Python no-underscore)
 ];
 
 export function isTestFile(filePath: string): boolean {

@@ -121,6 +121,18 @@ describe("findTransitiveTests", () => {
     const result = findTransitiveTests(rev, "target.ts", new Set());
     expect(result).toEqual(["src/__tests__/found.test.ts"]);
   });
+
+  it("does not traverse past MAX_BFS_DEPTH (10 hops)", () => {
+    // Build a chain: target -> h1 -> h2 -> ... -> h10 -> deep.test.ts
+    // The test file is at depth 11, which exceeds MAX_BFS_DEPTH=10 and should be skipped
+    const rev = new Map<string, string[]>();
+    rev.set("target.ts", ["h1.ts"]);
+    for (let i = 1; i < 10; i++) {
+      rev.set(`h${i}.ts`, [`h${i + 1}.ts`]);
+    }
+    rev.set("h10.ts", ["src/__tests__/deep.test.ts"]);
+    expect(findTransitiveTests(rev, "target.ts", new Set())).toEqual([]);
+  });
 });
 
 // ── getFileGraphData ─────────────────────────────────────────────────
