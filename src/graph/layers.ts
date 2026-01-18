@@ -1,10 +1,5 @@
 import type { ArchitecturalLayer, ImportGraph, LayerConsistency, LayerEdge, LayerViolation } from "../types.js";
-
-/** Layer consistency parameters */
-const LAYER_CONSISTENCY = {
-  /** Minimum layers for layer consistency scoring */
-  MIN_LAYERS_FOR_SCORING: 2,
-} as const;
+import { LAYER_CONSISTENCY } from "../config/thresholds.js";
 
 /** Directory patterns for classifying files into architectural layers */
 const LAYER_PATTERNS: Array<{ name: string; pattern: RegExp }> = [

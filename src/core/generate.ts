@@ -72,7 +72,7 @@ export async function generateFiles(
       if (existing) {
         const userSections = extractUserSections(existing);
         for (const s of userSections) {
-          reservedChars = Math.max(reservedChars, s.content.length + 2); // +2 for \n\n
+          reservedChars += s.content.length + 2; // +2 for \n\n
         }
       }
     }

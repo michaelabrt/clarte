@@ -19,7 +19,7 @@ const LANG_FILES: Record<string, string> = {
 
 function getWasmDir(): string {
   const selfDir = path.dirname(new URL(import.meta.url).pathname);
-  return selfDir.includes("/src") ? path.join(selfDir, "..", "..", "dist", "wasm") : path.join(selfDir, "wasm");
+  return selfDir.includes("/src/parsers") ? path.join(selfDir, "..", "..", "dist", "wasm") : path.join(selfDir, "wasm");
 }
 
 const langPromises = new Map<string, Promise<void>>();

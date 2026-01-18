@@ -74,7 +74,7 @@ function extractGoMethodSig(node: Node, content: string): string {
   const sig = extractGoFuncSig(node, content);
 
   // Rewrite method receivers: func (r *Type) Method(... -> (Type).Method(...
-  const receiverMatch = sig.match(/^func\s*\(\w+\s+\*?(\w+)\)\s*(\w+)\((.*)$/);
+  const receiverMatch = sig.match(/^func\s*\(\w+\s+\*?(\w+(?:\[[^\]]+\])?)\)\s*(\w+)\((.*)$/);
   if (receiverMatch) {
     const [, receiverType, methodName, rest] = receiverMatch;
     return `(${receiverType}).${methodName}(${rest}`;

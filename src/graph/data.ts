@@ -34,13 +34,14 @@ export function findTransitiveTests(
   const results: string[] = [];
   const visited = new Set<string>([target]);
   const queue: Array<{ file: string; depth: number }> = [];
+  let qHead = 0;
 
   for (const importer of reverseAdj.get(target) ?? []) {
     queue.push({ file: importer, depth: 1 });
   }
 
-  while (queue.length > 0 && results.length < GRAPH_DATA.MAX_INTEGRATION_TESTS) {
-    const { file, depth } = queue.shift()!;
+  while (qHead < queue.length && results.length < GRAPH_DATA.MAX_INTEGRATION_TESTS) {
+    const { file, depth } = queue[qHead++];
     if (visited.has(file) || depth > GRAPH_DATA.MAX_BFS_DEPTH) continue;
     visited.add(file);
 
