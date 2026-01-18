@@ -107,7 +107,7 @@ describe("runPrompts", () => {
     }) as never);
 
     await expect(runPrompts(makeDetected())).rejects.toThrow("process.exit");
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(exitSpy).toHaveBeenCalledWith(0);
 
     exitSpy.mockRestore();
   });
