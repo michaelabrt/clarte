@@ -1,21 +1,5 @@
 import type { ArchitecturalLayer, ArchViolation, ImportGraph, LayerEdge } from "../types.js";
-
-/** Layer consistency parameters used by fitness checks */
-const LAYER_CONSISTENCY = {
-  /**
-   * Minimum layers for layer consistency scoring.
-   * Rationale: with only 1 layer, there are no cross-layer edges to check.
-   * 2 is the minimum where upward-dependency and layer-skip rules are meaningful.
-   */
-  MIN_LAYERS_FOR_SCORING: 2,
-  /**
-   * Minimum layer skip distance to count as a violation.
-   * Rationale: skipping 1 layer (adjacent layers importing each other) is normal.
-   * Skipping 2+ layers suggests a missing abstraction in an intermediate layer.
-   * This avoids flagging standard controller->service or service->model patterns.
-   */
-  MIN_SKIP_DISTANCE: 2,
-} as const;
+import { LAYER_CONSISTENCY } from "../config/thresholds.js";
 
 /**
  * Derive a topological ordering of layers from layer dependency edges.

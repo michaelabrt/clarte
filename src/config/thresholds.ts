@@ -150,6 +150,16 @@ export const BETWEENNESS_K = 50;
 export const DIFF_COUPLING_THRESHOLD = 0.5;
 
 /**
+ * Layer consistency scoring thresholds.
+ */
+export const LAYER_CONSISTENCY = {
+  /** Minimum number of detected layers to compute layer scoring */
+  MIN_LAYERS_FOR_SCORING: 2,
+  /** Minimum layer-skip distance to count as a violation (imports that skip more than 1 layer) */
+  MIN_SKIP_DISTANCE: 2,
+} as const;
+
+/**
  * Graph data computation limits.
  */
 export const GRAPH_DATA = {
