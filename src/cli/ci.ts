@@ -35,16 +35,21 @@ export async function runCiMode(
       }).trim();
       files = output ? output.split("\n").filter(Boolean) : [];
     } catch {
-      // Fallback: try uncommitted changes
-      try {
-        const output = execFileSync("git", ["diff", "--name-only", "--diff-filter=ACMR", "HEAD"], {
-          cwd: rootDir,
-          encoding: "utf-8",
-          timeout: 30_000,
-        }).trim();
-        files = output ? output.split("\n").filter(Boolean) : [];
-      } catch {
+      if (base === undefined) {
+        // HEAD is always valid; if it fails, give up
         files = [];
+      } else {
+        // Fallback: try uncommitted changes against HEAD
+        try {
+          const output = execFileSync("git", ["diff", "--name-only", "--diff-filter=ACMR", "HEAD"], {
+            cwd: rootDir,
+            encoding: "utf-8",
+            timeout: 30_000,
+          }).trim();
+          files = output ? output.split("\n").filter(Boolean) : [];
+        } catch {
+          files = [];
+        }
       }
     }
   }

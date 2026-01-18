@@ -2,15 +2,19 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const TEST_FILE_PATTERNS = [
-  /\.(test|spec)\.[jt]sx?$/,   // .test.ts, .test.tsx, .test.js, .test.jsx
-  /\.(test|spec)\.m[jt]s$/,   // .test.mts, .test.mjs (ESM)
-  /\.(test|spec)\.c[jt]s$/,   // .test.cts, .test.cjs (CJS)
-  /__tests__\//,                // __tests__ directory
-  /\/tests?\//,                 // /test/ or /tests/ directory
-  /_test\.go$/,                 // Go test files
-  /_test\.py$/,                 // Python suffix-style test files
-  /test_[^/]+\.py$/,           // test_foo.py (Python underscore convention)
-  /test[^_/][^/]*\.py$/,       // testfoo.py (Python no-underscore)
+  /\.(test|spec)\.[jt]sx?$/, // .test.ts, .test.tsx, .test.js, .test.jsx
+  /\.(test|spec)\.m[jt]s$/, // .test.mts, .test.mjs (ESM)
+  /\.(test|spec)\.c[jt]s$/, // .test.cts, .test.cjs (CJS)
+  /__tests__\//, // __tests__ directory
+  /\/tests?\//, // /test/ or /tests/ directory
+  /_test\.go$/, // Go test files
+  /_test\.py$/, // Python suffix-style test files
+  /test_[^/]+\.py$/, // test_foo.py (Python underscore convention)
+  /test[^_/][^/]*\.py$/, // testfoo.py (Python no-underscore)
+  /Test\.java$/, // Java: FooTest.java
+  /Tests\.java$/, // Java: FooTests.java
+  /IT\.java$/, // Java integration tests: FooIT.java
+  /\/tests\/[^/]+\.rs$/, // Rust integration tests: tests/*.rs
 ];
 
 export function isTestFile(filePath: string): boolean {
@@ -58,8 +62,9 @@ export async function fileExists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
   }
 }
 
@@ -107,7 +112,8 @@ export function estimateTokens(text: string): number {
  */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
-  return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /**
@@ -131,7 +137,8 @@ export async function writeFileSafe(filePath: string, content: string): Promise<
 export async function readDirSafe(dirPath: string): Promise<string[]> {
   try {
     return await fs.readdir(dirPath);
-  } catch {
-    return [];
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
   }
 }
