@@ -79,7 +79,7 @@ function extractPythonClassEntry(
 
   if (isDatalike || isEnum || isProtocol) {
     // Data-like: extract full block
-    const block = extractPythonBlock(node, content, decorators);
+    const block = extractPythonBlock(node, decorators);
     entries.push({ file: relPath, category, signature: block });
   } else {
     // Non-data class: extract header + public methods
@@ -139,7 +139,7 @@ function extractPythonFunctionEntry(
   entries.push({ file: relPath, category: "function", signature: sig });
 }
 
-function extractPythonBlock(node: Node, content: string, decorators: string[]): string {
+function extractPythonBlock(node: Node, decorators: string[]): string {
   const maxLines = 30;
   const decoPrefix = decorators.map((d) => `@${d}`).join("\n");
 
@@ -229,7 +229,5 @@ function extractPythonDocstringFromBody(body: Node): string | null {
   if (!text) return null;
 
   if (text.length > 80) text = text.slice(0, 77) + "...";
-  // Normalize single quotes to double quotes
-  text = text.replace(/'/g, '"');
   return text;
 }
