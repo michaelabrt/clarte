@@ -28,12 +28,12 @@ export function extractJavaSnapshot(root: Node, content: string, relPath: string
 
     switch (node.type) {
       case "interface_declaration": {
-        const block = extractJavaBlock(node, content);
+        const block = extractJavaBlock(node);
         entries.push({ file: relPath, category: "interface", signature: block });
         break;
       }
       case "enum_declaration": {
-        const block = extractJavaBlock(node, content);
+        const block = extractJavaBlock(node);
         entries.push({ file: relPath, category: "type", signature: block });
         break;
       }
@@ -69,12 +69,14 @@ function isJavaPublic(node: Node): boolean {
 function hasJavaAnnotation(node: Node, name: string): boolean {
   const modifiers = node.namedChildren.find((c) => c.type === "modifiers");
   if (!modifiers) return false;
-  return modifiers.namedChildren.some(
-    (c) => (c.type === "marker_annotation" || c.type === "annotation") && c.text.includes(name),
-  );
+  return modifiers.namedChildren.some((c) => {
+    if (c.type !== "marker_annotation" && c.type !== "annotation") return false;
+    const annName = c.text.replace(/^@/, "").split("(")[0].trim();
+    return annName === name;
+  });
 }
 
-function extractJavaBlock(node: Node, content: string): string {
+function extractJavaBlock(node: Node): string {
   // Include annotations from modifiers
   const text = node.text.split("\n").map((l) => l.trimStart());
   if (text.length > 30) return text.slice(0, 30).join("\n").trim();
