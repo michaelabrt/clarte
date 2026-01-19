@@ -54,13 +54,7 @@ export async function buildAiderContext(
   if (analysis?.configConstraints) {
     const constraintsSection = renderConstraintsSection(analysis.configConstraints);
     if (constraintsSection) {
-      // Extract bullet lines from the markdown section
-      for (const line of constraintsSection.split("\n")) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith("- ")) {
-          lines.push(`  - "${escapeYaml(trimmed.slice(2).replace(/\*\*/g, ""))}"`);
-        }
-      }
+      lines.push(...markdownBulletsToYaml(constraintsSection));
     }
   }
 
@@ -68,12 +62,7 @@ export async function buildAiderContext(
   if (analysis?.conventions) {
     const conventionsSection = renderConventionsSection(analysis.conventions);
     if (conventionsSection) {
-      for (const line of conventionsSection.split("\n")) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith("- ")) {
-          lines.push(`  - "${escapeYaml(trimmed.slice(2).replace(/\*\*/g, ""))}"`);
-        }
-      }
+      lines.push(...markdownBulletsToYaml(conventionsSection));
     }
   }
 
@@ -81,12 +70,7 @@ export async function buildAiderContext(
   if (analysis?.testMapping) {
     const testSection = renderTestMappingSection(analysis.testMapping, analysis?.hubFiles);
     if (testSection) {
-      for (const line of testSection.split("\n")) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith("- ")) {
-          lines.push(`  - "${escapeYaml(trimmed.slice(2).replace(/\*\*/g, ""))}"`);
-        }
-      }
+      lines.push(...markdownBulletsToYaml(testSection));
     }
   }
 
@@ -121,7 +105,6 @@ export async function buildAiderContext(
   // Framework conventions
   const fwHints = getFrameworkHints(ctx);
   if (fwHints.length > 0) {
-    // Filter to just the bullet-point lines (skip headers and blank lines)
     for (const hint of fwHints) {
       const trimmed = hint.trim();
       if (trimmed?.startsWith("- ")) {
@@ -301,4 +284,15 @@ export async function buildAiderContext(
  */
 function escapeYaml(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\t/g, "\\t");
+}
+
+/**
+ * Convert a markdown bullet list section to indented YAML list entries.
+ */
+function markdownBulletsToYaml(section: string): string[] {
+  return section
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- "))
+    .map((line) => `  - "${escapeYaml(line.slice(2).replace(/\*\*/g, ""))}"`);
 }
