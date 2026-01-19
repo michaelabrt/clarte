@@ -1,5 +1,6 @@
 import type { Node } from "web-tree-sitter";
 import type { SnapshotEntry } from "../types.js";
+import { extractNodeBlock } from "./snapshot-utils.js";
 
 export function extractGoSnapshot(root: Node, content: string, relPath: string): SnapshotEntry[] {
   const entries: SnapshotEntry[] = [];
@@ -21,7 +22,7 @@ export function extractGoSnapshot(root: Node, content: string, relPath: string):
 
         if (typeNode.type === "struct_type" || typeNode.type === "interface_type") {
           const category: SnapshotEntry["category"] = typeNode.type === "interface_type" ? "interface" : "type";
-          const block = extractGoNodeBlock(spec, content);
+          const block = extractNodeBlock(spec);
           entries.push({ file: relPath, category, signature: `type ${block}` });
         } else {
           // Type alias or named type
@@ -47,19 +48,13 @@ export function extractGoSnapshot(root: Node, content: string, relPath: string):
         return name && name[0] === name[0].toUpperCase();
       });
       if (hasExported) {
-        const block = extractGoNodeBlock(node, content);
+        const block = extractNodeBlock(node);
         entries.push({ file: relPath, category: "type", signature: block });
       }
     }
   }
 
   return entries;
-}
-
-export function extractGoNodeBlock(node: Node, content: string): string {
-  const text = node.text.split("\n").map((l) => l.trimStart());
-  if (text.length > 30) return text.slice(0, 30).join("\n").trim();
-  return text.join("\n").trim();
 }
 
 function extractGoFuncSig(node: Node, content: string): string {
