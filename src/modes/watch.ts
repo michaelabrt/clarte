@@ -10,7 +10,7 @@ import { getHubFiles } from "../graph/hub-files.js";
 import { detectArchitecturalLayers, computeLayerConsistency } from "../graph/layers.js";
 import { computeInstability } from "../graph/instability.js";
 import { detectCommunities } from "../graph/communities.js";
-import { findDeadFiles } from "../graph/dead-files.js";
+import { findDeadFiles, readPackageEntryPoints } from "../graph/dead-files.js";
 import { findCrossCuttingFiles } from "../graph/cross-cutting.js";
 import { findChokepoints } from "../graph/chokepoints.js";
 import { computeGraphTopology } from "../graph/topology.js";
@@ -18,7 +18,7 @@ import { findStructuralTemporalMismatches } from "../graph/mismatches.js";
 import { findTightCouplings } from "../graph/tight-coupling.js";
 import { buildGraphWithCache } from "../graph/cache.js";
 import { analyzeGitActivityAsync } from "../git/analysis.js";
-import { fileExists } from "../utils.js";
+import { fileExists, NOOP_PROGRESS } from "../utils.js";
 import { scanConfigConstraints } from "../config/scan.js";
 import { inferConventions } from "../conventions/conventions.js";
 import { buildTestMapping } from "../analysis/test-map.js";
@@ -119,8 +119,7 @@ function timeStamp(): string {
 }
 
 export async function runWatchMode(rootDir: string, verbose: boolean): Promise<void> {
-  const noopProgress: ProgressCallback = () => {};
-  const verboseLog: ProgressCallback = verbose ? (msg) => console.log(`  ${msg}`) : noopProgress;
+  const verboseLog: ProgressCallback = verbose ? (msg) => console.log(`  ${msg}`) : NOOP_PROGRESS;
 
   // 1. Load config (required for watch mode)
   const config = await loadConfig(rootDir);
@@ -216,18 +215,17 @@ async function runAnalysis(
   analysisDays: number,
 ): Promise<void> {
   const startTime = performance.now();
-  const noopProgress: ProgressCallback = () => {};
 
   // Detect context
-  const detected = await detectContext(rootDir, verbose ? verboseLog : noopProgress);
+  const detected = await detectContext(rootDir, verbose ? verboseLog : NOOP_PROGRESS);
 
   // Build import graph (with cache for incremental updates)
-  const graph = await buildGraphWithCache(rootDir, detected.language, verbose ? verboseLog : noopProgress);
+  const graph = await buildGraphWithCache(rootDir, detected.language, verbose ? verboseLog : NOOP_PROGRESS);
 
   // Merge secondary language graphs
   if (detected.secondaryLanguages) {
     for (const secLang of detected.secondaryLanguages) {
-      const secGraph = await buildImportGraph(rootDir, secLang, noopProgress);
+      const secGraph = await buildImportGraph(rootDir, secLang, NOOP_PROGRESS);
       mergeGraph(graph, secGraph);
     }
   }
@@ -241,7 +239,7 @@ async function runAnalysis(
   const { layers, layerEdges } = detectArchitecturalLayers(graph, answers.layers);
   const instabilities = computeInstability(graph);
   const communities = detectCommunities(graph);
-  const gitActivity = detected.isGitRepo ? await analyzeGitActivityAsync(rootDir, noopProgress, analysisDays) : null;
+  const gitActivity = detected.isGitRepo ? await analyzeGitActivityAsync(rootDir, NOOP_PROGRESS, analysisDays) : null;
   if (gitActivity) {
     const filesToCheck = new Set<string>();
     for (const h of gitActivity.hotFiles) filesToCheck.add(h.path);
@@ -265,7 +263,7 @@ async function runAnalysis(
       gitActivity.lagCouplings = gitActivity.lagCouplings.filter((c) => alive.has(c.fileA) && alive.has(c.fileB));
     }
   }
-  const deadFiles = findDeadFiles(graph);
+  const deadFiles = findDeadFiles(graph, readPackageEntryPoints(rootDir));
   const crossCuttingFiles = findCrossCuttingFiles(graph, layers);
   const layerConsistency = layers.length >= 2 ? computeLayerConsistency(graph, layers, layerEdges) : undefined;
   const chokepoints = findChokepoints(graph);

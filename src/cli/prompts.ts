@@ -3,9 +3,7 @@ import type { DetectedContext, IDETarget, ProjectConfig, UserAnswers } from "../
 import { theme as t } from "../theme.js";
 import { ExitCode } from "../errors.js";
 import { summarizeDetection } from "../detect/detect.js";
-
-/** Languages that support code snapshot extraction */
-const SNAPSHOT_LANGUAGES = new Set(["typescript", "javascript", "python", "go", "rust", "java"]);
+import { SNAPSHOT_LANGUAGES } from "../config/thresholds.js";
 
 /**
  * Run the interactive prompt flow. Takes the auto-detected context

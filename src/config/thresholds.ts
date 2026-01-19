@@ -160,6 +160,11 @@ export const LAYER_CONSISTENCY = {
 } as const;
 
 /**
+ * Languages that support code snapshot extraction.
+ */
+export const SNAPSHOT_LANGUAGES = new Set(["typescript", "javascript", "python", "go", "rust", "java"]);
+
+/**
  * Graph data computation limits.
  */
 export const GRAPH_DATA = {
