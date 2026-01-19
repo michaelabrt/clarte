@@ -20,6 +20,21 @@ import { runCheckMode } from "./cli/check.js";
 import { runCiMode } from "./cli/ci.js";
 import { runGenerateMode } from "./modes/generate.js";
 
+const PROJECT_MARKERS = [
+  "package.json",
+  "go.mod",
+  "Cargo.toml",
+  "pyproject.toml",
+  "requirements.txt",
+  "pom.xml",
+  "build.gradle",
+  "build.gradle.kts",
+  "Makefile",
+  "CMakeLists.txt",
+  "Gemfile",
+  "composer.json",
+];
+
 async function main() {
   const rawArgs = process.argv.slice(2);
 
@@ -64,20 +79,6 @@ async function main() {
     process.exit(ExitCode.SUCCESS);
   }
 
-  const PROJECT_MARKERS = [
-    "package.json",
-    "go.mod",
-    "Cargo.toml",
-    "pyproject.toml",
-    "requirements.txt",
-    "pom.xml",
-    "build.gradle",
-    "build.gradle.kts",
-    "Makefile",
-    "CMakeLists.txt",
-    "Gemfile",
-    "composer.json",
-  ];
   const hasProjectMarker = (await Promise.all(PROJECT_MARKERS.map((f) => fileExists(path.join(rootDir, f))))).some(
     Boolean,
   );
@@ -136,6 +137,8 @@ async function main() {
   if (diffMode) {
     p.log.info(t.muted("diff-aware context"));
     await runDiffMode(rootDir, diffRef, verbose, diffFile, diffFilterFiles);
+    unpatchPicocolors();
+    resetTerminalColors();
     return;
   }
 
