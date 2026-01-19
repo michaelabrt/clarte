@@ -5,6 +5,7 @@ import { buildImportGraph, mergeGraph } from "../graph/build.js";
 import { runAnalysis } from "../core/run-analysis.js";
 import { loadConfig } from "../config/config.js";
 import { analyzeForCI, type CIAnalysisResult } from "../analysis/ci.js";
+import { NOOP_PROGRESS } from "../utils.js";
 import type { ProgressCallback } from "../types.js";
 
 /**
@@ -18,8 +19,7 @@ export async function runCiMode(
   base: string | undefined,
   verbose: boolean,
 ): Promise<CIAnalysisResult> {
-  const noopProgress: ProgressCallback = () => {};
-  const verboseLog: ProgressCallback = verbose ? (msg) => process.stderr.write(`[ci] ${msg}\n`) : noopProgress;
+  const verboseLog: ProgressCallback = verbose ? (msg) => process.stderr.write(`[ci] ${msg}\n`) : NOOP_PROGRESS;
 
   // Resolve changed files from git if not provided
   let files: string[];
@@ -91,7 +91,7 @@ export async function runCiMode(
     verbose,
     true, // jsonMode — suppress CLI output
     verboseLog,
-    noopProgress,
+    NOOP_PROGRESS,
   );
 
   // Filter to only files that exist in the graph (source files, not config/docs)

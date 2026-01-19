@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { ProgressCallback } from "./types/output.js";
 
 const TEST_FILE_PATTERNS = [
   /\.(test|spec)\.[jt]sx?$/, // .test.ts, .test.tsx, .test.js, .test.jsx
@@ -16,6 +17,9 @@ const TEST_FILE_PATTERNS = [
   /IT\.java$/, // Java integration tests: FooIT.java
   /\/tests\/[^/]+\.rs$/, // Rust integration tests: tests/*.rs
 ];
+
+/** No-op progress callback for use when progress reporting is not needed. */
+export const NOOP_PROGRESS: ProgressCallback = () => {};
 
 export function isTestFile(filePath: string): boolean {
   return TEST_FILE_PATTERNS.some((p) => p.test(filePath));
