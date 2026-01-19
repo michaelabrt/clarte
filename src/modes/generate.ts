@@ -1,7 +1,7 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
 import { theme as t, unpatchPicocolors, resetTerminalColors } from "../theme.js";
-import { fileExists, formatBytes } from "../utils.js";
+import { fileExists, formatBytes, NOOP_PROGRESS } from "../utils.js";
 import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "../detect/detect.js";
 import { runPrompts } from "../cli/prompts.js";
 import { generateSnapshot } from "../snapshot/snapshot.js";
@@ -28,7 +28,8 @@ import { startShimmer } from "../cli/animations.js";
 import { serializeAnalysis } from "../analysis/serialize.js";
 import { buildDirectives } from "../templates/directives.js";
 import { runAnalysis } from "../core/run-analysis.js";
-import { HITS } from "../config/thresholds.js";
+import { persistGraph, loadPersistedGraph } from "../graph/persist.js";
+import { HITS, SNAPSHOT_LANGUAGES } from "../config/thresholds.js";
 
 export interface GenerateOptions {
   rootDir: string;
@@ -68,9 +69,8 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     savedConfig,
   } = opts;
 
-  const noopProgress: ProgressCallback = () => {};
   const verboseLog: ProgressCallback = jsonMode
-    ? noopProgress
+    ? NOOP_PROGRESS
     : (msg) => {
         if (verbose) p.log.info(t.muted(msg));
       };
@@ -177,17 +177,20 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     verbose,
     jsonMode,
     verboseLog,
-    noopProgress,
+    NOOP_PROGRESS,
   );
 
   // Persist analysis graph for hooks and cursor rules (non-critical)
   let persistedGraph: PersistedGraph | null = null;
   try {
-    const { persistGraph, loadPersistedGraph } = await import("../graph/persist.js");
     await persistGraph(rootDir, graph, analysis);
+  } catch (err) {
+    verboseLog(`Graph persistence failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  try {
     persistedGraph = await loadPersistedGraph(rootDir);
   } catch (err) {
-    verboseLog?.(`Graph persistence failed: ${err instanceof Error ? err.message : String(err)}`);
+    verboseLog(`Graph load failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   if (jsonMode) {
@@ -282,13 +285,12 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     const detectedIDEs = await detectIDEs(rootDir);
     const detectedDescription = await detectProjectDescription(rootDir);
 
-    const snapshotLanguages = new Set(["typescript", "javascript", "python", "go", "rust", "java"]);
     answers = {
       ides: detectedIDEs,
       projectPurpose: detectedDescription ?? "",
       keyPatterns: "",
       gotchas: "",
-      generateSnapshot: snapshotLanguages.has(detected.language),
+      generateSnapshot: SNAPSHOT_LANGUAGES.has(detected.language),
       snapshotPaths: [],
       stackConfirmed: true,
       stackCorrections: "",
@@ -379,8 +381,8 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       const { generateHookFiles, configureClaudeHooks } = await import("../hooks/generate-hooks.js");
       await generateHookFiles(rootDir, persistedGraph);
       await configureClaudeHooks(rootDir);
-    } catch {
-      // Non-critical
+    } catch (err) {
+      verboseLog(`Hook generation failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
