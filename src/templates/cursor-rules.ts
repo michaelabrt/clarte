@@ -31,23 +31,25 @@ export async function buildCursorRules(
   rules.push(await buildGlobalRule(ctx, answers, analysis));
 
   // Component rule (if components/ directory exists)
-  const hasComponents = ctx.directories.some((d) => d.endsWith("components") || d.includes("components/"));
+  const hasComponents = ctx.directories.some((d) => d.split("/").includes("components"));
   if (hasComponents) {
     rules.push(buildComponentsRule(ctx));
   }
 
   // Services rule (if services/ or api/ exists)
-  const hasServices = ctx.directories.some(
-    (d) => d.endsWith("services") || d.endsWith("api") || d.includes("services/") || d.includes("api/"),
-  );
+  const hasServices = ctx.directories.some((d) => {
+    const parts = d.split("/");
+    return parts.includes("services") || parts.includes("api");
+  });
   if (hasServices) {
     rules.push(buildServicesRule(ctx));
   }
 
   // Stores rule (if stores/ or store/ exists)
-  const hasStores = ctx.directories.some(
-    (d) => d.endsWith("stores") || d.endsWith("store") || d.includes("stores/") || d.includes("store/"),
-  );
+  const hasStores = ctx.directories.some((d) => {
+    const parts = d.split("/");
+    return parts.includes("stores") || parts.includes("store");
+  });
   if (hasStores) {
     rules.push(buildStoresRule(ctx));
   }
@@ -360,5 +362,5 @@ function getExtGlob(ctx: DetectedContext): string {
  * Format a CursorRule as the full file content with frontmatter.
  */
 export function renderCursorRule(rule: CursorRule): string {
-  return ["---", `description: ${rule.description}`, `globs: ${rule.globs}`, "---", "", rule.body, ""].join("\n");
+  return ["---", `description: ${rule.description}`, `globs: "${rule.globs}"`, "---", "", rule.body, ""].join("\n");
 }

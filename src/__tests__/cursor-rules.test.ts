@@ -300,7 +300,7 @@ describe("renderCursorRule", () => {
 
     expect(output).toContain("---");
     expect(output).toContain("description: Universal project rules");
-    expect(output).toContain("globs: **/*.{ts,tsx}");
+    expect(output).toContain(`globs: "**/*.{ts,tsx}"`);
     // Body appears after frontmatter
     expect(output).toContain("# Global Rules");
     expect(output).toContain("Some content.");
@@ -316,7 +316,7 @@ describe("renderCursorRule", () => {
     const lines = output.split("\n");
     expect(lines[0]).toBe("---");
     expect(lines[1]).toBe("description: Test rule");
-    expect(lines[2]).toBe("globs: **/*.ts");
+    expect(lines[2]).toBe(`globs: "**/*.ts"`);
     expect(lines[3]).toBe("---");
     expect(lines[4]).toBe("");
     expect(lines[5]).toBe("Body text");
