@@ -1,6 +1,6 @@
 import type { Node } from "web-tree-sitter";
 import type { SnapshotEntry } from "../types.js";
-import { extractGoNodeBlock } from "./snapshot-go.js";
+import { extractNodeBlock } from "./snapshot-utils.js";
 
 export function extractRustSnapshot(root: Node, content: string, relPath: string): SnapshotEntry[] {
   const entries: SnapshotEntry[] = [];
@@ -20,7 +20,7 @@ export function extractRustSnapshot(root: Node, content: string, relPath: string
       case "struct_item": {
         const body = node.namedChildren.find((c) => c.type === "field_declaration_list");
         if (body) {
-          const block = extractGoNodeBlock(node, content);
+          const block = extractNodeBlock(node);
           entries.push({ file: relPath, category: "type", signature: block });
         } else {
           // Tuple or unit struct
@@ -29,12 +29,12 @@ export function extractRustSnapshot(root: Node, content: string, relPath: string
         break;
       }
       case "enum_item": {
-        const block = extractGoNodeBlock(node, content);
+        const block = extractNodeBlock(node);
         entries.push({ file: relPath, category: "type", signature: block });
         break;
       }
       case "trait_item": {
-        const block = extractGoNodeBlock(node, content);
+        const block = extractNodeBlock(node);
         entries.push({ file: relPath, category: "interface", signature: block });
         break;
       }
