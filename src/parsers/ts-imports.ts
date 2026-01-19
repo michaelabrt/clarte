@@ -22,25 +22,37 @@ export function parseJsImportsAst(root: Node): RawImport[] {
           importSpecifiers.add(imp.specifier);
         }
       }
-    } else if (node.type === "expression_statement" || node.type === "lexical_declaration") {
-      // Dynamic import() and require()
-      collectDynamicImports(node, imports);
     }
   }
 
-  // require() via AST: find all call_expression with callee "require"
-  const requireCalls = root.descendantsOfType("call_expression");
-  for (const call of requireCalls) {
+  // Scan all call_expression nodes for dynamic import() and require() at any nesting depth
+  const allCalls = root.descendantsOfType("call_expression");
+  for (const call of allCalls) {
     const fn = call.childForFieldName("function");
-    if (!fn || fn.type !== "identifier" || fn.text !== "require") continue;
-    const args = call.childForFieldName("arguments");
-    if (!args) continue;
-    const firstArg = args.namedChildren[0];
-    if (!firstArg) continue;
-    const spec = extractStringContent(firstArg);
-    if (spec && !importSpecifiers.has(spec)) {
-      importSpecifiers.add(spec);
-      imports.push({ specifier: spec, importedNames: [] });
+    if (!fn) continue;
+
+    if (fn.type === "import") {
+      // Dynamic import('...')
+      const args = call.childForFieldName("arguments");
+      if (!args) continue;
+      const firstArg = args.namedChildren[0];
+      if (!firstArg) continue;
+      const spec = extractStringContent(firstArg);
+      if (spec && !importSpecifiers.has(spec)) {
+        importSpecifiers.add(spec);
+        imports.push({ specifier: spec, importedNames: [], isDynamic: true });
+      }
+    } else if (fn.type === "identifier" && fn.text === "require") {
+      // require('...')
+      const args = call.childForFieldName("arguments");
+      if (!args) continue;
+      const firstArg = args.namedChildren[0];
+      if (!firstArg) continue;
+      const spec = extractStringContent(firstArg);
+      if (spec && !importSpecifiers.has(spec)) {
+        importSpecifiers.add(spec);
+        imports.push({ specifier: spec, importedNames: [] });
+      }
     }
   }
 
@@ -101,29 +113,6 @@ function parseJsExportReexport(exportNode: Node, source: Node): RawImport | null
   }
 
   return { specifier, importedNames: names, isTypeOnly };
-}
-
-function collectDynamicImports(node: Node, imports: RawImport[]): void {
-  // Walk descendants looking for dynamic import() calls
-  const calls = node.descendantsOfType("call_expression");
-  for (const call of calls) {
-    const fn = call.childForFieldName("function");
-    if (!fn) continue;
-
-    if (fn.type === "import") {
-      // dynamic import('...')
-      const args = call.childForFieldName("arguments");
-      if (args) {
-        const firstArg = args.namedChildren[0];
-        if (firstArg) {
-          const spec = extractStringContent(firstArg);
-          if (spec) {
-            imports.push({ specifier: spec, importedNames: [], isDynamic: true });
-          }
-        }
-      }
-    }
-  }
 }
 
 export function extractStringContent(node: Node): string | null {

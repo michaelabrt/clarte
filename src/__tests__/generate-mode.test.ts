@@ -156,6 +156,7 @@ const mockConfigToAnswers = vi.fn().mockReturnValue({
 const mockComputeSnapshotHash = vi.fn().mockResolvedValue("hash123");
 
 vi.mock("../config/config.js", () => ({
+  CLARTE_DIR: ".clarte",
   saveConfig: (...args: unknown[]) => mockSaveConfig(...args),
   configToAnswers: (...args: unknown[]) => mockConfigToAnswers(...args),
   computeSnapshotHash: (...args: unknown[]) => mockComputeSnapshotHash(...args),
@@ -194,6 +195,7 @@ vi.mock("../templates/directives.js", () => ({
 
 const mockFileExists = vi.fn().mockResolvedValue(false);
 vi.mock("../utils.js", () => ({
+  NOOP_PROGRESS: () => {},
   fileExists: (...args: unknown[]) => mockFileExists(...args),
   formatBytes: (n: number) => `${(n / 1024).toFixed(0)} KB`,
 }));
