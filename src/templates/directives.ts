@@ -16,40 +16,40 @@ export interface FileComplexityInfo {
  * switch, case, catch, &&, ||, ternary).
  */
 export async function computeFileComplexity(rootDir: string, hubFiles: HubFile[]): Promise<FileComplexityInfo[]> {
-  const results: FileComplexityInfo[] = [];
+  const branchPatterns = [
+    /\bif\b/g,
+    /\belse\b/g,
+    /\bfor\b/g,
+    /\bwhile\b/g,
+    /\bswitch\b/g,
+    /\bcase\b/g,
+    /\bcatch\b/g,
+    /&&/g,
+    /\|\|/g,
+    /\?(?!\s*[.:])\s*[^?]/g, // ternary (? not followed by ?, ., or :)
+  ];
 
-  for (const hub of hubFiles) {
-    try {
-      const content = await fs.readFile(path.join(rootDir, hub.path), "utf-8");
-      const lines = content.split("\n").length;
-      const exports = (content.match(/\bexport\b/g) ?? []).length;
+  const results = await Promise.all(
+    hubFiles.map(async (hub) => {
+      try {
+        const content = await fs.readFile(path.join(rootDir, hub.path), "utf-8");
+        const lines = content.split("\n").length;
+        const exports = (content.match(/\bexport\b/g) ?? []).length;
 
-      // Cyclomatic complexity proxy: count branching keywords
-      const branchPatterns = [
-        /\bif\b/g,
-        /\belse\b/g,
-        /\bfor\b/g,
-        /\bwhile\b/g,
-        /\bswitch\b/g,
-        /\bcase\b/g,
-        /\bcatch\b/g,
-        /&&/g,
-        /\|\|/g,
-        /\?(?!\s*[.:])\s*[^?]/g, // ternary (? not followed by ?, ., or :)
-      ];
+        // Cyclomatic complexity proxy: count branching keywords
+        let branchPoints = 0;
+        for (const pat of branchPatterns) {
+          branchPoints += (content.match(pat) ?? []).length;
+        }
 
-      let branchPoints = 0;
-      for (const pat of branchPatterns) {
-        branchPoints += (content.match(pat) ?? []).length;
+        return { path: hub.path, exports, lines, branchPoints };
+      } catch {
+        return null;
       }
+    }),
+  );
 
-      results.push({ path: hub.path, exports, lines, branchPoints });
-    } catch {
-      // File unreadable; skip
-    }
-  }
-
-  return results;
+  return results.filter((r): r is FileComplexityInfo => r !== null);
 }
 
 /**
