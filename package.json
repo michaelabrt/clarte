@@ -15,6 +15,7 @@
     "bench": "vitest bench",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
     "format": "biome format --write src/",
     "prepublishOnly": "npm run build",
     "prepare": "husky"

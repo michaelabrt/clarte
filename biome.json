@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.4/schema.json",
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -32,7 +32,7 @@
         "useLiteralKeys": "off"
       },
       "style": {
-        "noNonNullAssertion": "off",
+        "noNonNullAssertion": "warn",
         "useNodejsImportProtocol": "error",
         "noParameterAssign": "off",
         "useDefaultParameterLast": "off",
@@ -40,7 +40,7 @@
       },
       "suspicious": {
         "noAssignInExpressions": "off",
-        "noExplicitAny": "off"
+        "noExplicitAny": "warn"
       },
       "correctness": {
         "noUnusedVariables": "warn",

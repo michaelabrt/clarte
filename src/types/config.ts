@@ -82,7 +82,9 @@ export interface GenerateOptions {
   reconfigure: boolean;
   verbose: boolean;
   jsonMode: boolean;
+  /** Token budget for code snapshot generation (controls how many snapshot entries to include) */
   maxTokens?: number;
+  /** Token budget for the assembled context file sections (default: DEFAULT_BUDGET from budget.ts) */
   effectiveBudget?: number;
   sectionFilter?: SectionFilter;
   maxChars?: number;
