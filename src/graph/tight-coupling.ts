@@ -24,6 +24,8 @@ export function findTightCouplings(graph: ImportGraph, minNames = 5, topN = 10):
     if (edge.isExternal || edge.importedNames.length === 0) continue;
     // Skip barrel files' own re-export edges (not genuine coupling)
     if (barrels.has(edge.from)) continue;
+    // Skip barrel-routed edges (synthetic; count would be inflated)
+    if (edge.isBarrelRouted) continue;
     const key = `${edge.from}->${edge.to}`;
     let entry = pairNames.get(key);
     if (!entry) {
