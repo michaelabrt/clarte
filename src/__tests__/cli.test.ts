@@ -4,9 +4,11 @@
 
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 const BIN = path.resolve("dist/index.js");
+const isBuild = existsSync(BIN);
 
 function run(...args: string[]): { stdout: string; exitCode: number } {
   try {
@@ -22,7 +24,7 @@ function run(...args: string[]): { stdout: string; exitCode: number } {
   }
 }
 
-describe("CLI smoke tests", () => {
+describe.skipIf(!isBuild)("CLI smoke tests", () => {
   it("--help exits 0 and shows usage", () => {
     const { stdout, exitCode } = run("--help");
     expect(exitCode).toBe(0);

@@ -2,7 +2,7 @@
  * Shared test factories for building minimal test objects.
  * Import from here instead of copying factory functions across test files.
  */
-import type { ImportEdge, ImportGraph } from "../../types.js";
+import type { ContextAnalysis, DetectedContext, ImportEdge, ImportGraph } from "../../types.js";
 import type { EdgeRecord, FileRecord, PersistedGraph } from "../../types/persisted-graph.js";
 
 type SimpleEdge = { from: string; to: string };
@@ -95,4 +95,43 @@ export function makeFileRecord(overrides: Partial<FileRecord> = {}): FileRecord 
  */
 export function makeEdgeRecord(from: string, to: string): EdgeRecord {
   return { from, to, importedNames: [] };
+}
+
+/**
+ * Build a minimal ContextAnalysis for testing.
+ */
+export function makeContextAnalysis(overrides: Partial<ContextAnalysis> = {}): ContextAnalysis {
+  return {
+    hubFiles: [],
+    circularDeps: [],
+    layers: [],
+    layerEdges: [],
+    gitActivity: null,
+    instabilities: [],
+    communities: [],
+    deadFiles: [],
+    analysisDays: 90,
+    ...overrides,
+  };
+}
+
+/**
+ * Factory for DetectedContext with sensible defaults.
+ */
+export function makeDetectedContext(overrides: Partial<DetectedContext> = {}): DetectedContext {
+  return {
+    rootDir: "/tmp/test",
+    language: "typescript",
+    hasTypeScript: true,
+    packageManager: "npm",
+    linter: "eslint",
+    frameworks: [],
+    directories: ["src"],
+    dependencies: [],
+    isGitRepo: true,
+    totalSourceBytes: 10000,
+    sourceFileCount: 50,
+    monorepo: null,
+    ...overrides,
+  };
 }

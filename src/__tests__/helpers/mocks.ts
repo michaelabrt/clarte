@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { DetectedContext } from "../../types.js";
+export { makeDetectedContext } from "./factories.js";
 
 /**
  * Shared theme mock: identity functions for all theme properties.
@@ -53,26 +53,5 @@ export function createClackMock(opts: { captureLogs?: boolean } = {}) {
       confirm: vi.fn(),
       isCancel: vi.fn(() => false),
     },
-  };
-}
-
-/**
- * Factory for DetectedContext with sensible defaults.
- */
-export function makeDetectedContext(overrides: Partial<DetectedContext> = {}): DetectedContext {
-  return {
-    rootDir: "/tmp/test",
-    language: "typescript",
-    hasTypeScript: true,
-    packageManager: "npm",
-    linter: "eslint",
-    frameworks: [],
-    directories: ["src"],
-    dependencies: [],
-    isGitRepo: true,
-    totalSourceBytes: 10000,
-    sourceFileCount: 50,
-    monorepo: null,
-    ...overrides,
   };
 }
