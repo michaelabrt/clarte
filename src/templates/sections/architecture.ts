@@ -50,11 +50,14 @@ export async function renderArchitectureSections(
 
     // Detect SDP violations: a stable file (low I) importing an unstable file (high I).
     // Requires the full graph; without it we emit no warnings to avoid false positives.
+    // Orchestrators are exempt: they are expected to have high instability by design.
+    const orchestratorPaths = new Set(analysis.hubFiles.filter((h) => h.role === "Orchestrator").map((h) => h.path));
     const sdpViolations = new Set<string>();
     if (graph) {
       const allInstabilities = computeAllInstabilities(graph);
       for (const edge of graph.edges) {
         if (edge.isExternal) continue;
+        if (orchestratorPaths.has(edge.to)) continue;
         const importerI = allInstabilities.get(edge.from) ?? 0;
         const importedI = allInstabilities.get(edge.to) ?? 0;
         if (importerI < importedI) {

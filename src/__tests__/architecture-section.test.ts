@@ -41,6 +41,7 @@ function makeHubFile(path: string, overrides?: Partial<HubFile>): HubFile {
     hubScore: 0.5,
     role: "Foundation",
     importedBy: 5,
+    imports: 2,
     ...overrides,
   };
 }
@@ -137,6 +138,30 @@ describe("renderArchitectureSections: key-files", () => {
     const sections = await renderArchitectureSections(analysis, DETECTED, graph);
     const kf = sections.find((s) => s.id === "key-files");
     expect(kf!.content).toContain("SDP");
+    expect(kf!.content).toContain("I=80%");
+  });
+
+  it("suppresses SDP warning when the imported hub is an Orchestrator", async () => {
+    // Same topology as SDP test: base.ts (I=0.2) imports hub.ts (I=0.8)
+    // But hub.ts has role=Orchestrator — should NOT get SDP warning
+    const analysis = makeAnalysis({
+      hubFiles: [makeHubFile("hub.ts", { role: "Orchestrator" })],
+      instabilities: [{ path: "hub.ts", fanIn: 1, fanOut: 4, instability: 0.8 }],
+    });
+    const graph = makeGraph([
+      { from: "c1.ts", to: "base.ts" },
+      { from: "c2.ts", to: "base.ts" },
+      { from: "c3.ts", to: "base.ts" },
+      { from: "c4.ts", to: "base.ts" },
+      { from: "base.ts", to: "hub.ts" },
+      { from: "hub.ts", to: "d1.ts" },
+      { from: "hub.ts", to: "d2.ts" },
+      { from: "hub.ts", to: "d3.ts" },
+      { from: "hub.ts", to: "d4.ts" },
+    ]);
+    const sections = await renderArchitectureSections(analysis, DETECTED, graph);
+    const kf = sections.find((s) => s.id === "key-files");
+    expect(kf!.content).not.toContain("SDP");
     expect(kf!.content).toContain("I=80%");
   });
 
