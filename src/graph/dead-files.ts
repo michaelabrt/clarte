@@ -49,6 +49,7 @@ export function findDeadFiles(graph: ImportGraph, entryPoints: string[] = []): s
 
   for (const [file, degree] of graph.inDegree) {
     if (degree > 0) continue;
+    if (graph.barrelFiles?.has(file)) continue;
     if (entrySet.has(file)) continue;
     // Skip test files
     if (/\.(test|spec)\.[jt]sx?$/.test(file) || file.includes("__tests__/")) continue;
