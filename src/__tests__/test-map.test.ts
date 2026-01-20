@@ -398,6 +398,81 @@ describe("renderTestMappingSection — test type annotations", () => {
   });
 });
 
+// ── Transitive coverage ──────────────────────────────────────────────
+
+describe("buildTestMapping — transitive coverage", () => {
+  it("marks a file 1 hop from a directly-tested file as covered", () => {
+    // test -> dispatcher -> target
+    const graph = makeGraph(
+      ["src/dispatcher.ts", "src/target.ts", "src/__tests__/dispatcher.test.ts"],
+      [
+        { from: "src/__tests__/dispatcher.test.ts", to: "src/dispatcher.ts" },
+        { from: "src/dispatcher.ts", to: "src/target.ts" },
+        // target is also imported by another source file so it would appear in untested
+        { from: "src/other.ts", to: "src/target.ts" },
+      ],
+    );
+
+    const result = buildTestMapping(graph, makeCtx());
+    expect(result).not.toBeNull();
+    expect(result!.untestedFiles).not.toContain("src/target.ts");
+  });
+
+  it("marks a file 3 hops from a test as covered", () => {
+    // test -> a -> b -> c; c is also imported by a non-test source
+    const graph = makeGraph(
+      ["src/a.ts", "src/b.ts", "src/c.ts", "src/other.ts", "src/__tests__/a.test.ts"],
+      [
+        { from: "src/__tests__/a.test.ts", to: "src/a.ts" },
+        { from: "src/a.ts", to: "src/b.ts" },
+        { from: "src/b.ts", to: "src/c.ts" },
+        { from: "src/other.ts", to: "src/c.ts" },
+      ],
+    );
+
+    const result = buildTestMapping(graph, makeCtx());
+    expect(result).not.toBeNull();
+    expect(result!.untestedFiles).not.toContain("src/c.ts");
+  });
+
+  it("does not mark a file 4+ hops away as covered (depth limit = 3)", () => {
+    // test -> a -> b -> c -> e -> d; d is 4 hops from directly-covered a, exceeds depth limit
+    const graph = makeGraph(
+      ["src/a.ts", "src/b.ts", "src/c.ts", "src/e.ts", "src/d.ts", "src/other.ts", "src/__tests__/a.test.ts"],
+      [
+        { from: "src/__tests__/a.test.ts", to: "src/a.ts" },
+        { from: "src/a.ts", to: "src/b.ts" },
+        { from: "src/b.ts", to: "src/c.ts" },
+        { from: "src/c.ts", to: "src/e.ts" },
+        { from: "src/e.ts", to: "src/d.ts" },
+        { from: "src/other.ts", to: "src/d.ts" },
+      ],
+    );
+
+    const result = buildTestMapping(graph, makeCtx());
+    expect(result).not.toBeNull();
+    expect(result!.untestedFiles).toContain("src/d.ts");
+  });
+
+  it("does not leak transitive coverage across unrelated source chains", () => {
+    // test -> a, unrelated chain: x -> y (no test covers x)
+    const graph = makeGraph(
+      ["src/a.ts", "src/x.ts", "src/y.ts", "src/__tests__/a.test.ts"],
+      [
+        { from: "src/__tests__/a.test.ts", to: "src/a.ts" },
+        { from: "src/x.ts", to: "src/y.ts" },
+        // y is also imported by another source so it would be a candidate
+        { from: "src/other.ts", to: "src/y.ts" },
+      ],
+    );
+
+    const result = buildTestMapping(graph, makeCtx());
+    expect(result).not.toBeNull();
+    // y is not reachable from the tested chain (only from x, which is not tested)
+    expect(result!.untestedFiles).toContain("src/y.ts");
+  });
+});
+
 // ── Task 2c: Monorepo per-package test mapping ──────────────────────
 
 describe("buildTestMapping — monorepo per-package", () => {

@@ -156,9 +156,38 @@ export function buildTestMapping(graph: ImportGraph, ctx: DetectedContext): Test
     tests.sort();
   }
 
+  // Build source->source out-edges for transitive coverage
+  const sourceOutEdges = new Map<string, Set<string>>();
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    if (!sourceFiles.has(edge.from) || !sourceFiles.has(edge.to)) continue;
+    getOrSet(sourceOutEdges, edge.from, () => new Set<string>()).add(edge.to);
+  }
+
+  // Extend coverage transitively: if a source file is directly tested,
+  // files it imports (up to N hops) are also considered covered.
+  const TRANSITIVE_DEPTH = 3;
+  const transitivelyCovered = new Set<string>(sourceToTests.keys());
+
+  let frontier = new Set<string>(sourceToTests.keys());
+  for (let depth = 0; depth < TRANSITIVE_DEPTH && frontier.size > 0; depth++) {
+    const nextFrontier = new Set<string>();
+    for (const file of frontier) {
+      const targets = sourceOutEdges.get(file);
+      if (!targets) continue;
+      for (const target of targets) {
+        if (!transitivelyCovered.has(target) && sourceFiles.has(target)) {
+          transitivelyCovered.add(target);
+          nextFrontier.add(target);
+        }
+      }
+    }
+    frontier = nextFrontier;
+  }
+
   // Find untested source files
   // A source file is "untested" if:
-  // 1. It's not imported by any test file
+  // 1. It's not imported by any test file (directly or transitively)
   // 2. It IS imported by at least one non-test file (has some purpose)
   // 3. It's not excluded (types, config, barrels, etc.)
   const importedByNonTest = new Set<string>();
@@ -171,7 +200,7 @@ export function buildTestMapping(graph: ImportGraph, ctx: DetectedContext): Test
 
   const untestedFiles: string[] = [];
   for (const file of sourceFiles) {
-    if (sourceToTests.has(file)) continue;
+    if (transitivelyCovered.has(file)) continue;
     if (!importedByNonTest.has(file)) continue;
     if (isExcludedFromUntested(file)) continue;
     untestedFiles.push(file);
