@@ -363,6 +363,30 @@ describe("runGenerateMode", () => {
     expect(mockSaveConfig).not.toHaveBeenCalled();
   });
 
+  it("passes delivery config to generateFiles", async () => {
+    const savedConfig = {
+      ides: ["claude"],
+      generateSnapshot: true,
+      snapshotPaths: [],
+      generatePerPackage: false,
+      delivery: {
+        scopedRules: true,
+        enrichedHooks: true,
+        onDemandSkills: true,
+      },
+    } as ProjectConfig;
+
+    await runGenerateMode(makeOpts({ savedConfig }));
+
+    // delivery is the last positional argument (index 13)
+    const callArgs = mockGenerateFiles.mock.calls[0];
+    expect(callArgs[13]).toEqual({
+      scopedRules: true,
+      enrichedHooks: true,
+      onDemandSkills: true,
+    });
+  });
+
   it("builds secondary language graphs when detected", async () => {
     mockDetectContext.mockResolvedValue({
       rootDir: "/tmp/test",

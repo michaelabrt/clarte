@@ -445,11 +445,15 @@ export async function renderDirectivesSection(
   analysis: ContextAnalysis,
   ctx: DetectedContext,
   graph?: ImportGraph,
+  excludeDirectives?: Set<string>,
 ): Promise<string | null> {
   const fileComplexity =
     analysis.hubFiles.length > 0 ? await computeFileComplexity(ctx.rootDir, analysis.hubFiles) : undefined;
 
-  const directives = buildDirectives(analysis, ctx, fileComplexity, graph);
+  let directives = buildDirectives(analysis, ctx, fileComplexity, graph);
+  if (excludeDirectives?.size) {
+    directives = directives.filter((d) => !excludeDirectives.has(d));
+  }
   if (directives.length === 0) return null;
 
   const lines: string[] = [];

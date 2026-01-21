@@ -115,6 +115,102 @@ describe("buildContextMap", () => {
     const map = buildContextMap(graph);
     expect(map["src/a.ts"]).toContain("cochange: src/b.ts (55%)");
   });
+  it("enriched=false produces unchanged output (backward compat)", () => {
+    const graph = makePersistedGraph({
+      files: {
+        "src/utils.ts": makeFileRecord({
+          role: "Foundation",
+          betweenness: 0.85,
+          instability: 0.3,
+          layers: ["utils"],
+        }),
+      },
+    });
+
+    const mapDefault = buildContextMap(graph);
+    const mapExplicit = buildContextMap(graph, false);
+    expect(mapDefault).toEqual(mapExplicit);
+    // Should not contain enriched fields
+    expect(mapDefault["src/utils.ts"]).not.toContain("instability:");
+    expect(mapDefault["src/utils.ts"]).not.toContain("layers:");
+  });
+
+  it("enriched=true includes instability when >= 0.6", () => {
+    const graph = makePersistedGraph({
+      files: {
+        "src/core/a.ts": makeFileRecord({
+          role: "Utility",
+          betweenness: 0.5,
+          instability: 0.85,
+          layers: ["core"],
+        }),
+      },
+    });
+
+    const map = buildContextMap(graph, true);
+    expect(map["src/core/a.ts"]).toContain("instability: 85%");
+    expect(map["src/core/a.ts"]).toContain("layers: core");
+  });
+
+  it("enriched=true excludes instability below 0.6", () => {
+    const graph = makePersistedGraph({
+      files: {
+        "src/utils.ts": makeFileRecord({
+          role: "Foundation",
+          betweenness: 0.85,
+          instability: 0.3,
+          layers: ["utils"],
+        }),
+      },
+    });
+
+    const map = buildContextMap(graph, true);
+    expect(map["src/utils.ts"]).not.toContain("instability:");
+    // But layers should still be there
+    expect(map["src/utils.ts"]).toContain("layers: utils");
+  });
+
+  it("enriched=true includes tight coupling partners", () => {
+    const graph = makePersistedGraph({
+      files: {
+        "src/a.ts": makeFileRecord({ betweenness: 0.5 }),
+        "src/b.ts": makeFileRecord({ betweenness: 0.3 }),
+      },
+      edges: [{ from: "src/a.ts", to: "src/b.ts", importedNames: ["x1", "x2", "x3", "x4", "x5"] }],
+    });
+
+    const map = buildContextMap(graph, true);
+    expect(map["src/a.ts"]).toContain("tight-coupling: src/b.ts (5 names)");
+  });
+
+  it("enriched=true includes per-file directives", () => {
+    const graph = makePersistedGraph({
+      files: {
+        "src/utils.ts": makeFileRecord({ role: "Foundation", betweenness: 0.85 }),
+      },
+    });
+
+    const directives = ["When modifying `src/utils.ts`, check dependents for breaking changes."];
+    const map = buildContextMap(graph, true, directives);
+    expect(map["src/utils.ts"]).toContain("directive: When modifying");
+  });
+
+  it("enriched=true caps directives per file at 2", () => {
+    const graph = makePersistedGraph({
+      files: {
+        "src/utils.ts": makeFileRecord({ role: "Foundation", betweenness: 0.85 }),
+      },
+    });
+
+    const directives = [
+      "When modifying `src/utils.ts`, check A.",
+      "When modifying `src/utils.ts`, check B.",
+      "When modifying `src/utils.ts`, check C.",
+    ];
+    const map = buildContextMap(graph, true, directives);
+    const directiveLines = map["src/utils.ts"].split("\n").filter((l: string) => l.startsWith("directive:"));
+    expect(directiveLines).toHaveLength(2);
+  });
 });
 
 // ── generateHookFiles ───────────────────────────────────────────────────────

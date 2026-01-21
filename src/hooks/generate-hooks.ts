@@ -59,9 +59,16 @@ const HOOK_DEFS: HookDef[] = [
 
 /**
  * Generate hook files: context-map.json, on-read.mjs and on-session-start.mjs.
+ * When enriched=true, includes extra context (instability, layers, tight coupling).
+ * Pass directives for per-file directive injection.
  */
-export async function generateHookFiles(rootDir: string, graph: PersistedGraph): Promise<void> {
-  const contextMap = buildContextMap(graph);
+export async function generateHookFiles(
+  rootDir: string,
+  graph: PersistedGraph,
+  enriched?: boolean,
+  directives?: string[],
+): Promise<void> {
+  const contextMap = buildContextMap(graph, enriched, directives);
 
   const hooksDir = path.join(rootDir, HOOKS_DIR);
   await writeFileSafe(path.join(hooksDir, CONTEXT_MAP_FILE), JSON.stringify(contextMap, null, 2));

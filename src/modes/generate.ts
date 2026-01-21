@@ -358,6 +358,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       maxChars,
       graph,
       persistedGraph,
+      savedConfig?.delivery,
     );
   } finally {
     shimmer.stop();
@@ -379,7 +380,11 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
   if (!dryRun && persistedGraph && answers.ides.includes("claude") && savedConfig?.hooks !== false) {
     try {
       const { generateHookFiles, configureClaudeHooks } = await import("../hooks/generate-hooks.js");
-      await generateHookFiles(rootDir, persistedGraph);
+      let hookDirectives: string[] | undefined;
+      if (savedConfig?.delivery?.enrichedHooks) {
+        hookDirectives = buildDirectives(analysis, detected);
+      }
+      await generateHookFiles(rootDir, persistedGraph, savedConfig?.delivery?.enrichedHooks, hookDirectives);
       await configureClaudeHooks(rootDir);
     } catch (err) {
       verboseLog(`Hook generation failed: ${err instanceof Error ? err.message : String(err)}`);

@@ -67,6 +67,12 @@ export interface FileGraphData {
   separatesComponents: number;
   integrationTests: string[];
   coChange: Array<{ file: string; confidence: number }>;
+  /** Instability score (0-1), null if not computed */
+  instability: number | null;
+  /** Architectural layers this file belongs to */
+  layers: string[];
+  /** Top tight-coupling partners (files importing many names from each other) */
+  tightCouplingPartners: Array<{ file: string; importedNames: number }>;
 }
 
 /**
@@ -93,6 +99,13 @@ export function getFileGraphData(
     .sort((a, b) => b.confidence - a.confidence)
     .slice(0, GRAPH_DATA.MAX_COCHANGE);
 
+  // Tight coupling: edges from this file with >= 5 imported names, top 3
+  const tightCouplingPartners = graph.edges
+    .filter((e) => e.from === filePath && e.importedNames.length >= 5)
+    .sort((a, b) => b.importedNames.length - a.importedNames.length)
+    .slice(0, 3)
+    .map((e) => ({ file: e.to, importedNames: e.importedNames.length }));
+
   return {
     role: file.role ?? "Leaf",
     betweenness: file.betweenness,
@@ -100,5 +113,8 @@ export function getFileGraphData(
     separatesComponents: file.separatesComponents,
     integrationTests,
     coChange,
+    instability: file.instability,
+    layers: file.layers,
+    tightCouplingPartners,
   };
 }

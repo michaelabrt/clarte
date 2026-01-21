@@ -15,6 +15,7 @@ export async function renderArchitectureSections(
   analysis: ContextAnalysis,
   ctx: DetectedContext,
   graph?: ImportGraph,
+  excludeDirectives?: Set<string>,
 ): Promise<ContextSection[]> {
   const sections: ContextSection[] = [];
 
@@ -30,7 +31,7 @@ export async function renderArchitectureSections(
     }
   }
 
-  const directivesSection = await renderDirectivesSection(analysis, ctx, graph);
+  const directivesSection = await renderDirectivesSection(analysis, ctx, graph, excludeDirectives);
   if (directivesSection) {
     sections.push({
       id: "working-guidelines",

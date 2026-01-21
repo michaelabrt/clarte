@@ -117,6 +117,20 @@ describe("loadConfig", () => {
     expect(config!.stackCorrections).toBe("");
     expect(config!.generatePerPackage).toBe(false);
   });
+
+  it("loads delivery config", async () => {
+    tmpDir = await makeTmpDir();
+    await writeConfig(tmpDir, {
+      _version: 2,
+      ides: ["claude"],
+      projectPurpose: "Test",
+      delivery: { scopedRules: true, enrichedHooks: false, onDemandSkills: true },
+    });
+
+    const config = await loadConfig(tmpDir);
+
+    expect(config!.delivery).toEqual({ scopedRules: true, enrichedHooks: false, onDemandSkills: true });
+  });
 });
 
 // ── saveConfig + loadConfig round-trip ──────────────────────────────────────
@@ -157,6 +171,22 @@ describe("saveConfig + loadConfig round-trip", () => {
     const loaded = await loadConfig(tmpDir);
 
     expect(loaded!.staleDays).toBe(30);
+  });
+
+  it("preserves existing delivery config on re-save", async () => {
+    tmpDir = await makeTmpDir();
+
+    await writeConfig(tmpDir, {
+      _version: 2,
+      ides: ["claude"],
+      projectPurpose: "Test",
+      delivery: { scopedRules: true, onDemandSkills: true },
+    });
+
+    await saveConfig(tmpDir, sampleAnswers);
+    const loaded = await loadConfig(tmpDir);
+
+    expect(loaded!.delivery).toEqual({ scopedRules: true, onDemandSkills: true });
   });
 });
 
