@@ -246,28 +246,33 @@ export function buildTestMapping(graph: ImportGraph, ctx: DetectedContext): Test
 
 /**
  * Render the test coverage map as a markdown section.
- * Includes per-hub-file directives and untested file warnings.
+ * Includes per-source-file directives (hub files first) and untested file warnings.
  */
 export function renderTestMappingSection(mapping: TestMapping, hubFiles?: Array<{ path: string }>): string | null {
   const lines: string[] = [];
 
-  if (hubFiles && hubFiles.length > 0) {
-    const directives: string[] = [];
-    for (const hub of hubFiles) {
-      const tests = mapping.sourceToTests.get(hub.path);
-      if (tests && tests.length > 0) {
-        const testList = tests
-          .map((t) => {
-            const typeLabel = mapping.testTypes?.get(t);
-            return typeLabel ? `\`${t}\` (${typeLabel})` : `\`${t}\``;
-          })
-          .join(", ");
-        directives.push(`- **Must**: When modifying \`${hub.path}\`, run its tests: ${testList}`);
-      }
-    }
-    if (directives.length > 0) {
-      lines.push(...directives);
-    }
+  // Render directives for ALL source files with tests, hub files first
+  const hubSet = new Set(hubFiles?.map((h) => h.path) ?? []);
+  const testedFiles = Array.from(mapping.sourceToTests.keys()).sort((a, b) => {
+    const aHub = hubSet.has(a) ? 0 : 1;
+    const bHub = hubSet.has(b) ? 0 : 1;
+    if (aHub !== bHub) return aHub - bHub;
+    return a.localeCompare(b);
+  });
+
+  const directives: string[] = [];
+  for (const sourceFile of testedFiles) {
+    const tests = mapping.sourceToTests.get(sourceFile)!;
+    const testList = tests
+      .map((t) => {
+        const typeLabel = mapping.testTypes?.get(t);
+        return typeLabel ? `\`${t}\` (${typeLabel})` : `\`${t}\``;
+      })
+      .join(", ");
+    directives.push(`- **Must**: When modifying \`${sourceFile}\`, run its tests: ${testList}`);
+  }
+  if (directives.length > 0) {
+    lines.push(...directives);
   }
 
   if (mapping.untestedFiles.length > 0) {
