@@ -127,6 +127,7 @@ export async function loadConfig(rootDir: string): Promise<ProjectConfig | null>
     analysisDays: cfg.analysisDays,
     sectionOrder: Array.isArray(cfg.sectionOrder) ? cfg.sectionOrder : undefined,
     hooks: cfg.hooks,
+    delivery: cfg.delivery,
   };
 }
 
@@ -162,6 +163,7 @@ export async function saveConfig(
     ...(existing?.autoRefreshOnCommit != null ? { autoRefreshOnCommit: existing.autoRefreshOnCommit } : {}),
     ...(existing?.sectionOrder?.length ? { sectionOrder: existing.sectionOrder } : {}),
     ...(existing?.hooks != null ? { hooks: existing.hooks } : {}),
+    ...(existing?.delivery ? { delivery: existing.delivery } : {}),
   };
   await writeFileSafe(configPath, JSON.stringify(cfg, null, 2) + "\n");
 }

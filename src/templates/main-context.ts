@@ -7,6 +7,7 @@ import type {
   ImportGraph,
   UserAnswers,
 } from "../types.js";
+import { estimateTokens } from "../utils.js";
 import { getProjectName, resetProjectNameCache, renderProjectInfoSections } from "./sections/project-info.js";
 import { renderArchitectureSections } from "./sections/architecture.js";
 import { renderDependencySections } from "./sections/dependencies.js";
@@ -69,8 +70,10 @@ export async function buildMainContext(
   maxChars?: number,
   reservedChars: number = 0,
   graph?: ImportGraph,
+  excludeDirectives?: Set<string>,
+  onDemandSkills?: boolean,
 ): Promise<string> {
-  const allSections = await buildSections(ctx, answers, snapshot, analysis, graph);
+  const allSections = await buildSections(ctx, answers, snapshot, analysis, graph, excludeDirectives, onDemandSkills);
   const effectiveBudget = budget ?? DEFAULT_BUDGET;
   const effectiveMaxChars = maxChars ?? DEFAULT_MAX_CHARS;
 
@@ -131,13 +134,15 @@ export async function buildSections(
   snapshot: CodeSnapshot | null,
   analysis?: ContextAnalysis,
   graph?: ImportGraph,
+  excludeDirectives?: Set<string>,
+  onDemandSkills?: boolean,
 ): Promise<ContextSection[]> {
   resetProjectNameCache();
   const projectName = await getProjectName(ctx);
 
   // Collect sections from all submodules
   const projectInfo = await renderProjectInfoSections(ctx, answers, projectName);
-  const architecture = analysis ? await renderArchitectureSections(analysis, ctx, graph) : [];
+  const architecture = analysis ? await renderArchitectureSections(analysis, ctx, graph, excludeDirectives) : [];
   const dependencies = analysis ? renderDependencySections(analysis) : [];
   const structure = renderStructureSections(ctx, snapshot, analysis);
   const gitActivity = analysis ? renderGitActivitySections(analysis) : [];
@@ -188,6 +193,17 @@ export async function buildSections(
   // Append any sections not in the canonical order (future-proofing)
   for (const s of byId.values()) {
     if (!sections.includes(s)) sections.push(s);
+  }
+
+  // Append on-demand skills pointer to key-patterns section (Exp 3)
+  if (onDemandSkills) {
+    const keyPatternsSection = sections.find((s) => s.id === "key-patterns");
+    if (keyPatternsSection) {
+      const pointer =
+        "- Detailed coupling analysis, health diagnostics and test coverage are available via /coupling, /health and /tests";
+      keyPatternsSection.content += `\n${pointer}`;
+      keyPatternsSection.tokens = estimateTokens(keyPatternsSection.content);
+    }
   }
 
   // -- Per-IDE section priority boosts (Task 1c) --

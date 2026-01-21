@@ -18,6 +18,7 @@ import { buildClaudeSkills, renderClaudeSkill } from "../templates/claude-skills
 import { buildAiderContext } from "../templates/aider-context.js";
 import { detectContext } from "../detect/detect.js";
 import { generateSnapshot } from "../snapshot/snapshot.js";
+import type { ProjectConfig } from "../types/config.js";
 
 /**
  * Generate all context files based on detection, user answers, and snapshot.
@@ -38,6 +39,7 @@ export async function generateFiles(
   maxChars?: number,
   graph?: ImportGraph,
   persistedGraph?: PersistedGraph | null,
+  delivery?: ProjectConfig["delivery"],
 ): Promise<GeneratedFile[]> {
   // Deduplicate files by path (e.g. multiple targets that share the same output path)
   const fileMap = new Map<string, GeneratedFile>();
@@ -78,6 +80,46 @@ export async function generateFiles(
     }
   }
 
+  // Compute scoped rules and directive exclusions (Exp 1)
+  let scopedRules: Array<{ filename: string; scope: string; paths: string[]; body: string }> = [];
+  let excludeDirectives: Set<string> | undefined;
+  const isFullMode = budget === 0;
+
+  if (delivery?.scopedRules && analysis && answers.ides.includes("claude") && !isFullMode) {
+    const { buildScopedRules, getGlobalDirectives } = await import("../templates/scoped-rules.js");
+    scopedRules = await buildScopedRules(analysis, ctx, graph);
+    if (scopedRules.length > 0) {
+      const { buildDirectives, computeFileComplexity } = await import("../templates/directives.js");
+      const { groupDirectivesByScope } = await import("../templates/directive-scope.js");
+      const fileComplexity =
+        analysis.hubFiles.length > 0 ? await computeFileComplexity(ctx.rootDir, analysis.hubFiles) : undefined;
+      const allDirectives = buildDirectives(analysis, ctx, fileComplexity, graph);
+      const scopedMap = groupDirectivesByScope(allDirectives);
+      const globalDirectives = getGlobalDirectives(allDirectives, scopedMap);
+      // Directives NOT in globalDirectives should be excluded from the main file
+      const globalSet = new Set(globalDirectives);
+      excludeDirectives = new Set(allDirectives.filter((d: string) => !globalSet.has(d)));
+    }
+  }
+
+  // Compute section excludes for on-demand skills (Exp 3)
+  let effectiveSectionFilter = sectionFilter;
+  if (delivery?.onDemandSkills && analysis && !isFullMode) {
+    const skillExcludes = new Set([
+      "tight-coupling",
+      "hidden-coupling",
+      "change-coupling",
+      "dead-files",
+      "cross-cutting",
+      "chokepoints",
+      "layer-consistency",
+      "circular-deps",
+      "test-mapping",
+    ]);
+    const mergedExclude = new Set([...(sectionFilter?.exclude ?? []), ...skillExcludes]);
+    effectiveSectionFilter = { ...sectionFilter, exclude: mergedExclude };
+  }
+
   for (const ide of answers.ides) {
     const mainFilename = getMainContextFilename(ide);
     const mainContent =
@@ -89,10 +131,12 @@ export async function generateFiles(
             snapshot,
             analysis,
             budget,
-            sectionFilter,
+            ide === "claude" ? effectiveSectionFilter : sectionFilter,
             maxChars,
             reservedChars,
             graph,
+            ide === "claude" ? excludeDirectives : undefined,
+            ide === "claude" ? delivery?.onDemandSkills : undefined,
           );
     // Prepend alwaysApply frontmatter for Cursor .mdc files
     const finalContent =
@@ -114,11 +158,20 @@ export async function generateFiles(
     }
 
     if (generateSkills && ide === "claude") {
-      const skills = buildClaudeSkills();
+      const skills = buildClaudeSkills(analysis, delivery?.onDemandSkills);
       for (const skill of skills) {
         const skillPath = `.claude/skills/${skill.name}/SKILL.md`;
         const skillContent = renderClaudeSkill(skill);
         await addFile(skillPath, skillContent);
+      }
+    }
+
+    // Generate scoped rule files (Exp 1)
+    if (ide === "claude" && scopedRules.length > 0) {
+      const { renderScopedRule: renderRule } = await import("../templates/scoped-rules.js");
+      for (const rule of scopedRules) {
+        const rulePath = `.claude/rules/${rule.filename}`;
+        await addFile(rulePath, renderRule(rule));
       }
     }
 
