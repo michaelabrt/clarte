@@ -344,6 +344,37 @@ describe("configureClaudeHooks", () => {
     expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain("on-read.mjs");
   });
 
+  it("repairs corrupted settings with clobbered hooks", async () => {
+    tmpDir = await makeTmpDir();
+    await fs.mkdir(path.join(tmpDir, ".claude"), { recursive: true });
+    // Simulate clobber bug: a single PreToolUse entry with the wrong script
+    // (on-read.mjs was overwritten by a second hook registration)
+    await fs.writeFile(
+      path.join(tmpDir, ".claude/settings.json"),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { hooks: [{ type: "command", command: "node .clarte/hooks/on-session-start.mjs" }] },
+          ],
+          SessionStart: [
+            { hooks: [{ type: "command", command: "node .clarte/hooks/on-session-start.mjs" }] },
+          ],
+        },
+      }),
+    );
+
+    await configureClaudeHooks(tmpDir);
+
+    const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
+    const settings = JSON.parse(content);
+    // Should have exactly 1 PreToolUse hook (on-read) and 1 SessionStart hook
+    expect(settings.hooks.PreToolUse).toHaveLength(1);
+    expect(settings.hooks.PreToolUse[0].matcher).toBe("Read");
+    expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain("on-read.mjs");
+    expect(settings.hooks.SessionStart).toHaveLength(1);
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("on-session-start.mjs");
+  });
+
   it("handles malformed settings gracefully", async () => {
     tmpDir = await makeTmpDir();
     await fs.mkdir(path.join(tmpDir, ".claude"), { recursive: true });
