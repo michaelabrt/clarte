@@ -71,6 +71,9 @@ export function printHelp(): void {
   console.log(
     `    ${t.accent("  --changed-files=a,b")}   ${t.text("Explicit list of changed files (comma-separated)")}`,
   );
+  console.log(
+    `    ${t.accent("learn <log.jsonl>")}       ${t.text("Analyze a Claude Code session log against the project graph")}`,
+  );
   console.log("");
   console.log(`  ${t.textBold("Examples:")}`);
   console.log(
@@ -124,6 +127,8 @@ export interface CliArgs {
   sectionFilter: SectionFilterOptions | undefined;
   maxChars: number | undefined;
   initHook: boolean;
+  learnSubcommand: boolean;
+  learnSessionPath: string | undefined;
 }
 
 export function parseCliArgs(rawArgs: string[]): CliArgs {
@@ -186,12 +191,16 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     throw new ClarteError(`Invalid --max-chars value: ${maxCharsArg?.split("=").slice(1).join("=")}`);
   }
   const initHook = rawArgs.includes("--init-hook");
+  const learnSubcommand = rawArgs[0] === "learn";
+  const learnSessionPath = learnSubcommand ? rawArgs.slice(1).find((a) => !a.startsWith("-")) : undefined;
   const diffFileArg = rawArgs.find((a) => a.startsWith("--diff-file="));
   const diffFile = diffFileArg?.split("=").slice(1).join("=");
   const diffFilterSet = new Set(diffFilterFiles);
-  const subcommands = new Set(["ci"]);
+  const subcommands = new Set(["ci", "learn"]);
   const targetDir =
-    rawArgs.find((a) => !a.startsWith("-") && !diffFilterSet.has(a) && !subcommands.has(a)) ?? process.cwd();
+    rawArgs.find(
+      (a) => !a.startsWith("-") && !diffFilterSet.has(a) && !subcommands.has(a) && a !== learnSessionPath,
+    ) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
   if (diffFile && !diffMode) {
@@ -275,6 +284,8 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     sectionFilter,
     maxChars: maxCharsRaw,
     initHook,
+    learnSubcommand,
+    learnSessionPath,
   };
 }
 

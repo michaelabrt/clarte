@@ -186,4 +186,23 @@ describe("parseCliArgs", () => {
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
+
+  it("parses learn subcommand without path", () => {
+    const result = parseCliArgs(["learn"]);
+    expect(result.learnSubcommand).toBe(true);
+    expect(result.learnSessionPath).toBeUndefined();
+  });
+
+  it("parses learn subcommand with session path", () => {
+    const result = parseCliArgs(["learn", "session.jsonl"]);
+    expect(result.learnSubcommand).toBe(true);
+    expect(result.learnSessionPath).toBe("session.jsonl");
+  });
+
+  it("parses learn subcommand with --verbose and session path", () => {
+    const result = parseCliArgs(["learn", "--verbose", "session.jsonl"]);
+    expect(result.learnSubcommand).toBe(true);
+    expect(result.verbose).toBe(true);
+    expect(result.learnSessionPath).toBe("session.jsonl");
+  });
 });

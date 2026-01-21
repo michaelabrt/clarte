@@ -64,6 +64,8 @@ async function main() {
     sectionFilter,
     maxChars,
     initHook,
+    learnSubcommand,
+    learnSessionPath,
   } = parseCliArgs(rawArgs);
 
   if (initHook) {
@@ -76,6 +78,20 @@ async function main() {
     await new Promise<void>((resolve, reject) => {
       process.stdout.write(JSON.stringify(result, null, 2) + "\n", (err) => (err ? reject(err) : resolve()));
     });
+    process.exit(ExitCode.SUCCESS);
+  }
+
+  if (learnSubcommand) {
+    if (!learnSessionPath) {
+      throw new ClarteError("Usage: clarte learn <session-log.jsonl>");
+    }
+    const { runLearnMode } = await import("./cli/learn.js");
+    const result = await runLearnMode(rootDir, learnSessionPath, verbose, jsonMode);
+    if (jsonMode) {
+      await new Promise<void>((resolve, reject) => {
+        process.stdout.write(JSON.stringify(result, null, 2) + "\n", (err) => (err ? reject(err) : resolve()));
+      });
+    }
     process.exit(ExitCode.SUCCESS);
   }
 
