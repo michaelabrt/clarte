@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs/promises";
@@ -82,6 +82,11 @@ describe("buildFileCallIndex", () => {
 
 describe("buildCallGraph - extraction", () => {
   const projectRoot = path.join(FIXTURE_DIR, "..", "..", "..", "..");
+  const cacheFile = path.join(projectRoot, ".clarte/call-graph.json");
+
+  beforeEach(async () => {
+    await fs.rm(cacheFile, { force: true });
+  });
 
   beforeAll(async () => {
     // Verify fixture file exists
@@ -192,6 +197,11 @@ describe("persistCallGraph / loadCallGraph - round-trip", () => {
 
 describe("buildCallGraph - incremental invalidation", () => {
   const projectRoot = path.join(FIXTURE_DIR, "..", "..", "..", "..");
+  const cacheFile = path.join(projectRoot, ".clarte/call-graph.json");
+
+  beforeEach(async () => {
+    await fs.rm(cacheFile, { force: true });
+  });
 
   it("reuses previous results for unchanged files", async () => {
     const graph = makeCallGraphImportGraph();
