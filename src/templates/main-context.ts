@@ -289,17 +289,16 @@ export async function buildSections(
 function buildGraphToolsSection(): string {
   return `## Graph Tools
 
-clarte MCP server provides code graph queries. **ALWAYS call \`clarte_context\` before editing any existing file.** The enforcement hook will block edits to files where \`clarte_context\` has not been called.
+clarte MCP server provides code graph queries.
 
 | Trigger | Tool | What it returns |
 |---------|------|-----------------|
-| **BEFORE editing** any existing file | \`clarte_context(<path>)\` | Importers, dependencies, co-change partners, test file |
+| **BEFORE Grep or Glob** when locating a file | \`clarte_search(<query>)\` | Ranked files with test file + co-change partners inline |
 | **BEFORE renaming or removing** a function | \`clarte_function(<name>)\` | All call sites + all functions it calls |
-| **WHEN searching** for a symbol by name | \`clarte_search(<query>)\` | Ranked file + export matches |
 | **BEFORE changing** a public API or export | \`clarte_impact(<path>)\` | Full transitive dependent set + risk level |
 
 **STOP CONDITIONS:**
-- Do NOT call \`clarte_context\` on files you already called it on this session.
+- Do NOT use Grep or Glob to locate files by name - use \`clarte_search\` first; fall back to Grep only for content patterns or if search returns no matches.
 - Do NOT call \`clarte_function\` for trivial one-line functions.
 - Do NOT call \`clarte_impact\` on leaf files with zero importers.
 - When you have enough context to edit, start editing immediately.`;
