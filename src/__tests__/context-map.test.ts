@@ -293,6 +293,50 @@ describe("generateHookFiles", () => {
     expect(script).toContain("CLARTE_HOOKS_DISABLED");
   });
 
+  it("on-session-start.mjs checks stored session_id", async () => {
+    tmpDir = await makeTmpDir();
+    const graph = makePersistedGraph({ files: {} });
+
+    await generateHookFiles(tmpDir, graph);
+
+    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-session-start.mjs"), "utf-8");
+    expect(script).toContain("session_id");
+  });
+
+  it("on-session-start.mjs always clears fail-fast.json", async () => {
+    tmpDir = await makeTmpDir();
+    const graph = makePersistedGraph({ files: {} });
+
+    await generateHookFiles(tmpDir, graph);
+
+    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-session-start.mjs"), "utf-8");
+    expect(script).toContain("fail-fast.json");
+  });
+
+  it("on-session-start.mjs conditionally clears mcp-session.json", async () => {
+    tmpDir = await makeTmpDir();
+    const graph = makePersistedGraph({ files: {} });
+
+    await generateHookFiles(tmpDir, graph);
+
+    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-session-start.mjs"), "utf-8");
+    expect(script).toContain("mcp-session.json");
+  });
+
+  it("on-session-start.mjs uses resolve() for all paths", async () => {
+    tmpDir = await makeTmpDir();
+    const graph = makePersistedGraph({ files: {} });
+
+    await generateHookFiles(tmpDir, graph);
+
+    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-session-start.mjs"), "utf-8");
+    expect(script).toContain("resolve(");
+    // Should not use bare relative paths like ".clarte/hooks/.state" without resolve()
+    // Every reference to the state dir should go through resolve()
+    const stateRefWithoutResolve = /(?<!resolve\([^)]*)"\.clarte\/hooks\/\.state"/.test(script);
+    expect(stateRefWithoutResolve).toBe(false);
+  });
+
 });
 
 // ── configureClaudeHooks ────────────────────────────────────────────────────
@@ -411,7 +455,7 @@ describe("configureClaudeHooks", () => {
         hooks: {
           PostToolUse: [
             {
-              matcher: "mcp__clarte__",
+              matcher: "mcp__clarte__clarte_context",
               hooks: [{ type: "command", command: "node .clarte/hooks/on-mcp-post.mjs" }],
             },
           ],
@@ -451,7 +495,7 @@ describe("configureClaudeHooks", () => {
     const settings = JSON.parse(content);
 
     const postHook = settings.hooks.PostToolUse?.find(
-      (h: { matcher?: string }) => h.matcher === "mcp__clarte__",
+      (h: { matcher?: string }) => h.matcher === "mcp__clarte__clarte_context",
     );
     expect(postHook).toBeDefined();
     expect(postHook.hooks[0].command).toContain("on-mcp-post.mjs");

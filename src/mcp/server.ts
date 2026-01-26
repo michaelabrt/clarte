@@ -112,12 +112,16 @@ function watchGraphFiles(rootDir: string, state: ServerState): void {
 
   fs.watchFile(graphAbsPath, { interval: 2000 }, (curr, prev) => {
     if (curr.mtimeMs !== prev.mtimeMs) {
-      reloadAll().catch(() => {});
+      reloadAll().catch((err) => {
+        process.stderr.write(`[clarte] hot-reload failed: ${err instanceof Error ? err.message : String(err)}\n`);
+      });
     }
   });
   fs.watchFile(callGraphAbsPath, { interval: 2000 }, (curr, prev) => {
     if (curr.mtimeMs !== prev.mtimeMs) {
-      reloadAll().catch(() => {});
+      reloadAll().catch((err) => {
+        process.stderr.write(`[clarte] hot-reload failed: ${err instanceof Error ? err.message : String(err)}\n`);
+      });
     }
   });
 
