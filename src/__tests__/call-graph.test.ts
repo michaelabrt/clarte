@@ -195,6 +195,113 @@ describe("persistCallGraph / loadCallGraph - round-trip", () => {
   });
 });
 
+describe("buildCallGraph - extraction (new fixtures)", () => {
+  const projectRoot = path.join(FIXTURE_DIR, "..", "..", "..", "..");
+  const cacheFile = path.join(projectRoot, ".clarte/call-graph.json");
+
+  beforeEach(async () => {
+    await fs.rm(cacheFile, { force: true });
+  });
+
+  it("arrow.ts: arrowFn calling doThing resolves to helper.ts", async () => {
+    const graph = makeImportGraph(
+      [
+        {
+          from: "src/__tests__/fixtures/call-graph/arrow.ts",
+          to: "src/__tests__/fixtures/call-graph/helper.ts",
+          isExternal: false,
+          specifier: "./helper.js",
+          importedNames: ["doThing"],
+        },
+      ],
+      ["src/__tests__/fixtures/call-graph/arrow.ts", "src/__tests__/fixtures/call-graph/helper.ts"],
+    );
+    const files = ["src/__tests__/fixtures/call-graph/arrow.ts"];
+
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+
+    const arrowFnSite = callGraph.sites.find((s) => s.callerFn === "arrowFn" && s.callee === "doThing");
+    expect(arrowFnSite).toBeDefined();
+    expect(arrowFnSite!.calleeFile).toBe("src/__tests__/fixtures/call-graph/helper.ts");
+    expect(arrowFnSite!.caller).toBe("src/__tests__/fixtures/call-graph/arrow.ts");
+  });
+
+  it("method.ts: new Service() in constructor resolves calleeFile to service.ts", async () => {
+    const graph = makeImportGraph(
+      [
+        {
+          from: "src/__tests__/fixtures/call-graph/method.ts",
+          to: "src/__tests__/fixtures/call-graph/service.ts",
+          isExternal: false,
+          specifier: "./service.js",
+          importedNames: ["Service"],
+        },
+      ],
+      ["src/__tests__/fixtures/call-graph/method.ts", "src/__tests__/fixtures/call-graph/service.ts"],
+    );
+    const files = ["src/__tests__/fixtures/call-graph/method.ts"];
+
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+
+    const constructorSite = callGraph.sites.find((s) => s.callee === "Service");
+    expect(constructorSite).toBeDefined();
+    expect(constructorSite!.calleeFile).toBe("src/__tests__/fixtures/call-graph/service.ts");
+    // Enclosing function for a new_expression in a class constructor method_definition
+    expect(constructorSite!.callerFn === "constructor" || constructorSite!.callerFn === "").toBe(true);
+  });
+
+  it("chained.ts: doThing() resolves but chained obj.b().c() produces no site for callee 'c'", async () => {
+    const graph = makeImportGraph(
+      [
+        {
+          from: "src/__tests__/fixtures/call-graph/chained.ts",
+          to: "src/__tests__/fixtures/call-graph/helper.ts",
+          isExternal: false,
+          specifier: "./helper.js",
+          importedNames: ["doThing"],
+        },
+      ],
+      ["src/__tests__/fixtures/call-graph/chained.ts", "src/__tests__/fixtures/call-graph/helper.ts"],
+    );
+    const files = ["src/__tests__/fixtures/call-graph/chained.ts"];
+
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+
+    const doThingSite = callGraph.sites.find((s) => s.callee === "doThing");
+    expect(doThingSite).toBeDefined();
+    expect(doThingSite!.calleeFile).toBe("src/__tests__/fixtures/call-graph/helper.ts");
+
+    const chainedCSite = callGraph.sites.find((s) => s.callee === "c");
+    expect(chainedCSite).toBeUndefined();
+  });
+
+  it("barrel-calls.ts: callThroughBarrel resolves calleeFile to barrel.ts (not helper.ts)", async () => {
+    const graph = makeImportGraph(
+      [
+        {
+          from: "src/__tests__/fixtures/call-graph/barrel-calls.ts",
+          to: "src/__tests__/fixtures/call-graph/barrel.ts",
+          isExternal: false,
+          specifier: "./barrel.js",
+          importedNames: ["doThing"],
+        },
+      ],
+      [
+        "src/__tests__/fixtures/call-graph/barrel-calls.ts",
+        "src/__tests__/fixtures/call-graph/barrel.ts",
+      ],
+    );
+    const files = ["src/__tests__/fixtures/call-graph/barrel-calls.ts"];
+
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+
+    const site = callGraph.sites.find((s) => s.callee === "doThing" && s.callerFn === "callThroughBarrel");
+    expect(site).toBeDefined();
+    expect(site!.calleeFile).toBe("src/__tests__/fixtures/call-graph/barrel.ts");
+    expect(site!.calleeFile).not.toBe("src/__tests__/fixtures/call-graph/helper.ts");
+  });
+});
+
 describe("buildCallGraph - incremental invalidation", () => {
   const projectRoot = path.join(FIXTURE_DIR, "..", "..", "..", "..");
   const cacheFile = path.join(projectRoot, ".clarte/call-graph.json");
