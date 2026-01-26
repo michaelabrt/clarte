@@ -72,8 +72,18 @@ export async function buildMainContext(
   graph?: ImportGraph,
   excludeDirectives?: Set<string>,
   onDemandSkills?: boolean,
+  mcpEnabled?: boolean,
 ): Promise<string> {
-  const allSections = await buildSections(ctx, answers, snapshot, analysis, graph, excludeDirectives, onDemandSkills);
+  const allSections = await buildSections(
+    ctx,
+    answers,
+    snapshot,
+    analysis,
+    graph,
+    excludeDirectives,
+    onDemandSkills,
+    mcpEnabled,
+  );
   const effectiveBudget = budget ?? DEFAULT_BUDGET;
   const effectiveMaxChars = maxChars ?? DEFAULT_MAX_CHARS;
 
@@ -136,6 +146,7 @@ export async function buildSections(
   graph?: ImportGraph,
   excludeDirectives?: Set<string>,
   onDemandSkills?: boolean,
+  mcpEnabled?: boolean,
 ): Promise<ContextSection[]> {
   resetProjectNameCache();
   const projectName = await getProjectName(ctx);
@@ -153,6 +164,17 @@ export async function buildSections(
     byId.set(s.id, s);
   }
 
+  // Add graph-tools section when MCP server is configured
+  if (mcpEnabled) {
+    const graphToolsContent = buildGraphToolsSection();
+    byId.set("graph-tools", {
+      id: "graph-tools",
+      priority: 2,
+      content: graphToolsContent,
+      tokens: estimateTokens(graphToolsContent),
+    });
+  }
+
   // Insert in the exact order matching the original monolithic buildSections().
   // This order determines tiebreaking when sections share a priority level.
   const SECTION_ORDER = [
@@ -161,6 +183,7 @@ export async function buildSections(
     "tech-stack",
     "config-constraints",
     "working-guidelines",
+    "graph-tools",
     "key-files",
     "circular-deps",
     "architecture",
@@ -258,6 +281,28 @@ export async function buildSections(
   }
 
   return sections;
+}
+
+/**
+ * Build the Graph Tools section for the MCP CORE DIRECTIVE.
+ */
+function buildGraphToolsSection(): string {
+  return `## Graph Tools
+
+clarte MCP server provides code graph queries. **ALWAYS call \`clarte_context\` before editing any existing file.** The enforcement hook will block edits to files where \`clarte_context\` has not been called.
+
+| Trigger | Tool | What it returns |
+|---------|------|-----------------|
+| **BEFORE editing** any existing file | \`clarte_context(<path>)\` | Importers, dependencies, co-change partners, test file |
+| **BEFORE renaming or removing** a function | \`clarte_function(<name>)\` | All call sites + all functions it calls |
+| **WHEN searching** for a symbol by name | \`clarte_search(<query>)\` | Ranked file + export matches |
+| **BEFORE changing** a public API or export | \`clarte_impact(<path>)\` | Full transitive dependent set + risk level |
+
+**STOP CONDITIONS:**
+- Do NOT call \`clarte_context\` on files you already called it on this session.
+- Do NOT call \`clarte_function\` for trivial one-line functions.
+- Do NOT call \`clarte_impact\` on leaf files with zero importers.
+- When you have enough context to edit, start editing immediately.`;
 }
 
 /**

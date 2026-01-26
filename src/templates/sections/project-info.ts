@@ -279,6 +279,11 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
     lines.push(`Linter: **${ctx.linter}**`);
   }
 
+  if (ctx.testFramework) {
+    lines.push("");
+    lines.push("Always use `.clarte/scripts/check-tests.sh` instead of running tests directly. It runs the same test command but appends a one-line structured summary (pass/fail counts and failure names).");
+  }
+
   lines.push("");
   lines.push("After significant changes, use `/check` to verify no architectural regressions.");
 
