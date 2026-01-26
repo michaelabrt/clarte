@@ -402,6 +402,34 @@ describe("configureClaudeHooks", () => {
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("on-session-start.mjs");
   });
 
+  it("removes PostToolUse MCP hook when mcpEnabled=false", async () => {
+    tmpDir = await makeTmpDir();
+    await fs.mkdir(path.join(tmpDir, ".claude"), { recursive: true });
+    await fs.writeFile(
+      path.join(tmpDir, ".claude/settings.json"),
+      JSON.stringify({
+        hooks: {
+          PostToolUse: [
+            {
+              matcher: "mcp__clarte__",
+              hooks: [{ type: "command", command: "node .clarte/hooks/on-mcp-post.mjs" }],
+            },
+          ],
+        },
+      }),
+    );
+
+    await configureClaudeHooks(tmpDir, false);
+
+    const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
+    const settings = JSON.parse(content);
+    const postToolUse = settings.hooks?.PostToolUse ?? [];
+    const hasClarteMcpHook = postToolUse.some((h: { hooks: { command: string }[] }) =>
+      h.hooks?.some((e) => e.command?.includes("on-mcp-post.mjs")),
+    );
+    expect(hasClarteMcpHook).toBe(false);
+  });
+
   it("handles malformed settings gracefully", async () => {
     tmpDir = await makeTmpDir();
     await fs.mkdir(path.join(tmpDir, ".claude"), { recursive: true });

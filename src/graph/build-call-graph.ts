@@ -194,7 +194,10 @@ export async function buildCallGraph(
 
     if (previous?.fileHashes[file] === hash) {
       const prevSites = prevSitesByFile.get(file) ?? [];
-      allSites.push(...prevSites);
+      // Only reuse sites whose calleeFile is still reachable via the current edges.
+      // If imports changed (edges removed/added), stale resolved sites must be dropped.
+      const currentTargets = new Set((edgesByFile.get(file) ?? []).map((e) => e.to));
+      allSites.push(...prevSites.filter((s) => s.calleeFile !== null && currentTargets.has(s.calleeFile)));
       continue;
     }
 
