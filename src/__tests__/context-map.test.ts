@@ -262,7 +262,7 @@ describe("generateHookFiles", () => {
     const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-read.mjs"), "utf-8");
     expect(script).toContain("import");
     expect(script).toContain("readFileSync");
-    expect(script).toContain("/dev/stdin");
+    expect(script).toContain("readFileSync(0,");
     expect(script).toContain("context-map.json");
     expect(script).toContain("additionalContext");
     expect(script).toContain("tool_input");
