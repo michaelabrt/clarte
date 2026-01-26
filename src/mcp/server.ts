@@ -13,7 +13,7 @@ import { loadCallGraph, buildCallerIndex, buildFileCallIndex } from "../graph/bu
 import type { PersistedGraph, EdgeRecord } from "../types/persisted-graph.js";
 import type { PersistedCallGraph, CallerIndex, FileCallIndex } from "../types/call-graph.js";
 import { VERSION } from "../cli/args.js";
-import { handleContext, handleFunction, handleSearch, handleImpact } from "./tools.js";
+import { handleFunction, handleSearch, handleImpact } from "./tools.js";
 
 const GRAPH_PATH = path.join(CLARTE_DIR, "graph.json");
 const CALL_GRAPH_PATH = path.join(CLARTE_DIR, "call-graph.json");
@@ -33,28 +33,18 @@ export interface ServerState {
   callGraph: PersistedCallGraph | null;
   callerIndex: CallerIndex;
   fileCallIndex: FileCallIndex;
-  edgesByFile: Map<string, EdgeEntry[]>;
   edgesByTarget: Map<string, EdgeEntry[]>;
   graphMtime: number;
   callGraphMtime: number;
 }
 
-function buildEdgeIndices(edges: EdgeRecord[]): {
-  edgesByFile: Map<string, EdgeEntry[]>;
-  edgesByTarget: Map<string, EdgeEntry[]>;
-} {
-  const edgesByFile = new Map<string, EdgeEntry[]>();
+function buildEdgesByTarget(edges: EdgeRecord[]): Map<string, EdgeEntry[]> {
   const edgesByTarget = new Map<string, EdgeEntry[]>();
-
   for (const edge of edges) {
-    if (!edgesByFile.has(edge.from)) edgesByFile.set(edge.from, []);
-    edgesByFile.get(edge.from)!.push({ from: edge.from, to: edge.to, importedNames: edge.importedNames ?? [] });
-
     if (!edgesByTarget.has(edge.to)) edgesByTarget.set(edge.to, []);
     edgesByTarget.get(edge.to)!.push({ from: edge.from, to: edge.to, importedNames: edge.importedNames ?? [] });
   }
-
-  return { edgesByFile, edgesByTarget };
+  return edgesByTarget;
 }
 
 function getMtime(filePath: string): number {
@@ -70,7 +60,7 @@ export async function loadServerState(rootDir: string): Promise<ServerState> {
   const callGraph = await loadCallGraph(rootDir);
 
   const edges = graph?.edges ?? [];
-  const { edgesByFile, edgesByTarget } = buildEdgeIndices(edges);
+  const edgesByTarget = buildEdgesByTarget(edges);
   const callerIndex = callGraph ? buildCallerIndex(callGraph.sites) : new Map();
   const fileCallIndex = callGraph ? buildFileCallIndex(callGraph.sites) : new Map();
 
@@ -79,7 +69,6 @@ export async function loadServerState(rootDir: string): Promise<ServerState> {
     callGraph,
     callerIndex,
     fileCallIndex,
-    edgesByFile,
     edgesByTarget,
     graphMtime: getMtime(path.join(rootDir, GRAPH_PATH)),
     callGraphMtime: getMtime(path.join(rootDir, CALL_GRAPH_PATH)),
@@ -95,13 +84,12 @@ function watchGraphFiles(rootDir: string, state: ServerState): void {
     const newCallGraph = await loadCallGraph(rootDir);
 
     const edges = newGraph?.edges ?? [];
-    const { edgesByFile, edgesByTarget } = buildEdgeIndices(edges);
+    const edgesByTarget = buildEdgesByTarget(edges);
     const callerIndex = newCallGraph ? buildCallerIndex(newCallGraph.sites) : new Map();
     const fileCallIndex = newCallGraph ? buildFileCallIndex(newCallGraph.sites) : new Map();
 
     state.graph = newGraph;
     state.callGraph = newCallGraph;
-    state.edgesByFile = edgesByFile;
     state.edgesByTarget = edgesByTarget;
     state.callerIndex = callerIndex;
     state.fileCallIndex = fileCallIndex;
@@ -132,20 +120,6 @@ function watchGraphFiles(rootDir: string, state: ServerState): void {
 }
 
 const TOOLS: Tool[] = [
-  {
-    name: "clarte_context",
-    description:
-      "Returns the dependency neighborhood for a source file: importers, dependencies, " +
-      "co-change partners, and test file. ALWAYS call this BEFORE editing any existing " +
-      "file. Do NOT call twice for the same file in one session.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Relative file path (e.g. src/utils.ts)" },
-      },
-      required: ["path"],
-    },
-  },
   {
     name: "clarte_function",
     description:
@@ -233,8 +207,6 @@ export async function createMcpServer(rootDir: string): Promise<{ server: Server
     }
 
     switch (name) {
-      case "clarte_context":
-        return handleContext(safeArgs, state);
       case "clarte_function":
         return handleFunction(safeArgs, state);
       case "clarte_search":

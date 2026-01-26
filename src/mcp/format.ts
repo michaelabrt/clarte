@@ -1,93 +1,6 @@
-import type { PersistedGraph, FileRecord } from "../types/persisted-graph.js";
+import type { PersistedGraph } from "../types/persisted-graph.js";
 import type { CallSite, CallerIndex, FileCallIndex } from "../types/call-graph.js";
-
-interface EdgeEntry {
-  from: string;
-  to: string;
-  importedNames: string[];
-}
-
-const ROLE_LABELS: Record<string, string> = {
-  Orchestrator: "Orchestrator",
-  Foundation: "Foundation",
-  Leaf: "Leaf",
-};
-
-function formatRole(record: FileRecord): string {
-  const parts: string[] = [];
-  if (record.role && ROLE_LABELS[record.role]) {
-    parts.push(ROLE_LABELS[record.role]);
-  }
-  if (record.betweenness > 0) {
-    parts.push(`BETWEENNESS: ${Math.round(record.betweenness * 100)}%`);
-  }
-  if (record.instability !== null) {
-    parts.push(`INSTABILITY: ${record.instability.toFixed(2)}`);
-  }
-  return parts.join(" | ");
-}
-
-function getImporters(filePath: string, edgesByTarget: Map<string, EdgeEntry[]>): string[] {
-  return (edgesByTarget.get(filePath) ?? []).map((e) => e.from);
-}
-
-function getDeps(filePath: string, edgesByFile: Map<string, EdgeEntry[]>): string[] {
-  return (edgesByFile.get(filePath) ?? []).map((e) => e.to);
-}
-
-/**
- * Format a clarte_context response for a file.
- */
-export function formatContext(
-  filePath: string,
-  graph: PersistedGraph,
-  edgesByFile: Map<string, EdgeEntry[]>,
-  edgesByTarget: Map<string, EdgeEntry[]>,
-): string {
-  const record = graph.files[filePath];
-  if (!record) {
-    return `${filePath}: not in graph (run clarte generate to update)`;
-  }
-
-  const lines: string[] = [`FILE: ${filePath}`];
-
-  const roleStr = formatRole(record);
-  if (roleStr) lines.push(`ROLE: ${roleStr}`);
-
-  const importers = getImporters(filePath, edgesByTarget);
-  if (importers.length > 0) {
-    lines.push(`IMPORTERS (${importers.length}): ${importers.join(", ")}`);
-  } else {
-    lines.push("IMPORTERS: none");
-  }
-
-  const deps = getDeps(filePath, edgesByFile);
-  if (deps.length > 0) {
-    lines.push(`DEPS (${deps.length}): ${deps.join(", ")}`);
-  } else {
-    lines.push("DEPS: none");
-  }
-
-  const coChanges = graph.changeCoupling
-    .filter((c) => c.fileA === filePath || c.fileB === filePath)
-    .sort((a, b) => b.coChangeCount - a.coChangeCount)
-    .slice(0, 5);
-
-  if (coChanges.length > 0) {
-    const parts = coChanges.map((c) => {
-      const partner = c.fileA === filePath ? c.fileB : c.fileA;
-      return `${partner} (${c.coChangeCount}x, ${Math.round(c.confidence * 100)}%)`;
-    });
-    lines.push(`CO-CHANGES: ${parts.join(" | ")}`);
-  }
-
-  const testFiles = record.testFiles ?? [];
-  if (testFiles.length > 0) {
-    lines.push(`TEST: ${testFiles.join(", ")}`);
-  }
-
-  return lines.join("\n");
-}
+import type { EdgeEntry } from "./server.js";
 
 /**
  * Format a clarte_function response for a named function.
@@ -174,13 +87,18 @@ export function formatFunction(
   return lines.join("\n");
 }
 
+const CO_CHANGE_THRESHOLD = 0.7;
+
 /**
  * Format a clarte_search response.
+ * Each result is prefixed with FILE: so hooks can parse file paths from the output.
+ * Includes TEST and CO-CHANGES metadata inline so agents can act without follow-up calls.
  */
 export function formatSearch(
   query: string,
   graph: PersistedGraph,
   edgesByTarget: Map<string, EdgeEntry[]>,
+  fileCallIndex: FileCallIndex,
 ): string {
   const lowerQuery = query.toLowerCase();
   const tokens = lowerQuery.split(/\W+/).filter(Boolean);
@@ -223,6 +141,20 @@ export function formatSearch(
       }
     }
 
+    // Score function names from call graph
+    const fileSites = fileCallIndex.get(filePath) ?? [];
+    const fnNames = new Set(fileSites.map((s) => s.callerFn));
+    for (const fn of fnNames) {
+      const lowerFn = fn.toLowerCase();
+      for (const token of tokens) {
+        if (lowerFn.includes(token)) {
+          score += 3;
+          if (!matchingNames.includes(fn)) matchingNames.push(fn);
+          break;
+        }
+      }
+    }
+
     if (score > 0) {
       results.push({ file: filePath, score, names: [...new Set(matchingNames)].slice(0, 5) });
     }
@@ -237,10 +169,27 @@ export function formatSearch(
 
   const lines = [`RESULTS for "${query}" (${top.length} matches):`];
   for (const r of top) {
+    lines.push(`FILE: ${r.file}`);
     if (r.names.length > 0) {
-      lines.push(`  ${r.file} - exports: ${r.names.join(", ")}`);
-    } else {
-      lines.push(`  ${r.file}`);
+      lines.push(`  exports: ${r.names.join(", ")}`);
+    }
+    const record = graph.files[r.file];
+    const testFiles = record?.testFiles ?? [];
+    if (testFiles.length > 0) {
+      lines.push(`  TEST: ${testFiles.join(", ")}`);
+    }
+    const coChanges = graph.changeCoupling
+      .filter(
+        (c) => (c.fileA === r.file || c.fileB === r.file) && c.confidence >= CO_CHANGE_THRESHOLD,
+      )
+      .sort((a, b) => b.coChangeCount - a.coChangeCount)
+      .slice(0, 2);
+    if (coChanges.length > 0) {
+      const parts = coChanges.map((c) => {
+        const partner = c.fileA === r.file ? c.fileB : c.fileA;
+        return `${partner} (${Math.round(c.confidence * 100)}%)`;
+      });
+      lines.push(`  CO-CHANGES: ${parts.join(" | ")}`);
     }
   }
 
