@@ -74,6 +74,12 @@ export function printHelp(): void {
   console.log(
     `    ${t.accent("learn <log.jsonl>")}       ${t.text("Analyze a Claude Code session log against the project graph")}`,
   );
+  console.log(
+    `    ${t.accent("run <task> [-- flags]")}   ${t.text("Run claude -p with graph-derived edit-target directives")}`,
+  );
+  console.log(
+    `    ${t.accent("serve")}                   ${t.text("Start MCP server (JSON-RPC over stdio) for code graph queries")}`,
+  );
   console.log("");
   console.log(`  ${t.textBold("Examples:")}`);
   console.log(
@@ -129,6 +135,11 @@ export interface CliArgs {
   initHook: boolean;
   learnSubcommand: boolean;
   learnSessionPath: string | undefined;
+  runSubcommand: boolean;
+  runTaskDescription: string | undefined;
+  runPassthroughArgs: string[];
+  serveSubcommand: boolean;
+  mcpMode: boolean;
 }
 
 export function parseCliArgs(rawArgs: string[]): CliArgs {
@@ -193,10 +204,22 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const initHook = rawArgs.includes("--init-hook");
   const learnSubcommand = rawArgs[0] === "learn";
   const learnSessionPath = learnSubcommand ? rawArgs.slice(1).find((a) => !a.startsWith("-")) : undefined;
+  const runSubcommand = rawArgs[0] === "run";
+  let runTaskDescription: string | undefined;
+  let runPassthroughArgs: string[] = [];
+  if (runSubcommand) {
+    const rest = rawArgs.slice(1);
+    const separatorIdx = rest.indexOf("--");
+    const beforeSeparator = separatorIdx >= 0 ? rest.slice(0, separatorIdx) : rest;
+    runPassthroughArgs = separatorIdx >= 0 ? rest.slice(separatorIdx + 1) : [];
+    runTaskDescription = beforeSeparator.find((a) => !a.startsWith("-"));
+  }
+  const serveSubcommand = rawArgs[0] === "serve";
+  const mcpMode = rawArgs.includes("--mcp");
   const diffFileArg = rawArgs.find((a) => a.startsWith("--diff-file="));
   const diffFile = diffFileArg?.split("=").slice(1).join("=");
   const diffFilterSet = new Set(diffFilterFiles);
-  const subcommands = new Set(["ci", "learn"]);
+  const subcommands = new Set(["ci", "learn", "run", "serve"]);
   const targetDir =
     rawArgs.find(
       (a) => !a.startsWith("-") && !diffFilterSet.has(a) && !subcommands.has(a) && a !== learnSessionPath,
@@ -235,6 +258,7 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     "--watch",
     "--full",
     "--init-hook",
+    "--mcp",
     "--help",
     "-h",
     "--version",
@@ -286,6 +310,11 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     initHook,
     learnSubcommand,
     learnSessionPath,
+    runSubcommand,
+    runTaskDescription,
+    runPassthroughArgs,
+    serveSubcommand,
+    mcpMode,
   };
 }
 

@@ -43,6 +43,7 @@ export interface GenerateOptions {
   sectionFilter?: { include?: Set<string>; exclude?: Set<string> };
   maxChars?: number;
   savedConfig: ProjectConfig | null;
+  mcpMode?: boolean;
 }
 
 export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
@@ -67,6 +68,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     sectionFilter,
     maxChars,
     savedConfig,
+    mcpMode,
   } = opts;
 
   const verboseLog: ProgressCallback = jsonMode
@@ -191,6 +193,29 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     persistedGraph = await loadPersistedGraph(rootDir);
   } catch (err) {
     verboseLog(`Graph load failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Build call graph for MCP function-level queries (non-critical, only when MCP is enabled)
+  if (mcpMode) {
+    try {
+      const { buildCallGraph, persistCallGraph } = await import("../graph/build-call-graph.js");
+      const callGraph = await buildCallGraph(
+        rootDir,
+        graph,
+        [...graph.inDegree.keys()],
+        detected.language,
+      );
+      await persistCallGraph(rootDir, callGraph);
+      verboseLog(`Call graph: ${callGraph.sites.length} resolved call sites`);
+    } catch (err) {
+      if (!jsonMode) {
+        p.log.warn(
+          t.warn(
+            `Call graph extraction failed: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+      }
+    }
   }
 
   if (jsonMode) {
@@ -359,6 +384,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       graph,
       persistedGraph,
       savedConfig?.delivery,
+      mcpMode,
     );
   } finally {
     shimmer.stop();
@@ -384,10 +410,26 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       if (savedConfig?.delivery?.enrichedHooks) {
         hookDirectives = buildDirectives(analysis, detected);
       }
-      await generateHookFiles(rootDir, persistedGraph, savedConfig?.delivery?.enrichedHooks, hookDirectives);
-      await configureClaudeHooks(rootDir);
+      await generateHookFiles(
+        rootDir,
+        persistedGraph,
+        savedConfig?.delivery?.enrichedHooks,
+        hookDirectives,
+        mcpMode,
+      );
+      await configureClaudeHooks(rootDir, mcpMode);
     } catch (err) {
       verboseLog(`Hook generation failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Generate check-tests.sh skill script (non-critical)
+  if (!dryRun && answers.ides.includes("claude")) {
+    try {
+      const { generateCheckTestsScript } = await import("../hooks/generate-scripts.js");
+      await generateCheckTestsScript(rootDir, detected);
+    } catch (err) {
+      verboseLog(`Script generation failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

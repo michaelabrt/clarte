@@ -66,6 +66,11 @@ async function main() {
     initHook,
     learnSubcommand,
     learnSessionPath,
+    runSubcommand,
+    runTaskDescription,
+    runPassthroughArgs,
+    serveSubcommand,
+    mcpMode,
   } = parseCliArgs(rawArgs);
 
   if (initHook) {
@@ -93,6 +98,21 @@ async function main() {
       });
     }
     process.exit(ExitCode.SUCCESS);
+  }
+
+  if (runSubcommand) {
+    if (!runTaskDescription) {
+      throw new ClarteError('Usage: clarte run "task description" [-- claude flags]');
+    }
+    const { runRunMode } = await import("./cli/run.js");
+    const code = await runRunMode(rootDir, runTaskDescription, runPassthroughArgs, verbose);
+    process.exit(code);
+  }
+
+  if (serveSubcommand) {
+    const { runServeMode } = await import("./modes/serve.js");
+    await runServeMode(rootDir);
+    return;
   }
 
   const hasProjectMarker = (await Promise.all(PROJECT_MARKERS.map((f) => fileExists(path.join(rootDir, f))))).some(
@@ -170,6 +190,7 @@ async function main() {
     sectionFilter,
     maxChars,
     savedConfig,
+    mcpMode,
   });
 
   unpatchPicocolors();

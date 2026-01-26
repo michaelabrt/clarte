@@ -155,6 +155,22 @@ describe("renderProjectInfoSections", () => {
     const dev = sections.find((s) => s.id === "development");
     expect(dev?.content).toContain("npm install");
   });
+
+  it("development section includes check-tests directive when testFramework is set", async () => {
+    const ctx = makeCtx({ testFramework: "Vitest" });
+    const sections = await renderProjectInfoSections(ctx, defaultAnswers, "test");
+
+    const dev = sections.find((s) => s.id === "development");
+    expect(dev?.content).toContain(".clarte/scripts/check-tests.sh");
+  });
+
+  it("development section omits check-tests directive when no testFramework", async () => {
+    const ctx = makeCtx();
+    const sections = await renderProjectInfoSections(ctx, defaultAnswers, "test");
+
+    const dev = sections.find((s) => s.id === "development");
+    expect(dev?.content).not.toContain("check-tests");
+  });
 });
 
 describe("getProjectName", () => {

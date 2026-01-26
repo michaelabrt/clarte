@@ -40,6 +40,7 @@ export async function generateFiles(
   graph?: ImportGraph,
   persistedGraph?: PersistedGraph | null,
   delivery?: ProjectConfig["delivery"],
+  mcpEnabled?: boolean,
 ): Promise<GeneratedFile[]> {
   // Deduplicate files by path (e.g. multiple targets that share the same output path)
   const fileMap = new Map<string, GeneratedFile>();
@@ -137,6 +138,7 @@ export async function generateFiles(
             graph,
             ide === "claude" ? excludeDirectives : undefined,
             ide === "claude" ? delivery?.onDemandSkills : undefined,
+            ide === "claude" ? mcpEnabled : undefined,
           );
     // Prepend alwaysApply frontmatter for Cursor .mdc files
     const finalContent =

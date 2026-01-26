@@ -9,7 +9,7 @@ export default defineConfig((options) => [
     outDir: "dist",
     clean: !options.watch,
     splitting: false,
-    external: ["web-tree-sitter"],
+    external: ["web-tree-sitter", "@modelcontextprotocol/sdk"],
     sourcemap: false,
     dts: false,
     banner: {
