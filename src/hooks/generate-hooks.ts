@@ -289,8 +289,10 @@ export async function configureClaudeHooks(rootDir: string, mcpEnabled?: boolean
 
   const allDefs = mcpEnabled ? [...HOOK_DEFS, ...MCP_HOOK_DEFS] : HOOK_DEFS;
 
-  // Clean up all existing clarte hooks first (repairs clobber corruption)
-  for (const def of allDefs) {
+  // Clean up all existing clarte hooks first (repairs clobber corruption).
+  // Always clean ALL known events so previously-installed MCP hooks are removed
+  // when mcpEnabled is false (prevents PostToolUse leak).
+  for (const def of [...HOOK_DEFS, ...MCP_HOOK_DEFS]) {
     const group = settings.hooks[def.event] as MatchedHookGroup[] | undefined;
     if (group) {
       settings.hooks[def.event] = group.filter((entry) => !isClartHook(entry));

@@ -1,4 +1,5 @@
 import path from "node:path";
+import fs from "node:fs/promises";
 import * as p from "@clack/prompts";
 import { theme as t, unpatchPicocolors, resetTerminalColors } from "../theme.js";
 import { fileExists, formatBytes, NOOP_PROGRESS } from "../utils.js";
@@ -44,6 +45,21 @@ export interface GenerateOptions {
   maxChars?: number;
   savedConfig: ProjectConfig | null;
   mcpMode?: boolean;
+}
+
+async function generateMcpConfig(rootDir: string): Promise<void> {
+  const mcpConfigPath = path.join(rootDir, ".mcp.json");
+  let config: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(await fs.readFile(mcpConfigPath, "utf-8"));
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      config = parsed as Record<string, unknown>;
+    }
+  } catch {}
+  const mcpServers = (config.mcpServers as Record<string, unknown>) ?? {};
+  mcpServers.clarte = { command: "npx", args: ["clarte", "serve"], type: "stdio" };
+  config.mcpServers = mcpServers;
+  await fs.writeFile(mcpConfigPath, JSON.stringify(config, null, 2) + "\n");
 }
 
 export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
@@ -420,6 +436,15 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       await configureClaudeHooks(rootDir, mcpMode);
     } catch (err) {
       verboseLog(`Hook generation failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Generate .mcp.json for clarte serve (non-critical, only when MCP is enabled)
+  if (!dryRun && mcpMode) {
+    try {
+      await generateMcpConfig(rootDir);
+    } catch (err) {
+      verboseLog(`MCP config generation failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
