@@ -13,7 +13,7 @@ import { loadCallGraph, buildCallerIndex, buildFileCallIndex } from "../graph/bu
 import type { PersistedGraph, EdgeRecord } from "../types/persisted-graph.js";
 import type { PersistedCallGraph, CallerIndex, FileCallIndex } from "../types/call-graph.js";
 import { VERSION } from "../cli/args.js";
-import { handleFunction, handleSearch, handleImpact } from "./tools.js";
+import { handleContext, handleFunction, handleSearch, handleImpact } from "./tools.js";
 
 const GRAPH_PATH = path.join(CLARTE_DIR, "graph.json");
 const CALL_GRAPH_PATH = path.join(CLARTE_DIR, "call-graph.json");
@@ -121,6 +121,20 @@ function watchGraphFiles(rootDir: string, state: ServerState): void {
 
 const TOOLS: Tool[] = [
   {
+    name: "clarte_context",
+    description:
+      "Returns the dependency neighborhood for a source file: importers, " +
+      "co-change partners, and test file. Call this BEFORE editing any existing " +
+      "file. Do NOT call twice for the same file in one session.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Relative file path (e.g. src/utils.ts)" },
+      },
+      required: ["path"],
+    },
+  },
+  {
     name: "clarte_function",
     description:
       "Returns all call sites of a function (who calls it) and all functions it calls " +
@@ -207,6 +221,8 @@ export async function createMcpServer(rootDir: string): Promise<{ server: Server
     }
 
     switch (name) {
+      case "clarte_context":
+        return handleContext(safeArgs, state);
       case "clarte_function":
         return handleFunction(safeArgs, state);
       case "clarte_search":

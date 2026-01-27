@@ -153,27 +153,8 @@ import { resolve, relative } from "node:path";
 if (process.env.CLARTE_HOOKS_DISABLED) process.exit(0);
 
 ${PARSE_STDIN}
-if (input.tool_name !== "mcp__clarte__clarte_search") process.exit(0);
-
-// Extract the tool output text (handles string or MCP content-block array)
-const resp = input.tool_response;
-let outputText = "";
-if (typeof resp === "string") {
-  outputText = resp;
-} else if (Array.isArray(resp)) {
-  outputText = resp.map(function(r) { return (r && typeof r.text === "string") ? r.text : ""; }).join("\\n");
-} else if (resp && typeof resp === "object" && Array.isArray(resp.content)) {
-  outputText = resp.content.map(function(r) { return (r && typeof r.text === "string") ? r.text : ""; }).join("\\n");
-}
-if (!outputText) process.exit(0);
-
-// Parse FILE: lines from search results
-const filePaths = [];
-for (const line of outputText.split("\\n")) {
-  const m = line.match(/^FILE:\\s+(.+)/);
-  if (m) filePaths.push(m[1].trim());
-}
-if (filePaths.length === 0) process.exit(0);
+const toolName = input.tool_name;
+if (toolName !== "mcp__clarte__clarte_context" && toolName !== "mcp__clarte__clarte_search") process.exit(0);
 
 const cwd = input.cwd || process.cwd();
 const STATE_DIR = resolve(cwd, ".clarte/hooks/.state");
@@ -182,12 +163,32 @@ const STATE_FILE = resolve(STATE_DIR, "mcp-session.json");
 let state = { contextCalled: [] };
 try { state = JSON.parse(readFileSync(STATE_FILE, "utf-8")); } catch {}
 if (!Array.isArray(state.contextCalled)) state.contextCalled = [];
-for (const fp of filePaths) {
+
+function track(fp) {
   const rel = relative(cwd, resolve(cwd, fp)).replace(/\\\\/g, "/");
-  if (!state.contextCalled.includes(rel)) {
-    state.contextCalled.push(rel);
+  if (!state.contextCalled.includes(rel)) state.contextCalled.push(rel);
+}
+
+if (toolName === "mcp__clarte__clarte_context") {
+  const filePath = input.tool_input?.path;
+  if (filePath) track(filePath);
+} else {
+  // clarte_search: parse FILE: lines from tool output
+  const resp = input.tool_response;
+  let outputText = "";
+  if (typeof resp === "string") {
+    outputText = resp;
+  } else if (Array.isArray(resp)) {
+    outputText = resp.map(function(r) { return (r && typeof r.text === "string") ? r.text : ""; }).join("\\n");
+  } else if (resp && typeof resp === "object" && Array.isArray(resp.content)) {
+    outputText = resp.content.map(function(r) { return (r && typeof r.text === "string") ? r.text : ""; }).join("\\n");
+  }
+  for (const line of outputText.split("\\n")) {
+    const m = line.match(/^FILE:\\s+(.+)/);
+    if (m) track(m[1].trim());
   }
 }
+
 try { mkdirSync(STATE_DIR, { recursive: true }); writeFileSync(STATE_FILE, JSON.stringify(state)); } catch {}
 `;
 
@@ -235,7 +236,7 @@ if (!called) {
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: "Call clarte_search to locate '" + relNorm + "' in the graph before editing it. This provides co-change partners, test file and impact context."
+      permissionDecisionReason: "Call clarte_context('" + relNorm + "') first to understand this file's dependencies before editing it."
     }
   });
   process.stdout.write(result);
@@ -256,7 +257,12 @@ const HOOK_DEFS: HookDef[] = [
 ];
 
 const MCP_HOOK_DEFS: HookDef[] = [
-  { event: "PostToolUse", file: "on-mcp-post.mjs", matcher: "mcp__clarte__clarte_search", script: MCP_POST_SCRIPT },
+  {
+    event: "PostToolUse",
+    file: "on-mcp-post.mjs",
+    matcher: "mcp__clarte__clarte_context|mcp__clarte__clarte_search",
+    script: MCP_POST_SCRIPT,
+  },
   {
     event: "PreToolUse",
     file: "on-mcp-enforce.mjs",
