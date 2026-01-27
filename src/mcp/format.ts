@@ -1,6 +1,69 @@
-import type { PersistedGraph } from "../types/persisted-graph.js";
+import type { PersistedGraph, FileRecord } from "../types/persisted-graph.js";
 import type { CallSite, CallerIndex, FileCallIndex } from "../types/call-graph.js";
 import type { EdgeEntry } from "./server.js";
+
+const ROLE_LABELS: Record<string, string> = {
+  Orchestrator: "Orchestrator",
+  Foundation: "Foundation",
+  Leaf: "Leaf",
+};
+
+function formatRole(record: FileRecord): string {
+  const parts: string[] = [];
+  if (record.role && ROLE_LABELS[record.role]) {
+    parts.push(ROLE_LABELS[record.role]);
+  }
+  if (record.betweenness > 0) {
+    parts.push(`BETWEENNESS: ${Math.round(record.betweenness * 100)}%`);
+  }
+  if (record.instability !== null) {
+    parts.push(`INSTABILITY: ${record.instability.toFixed(2)}`);
+  }
+  return parts.join(" | ");
+}
+
+/**
+ * Format a clarte_context response for a file.
+ */
+export function formatContext(
+  filePath: string,
+  graph: PersistedGraph,
+  edgesByTarget: Map<string, EdgeEntry[]>,
+): string {
+  const record = graph.files[filePath];
+  if (!record) {
+    return `${filePath}: not in graph (run clarte generate to update)`;
+  }
+
+  const lines: string[] = [`FILE: ${filePath}`];
+
+  const roleStr = formatRole(record);
+  if (roleStr) lines.push(`ROLE: ${roleStr}`);
+
+  const importers = (edgesByTarget.get(filePath) ?? []).map((e) => e.from);
+  lines.push(
+    `IMPORTERS: ${importers.length === 0 ? "none" : `${importers.length} (use clarte_impact for full list)`}`,
+  );
+
+  const coChanges = graph.changeCoupling
+    .filter((c) => (c.fileA === filePath || c.fileB === filePath) && c.confidence >= CO_CHANGE_THRESHOLD)
+    .sort((a, b) => b.coChangeCount - a.coChangeCount)
+    .slice(0, 3);
+  if (coChanges.length > 0) {
+    const parts = coChanges.map((c) => {
+      const partner = c.fileA === filePath ? c.fileB : c.fileA;
+      return `${partner} (${Math.round(c.confidence * 100)}%)`;
+    });
+    lines.push(`CO-CHANGES: ${parts.join(" | ")}`);
+  }
+
+  const testFiles = record.testFiles ?? [];
+  if (testFiles.length > 0) {
+    lines.push(`TEST: ${testFiles.join(", ")}`);
+  }
+
+  return lines.join("\n");
+}
 
 /**
  * Format a clarte_function response for a named function.
@@ -156,12 +219,15 @@ export function formatSearch(
     }
 
     if (score > 0) {
+      // Importance tiebreaker: files imported by more files surface first within the same score tier
+      const importance = graph.files[filePath]?.importedByCount ?? 0;
+      score += Math.min(importance, 99) * 0.01;
       results.push({ file: filePath, score, names: [...new Set(matchingNames)].slice(0, 5) });
     }
   }
 
   results.sort((a, b) => b.score - a.score);
-  const top = results.slice(0, 20);
+  const top = results.slice(0, 5);
 
   if (top.length === 0) {
     return `RESULTS for "${query}": no matches found`;

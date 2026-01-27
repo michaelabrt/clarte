@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { handleFunction, handleSearch, handleImpact } from "../mcp/tools.js";
+import { handleContext, handleFunction, handleSearch, handleImpact } from "../mcp/tools.js";
 import { buildCallerIndex, buildFileCallIndex } from "../graph/build-call-graph.js";
 import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
 import type { ServerState } from "../mcp/server.js";
@@ -27,6 +27,59 @@ function makeState(overrides: Partial<ServerState> = {}): ServerState {
     ...overrides,
   };
 }
+
+// ── handleContext ─────────────────────────────────────────────────────────────
+
+describe("handleContext", () => {
+  it("returns file metadata for a known file", () => {
+    const graph = makePersistedGraph({
+      files: {
+        "src/utils.ts": makeFileRecord({
+          role: "Foundation",
+          betweenness: 0.8,
+          instability: 0.2,
+          testFiles: ["src/__tests__/utils.test.ts"],
+        }),
+      },
+      changeCoupling: [
+        { fileA: "src/utils.ts", fileB: "src/index.ts", confidence: 0.9, coChangeCount: 15 },
+      ],
+    });
+    const { edgesByTarget } = makeEdgesByFile([
+      { from: "src/index.ts", to: "src/utils.ts", importedNames: ["foo"] },
+    ]);
+    const state = makeState({ graph, edgesByTarget });
+
+    const result = handleContext({ path: "src/utils.ts" }, state);
+    expect(result.isError).toBeFalsy();
+    const text = result.content[0].text;
+    expect(text).toContain("FILE: src/utils.ts");
+    expect(text).toContain("Foundation");
+    expect(text).toContain("IMPORTERS");
+    expect(text).toContain("TEST:");
+    expect(text).toContain("CO-CHANGES");
+  });
+
+  it("returns not-in-graph message for unknown file", () => {
+    const state = makeState();
+    const result = handleContext({ path: "src/unknown.ts" }, state);
+    expect(result.isError).toBeFalsy();
+    expect(result.content[0].text).toContain("not in graph");
+  });
+
+  it("returns error when graph is not loaded", () => {
+    const state = makeState({ graph: null });
+    const result = handleContext({ path: "src/any.ts" }, state);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("graph not loaded");
+  });
+
+  it("returns error when path param is missing", () => {
+    const state = makeState();
+    const result = handleContext({}, state);
+    expect(result.isError).toBe(true);
+  });
+});
 
 // ── handleFunction ────────────────────────────────────────────────────────────
 

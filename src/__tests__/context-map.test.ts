@@ -455,7 +455,7 @@ describe("configureClaudeHooks", () => {
         hooks: {
           PostToolUse: [
             {
-              matcher: "mcp__clarte__clarte_search",
+              matcher: "mcp__clarte__clarte_context|mcp__clarte__clarte_search",
               hooks: [{ type: "command", command: "node .clarte/hooks/on-mcp-post.mjs" }],
             },
           ],
@@ -495,7 +495,7 @@ describe("configureClaudeHooks", () => {
     const settings = JSON.parse(content);
 
     const postHook = settings.hooks.PostToolUse?.find(
-      (h: { matcher?: string }) => h.matcher === "mcp__clarte__clarte_search",
+      (h: { matcher?: string }) => h.matcher?.includes("clarte_context"),
     );
     expect(postHook).toBeDefined();
     expect(postHook.hooks[0].command).toContain("on-mcp-post.mjs");
@@ -523,6 +523,7 @@ describe("MCP hook scripts", () => {
     await generateHookFiles(tmpDir, graph, false, undefined, true);
 
     const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-mcp-post.mjs"), "utf-8");
+    expect(script).toContain("mcp__clarte__clarte_context");
     expect(script).toContain("mcp__clarte__clarte_search");
     expect(script).toContain("CLARTE_HOOKS_DISABLED");
     expect(script).toContain("mcp-session.json");

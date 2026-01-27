@@ -1,4 +1,4 @@
-import { formatFunction, formatSearch, formatImpact } from "./format.js";
+import { formatContext, formatFunction, formatSearch, formatImpact } from "./format.js";
 import type { ServerState } from "./server.js";
 
 type ToolResult = {
@@ -12,6 +12,18 @@ function ok(text: string): ToolResult {
 
 function err(text: string): ToolResult {
   return { content: [{ type: "text", text }], isError: true };
+}
+
+export function handleContext(args: Record<string, unknown>, state: ServerState): ToolResult {
+  const filePath = args.path;
+  if (typeof filePath !== "string" || !filePath) {
+    return err("path parameter is required");
+  }
+  if (!state.graph) {
+    return err("graph not loaded: run clarte generate first");
+  }
+  const text = formatContext(filePath, state.graph, state.edgesByTarget);
+  return ok(text);
 }
 
 export function handleFunction(args: Record<string, unknown>, state: ServerState): ToolResult {
