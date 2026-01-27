@@ -57,7 +57,7 @@ async function generateMcpConfig(rootDir: string): Promise<void> {
     }
   } catch {}
   const mcpServers = (config.mcpServers as Record<string, unknown>) ?? {};
-  mcpServers.clarte = { command: "npx", args: ["clarte", "serve"], type: "stdio" };
+  mcpServers.clarte = { command: "npx", args: ["clarte", "serve"], type: "stdio", cwd: rootDir };
   config.mcpServers = mcpServers;
   await fs.writeFile(mcpConfigPath, JSON.stringify(config, null, 2) + "\n");
 }
@@ -353,6 +353,13 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     }
   }
 
+  // MCP enforcement is currently implemented for Claude Code only (PreToolUse hook API).
+  // Always include the "claude" target so enforcement hooks and graph-tools instructions are generated,
+  // regardless of which IDEs were auto-detected.
+  if (mcpMode && !answers.ides.includes("claude")) {
+    answers = { ...answers, ides: [...answers.ides, "claude"] };
+  }
+
   let snapshot = null;
   if (answers.generateSnapshot) {
     shimmer = startShimmer("Scanning source files for code snapshot...");
@@ -431,9 +438,8 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
         persistedGraph,
         savedConfig?.delivery?.enrichedHooks,
         hookDirectives,
-        mcpMode,
       );
-      await configureClaudeHooks(rootDir, mcpMode);
+      await configureClaudeHooks(rootDir);
     } catch (err) {
       verboseLog(`Hook generation failed: ${err instanceof Error ? err.message : String(err)}`);
     }

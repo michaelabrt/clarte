@@ -289,18 +289,16 @@ export async function buildSections(
 function buildGraphToolsSection(): string {
   return `## Graph Tools
 
-clarte MCP server provides code graph queries.
+clarte MCP server provides code graph queries. See CLAUDE.md for usage instructions.
 
 | Trigger | Tool | What it returns |
 |---------|------|-----------------|
-| **INSTEAD OF Glob** when finding a file by name or symbol | \`clarte_search(<query>)\` | Top 5 ranked files with test file + co-change partners |
-| **BEFORE your first edit** to an existing file | \`clarte_context(<path>)\` | Importers, co-change partners, test file |
-| **BEFORE renaming or removing** a function | \`clarte_function(<name>)\` | All call sites + all functions it calls |
-| **BEFORE changing** a public API or export | \`clarte_impact(<path>)\` | Full transitive dependent set + risk level |
+| **After finding a file**, before editing | \`clarte_scope(<path>)\` | Importers, co-change partners, test file |
+| **Before renaming or removing** a function | \`clarte_function(<name>)\` | All call sites + all functions it calls |
+| **Before changing** a public API or export | \`clarte_impact(<path>)\` | Full transitive dependent set + risk level |
 
 **STOP CONDITIONS:**
-- Do NOT use Glob to find files by name - use \`clarte_search\` instead. For content patterns, Grep is still the right tool.
-- Do NOT call \`clarte_context\` on files you already called it on this session.
+- Do NOT call \`clarte_scope\` on files you already called it on this session.
 - Do NOT call \`clarte_function\` for trivial one-line functions.
 - Do NOT call \`clarte_impact\` on leaf files with zero importers.
 - When you have enough context to edit, start editing immediately.`;

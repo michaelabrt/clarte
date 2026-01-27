@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { handleContext, handleFunction, handleSearch, handleImpact } from "../mcp/tools.js";
+import { handleScope, handleFunction, handleImpact } from "../mcp/tools.js";
 import { buildCallerIndex, buildFileCallIndex } from "../graph/build-call-graph.js";
 import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
 import type { ServerState } from "../mcp/server.js";
@@ -28,9 +28,9 @@ function makeState(overrides: Partial<ServerState> = {}): ServerState {
   };
 }
 
-// ── handleContext ─────────────────────────────────────────────────────────────
+// ── handleScope ───────────────────────────────────────────────────────────────
 
-describe("handleContext", () => {
+describe("handleScope", () => {
   it("returns file metadata for a known file", () => {
     const graph = makePersistedGraph({
       files: {
@@ -50,7 +50,7 @@ describe("handleContext", () => {
     ]);
     const state = makeState({ graph, edgesByTarget });
 
-    const result = handleContext({ path: "src/utils.ts" }, state);
+    const result = handleScope({ path: "src/utils.ts" }, state);
     expect(result.isError).toBeFalsy();
     const text = result.content[0].text;
     expect(text).toContain("FILE: src/utils.ts");
@@ -62,21 +62,21 @@ describe("handleContext", () => {
 
   it("returns not-in-graph message for unknown file", () => {
     const state = makeState();
-    const result = handleContext({ path: "src/unknown.ts" }, state);
+    const result = handleScope({ path: "src/unknown.ts" }, state);
     expect(result.isError).toBeFalsy();
     expect(result.content[0].text).toContain("not in graph");
   });
 
   it("returns error when graph is not loaded", () => {
     const state = makeState({ graph: null });
-    const result = handleContext({ path: "src/any.ts" }, state);
+    const result = handleScope({ path: "src/any.ts" }, state);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("graph not loaded");
   });
 
   it("returns error when path param is missing", () => {
     const state = makeState();
-    const result = handleContext({}, state);
+    const result = handleScope({}, state);
     expect(result.isError).toBe(true);
   });
 });
@@ -146,72 +146,6 @@ describe("handleFunction", () => {
   it("returns error when name param is missing", () => {
     const state = makeState();
     const result = handleFunction({}, state);
-    expect(result.isError).toBe(true);
-  });
-});
-
-// ── handleSearch ──────────────────────────────────────────────────────────────
-
-describe("handleSearch", () => {
-  it("returns FILE:-prefixed results matching export names", () => {
-    const graph = makePersistedGraph({
-      files: {
-        "src/graph/build.ts": makeFileRecord({
-          testFiles: ["src/__tests__/build.test.ts"],
-        }),
-        "src/graph/cache.ts": makeFileRecord({}),
-        "src/utils.ts": makeFileRecord({}),
-      },
-      changeCoupling: [
-        { fileA: "src/graph/build.ts", fileB: "src/graph/cache.ts", confidence: 0.9, coChangeCount: 10 },
-      ],
-    });
-    const { edgesByTarget } = makeEdgesByFile([
-      { from: "src/index.ts", to: "src/graph/build.ts", importedNames: ["buildImportGraph"] },
-      { from: "src/index.ts", to: "src/graph/cache.ts", importedNames: ["buildGraphWithCache"] },
-    ]);
-    const state = makeState({ graph, edgesByTarget });
-
-    const result = handleSearch({ query: "buildImport" }, state);
-    const text = result.content[0].text;
-    expect(text).toContain("RESULTS");
-    expect(text).toContain("FILE: src/graph/build.ts");
-    expect(text).toContain("exports: buildImportGraph");
-    expect(text).toContain("TEST: src/__tests__/build.test.ts");
-    expect(text).toContain("CO-CHANGES");
-  });
-
-  it("scores function names from call graph", () => {
-    const graph = makePersistedGraph({
-      files: { "src/graph/build.ts": makeFileRecord({}) },
-    });
-    const { edgesByTarget } = makeEdgesByFile([]);
-    const fileCallIndex = buildFileCallIndex([
-      {
-        caller: "src/graph/build.ts",
-        callerFn: "buildImportGraph",
-        callee: "parseImports",
-        calleeFile: "src/parsers/parse-imports.ts",
-        line: 42,
-      },
-    ]);
-    const state = makeState({ graph, edgesByTarget, fileCallIndex });
-
-    const result = handleSearch({ query: "buildImport" }, state);
-    const text = result.content[0].text;
-    expect(text).toContain("FILE: src/graph/build.ts");
-    expect(text).toContain("buildImportGraph");
-  });
-
-  it("returns no-matches message for nonsense query", () => {
-    const state = makeState();
-    const result = handleSearch({ query: "xyzzy99nonexistent" }, state);
-    expect(result.content[0].text).toContain("no matches found");
-  });
-
-  it("returns error when query param is missing", () => {
-    const state = makeState();
-    const result = handleSearch({}, state);
     expect(result.isError).toBe(true);
   });
 });

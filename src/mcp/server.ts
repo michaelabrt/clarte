@@ -13,14 +13,14 @@ import { loadCallGraph, buildCallerIndex, buildFileCallIndex } from "../graph/bu
 import type { PersistedGraph, EdgeRecord } from "../types/persisted-graph.js";
 import type { PersistedCallGraph, CallerIndex, FileCallIndex } from "../types/call-graph.js";
 import { VERSION } from "../cli/args.js";
-import { handleContext, handleFunction, handleSearch, handleImpact } from "./tools.js";
+import { handleScope, handleFunction, handleImpact } from "./tools.js";
 
 const GRAPH_PATH = path.join(CLARTE_DIR, "graph.json");
 const CALL_GRAPH_PATH = path.join(CLARTE_DIR, "call-graph.json");
 
 const MCP_INSTRUCTIONS =
   "clarte provides code graph tools for this project. See CLAUDE.md for usage instructions.\n" +
-  "Tools: clarte_context, clarte_function, clarte_search, clarte_impact.";
+  "Tools: clarte_scope, clarte_function, clarte_impact.";
 
 export interface EdgeEntry {
   from: string;
@@ -121,11 +121,11 @@ function watchGraphFiles(rootDir: string, state: ServerState): void {
 
 const TOOLS: Tool[] = [
   {
-    name: "clarte_context",
+    name: "clarte_scope",
     description:
-      "Returns the dependency neighborhood for a source file: importers, " +
-      "co-change partners, and test file. Call this BEFORE editing any existing " +
-      "file. Do NOT call twice for the same file in one session.",
+      "Returns co-change partners and test file for a source file. Call this AFTER " +
+      "finding a file you intend to edit, to see what else typically changes alongside " +
+      "it and where the tests are. Do NOT call twice for the same file in one session.",
     inputSchema: {
       type: "object",
       properties: {
@@ -151,24 +151,6 @@ const TOOLS: Tool[] = [
         },
       },
       required: ["name"],
-    },
-  },
-  {
-    name: "clarte_search",
-    description:
-      "Fuzzy search across file paths and exported symbol names in the project graph. " +
-      "Returns ranked matches with file paths. Call this when you know a concept or " +
-      "symbol name but not where it lives. Do NOT use for content search (use Grep " +
-      "for that); this searches names and paths only.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: {
-          type: "string",
-          description: "Symbol name or file path fragment to search for",
-        },
-      },
-      required: ["query"],
     },
   },
   {
@@ -221,12 +203,10 @@ export async function createMcpServer(rootDir: string): Promise<{ server: Server
     }
 
     switch (name) {
-      case "clarte_context":
-        return handleContext(safeArgs, state);
+      case "clarte_scope":
+        return handleScope(safeArgs, state);
       case "clarte_function":
         return handleFunction(safeArgs, state);
-      case "clarte_search":
-        return handleSearch(safeArgs, state);
       case "clarte_impact":
         return handleImpact(safeArgs, state);
       default:

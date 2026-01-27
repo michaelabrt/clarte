@@ -1,4 +1,4 @@
-import { formatContext, formatFunction, formatSearch, formatImpact } from "./format.js";
+import { formatScope, formatFunction, formatImpact } from "./format.js";
 import type { ServerState } from "./server.js";
 
 type ToolResult = {
@@ -14,7 +14,7 @@ function err(text: string): ToolResult {
   return { content: [{ type: "text", text }], isError: true };
 }
 
-export function handleContext(args: Record<string, unknown>, state: ServerState): ToolResult {
+export function handleScope(args: Record<string, unknown>, state: ServerState): ToolResult {
   const filePath = args.path;
   if (typeof filePath !== "string" || !filePath) {
     return err("path parameter is required");
@@ -22,7 +22,7 @@ export function handleContext(args: Record<string, unknown>, state: ServerState)
   if (!state.graph) {
     return err("graph not loaded: run clarte generate first");
   }
-  const text = formatContext(filePath, state.graph, state.edgesByTarget);
+  const text = formatScope(filePath, state.graph, state.edgesByTarget);
   return ok(text);
 }
 
@@ -36,18 +36,6 @@ export function handleFunction(args: Record<string, unknown>, state: ServerState
   }
   const filePath = typeof args.path === "string" ? args.path : undefined;
   const text = formatFunction(name, filePath, state.callerIndex, state.fileCallIndex);
-  return ok(text);
-}
-
-export function handleSearch(args: Record<string, unknown>, state: ServerState): ToolResult {
-  const query = args.query;
-  if (typeof query !== "string" || !query) {
-    return err("query parameter is required");
-  }
-  if (!state.graph) {
-    return err("graph not loaded: run clarte generate first");
-  }
-  const text = formatSearch(query, state.graph, state.edgesByTarget, state.fileCallIndex);
   return ok(text);
 }
 
