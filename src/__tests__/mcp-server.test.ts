@@ -118,7 +118,7 @@ if (!existsSync(distEntry)) {
       expect(response.result.serverInfo.name).toBe("clarte");
     });
 
-    it("tools/list returns the 4 expected tool names", async () => {
+    it("tools/list returns the 3 expected tool names", async () => {
       const msg = {
         jsonrpc: "2.0",
         id: nextId++,
@@ -130,20 +130,19 @@ if (!existsSync(distEntry)) {
       };
 
       const names = response.result.tools.map((t) => t.name).sort();
-      expect(names).toContain("clarte_context");
+      expect(names).toContain("clarte_scope");
       expect(names).toContain("clarte_function");
-      expect(names).toContain("clarte_search");
       expect(names).toContain("clarte_impact");
-      expect(names).toHaveLength(4);
+      expect(names).toHaveLength(3);
     });
 
-    it("clarte_context for a known file returns content with FILE:", async () => {
+    it("clarte_scope for a known file returns content with FILE:", async () => {
       const msg = {
         jsonrpc: "2.0",
         id: nextId++,
         method: "tools/call",
         params: {
-          name: "clarte_context",
+          name: "clarte_scope",
           arguments: { path: "src/mcp/server.ts" },
         },
       };

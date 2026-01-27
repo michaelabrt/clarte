@@ -23,9 +23,9 @@ function formatRole(record: FileRecord): string {
 }
 
 /**
- * Format a clarte_context response for a file.
+ * Format a clarte_scope response for a file.
  */
-export function formatContext(
+export function formatScope(
   filePath: string,
   graph: PersistedGraph,
   edgesByTarget: Map<string, EdgeEntry[]>,
@@ -151,116 +151,6 @@ export function formatFunction(
 }
 
 const CO_CHANGE_THRESHOLD = 0.7;
-
-/**
- * Format a clarte_search response.
- * Each result is prefixed with FILE: so hooks can parse file paths from the output.
- * Includes TEST and CO-CHANGES metadata inline so agents can act without follow-up calls.
- */
-export function formatSearch(
-  query: string,
-  graph: PersistedGraph,
-  edgesByTarget: Map<string, EdgeEntry[]>,
-  fileCallIndex: FileCallIndex,
-): string {
-  const lowerQuery = query.toLowerCase();
-  const tokens = lowerQuery.split(/\W+/).filter(Boolean);
-
-  interface Match {
-    file: string;
-    score: number;
-    names: string[];
-  }
-
-  const results: Match[] = [];
-
-  for (const filePath of Object.keys(graph.files)) {
-    let score = 0;
-
-    // Score by file path match
-    const lowerPath = filePath.toLowerCase();
-    for (const token of tokens) {
-      if (lowerPath.includes(token)) score += 2;
-    }
-
-    // Collect known names for this file (union of all importedNames across edges pointing at it)
-    const incomingEdges = edgesByTarget.get(filePath) ?? [];
-    const knownNames = new Set<string>();
-    for (const edge of incomingEdges) {
-      for (const n of edge.importedNames) {
-        knownNames.add(n);
-      }
-    }
-
-    const matchingNames: string[] = [];
-    for (const n of knownNames) {
-      const lowerName = n.toLowerCase();
-      for (const token of tokens) {
-        if (lowerName.includes(token)) {
-          score += 3;
-          matchingNames.push(n);
-          break;
-        }
-      }
-    }
-
-    // Score function names from call graph
-    const fileSites = fileCallIndex.get(filePath) ?? [];
-    const fnNames = new Set(fileSites.map((s) => s.callerFn));
-    for (const fn of fnNames) {
-      const lowerFn = fn.toLowerCase();
-      for (const token of tokens) {
-        if (lowerFn.includes(token)) {
-          score += 3;
-          if (!matchingNames.includes(fn)) matchingNames.push(fn);
-          break;
-        }
-      }
-    }
-
-    if (score > 0) {
-      // Importance tiebreaker: files imported by more files surface first within the same score tier
-      const importance = graph.files[filePath]?.importedByCount ?? 0;
-      score += Math.min(importance, 99) * 0.01;
-      results.push({ file: filePath, score, names: [...new Set(matchingNames)].slice(0, 5) });
-    }
-  }
-
-  results.sort((a, b) => b.score - a.score);
-  const top = results.slice(0, 5);
-
-  if (top.length === 0) {
-    return `RESULTS for "${query}": no matches found`;
-  }
-
-  const lines = [`RESULTS for "${query}" (${top.length} matches):`];
-  for (const r of top) {
-    lines.push(`FILE: ${r.file}`);
-    if (r.names.length > 0) {
-      lines.push(`  exports: ${r.names.join(", ")}`);
-    }
-    const record = graph.files[r.file];
-    const testFiles = record?.testFiles ?? [];
-    if (testFiles.length > 0) {
-      lines.push(`  TEST: ${testFiles.join(", ")}`);
-    }
-    const coChanges = graph.changeCoupling
-      .filter(
-        (c) => (c.fileA === r.file || c.fileB === r.file) && c.confidence >= CO_CHANGE_THRESHOLD,
-      )
-      .sort((a, b) => b.coChangeCount - a.coChangeCount)
-      .slice(0, 2);
-    if (coChanges.length > 0) {
-      const parts = coChanges.map((c) => {
-        const partner = c.fileA === r.file ? c.fileB : c.fileA;
-        return `${partner} (${Math.round(c.confidence * 100)}%)`;
-      });
-      lines.push(`  CO-CHANGES: ${parts.join(" | ")}`);
-    }
-  }
-
-  return lines.join("\n");
-}
 
 /**
  * Format a clarte_impact response for a file.

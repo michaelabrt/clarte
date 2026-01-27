@@ -293,16 +293,6 @@ describe("generateHookFiles", () => {
     expect(script).toContain("CLARTE_HOOKS_DISABLED");
   });
 
-  it("on-session-start.mjs checks stored session_id", async () => {
-    tmpDir = await makeTmpDir();
-    const graph = makePersistedGraph({ files: {} });
-
-    await generateHookFiles(tmpDir, graph);
-
-    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-session-start.mjs"), "utf-8");
-    expect(script).toContain("session_id");
-  });
-
   it("on-session-start.mjs always clears fail-fast.json", async () => {
     tmpDir = await makeTmpDir();
     const graph = makePersistedGraph({ files: {} });
@@ -311,16 +301,6 @@ describe("generateHookFiles", () => {
 
     const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-session-start.mjs"), "utf-8");
     expect(script).toContain("fail-fast.json");
-  });
-
-  it("on-session-start.mjs conditionally clears mcp-session.json", async () => {
-    tmpDir = await makeTmpDir();
-    const graph = makePersistedGraph({ files: {} });
-
-    await generateHookFiles(tmpDir, graph);
-
-    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-session-start.mjs"), "utf-8");
-    expect(script).toContain("mcp-session.json");
   });
 
   it("on-session-start.mjs uses resolve() for all paths", async () => {
@@ -446,7 +426,7 @@ describe("configureClaudeHooks", () => {
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("on-session-start.mjs");
   });
 
-  it("removes PostToolUse MCP hook when mcpEnabled=false", async () => {
+  it("removes legacy PostToolUse MCP hook from previous installs", async () => {
     tmpDir = await makeTmpDir();
     await fs.mkdir(path.join(tmpDir, ".claude"), { recursive: true });
     await fs.writeFile(
@@ -463,7 +443,7 @@ describe("configureClaudeHooks", () => {
       }),
     );
 
-    await configureClaudeHooks(tmpDir, false);
+    await configureClaudeHooks(tmpDir);
 
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
@@ -486,78 +466,4 @@ describe("configureClaudeHooks", () => {
     expect(settings.hooks.PreToolUse).toHaveLength(2);
   });
 
-  it("registers MCP hooks when mcpEnabled=true", async () => {
-    tmpDir = await makeTmpDir();
-
-    await configureClaudeHooks(tmpDir, true);
-
-    const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
-    const settings = JSON.parse(content);
-
-    const postHook = settings.hooks.PostToolUse?.find(
-      (h: { matcher?: string }) => h.matcher?.includes("clarte_context"),
-    );
-    expect(postHook).toBeDefined();
-    expect(postHook.hooks[0].command).toContain("on-mcp-post.mjs");
-
-    const enforceHook = settings.hooks.PreToolUse?.find(
-      (h: { matcher?: string }) => h.matcher === "Edit|Write|str_replace_editor",
-    );
-    expect(enforceHook).toBeDefined();
-    expect(enforceHook.hooks[0].command).toContain("on-mcp-enforce.mjs");
-  });
-});
-
-// ── MCP hook scripts ─────────────────────────────────────────────────────────
-
-describe("MCP hook scripts", () => {
-  let tmpDir: string;
-  afterEach(async () => {
-    if (tmpDir) await cleanup(tmpDir);
-  });
-
-  it("generates on-mcp-post.mjs with correct tool name and CLARTE_HOOKS_DISABLED guard", async () => {
-    tmpDir = await makeTmpDir();
-    const graph = makePersistedGraph({ files: {} });
-
-    await generateHookFiles(tmpDir, graph, false, undefined, true);
-
-    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-mcp-post.mjs"), "utf-8");
-    expect(script).toContain("mcp__clarte__clarte_context");
-    expect(script).toContain("mcp__clarte__clarte_search");
-    expect(script).toContain("CLARTE_HOOKS_DISABLED");
-    expect(script).toContain("mcp-session.json");
-    expect(script).toContain("resolve(");
-  });
-
-  it("generates on-mcp-enforce.mjs with str_replace_editor compat and new-file bypass", async () => {
-    tmpDir = await makeTmpDir();
-    const graph = makePersistedGraph({ files: {} });
-
-    await generateHookFiles(tmpDir, graph, false, undefined, true);
-
-    const script = await fs.readFile(
-      path.join(tmpDir, ".clarte/hooks/on-mcp-enforce.mjs"),
-      "utf-8",
-    );
-    expect(script).toContain("file_path");
-    expect(script).toContain("tool_input?.path");
-    expect(script).toContain("existsSync");
-    expect(script).toContain("permissionDecision");
-    expect(script).toContain("CLARTE_HOOKS_DISABLED");
-  });
-
-  it("does not generate MCP hooks when mcpEnabled=false (default)", async () => {
-    tmpDir = await makeTmpDir();
-    const graph = makePersistedGraph({ files: {} });
-
-    await generateHookFiles(tmpDir, graph);
-
-    await expect(
-      fs.readFile(path.join(tmpDir, ".clarte/hooks/on-mcp-post.mjs"), "utf-8"),
-    ).rejects.toThrow();
-    await expect(
-      fs.readFile(path.join(tmpDir, ".clarte/hooks/on-mcp-enforce.mjs"), "utf-8"),
-    ).rejects.toThrow();
-  });
 });
