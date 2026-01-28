@@ -139,8 +139,6 @@ const sharedRequired = [
   [mcpDir, ".clarte/graph.json"],
   [mcpDir, ".claude/rules/clarte.md"],
   [mcpDir, ".claude/settings.json"],
-  [mcpDir, ".clarte/hooks/on-mcp-post.mjs"],
-  [mcpDir, ".clarte/hooks/on-mcp-enforce.mjs"],
 ];
 for (const [dir, rel] of sharedRequired) {
   const f = join(dir, rel);
