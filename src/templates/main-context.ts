@@ -289,19 +289,20 @@ export async function buildSections(
 function buildGraphToolsSection(): string {
   return `## Graph Tools
 
-clarte MCP server provides code graph queries. See CLAUDE.md for usage instructions.
+clarte MCP server provides code graph queries.
+
+**ALWAYS call \`clarte_route\` as your very first action. Do not Read, Grep or Glob before calling it.**
 
 | Trigger | Tool | What it returns |
 |---------|------|-----------------|
-| **After finding a file**, before editing | \`clarte_scope(<path>)\` | Importers, co-change partners, test file |
+| **FIRST action, before any exploration** | \`clarte_route(<task>)\` | The single file most likely to need editing |
 | **Before renaming or removing** a function | \`clarte_function(<name>)\` | All call sites + all functions it calls |
 | **Before changing** a public API or export | \`clarte_impact(<path>)\` | Full transitive dependent set + risk level |
 
 **STOP CONDITIONS:**
-- Do NOT call \`clarte_scope\` on files you already called it on this session.
 - Do NOT call \`clarte_function\` for trivial one-line functions.
 - Do NOT call \`clarte_impact\` on leaf files with zero importers.
-- When you have enough context to edit, start editing immediately.`;
+- After \`clarte_route\` returns a file, open it and start editing. Do not explore further.`;
 }
 
 /**

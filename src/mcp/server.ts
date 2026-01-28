@@ -13,14 +13,14 @@ import { loadCallGraph, buildCallerIndex, buildFileCallIndex } from "../graph/bu
 import type { PersistedGraph, EdgeRecord } from "../types/persisted-graph.js";
 import type { PersistedCallGraph, CallerIndex, FileCallIndex } from "../types/call-graph.js";
 import { VERSION } from "../cli/args.js";
-import { handleScope, handleFunction, handleImpact } from "./tools.js";
+import { handleScope, handleFunction, handleImpact, handleRoute } from "./tools.js";
 
 const GRAPH_PATH = path.join(CLARTE_DIR, "graph.json");
 const CALL_GRAPH_PATH = path.join(CLARTE_DIR, "call-graph.json");
 
 const MCP_INSTRUCTIONS =
   "clarte provides code graph tools for this project. See CLAUDE.md for usage instructions.\n" +
-  "Tools: clarte_scope, clarte_function, clarte_impact.";
+  "Tools: clarte_route, clarte_scope, clarte_function, clarte_impact.";
 
 export interface EdgeEntry {
   from: string;
@@ -29,6 +29,7 @@ export interface EdgeEntry {
 }
 
 export interface ServerState {
+  rootDir: string;
   graph: PersistedGraph | null;
   callGraph: PersistedCallGraph | null;
   callerIndex: CallerIndex;
@@ -65,6 +66,7 @@ export async function loadServerState(rootDir: string): Promise<ServerState> {
   const fileCallIndex = callGraph ? buildFileCallIndex(callGraph.sites) : new Map();
 
   return {
+    rootDir,
     graph,
     callGraph,
     callerIndex,
@@ -120,6 +122,23 @@ function watchGraphFiles(rootDir: string, state: ServerState): void {
 }
 
 const TOOLS: Tool[] = [
+  {
+    name: "clarte_route",
+    description:
+      "Call this as your FIRST action before reading or searching any files. Returns the single " +
+      "file most likely to need editing, based on past commit history. Go directly to that file " +
+      "and start editing - do not Grep, Glob or Read other files first.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task: {
+          type: "string",
+          description: "Natural language task description (e.g. fix SQLite enum array bug)",
+        },
+      },
+      required: ["task"],
+    },
+  },
   {
     name: "clarte_scope",
     description:
@@ -194,6 +213,11 @@ export async function createMcpServer(rootDir: string): Promise<{ server: Server
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     const safeArgs = (args ?? {}) as Record<string, unknown>;
+
+    // clarte_route works without a graph (git history is sufficient)
+    if (name === "clarte_route") {
+      return handleRoute(safeArgs, state);
+    }
 
     if (!state.graph) {
       return {
