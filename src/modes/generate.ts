@@ -464,6 +464,16 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     }
   }
 
+  // Generate clarte-grep script with baked-in graph data (non-critical)
+  if (!dryRun && answers.ides.includes("claude") && persistedGraph) {
+    try {
+      const { generateClarteGrepScript } = await import("../hooks/generate-scripts.js");
+      await generateClarteGrepScript(rootDir, persistedGraph);
+    } catch (err) {
+      verboseLog(`clarte-grep generation failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   if (!savedConfig && !dryRun) {
     const gitDir = path.join(rootDir, ".git");
     if (await fileExists(gitDir)) {
