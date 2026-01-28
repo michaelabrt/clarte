@@ -130,10 +130,11 @@ if (!existsSync(distEntry)) {
       };
 
       const names = response.result.tools.map((t) => t.name).sort();
+      expect(names).toContain("clarte_route");
       expect(names).toContain("clarte_scope");
       expect(names).toContain("clarte_function");
       expect(names).toContain("clarte_impact");
-      expect(names).toHaveLength(3);
+      expect(names).toHaveLength(4);
     });
 
     it("clarte_scope for a known file returns content with FILE:", async () => {

@@ -17,6 +17,7 @@ function makeEdgesByFile(edges: Array<{ from: string; to: string; importedNames?
 
 function makeState(overrides: Partial<ServerState> = {}): ServerState {
   return {
+    rootDir: "/nonexistent",
     graph: makePersistedGraph(),
     callGraph: null,
     callerIndex: new Map(),

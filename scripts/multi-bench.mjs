@@ -14,7 +14,7 @@
 // Set BUDGET=1.50 (default).
 
 import { execSync, spawn } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -41,7 +41,20 @@ const PLACEBO = `# TypeORM
 A TypeScript ORM for Node.js. Supports many SQL databases. Tests use mocha.
 `;
 
-const CONDITIONS = ["baseline", "clarte-route"];
+// Oracle task-context.md: the exact 3 files that contain the 3 bugs.
+// Used by the perfect-route condition to isolate delivery mechanism from routing quality.
+const ORACLE_CONTEXT = `# Edit targets (clarte)
+
+Based on past fixes to similar issues, these files are most likely to need editing:
+
+- src/driver/sqlite-abstract/AbstractSqliteQueryRunner.ts
+- src/driver/sqlite-abstract/AbstractSqliteDriver.ts
+- src/util/DateUtils.ts
+
+Matched commit: fix: sqlite simple-enum array serialization, check constraint and default values
+`;
+
+const CONDITIONS = ["baseline", "perfect-route"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -55,76 +68,6 @@ function shq(cmd, opts = {}) {
 
 function label(tag, msg) {
   console.log(`[ ${tag.padEnd(10)} ] ${msg}`);
-}
-
-// ── Route logic (inline port of clarte_route) ─────────────────────────────────
-
-const BM25_K1 = 1.5;
-const BM25_B  = 0.75;
-
-function tokenize(text) {
-  return text.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 3);
-}
-
-function buildCorpus(messages) {
-  const docs = messages.map(tokenize);
-  const avgdl = docs.length === 0 ? 1 : docs.reduce((s, d) => s + d.length, 0) / docs.length;
-  const df = new Map();
-  for (const doc of docs)
-    for (const term of new Set(doc))
-      df.set(term, (df.get(term) ?? 0) + 1);
-  return { docs, avgdl, df };
-}
-
-function bm25(queryTokens, doc, corpus) {
-  const N = corpus.docs.length;
-  const dl = doc.length;
-  const tf = new Map();
-  for (const t of doc) tf.set(t, (tf.get(t) ?? 0) + 1);
-  let score = 0;
-  for (const term of queryTokens) {
-    const termTf = tf.get(term) ?? 0;
-    if (termTf === 0) continue;
-    const dfVal = corpus.df.get(term) ?? 0;
-    const idf = Math.log((N - dfVal + 0.5) / (dfVal + 0.5) + 1);
-    score += idf * (termTf * (BM25_K1 + 1)) / (termTf + BM25_K1 * (1 - BM25_B + BM25_B * (dl / corpus.avgdl)));
-  }
-  return score;
-}
-
-function computeRoute(rootDir, task) {
-  let log;
-  try {
-    log = shq(`git log --format="%H|%s" --max-count=500`, { cwd: rootDir });
-  } catch { return []; }
-
-  const commits = log.split("\n").filter(Boolean).map(line => {
-    const sep = line.indexOf("|");
-    return sep === -1 ? null : { sha: line.slice(0, sep), message: line.slice(sep + 1) };
-  }).filter(Boolean);
-
-  if (commits.length === 0) return [];
-
-  const corpus = buildCorpus(commits.map(c => c.message));
-  const query  = tokenize(task);
-  const top = commits
-    .map((c, i) => ({ ...c, score: bm25(query, corpus.docs[i], corpus) }))
-    .filter(c => c.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
-
-  const seen = new Set();
-  for (const commit of top) {
-    let diff;
-    try { diff = shq(`git diff-tree --no-commit-id -r --name-only ${commit.sha}`, { cwd: rootDir }); }
-    catch { continue; }
-    for (const f of diff.split("\n").filter(Boolean)) {
-      if (existsSync(join(rootDir, f))) seen.add(f);
-      if (seen.size >= 5) break;
-    }
-    if (seen.size >= 5) break;
-  }
-  return [...seen];
 }
 
 // ── Setup: source repo ────────────────────────────────────────────────────────
@@ -168,30 +111,26 @@ for (const name of CONDITIONS) {
 writeFileSync(join(workDirs["baseline"], "CLAUDE.md"), PLACEBO);
 label("setup", "baseline: CLAUDE.md written.");
 
-// clarte-route: clarte generate --mcp produces CLAUDE.md with graph tools section + .mcp.json
+// perfect-route: clarte generate --mcp produces CLAUDE.md with "read task-context.md" directive.
+// task-context.md is pre-written with the oracle (exact correct files) to isolate delivery from routing.
+// No MCP server - testing whether the agent follows the directive alone.
 const baseConfig = { ides: ["claude"], projectPurpose: "", keyPatterns: "", gotchas: "",
   generateSnapshot: false, snapshotPaths: [], stackCorrections: "", generatePerPackage: false };
-writeFileSync(join(workDirs["clarte-route"], ".clarte.json"), JSON.stringify(baseConfig, null, 2));
-label("setup", "Running clarte generate --mcp for clarte-route...");
+writeFileSync(join(workDirs["perfect-route"], ".clarte.json"), JSON.stringify(baseConfig, null, 2));
+label("setup", "Running clarte generate --mcp for perfect-route...");
 try {
-  sh(`node ${join(CLARTE_ROOT, "dist/index.js")} ${workDirs["clarte-route"]} --mcp --yes < /dev/null`);
+  sh(`node ${join(CLARTE_ROOT, "dist/index.js")} ${workDirs["perfect-route"]} --mcp --yes < /dev/null`);
 } catch (e) {
-  label("WARN", `clarte generate failed for clarte-route: ${e.message}`);
+  label("WARN", `clarte generate failed for perfect-route: ${e.message}`);
 }
-const routeMcpJson = join(workDirs["clarte-route"], ".mcp.json");
-writeFileSync(routeMcpJson, JSON.stringify({
-  mcpServers: {
-    clarte: {
-      command: "node",
-      args: [join(CLARTE_ROOT, "dist/index.js"), "serve"],
-      type: "stdio",
-      cwd: workDirs["clarte-route"],
-    },
-  },
-}, null, 2));
-label("setup", "clarte-route: MCP server configured.");
+// Write oracle task-context.md (bypasses hook routing - provides exact correct files)
+mkdirSync(join(workDirs["perfect-route"], ".clarte"), { recursive: true });
+writeFileSync(join(workDirs["perfect-route"], ".clarte/task-context.md"), ORACLE_CONTEXT);
+// Remove .mcp.json - we test the CLAUDE.md directive alone, not the MCP server
+try { unlinkSync(join(workDirs["perfect-route"], ".mcp.json")); } catch {}
+label("setup", "perfect-route: oracle task-context.md written, no MCP server.");
 
-label("setup", "Setup complete. Starting baseline vs clarte-route...\n");
+label("setup", "Setup complete. Starting baseline vs perfect-route...\n");
 
 // ── Run sessions in parallel via async spawn ──────────────────────────────────
 
@@ -277,10 +216,10 @@ function runSession(workDir, extraArgs, tag) {
   });
 }
 
-label("bench", "baseline vs clarte-route...");
+label("bench", "baseline vs perfect-route...");
 const [baselineRun, routeRun] = await Promise.all([
-  runSession(workDirs["baseline"],     [],                                                "baseline"),
-  runSession(workDirs["clarte-route"], ["--mcp-config", routeMcpJson, "--mcp-debug"],   "c-route"),
+  runSession(workDirs["baseline"],      [], "baseline"),
+  runSession(workDirs["perfect-route"], [], "p-route"),
 ]);
 
 // ── Parse session logs ────────────────────────────────────────────────────────
@@ -362,8 +301,8 @@ function patchStats(workDir) {
 
 // Collect run data
 const runs = {
-  "baseline":     { run: baselineRun, workDir: workDirs["baseline"] },
-  "clarte-route": { run: routeRun,    workDir: workDirs["clarte-route"] },
+  "baseline":      { run: baselineRun, workDir: workDirs["baseline"] },
+  "perfect-route": { run: routeRun,    workDir: workDirs["perfect-route"] },
 };
 
 for (const cond of CONDITIONS) {
