@@ -168,28 +168,30 @@ for (const name of CONDITIONS) {
 writeFileSync(join(workDirs["baseline"], "CLAUDE.md"), PLACEBO);
 label("setup", "baseline: CLAUDE.md written.");
 
-// fat-scope: placebo CLAUDE.md + MCP server (clarte_scope returns file contents)
-writeFileSync(join(workDirs["fat-scope"], "CLAUDE.md"), PLACEBO);
-label("setup", "Running clarte generate for fat-scope...");
+// clarte-route: clarte generate --mcp produces CLAUDE.md with graph tools section + .mcp.json
+const baseConfig = { ides: ["claude"], projectPurpose: "", keyPatterns: "", gotchas: "",
+  generateSnapshot: false, snapshotPaths: [], stackCorrections: "", generatePerPackage: false };
+writeFileSync(join(workDirs["clarte-route"], ".clarte.json"), JSON.stringify(baseConfig, null, 2));
+label("setup", "Running clarte generate --mcp for clarte-route...");
 try {
-  sh(`node ${join(CLARTE_ROOT, "dist/index.js")} ${workDirs["fat-scope"]} --yes < /dev/null`);
+  sh(`node ${join(CLARTE_ROOT, "dist/index.js")} ${workDirs["clarte-route"]} --mcp --yes < /dev/null`);
 } catch (e) {
-  label("WARN", `clarte generate failed for fat-scope: ${e.message}`);
+  label("WARN", `clarte generate failed for clarte-route: ${e.message}`);
 }
-const fatScopeMcpJson = join(workDirs["fat-scope"], ".mcp.json");
-writeFileSync(fatScopeMcpJson, JSON.stringify({
+const routeMcpJson = join(workDirs["clarte-route"], ".mcp.json");
+writeFileSync(routeMcpJson, JSON.stringify({
   mcpServers: {
     clarte: {
       command: "node",
       args: [join(CLARTE_ROOT, "dist/index.js"), "serve"],
       type: "stdio",
-      cwd: workDirs["fat-scope"],
+      cwd: workDirs["clarte-route"],
     },
   },
 }, null, 2));
-label("setup", "fat-scope: MCP server configured.");
+label("setup", "clarte-route: MCP server configured.");
 
-label("setup", "Setup complete. Starting baseline vs fat-scope...\n");
+label("setup", "Setup complete. Starting baseline vs clarte-route...\n");
 
 // ── Run sessions in parallel via async spawn ──────────────────────────────────
 
@@ -275,10 +277,10 @@ function runSession(workDir, extraArgs, tag) {
   });
 }
 
-label("bench", "baseline vs fat-scope...");
-const [baselineRun, fatScopeRun] = await Promise.all([
-  runSession(workDirs["baseline"],  [],                                                 "baseline"),
-  runSession(workDirs["fat-scope"], ["--mcp-config", fatScopeMcpJson, "--mcp-debug"],  "fat-scope"),
+label("bench", "baseline vs clarte-route...");
+const [baselineRun, routeRun] = await Promise.all([
+  runSession(workDirs["baseline"],     [],                                                "baseline"),
+  runSession(workDirs["clarte-route"], ["--mcp-config", routeMcpJson, "--mcp-debug"],   "c-route"),
 ]);
 
 // ── Parse session logs ────────────────────────────────────────────────────────
@@ -360,8 +362,8 @@ function patchStats(workDir) {
 
 // Collect run data
 const runs = {
-  "baseline":  { run: baselineRun,  workDir: workDirs["baseline"] },
-  "fat-scope": { run: fatScopeRun,  workDir: workDirs["fat-scope"] },
+  "baseline":     { run: baselineRun, workDir: workDirs["baseline"] },
+  "clarte-route": { run: routeRun,    workDir: workDirs["clarte-route"] },
 };
 
 for (const cond of CONDITIONS) {
