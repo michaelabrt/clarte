@@ -327,7 +327,7 @@ describe("configureClaudeHooks", () => {
     if (tmpDir) await cleanup(tmpDir);
   });
 
-  it("creates settings file with SessionStart, PreToolUse, PostToolUse and UserPromptSubmit hooks", async () => {
+  it("creates settings file with SessionStart and PreToolUse hooks", async () => {
     tmpDir = await makeTmpDir();
 
     await configureClaudeHooks(tmpDir);
@@ -336,19 +336,20 @@ describe("configureClaudeHooks", () => {
     const settings = JSON.parse(content);
     expect(settings.hooks.SessionStart).toHaveLength(1);
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("on-session-start.mjs");
-    expect(settings.hooks.PreToolUse).toHaveLength(2);
+    // 3 PreToolUse hooks: gate (Read|Grep|Glob|Bash), pre-agent (Agent), fail-fast (no matcher)
+    expect(settings.hooks.PreToolUse).toHaveLength(3);
     const gateHook = settings.hooks.PreToolUse.find((h: { matcher?: string }) => h.matcher === "Read|Grep|Glob|Bash");
+    const preAgentHook = settings.hooks.PreToolUse.find((h: { matcher?: string }) => h.matcher === "Agent");
     const failFastHook = settings.hooks.PreToolUse.find(
       (h: { matcher?: string; hooks: { command: string }[] }) =>
         !h.matcher && h.hooks[0].command.includes("on-fail-fast.mjs"),
     );
     expect(gateHook).toBeDefined();
     expect(gateHook.hooks[0].command).toContain("on-pre-flight-gate.mjs");
+    expect(preAgentHook).toBeDefined();
+    expect(preAgentHook.hooks[0].command).toContain("on-pre-agent.mjs");
     expect(failFastHook).toBeDefined();
     expect(failFastHook.matcher).toBeUndefined();
-    expect(settings.hooks.PostToolUse).toHaveLength(1);
-    expect(settings.hooks.PostToolUse[0].matcher).toBe("Agent");
-    expect(settings.hooks.PostToolUse[0].hooks[0].command).toContain("on-post-agent.mjs");
   });
 
   it("preserves existing hooks", async () => {
@@ -369,10 +370,15 @@ describe("configureClaudeHooks", () => {
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
     expect(settings.someOtherSetting).toBe(true);
-    expect(settings.hooks.PreToolUse).toHaveLength(3);
+    expect(settings.hooks.PreToolUse).toHaveLength(4);
     expect(settings.hooks.PreToolUse[0].matcher).toBe("Write");
-    expect(settings.hooks.PreToolUse[1].matcher).toBe("Read|Grep|Glob|Bash");
-    expect(settings.hooks.PreToolUse[2].hooks[0].command).toContain("on-fail-fast.mjs");
+    const gateHook2 = settings.hooks.PreToolUse.find((h: { matcher?: string }) => h.matcher === "Read|Grep|Glob|Bash");
+    expect(gateHook2).toBeDefined();
+    const failFast2 = settings.hooks.PreToolUse.find(
+      (h: { matcher?: string; hooks: { command: string }[] }) =>
+        !h.matcher && h.hooks[0].command.includes("on-fail-fast.mjs"),
+    );
+    expect(failFast2).toBeDefined();
   });
 
   it("updates existing clarte hook entry", async () => {
@@ -391,10 +397,15 @@ describe("configureClaudeHooks", () => {
 
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
-    // Old clarte hook cleaned up, replaced with on-pre-flight-gate + on-fail-fast
-    expect(settings.hooks.PreToolUse).toHaveLength(2);
-    expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain("on-pre-flight-gate.mjs");
-    expect(settings.hooks.PreToolUse[1].hooks[0].command).toContain("on-fail-fast.mjs");
+    // Old clarte hook cleaned up, replaced with gate + pre-agent + on-fail-fast
+    expect(settings.hooks.PreToolUse).toHaveLength(3);
+    const gate3 = settings.hooks.PreToolUse.find((h: { matcher?: string }) => h.matcher === "Read|Grep|Glob|Bash");
+    expect(gate3?.hooks[0].command).toContain("on-pre-flight-gate.mjs");
+    const failFast3 = settings.hooks.PreToolUse.find(
+      (h: { matcher?: string; hooks: { command: string }[] }) =>
+        !h.matcher && h.hooks[0].command.includes("on-fail-fast.mjs"),
+    );
+    expect(failFast3).toBeDefined();
   });
 
   it("repairs corrupted settings with clobbered hooks", async () => {
@@ -420,11 +431,15 @@ describe("configureClaudeHooks", () => {
 
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
-    // Should have exactly 2 PreToolUse hooks (on-pre-flight-gate + on-fail-fast) and 1 SessionStart
-    expect(settings.hooks.PreToolUse).toHaveLength(2);
-    expect(settings.hooks.PreToolUse[0].matcher).toBe("Read|Grep|Glob|Bash");
-    expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain("on-pre-flight-gate.mjs");
-    expect(settings.hooks.PreToolUse[1].hooks[0].command).toContain("on-fail-fast.mjs");
+    // Should have exactly 3 PreToolUse hooks (gate + pre-agent + fail-fast) and 1 SessionStart
+    expect(settings.hooks.PreToolUse).toHaveLength(3);
+    const gate4 = settings.hooks.PreToolUse.find((h: { matcher?: string }) => h.matcher === "Read|Grep|Glob|Bash");
+    expect(gate4?.hooks[0].command).toContain("on-pre-flight-gate.mjs");
+    const failFast4 = settings.hooks.PreToolUse.find(
+      (h: { matcher?: string; hooks: { command: string }[] }) =>
+        !h.matcher && h.hooks[0].command.includes("on-fail-fast.mjs"),
+    );
+    expect(failFast4).toBeDefined();
     expect(settings.hooks.SessionStart).toHaveLength(1);
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("on-session-start.mjs");
   });
@@ -466,7 +481,7 @@ describe("configureClaudeHooks", () => {
 
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
-    expect(settings.hooks.PreToolUse).toHaveLength(2);
+    expect(settings.hooks.PreToolUse).toHaveLength(3);
   });
 
 });
