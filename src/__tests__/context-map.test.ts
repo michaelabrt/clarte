@@ -234,7 +234,7 @@ describe("generateHookFiles", () => {
     expect(script).toContain("fail-fast-override");
   });
 
-  it("generates context-map.json and on-read.mjs", async () => {
+  it("generates context-map.json and on-pre-flight-gate.mjs", async () => {
     tmpDir = await makeTmpDir();
     const graph = makePersistedGraph({
       files: {
@@ -248,9 +248,10 @@ describe("generateHookFiles", () => {
     const map = JSON.parse(mapContent);
     expect(map["src/utils.ts"]).toBeDefined();
 
-    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-read.mjs"), "utf-8");
-    expect(script).toContain("context-map.json");
-    expect(script).toContain("additionalContext");
+    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-pre-flight-gate.mjs"), "utf-8");
+    expect(script).toContain("pre-flight-done");
+    expect(script).toContain("permissionDecision");
+    expect(script).toContain("clarte-pre-flight");
   });
 
   it("produces valid ESM hook script with expected structure", async () => {
@@ -259,12 +260,11 @@ describe("generateHookFiles", () => {
 
     await generateHookFiles(tmpDir, graph);
 
-    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-read.mjs"), "utf-8");
+    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-pre-flight-gate.mjs"), "utf-8");
     expect(script).toContain("import");
-    expect(script).toContain("readFileSync");
+    expect(script).toContain("existsSync");
     expect(script).toContain("readFileSync(0,");
-    expect(script).toContain("context-map.json");
-    expect(script).toContain("additionalContext");
+    expect(script).toContain("task-context.md");
     expect(script).toContain("tool_input");
   });
 
@@ -283,13 +283,13 @@ describe("generateHookFiles", () => {
     expect(script).toContain("rmSync");
   });
 
-  it("on-read script checks CLARTE_HOOKS_DISABLED", async () => {
+  it("on-pre-flight-gate script checks CLARTE_HOOKS_DISABLED", async () => {
     tmpDir = await makeTmpDir();
     const graph = makePersistedGraph({ files: {} });
 
     await generateHookFiles(tmpDir, graph);
 
-    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-read.mjs"), "utf-8");
+    const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-pre-flight-gate.mjs"), "utf-8");
     expect(script).toContain("CLARTE_HOOKS_DISABLED");
   });
 
@@ -327,7 +327,7 @@ describe("configureClaudeHooks", () => {
     if (tmpDir) await cleanup(tmpDir);
   });
 
-  it("creates settings file with SessionStart and PreToolUse hooks", async () => {
+  it("creates settings file with SessionStart, PreToolUse, PostToolUse and UserPromptSubmit hooks", async () => {
     tmpDir = await makeTmpDir();
 
     await configureClaudeHooks(tmpDir);
@@ -337,15 +337,18 @@ describe("configureClaudeHooks", () => {
     expect(settings.hooks.SessionStart).toHaveLength(1);
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("on-session-start.mjs");
     expect(settings.hooks.PreToolUse).toHaveLength(2);
-    const readHook = settings.hooks.PreToolUse.find((h: { matcher?: string }) => h.matcher === "Read");
+    const gateHook = settings.hooks.PreToolUse.find((h: { matcher?: string }) => h.matcher === "Read|Grep|Glob|Bash");
     const failFastHook = settings.hooks.PreToolUse.find(
       (h: { matcher?: string; hooks: { command: string }[] }) =>
         !h.matcher && h.hooks[0].command.includes("on-fail-fast.mjs"),
     );
-    expect(readHook).toBeDefined();
-    expect(readHook.hooks[0].command).toContain("on-read.mjs");
+    expect(gateHook).toBeDefined();
+    expect(gateHook.hooks[0].command).toContain("on-pre-flight-gate.mjs");
     expect(failFastHook).toBeDefined();
     expect(failFastHook.matcher).toBeUndefined();
+    expect(settings.hooks.PostToolUse).toHaveLength(1);
+    expect(settings.hooks.PostToolUse[0].matcher).toBe("Agent");
+    expect(settings.hooks.PostToolUse[0].hooks[0].command).toContain("on-post-agent.mjs");
   });
 
   it("preserves existing hooks", async () => {
@@ -368,7 +371,7 @@ describe("configureClaudeHooks", () => {
     expect(settings.someOtherSetting).toBe(true);
     expect(settings.hooks.PreToolUse).toHaveLength(3);
     expect(settings.hooks.PreToolUse[0].matcher).toBe("Write");
-    expect(settings.hooks.PreToolUse[1].matcher).toBe("Read");
+    expect(settings.hooks.PreToolUse[1].matcher).toBe("Read|Grep|Glob|Bash");
     expect(settings.hooks.PreToolUse[2].hooks[0].command).toContain("on-fail-fast.mjs");
   });
 
@@ -388,9 +391,9 @@ describe("configureClaudeHooks", () => {
 
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
-    // Old clarte hook cleaned up, replaced with on-read + on-fail-fast
+    // Old clarte hook cleaned up, replaced with on-pre-flight-gate + on-fail-fast
     expect(settings.hooks.PreToolUse).toHaveLength(2);
-    expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain("on-read.mjs");
+    expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain("on-pre-flight-gate.mjs");
     expect(settings.hooks.PreToolUse[1].hooks[0].command).toContain("on-fail-fast.mjs");
   });
 
@@ -417,10 +420,10 @@ describe("configureClaudeHooks", () => {
 
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
-    // Should have exactly 2 PreToolUse hooks (on-read + on-fail-fast) and 1 SessionStart
+    // Should have exactly 2 PreToolUse hooks (on-pre-flight-gate + on-fail-fast) and 1 SessionStart
     expect(settings.hooks.PreToolUse).toHaveLength(2);
-    expect(settings.hooks.PreToolUse[0].matcher).toBe("Read");
-    expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain("on-read.mjs");
+    expect(settings.hooks.PreToolUse[0].matcher).toBe("Read|Grep|Glob|Bash");
+    expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain("on-pre-flight-gate.mjs");
     expect(settings.hooks.PreToolUse[1].hooks[0].command).toContain("on-fail-fast.mjs");
     expect(settings.hooks.SessionStart).toHaveLength(1);
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("on-session-start.mjs");

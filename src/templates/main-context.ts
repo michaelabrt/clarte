@@ -289,9 +289,11 @@ export async function buildSections(
 function buildGraphToolsSection(): string {
   return `## Graph Tools
 
-clarte pre-computes edit targets for each task.
+clarte enforces a pre-flight diagnostic before any file reads.
 
-**ALWAYS start by reading \`.clarte/task-context.md\` (Read tool). Then spawn an Agent subagent whose prompt lists those files and asks it to identify the edit points for your task. Do not Grep, Glob or ToolSearch before doing this.**
+**When a Read or Grep is blocked by the pre-flight gate**, spawn the diagnostic agent:
+\`Agent(subagent_type="clarte-pre-flight", prompt="<task description>")\`
+It reads \`.clarte/task-context.md\`, analyzes the relevant files and returns exact edit instructions. Apply them directly - do not read files first.
 
 | Trigger | Tool | What it returns |
 |---------|------|-----------------|
