@@ -428,7 +428,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
   // Generate Claude Code hooks for graph context delivery (non-critical)
   if (!dryRun && persistedGraph && answers.ides.includes("claude") && savedConfig?.hooks !== false) {
     try {
-      const { generateHookFiles, configureClaudeHooks } = await import("../hooks/generate-hooks.js");
+      const { generateHookFiles, configureClaudeHooks, generatePreFlightAgentFile } = await import("../hooks/generate-hooks.js");
       let hookDirectives: string[] | undefined;
       if (savedConfig?.delivery?.enrichedHooks) {
         hookDirectives = buildDirectives(analysis, detected);
@@ -440,6 +440,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
         hookDirectives,
       );
       await configureClaudeHooks(rootDir);
+      await generatePreFlightAgentFile(rootDir);
     } catch (err) {
       verboseLog(`Hook generation failed: ${err instanceof Error ? err.message : String(err)}`);
     }
