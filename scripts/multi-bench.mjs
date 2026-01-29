@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// Multi-condition benchmark: 4 conditions in parallel against the typeorm SQLite enum task.
+// Multi-condition benchmark: baseline vs pre-flight gate against the typeorm SQLite enum task.
 //
 // Usage:
 //   node scripts/multi-bench.mjs [source-repo-path]
 //
 // Conditions:
-//   baseline     - Placebo CLAUDE.md only, no MCP tools
-//   clarte-grep  - Placebo CLAUDE.md + clarte-grep directive, clarte generate produces script
-//   fat-scope    - Placebo CLAUDE.md + MCP server (clarte_scope returns file contents)
-//   clarte-route - Placebo CLAUDE.md + clarte_route directive + MCP server
+//   baseline   - Placebo CLAUDE.md only, no hooks
+//   pre-flight - clarte generate (hooks + agent file) + oracle task-context.md.
+//                Pre-flight gate denies Read/Grep/Glob/Bash until clarte-pre-flight
+//                agent completes. Tests enforced sequential delivery.
 //
 // Set MODEL=sonnet (default) or MODEL=haiku.
 // Set BUDGET=1.50 (default).
@@ -34,7 +34,7 @@ const TYPEORM_TASK =
   "Find and fix all three bugs. Add tests to cover the fixed behaviour.";
 
 const MODEL = process.env.MODEL ?? "sonnet";
-const BUDGET = process.env.BUDGET ?? "1.50";
+const BUDGET = process.env.BUDGET ?? "3.00";
 
 // Placebo CLAUDE.md used as base for all conditions
 const PLACEBO = `# TypeORM
@@ -42,7 +42,7 @@ A TypeScript ORM for Node.js. Supports many SQL databases. Tests use mocha.
 `;
 
 // Oracle task-context.md: the exact 3 files that contain the 3 bugs.
-// Used by the perfect-route condition to isolate delivery mechanism from routing quality.
+// Pre-written to isolate delivery mechanism from routing quality.
 const ORACLE_CONTEXT = `# Edit targets (clarte)
 
 Based on past fixes to similar issues, these files are most likely to need editing:
@@ -54,7 +54,7 @@ Based on past fixes to similar issues, these files are most likely to need editi
 Matched commit: fix: sqlite simple-enum array serialization, check constraint and default values
 `;
 
-const CONDITIONS = ["baseline", "perfect-route"];
+const CONDITIONS = ["baseline", "pre-flight"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -111,26 +111,24 @@ for (const name of CONDITIONS) {
 writeFileSync(join(workDirs["baseline"], "CLAUDE.md"), PLACEBO);
 label("setup", "baseline: CLAUDE.md written.");
 
-// perfect-route: clarte generate --mcp produces CLAUDE.md with "read task-context.md" directive.
-// task-context.md is pre-written with the oracle (exact correct files) to isolate delivery from routing.
-// No MCP server - testing whether the agent follows the directive alone.
+// pre-flight: clarte generate installs the deny-gate hooks and .claude/agents/clarte-pre-flight.md.
+// Oracle task-context.md is pre-written (bypasses BM25 routing) to isolate delivery from routing.
+// Tests whether the enforced sequential pre-flight agent actually substitutes exploration.
 const baseConfig = { ides: ["claude"], projectPurpose: "", keyPatterns: "", gotchas: "",
   generateSnapshot: false, snapshotPaths: [], stackCorrections: "", generatePerPackage: false };
-writeFileSync(join(workDirs["perfect-route"], ".clarte.json"), JSON.stringify(baseConfig, null, 2));
-label("setup", "Running clarte generate --mcp for perfect-route...");
+writeFileSync(join(workDirs["pre-flight"], ".clarte.json"), JSON.stringify(baseConfig, null, 2));
+label("setup", "Running clarte generate for pre-flight...");
 try {
-  sh(`node ${join(CLARTE_ROOT, "dist/index.js")} ${workDirs["perfect-route"]} --mcp --yes < /dev/null`);
+  sh(`node ${join(CLARTE_ROOT, "dist/index.js")} ${workDirs["pre-flight"]} --yes < /dev/null`);
 } catch (e) {
-  label("WARN", `clarte generate failed for perfect-route: ${e.message}`);
+  label("WARN", `clarte generate failed for pre-flight: ${e.message}`);
 }
-// Write oracle task-context.md (bypasses hook routing - provides exact correct files)
-mkdirSync(join(workDirs["perfect-route"], ".clarte"), { recursive: true });
-writeFileSync(join(workDirs["perfect-route"], ".clarte/task-context.md"), ORACLE_CONTEXT);
-// Remove .mcp.json - we test the CLAUDE.md directive alone, not the MCP server
-try { unlinkSync(join(workDirs["perfect-route"], ".mcp.json")); } catch {}
-label("setup", "perfect-route: oracle task-context.md written, no MCP server.");
+// Write oracle task-context.md (exact correct files - bypasses hook routing)
+mkdirSync(join(workDirs["pre-flight"], ".clarte"), { recursive: true });
+writeFileSync(join(workDirs["pre-flight"], ".clarte/task-context.md"), ORACLE_CONTEXT);
+label("setup", "pre-flight: oracle task-context.md written, deny-gate hooks active.");
 
-label("setup", "Setup complete. Starting baseline vs perfect-route...\n");
+label("setup", "Setup complete. Starting baseline vs pre-flight...\n");
 
 // ── Run sessions in parallel via async spawn ──────────────────────────────────
 
@@ -216,10 +214,10 @@ function runSession(workDir, extraArgs, tag) {
   });
 }
 
-label("bench", "baseline vs perfect-route...");
+label("bench", "baseline vs pre-flight...");
 const [baselineRun, routeRun] = await Promise.all([
-  runSession(workDirs["baseline"],      [], "baseline"),
-  runSession(workDirs["perfect-route"], [], "p-route"),
+  runSession(workDirs["baseline"],   [], "baseline"),
+  runSession(workDirs["pre-flight"], [], "pre-flight"),
 ]);
 
 // ── Parse session logs ────────────────────────────────────────────────────────
@@ -301,8 +299,8 @@ function patchStats(workDir) {
 
 // Collect run data
 const runs = {
-  "baseline":      { run: baselineRun, workDir: workDirs["baseline"] },
-  "perfect-route": { run: routeRun,    workDir: workDirs["perfect-route"] },
+  "baseline":   { run: baselineRun, workDir: workDirs["baseline"] },
+  "pre-flight": { run: routeRun,    workDir: workDirs["pre-flight"] },
 };
 
 for (const cond of CONDITIONS) {
