@@ -1,17 +1,16 @@
 #!/usr/bin/env node
-// Multi-condition benchmark: baseline vs pre-flight gate against the typeorm SQLite enum task.
+// Pre-flight mechanism smoke test against the typeorm SQLite enum task.
 //
 // Usage:
 //   node scripts/multi-bench.mjs [source-repo-path]
 //
-// Conditions:
-//   baseline   - Placebo CLAUDE.md only, no hooks
-//   pre-flight - clarte generate (hooks + agent file) + oracle task-context.md.
-//                Pre-flight gate denies Read/Grep/Glob/Bash until clarte-pre-flight
-//                agent completes. Tests enforced sequential delivery.
+// Runs a single pre-flight condition:
+//   - clarte generate installs deny-gate hooks + .claude/agents/clarte-pre-flight.md
+//   - Oracle task-context.md is pre-written (bypasses BM25 routing)
+//   - Verifies gate fires, subagent spawns, reads files, returns edit instructions
 //
 // Set MODEL=sonnet (default) or MODEL=haiku.
-// Set BUDGET=1.50 (default).
+// Set BUDGET=3.00 (default).
 
 import { execSync, spawn } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
@@ -54,7 +53,7 @@ Based on past fixes to similar issues, these files are most likely to need editi
 Matched commit: fix: sqlite simple-enum array serialization, check constraint and default values
 `;
 
-const CONDITIONS = ["baseline", "pre-flight"];
+const CONDITIONS = ["pre-flight"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -106,10 +105,6 @@ for (const name of CONDITIONS) {
 }
 
 // ── Write CLAUDE.md per condition ─────────────────────────────────────────────
-
-// baseline: placebo only
-writeFileSync(join(workDirs["baseline"], "CLAUDE.md"), PLACEBO);
-label("setup", "baseline: CLAUDE.md written.");
 
 // pre-flight: clarte generate installs the deny-gate hooks and .claude/agents/clarte-pre-flight.md.
 // Oracle task-context.md is pre-written (bypasses BM25 routing) to isolate delivery from routing.
@@ -214,11 +209,8 @@ function runSession(workDir, extraArgs, tag) {
   });
 }
 
-label("bench", "baseline vs pre-flight...");
-const [baselineRun, routeRun] = await Promise.all([
-  runSession(workDirs["baseline"],   [], "baseline"),
-  runSession(workDirs["pre-flight"], [], "pre-flight"),
-]);
+label("bench", "pre-flight...");
+const routeRun = await runSession(workDirs["pre-flight"], [], "pre-flight");
 
 // ── Parse session logs ────────────────────────────────────────────────────────
 
@@ -299,8 +291,7 @@ function patchStats(workDir) {
 
 // Collect run data
 const runs = {
-  "baseline":   { run: baselineRun, workDir: workDirs["baseline"] },
-  "pre-flight": { run: routeRun,    workDir: workDirs["pre-flight"] },
+  "pre-flight": { run: routeRun, workDir: workDirs["pre-flight"] },
 };
 
 for (const cond of CONDITIONS) {
@@ -339,11 +330,9 @@ function explorationRatio(stats) {
   return Math.round(((stats.firstEditTurn - 1) / stats.totalToolTurns) * 100);
 }
 
-const bRes = runs["baseline"].run.result;
-
 out("");
 out("══════════════════════════════════════════════════════════════════════");
-out(`  Multi-condition benchmark  Model: ${MODEL}  Budget: $${BUDGET}`);
+out(`  Pre-flight smoke test  Model: ${MODEL}  Budget: $${BUDGET}`);
 out(`  Date: ${new Date().toISOString().slice(0, 10)}  Task: opaque SQLite enum`);
 out("══════════════════════════════════════════════════════════════════════");
 
@@ -354,8 +343,8 @@ function tableRow(...cells) {
 }
 
 out("");
-tableRow("Condition", "Turns", "Cost", "First-edit", "Explore%", "vs baseline");
-out("  " + "─".repeat(COL_W.reduce((a, b) => a + b, 0) + COL_W.length * 2));
+tableRow("Condition", "Turns", "Cost", "First-edit", "Explore%");
+out("  " + "─".repeat(COL_W.slice(0, 5).reduce((a, b) => a + b, 0) + 5 * 2));
 
 for (const cond of CONDITIONS) {
   const r = runs[cond];
@@ -367,18 +356,10 @@ for (const cond of CONDITIONS) {
     fmtCost(res?.total_cost_usd),
     fmtN(stats?.firstEditTurn),
     fmtPct(explorationRatio(stats)),
-    cond === "baseline" ? "—" : deltaPct(bRes?.num_turns, res?.num_turns ?? null),
   );
 }
 
 // Cost delta
-out("");
-out("  Cost delta vs baseline:");
-for (const cond of CONDITIONS) {
-  if (cond === "baseline") continue;
-  const cost = runs[cond].run.result?.total_cost_usd ?? null;
-  out(`    ${cond.padEnd(14)}  ${fmtCost(cost)}  (${deltaPct(bRes?.total_cost_usd ?? null, cost)})`);
-}
 
 // Condition checks
 out("");
@@ -475,10 +456,9 @@ console.log("  Summary:");
 for (const cond of CONDITIONS) {
   const res = runs[cond].run.result;
   const stats = runs[cond].stats;
-  const vb = cond === "baseline" ? "—" : deltaPct(bRes?.num_turns, res?.num_turns ?? null);
   console.log(
     `    ${cond.padEnd(14)}  turns=${fmtN(res?.num_turns)}  cost=${fmtCost(res?.total_cost_usd)}` +
-    `  first-edit=${fmtN(stats?.firstEditTurn)}  vs-baseline=${vb}`,
+    `  first-edit=${fmtN(stats?.firstEditTurn)}`,
   );
 }
 console.log("");
