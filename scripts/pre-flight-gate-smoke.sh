@@ -204,7 +204,7 @@ echo ""
 SESSION_ID=$(node --eval "try{const d=require('$RESULTS_DIR/session.json');if(d.session_id)console.log(d.session_id)}catch{}" 2>/dev/null)
 if [ -n "$SESSION_ID" ]; then
   ABS_PROJECT=$(cd "$PROJECT" && pwd)
-  PROJECT_DIR_NAME=$(echo "$ABS_PROJECT" | sed 's|^/||; s|/|-|g')
+  PROJECT_DIR_NAME=$(echo "$ABS_PROJECT" | sed 's|/|-|g')
   LOG_SRC="$HOME/.claude/projects/${PROJECT_DIR_NAME}/${SESSION_ID}.jsonl"
   if [ -f "$LOG_SRC" ]; then
     cp "$LOG_SRC" "$RESULTS_DIR/session.jsonl"
