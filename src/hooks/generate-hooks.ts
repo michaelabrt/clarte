@@ -1,11 +1,11 @@
 import path from "node:path";
+import os from "node:os";
 import { readJsonFile, writeFileSafe } from "../utils.js";
 import type { PersistedGraph } from "../types/persisted-graph.js";
 import { buildContextMap } from "./context-map.js";
 import { CLARTE_DIR } from "../config/config.js";
 
 const HOOKS_DIR = `${CLARTE_DIR}/hooks`;
-const AGENTS_DIR = `.claude/agents`;
 const CONTEXT_MAP_FILE = "context-map.json";
 const SETTINGS_PATH = ".claude/settings.json";
 const PRE_FLIGHT_DONE = `.clarte/hooks/.state/pre-flight-done`;
@@ -295,6 +295,7 @@ const HOOK_DEFS: HookDef[] = [
 const ALL_HOOK_EVENTS = ["SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit"];
 
 const PRE_FLIGHT_AGENT_CONTENT = `---
+name: clarte-pre-flight
 description: Pre-flight diagnostic agent. Reads files listed in .clarte/task-context.md and returns exact edit instructions for the current task. Spawn before any file exploration.
 ---
 
@@ -346,9 +347,11 @@ export async function generateHookFiles(
 /**
  * Generate the pre-flight diagnostic agent file at .claude/agents/clarte-pre-flight.md.
  */
-export async function generatePreFlightAgentFile(rootDir: string): Promise<void> {
-  const agentsDir = path.join(rootDir, AGENTS_DIR);
-  await writeFileSafe(path.join(agentsDir, "clarte-pre-flight.md"), PRE_FLIGHT_AGENT_CONTENT);
+export async function generatePreFlightAgentFile(_rootDir: string): Promise<void> {
+  // Must be in ~/.claude/agents/ (user-global) for subagent_type to be recognized.
+  // Project-level .claude/agents/ is not loaded as a subagent_type source by Claude Code.
+  const userAgentsDir = path.join(os.homedir(), ".claude", "agents");
+  await writeFileSafe(path.join(userAgentsDir, "clarte-pre-flight.md"), PRE_FLIGHT_AGENT_CONTENT);
 }
 
 interface HookEntry {
