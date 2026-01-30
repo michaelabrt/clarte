@@ -2,7 +2,7 @@
 
 See `.claude/rules/clarte.md` for full architectural context.
 
-<!-- clarte: generated 2026-03-08T17:12:30Z. Run npx clarte to regenerate. -->
+<!-- clarte: generated 2026-03-09T13:14:32Z. Run npx clarte to regenerate. -->
 
 <!-- clarte:user-start -->
 ## Style Rules
