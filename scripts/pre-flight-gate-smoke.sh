@@ -57,11 +57,14 @@ PKG
 # Install hooks directly by copying from clarte's own generated hooks
 echo "Installing hooks..."
 mkdir -p "$PROJECT/.clarte/hooks"
-mkdir -p "$PROJECT/.claude/agents"
 for hook in on-session-start.mjs on-pre-flight-gate.mjs on-pre-agent.mjs on-fail-fast.mjs on-prompt.mjs; do
   cp "$CLARTE_ROOT/.clarte/hooks/$hook" "$PROJECT/.clarte/hooks/$hook"
 done
-cp "$CLARTE_ROOT/.claude/agents/clarte-pre-flight.md" "$PROJECT/.claude/agents/clarte-pre-flight.md"
+# clarte-pre-flight must be in ~/.claude/agents/ (user-global) to register as a subagent_type.
+# Copy it there if not already present.
+mkdir -p "$HOME/.claude/agents"
+cp "$CLARTE_ROOT/.claude/agents/clarte-pre-flight.md" "$HOME/.claude/agents/clarte-pre-flight.md" 2>/dev/null || true
+echo "  clarte-pre-flight agent: $([ -f "$HOME/.claude/agents/clarte-pre-flight.md" ] && echo 'installed' || echo 'MISSING')"
 
 # Write settings.json with hook registrations
 mkdir -p "$PROJECT/.claude"
