@@ -117,6 +117,19 @@ if (tool === "Edit" || tool === "Write") {
 if (tool === "Bash") {
   const cmd = input.tool_input?.command || "";
   if (TEST_RE.test(cmd)) {
+    // Deny background test runs immediately - they spawn TaskOutput polling loops
+    // that bypass the fail-fast counter. Force blocking Bash so we can count retries.
+    if (input.tool_input?.run_in_background) {
+      const output = JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: "Do not run test commands in the background. Run them directly (without run_in_background) so results are available immediately."
+        }
+      });
+      process.stdout.write(output);
+      process.exit(0);
+    }
     const base = extractBase(cmd);
     const state = readFFState();
     if (state.base === base) {
