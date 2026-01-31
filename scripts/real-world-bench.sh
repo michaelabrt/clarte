@@ -245,7 +245,36 @@ extract_metrics() {
   fi
 
   # Use node instead of jq (jq may not be installed)
-  node --eval 'const d=require(process.argv[1]);const t=d.num_turns||"N/A";const c=d.total_cost_usd?d.total_cost_usd.toFixed(2):"N/A";const cw=(d.usage?.cache_creation_input_tokens||0);const cr=(d.usage?.cache_read_input_tokens||0);const o=d.usage?.output_tokens||"N/A";console.log([t,cw,cr,o,c].join("|"))' "$file"
+  node --eval '
+const d = require(process.argv[1]);
+const c = d.total_cost_usd ? d.total_cost_usd.toFixed(2) : "N/A";
+// Aggregate tokens across all models (includes sub-agents)
+const mu = d.modelUsage || {};
+let cw = 0, cr = 0, o = 0;
+for (const m of Object.values(mu)) {
+  cw += m.cacheCreationInputTokens || 0;
+  cr += m.cacheReadInputTokens || 0;
+  o  += m.outputTokens || 0;
+}
+// Count actual assistant turns from session JSONL if available
+const jsonlPath = process.argv[1].replace(/\.json$/, "-session.jsonl");
+let turns = "N/A";
+try {
+  const lines = require("fs").readFileSync(jsonlPath, "utf8").split("\n").filter(Boolean);
+  let n = 0;
+  for (const l of lines) {
+    try {
+      const ev = JSON.parse(l);
+      const content = ev?.message?.content;
+      if (Array.isArray(content) && content.some(x => x.type === "tool_use" || x.type === "text")) {
+        if (ev?.message?.role === "assistant") n++;
+      }
+    } catch {}
+  }
+  if (n > 0) turns = n;
+} catch {}
+console.log([turns, cw, cr, o, c].join("|"))
+' "$file"
 }
 
 print_results() {
