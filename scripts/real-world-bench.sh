@@ -259,7 +259,7 @@ print_results() {
   printf "%-14s | %6s | %13s | %12s | %13s | %8s\n" "Condition" "Turns" "Cache Write" "Cache Read" "Output Tokens" "Cost"
   printf "%-14s-|-%6s-|-%13s-|-%12s-|-%13s-|-%8s\n" "--------------" "------" "-------------" "------------" "-------------" "--------"
 
-  for name in placebo clarte phone-book pointer direct direct-1 direct-2 direct-3 edit-targets; do
+  for name in placebo clarte phone-book pointer direct direct-1 direct-2 direct-3 edit-targets pre-flight; do
     local file="$RESULTS_DIR/${name}.json"
     if [ -f "$file" ] && [ -s "$file" ]; then
       IFS='|' read -r turns cw cr output cost <<< "$(extract_metrics "$file")"
@@ -681,6 +681,86 @@ RESOLVE_EOF
   collect_session_log "edit-targets" "$work_dir" "$result_file"
 }
 
+run_pre_flight() {
+  local work_dir="$BENCH_DIR/pre-flight"
+  clone_repo "$work_dir" "pre-flight"
+
+  # Generate graph + hooks
+  cat > "$work_dir/.clarte.json" << 'CLARTE_CFG_EOF'
+{
+  "_version": 2,
+  "ides": ["claude"],
+  "projectPurpose": "",
+  "keyPatterns": "",
+  "gotchas": "",
+  "generateSnapshot": true,
+  "snapshotPaths": [],
+  "stackCorrections": "",
+  "generatePerPackage": true
+}
+CLARTE_CFG_EOF
+
+  echo "[pre-flight] Running clarte --yes to generate graph + hooks..."
+  (cd "$work_dir" && node "$CLARTE_ROOT/dist/index.js" --yes 2>/dev/null) || true
+
+  # Resolve targets and write task-context.md to arm the gate
+  local resolve_script="$work_dir/_resolve-targets.mts"
+  cat > "$resolve_script" << RESOLVE_EOF
+import { loadPersistedGraph } from "$CLARTE_ROOT/src/graph/persist.ts";
+import { resolveEditTargets } from "$CLARTE_ROOT/src/cli/resolve-targets.ts";
+const graph = await loadPersistedGraph("$work_dir");
+if (!graph) process.exit(0);
+const targets = resolveEditTargets(process.argv[2], graph);
+if (targets.length > 0) process.stdout.write(targets.join("\n"));
+RESOLVE_EOF
+
+  local targets resolve_stderr
+  resolve_stderr=$(mktemp)
+  targets=$(npx tsx "$resolve_script" "$ISSUE_TEXT" 2>"$resolve_stderr") || true
+  if [ -s "$resolve_stderr" ]; then
+    echo "[pre-flight] Resolve stderr: $(cat "$resolve_stderr")"
+  fi
+  rm -f "$resolve_script" "$resolve_stderr"
+
+  local result_file="$RESULTS_DIR/pre-flight.json"
+
+  if [ -n "$targets" ]; then
+    echo "[pre-flight] Targets resolved:"
+    echo "$targets" | sed 's/^/  - /'
+
+    # Write task-context.md to arm the pre-flight gate
+    mkdir -p "$work_dir/.clarte"
+    {
+      echo "# Edit targets (clarte)"
+      echo ""
+      echo "Based on dependency graph analysis, these files are most likely to need editing:"
+      echo ""
+      echo "$targets" | sed 's/^/- /'
+    } > "$work_dir/.clarte/task-context.md"
+
+    echo "[pre-flight] Running claude -p with pre-flight gate (budget \$$MAX_BUDGET)..."
+    (cd "$work_dir" && env -u CLAUDECODE claude -p "$ISSUE_TEXT" \
+      --output-format json \
+      --model "${MODEL:-sonnet}" \
+      --max-budget-usd "$MAX_BUDGET" \
+      --allowedTools "$ALLOWED_TOOLS" \
+      --dangerously-skip-permissions \
+      > "$result_file" 2>/dev/null) || true
+  else
+    echo "[pre-flight] No targets resolved, running plain claude -p..."
+    (cd "$work_dir" && env -u CLAUDECODE claude -p "$ISSUE_TEXT" \
+      --output-format json \
+      --model "${MODEL:-sonnet}" \
+      --max-budget-usd "$MAX_BUDGET" \
+      --allowedTools "$ALLOWED_TOOLS" \
+      --dangerously-skip-permissions \
+      > "$result_file" 2>/dev/null) || true
+  fi
+
+  echo "[pre-flight] Done. Result: $result_file"
+  collect_session_log "pre-flight" "$work_dir" "$result_file"
+}
+
 # ── Main ────────────────────────────────────────────────────────────
 
 RUNS="${RUNS:-1}"
@@ -694,6 +774,7 @@ case "$CONDITION" in
   direct-2)   run_direct_variant "direct-2" "$DIRECT_2_WORDING"; print_results ;;
   direct-3)   run_direct_variant "direct-3" "$DIRECT_3_WORDING"; print_results ;;
   edit-targets) run_edit_targets; print_results ;;
+  pre-flight) run_pre_flight; print_results ;;
   parallel)
     for i in $(seq 1 "$RUNS"); do
       echo ""
@@ -1261,7 +1342,7 @@ CLARTE_CFG_EOF
     ;;
   *)
     echo "Unknown condition: $CONDITION"
-    echo "Usage: TARGET=hono|directus $0 [placebo|clarte|pointer|direct|direct-1|direct-2|direct-3|parallel|r7|r9|fail-fast-ab|all]"
+    echo "Usage: TARGET=hono|directus $0 [placebo|clarte|pointer|direct|direct-1|direct-2|direct-3|edit-targets|pre-flight|parallel|r7|r9|fail-fast-ab|all]"
     exit 1
     ;;
 esac
