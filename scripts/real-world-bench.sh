@@ -149,7 +149,7 @@ echo "Target: $TARGET ($REPO @ ${COMMIT:0:8})"
 ALLOWED_TOOLS="Read,Write,Edit,Glob,Grep,Bash"
 
 # ── Paths ───────────────────────────────────────────────────────────
-CONDITION="${1:-all}"
+CONDITION="${CONDITION:-${1:-all}}"
 BENCH_DIR="${2:-/tmp/clarte-bench-$(date +%Y%m%d-%H%M%S)}"
 RESULTS_DIR="$BENCH_DIR/results"
 CLARTE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -743,7 +743,7 @@ RESOLVE_EOF
       --output-format json \
       --model "${MODEL:-sonnet}" \
       --max-budget-usd "$MAX_BUDGET" \
-      --allowedTools "$ALLOWED_TOOLS" \
+      --allowedTools "$ALLOWED_TOOLS,Agent" \
       --dangerously-skip-permissions \
       > "$result_file" 2>/dev/null) || true
   else
