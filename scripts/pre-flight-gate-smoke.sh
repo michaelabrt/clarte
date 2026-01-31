@@ -304,10 +304,12 @@ PYEOF
 
   # Verdict
   echo ""
-  if [ "$DENY_COUNT" -gt 0 ]; then
-    echo "  GATE MECHANISM: PASS - deny fired $DENY_COUNT time(s)"
+  # Deny events appear as tool_result text, not as top-level permissionDecision JSONL events.
+  # Use gate message count as the signal instead.
+  if [ "$GATE_DENY" -gt 0 ]; then
+    echo "  GATE MECHANISM: PASS - gate fired $GATE_DENY time(s)"
   else
-    echo "  GATE MECHANISM: NOT TESTED - no deny events (agent may have spawned Agent first)"
+    echo "  GATE MECHANISM: FAIL - no gate messages found"
   fi
 
   MARKER_WRITTEN=$([ -f "$PROJECT/.clarte/hooks/.state/pre-flight-done" ] && echo yes || echo no)
