@@ -91,14 +91,15 @@ export async function renderArchitectureSections(
     sections.push({ id: "key-files", priority: 2, content: keyContent, tokens: estimateTokens(keyContent) });
   }
 
-  if (analysis.layers && analysis.layers.length > 1) {
-    const archLines: string[] = [];
-    archLines.push("## Architecture");
-    archLines.push("");
-    archLines.push(renderArchitectureDiagram(analysis.layers, analysis.layerEdges ?? []));
-    const archContent = archLines.join("\n");
-    sections.push({ id: "architecture", priority: 4, content: archContent, tokens: estimateTokens(archContent) });
-  }
+  // R5 ablation: architecture diagram is noise. Commented out for lean-context experiment.
+  // if (analysis.layers && analysis.layers.length > 1) {
+  //   const archLines: string[] = [];
+  //   archLines.push("## Architecture");
+  //   archLines.push("");
+  //   archLines.push(renderArchitectureDiagram(analysis.layers, analysis.layerEdges ?? []));
+  //   const archContent = archLines.join("\n");
+  //   sections.push({ id: "architecture", priority: 4, content: archContent, tokens: estimateTokens(archContent) });
+  // }
 
   if (analysis.monorepoAnalysis && analysis.monorepoAnalysis.crossPackageEdges.length > 0) {
     const mono = analysis.monorepoAnalysis;
@@ -150,8 +151,9 @@ export async function renderArchitectureSections(
     sections.push({ id: "package-dependencies", priority: 4, content: pkgContent, tokens: estimateTokens(pkgContent) });
   }
 
-  const lcSection = renderLayerConsistencySection(analysis);
-  if (lcSection) sections.push(lcSection);
+  // R5 ablation: layer consistency is noise. Commented out for lean-context experiment.
+  // const lcSection = renderLayerConsistencySection(analysis);
+  // if (lcSection) sections.push(lcSection);
 
   return sections;
 }
