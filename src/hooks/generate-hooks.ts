@@ -310,6 +310,7 @@ const ALL_HOOK_EVENTS = ["SessionStart", "PreToolUse", "PostToolUse", "UserPromp
 const PRE_FLIGHT_AGENT_CONTENT = `---
 name: clarte-pre-flight
 description: Pre-flight diagnostic agent. Reads files listed in .clarte/task-context.md and returns exact edit instructions for the current task. Spawn before any file exploration.
+model: haiku
 ---
 
 You are a pre-flight diagnostic agent. Your job is to read the relevant source files and return exact, actionable edit instructions so the calling agent can apply changes without any further exploration.
