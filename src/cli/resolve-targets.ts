@@ -121,11 +121,13 @@ const COUPLING_FACTOR = 0.4;
 const DEFAULT_MAX_TARGETS = 5;
 const MIN_COUPLING_CONFIDENCE = 0.5;
 
-/** Split camelCase/PascalCase: "AbstractSqlite" → ["Abstract", "Sqlite"] */
+/**
+ * Split camelCase/PascalCase on lowercase→uppercase boundaries.
+ * "AbstractSqlite" → ["Abstract", "Sqlite"], "SQLite" → ["SQLite"] (treated as one word).
+ */
 function splitCamelCase(s: string): string[] {
   return s
     .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
     .split(" ")
     .filter(Boolean);
 }
