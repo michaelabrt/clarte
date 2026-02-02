@@ -117,19 +117,6 @@ if (tool === "Edit" || tool === "Write") {
 if (tool === "Bash") {
   const cmd = input.tool_input?.command || "";
   if (TEST_RE.test(cmd)) {
-    // Deny background test runs immediately - they spawn TaskOutput polling loops
-    // that bypass the fail-fast counter. Force blocking Bash so we can count retries.
-    if (input.tool_input?.run_in_background) {
-      const output = JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason: "Do not run test commands in the background. Run them directly (without run_in_background) so results are available immediately."
-        }
-      });
-      process.stdout.write(output);
-      process.exit(0);
-    }
     const base = extractBase(cmd);
     const state = readFFState();
     if (state.base === base) {
@@ -313,13 +300,16 @@ description: Pre-flight diagnostic agent. Reads files listed in .clarte/task-con
 model: haiku
 ---
 
-You are a pre-flight diagnostic agent. Your job is to read the relevant source files and return exact, actionable edit instructions so the calling agent can apply changes without any further exploration.
+You are a pre-flight diagnostic agent. Your job is to read the relevant source files and return complete, correct edit instructions that cover every aspect of the task.
 
 ## Steps
 
-1. Read \`.clarte/task-context.md\` - it lists the files most likely to need editing.
-2. Read each listed file in full.
-3. For each change required by the task, identify the exact location.
+1. Read \`.clarte/task-context.md\` - contains the task description and the files most likely to need editing.
+2. Read each listed source file in full.
+3. If test files are listed, read them - your edits must make those tests pass.
+4. List every distinct problem the task describes. There may be more than one.
+5. For each problem, identify the exact code change needed.
+6. Before returning, verify your edits collectively address ALL problems you listed. If any are missing, add them or mark them UNCERTAIN.
 
 ## Output format
 

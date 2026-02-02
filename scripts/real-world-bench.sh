@@ -757,15 +757,48 @@ RESOLVE_EOF
     echo "[pre-flight] Targets resolved:"
     echo "$targets" | sed 's/^/  - /'
 
+    # Find test files that reference the target source files
+    local test_files=""
+    for target in $targets; do
+      local base
+      base=$(basename "$target" .ts)
+      local matches
+      matches=$(grep -rl "$base" "$work_dir" --include="*.ts" 2>/dev/null \
+        | grep -E "(test|spec|__tests__|github-issues)" \
+        | grep -v "node_modules" | head -2) || true
+      if [ -n "$matches" ]; then
+        test_files=$(printf "%s\n%s" "$test_files" "$matches")
+      fi
+    done
+    test_files=$(echo "$test_files" | sort -u | grep -v "^$" | \
+      sed "s|$work_dir/||") || true
+
     # Write task-context.md to arm the pre-flight gate
     mkdir -p "$work_dir/.clarte"
     {
-      echo "# Edit targets (clarte)"
+      echo "# Task"
+      echo ""
+      echo "$ISSUE_TEXT"
+      echo ""
+      echo "# Source files to edit"
       echo ""
       echo "Based on dependency graph analysis, these files are most likely to need editing:"
       echo ""
       echo "$targets" | sed 's/^/- /'
+      if [ -n "$test_files" ]; then
+        echo ""
+        echo "# Test files"
+        echo ""
+        echo "These tests must pass after your edits:"
+        echo ""
+        echo "$test_files" | sed 's/^/- /'
+      fi
     } > "$work_dir/.clarte/task-context.md"
+
+    if [ -n "$test_files" ]; then
+      echo "[pre-flight] Test files found:"
+      echo "$test_files" | sed 's/^/  - /'
+    fi
 
     echo "[pre-flight] Running claude -p with pre-flight gate (budget \$$MAX_BUDGET)..."
     (cd "$work_dir" && env -u CLAUDECODE claude -p "$ISSUE_TEXT" \
