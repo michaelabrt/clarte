@@ -101,22 +101,22 @@ describe("section ordering (sectionOrder)", () => {
   it("reorders sections when sectionOrder is provided", async () => {
     const answers = {
       ...mockAnswers({ ides: ["generic"] }),
-      sectionOrder: ["tech-stack", "hot-files", "key-files"],
+      sectionOrder: ["tech-stack", "architecture", "key-files"],
     } as UserAnswers;
 
     const sections = await buildSections(mockCtx(), answers, null, mockAnalysis());
 
     const techStack = sections.find((s) => s.id === "tech-stack");
-    const hotFiles = sections.find((s) => s.id === "hot-files");
+    const architecture = sections.find((s) => s.id === "architecture");
     const keyFiles = sections.find((s) => s.id === "key-files");
 
     expect(techStack).toBeDefined();
-    expect(hotFiles).toBeDefined();
+    expect(architecture).toBeDefined();
     expect(keyFiles).toBeDefined();
 
-    // tech-stack should be priority 0, hot-files priority 1, key-files priority 2
+    // tech-stack should be priority 0, architecture priority 1, key-files priority 2
     expect(techStack!.priority).toBe(0);
-    expect(hotFiles!.priority).toBe(1);
+    expect(architecture!.priority).toBe(1);
     expect(keyFiles!.priority).toBe(2);
   });
 
@@ -156,15 +156,15 @@ describe("section ordering (sectionOrder)", () => {
   it("non-listed sections keep offset priorities after ordered sections", async () => {
     const answers = {
       ...mockAnswers({ ides: ["generic"] }),
-      sectionOrder: ["key-files"],
+      sectionOrder: ["architecture"],
     } as UserAnswers;
 
     const sections = await buildSections(mockCtx(), answers, null, mockAnalysis());
 
-    const keyFiles = sections.find((s) => s.id === "key-files");
+    const architecture = sections.find((s) => s.id === "architecture");
     const hotFiles = sections.find((s) => s.id === "hot-files");
 
-    expect(keyFiles!.priority).toBe(0);
+    expect(architecture!.priority).toBe(0);
     // hot-files default priority is 7, offset by 1 (one item in sectionOrder) = 8
     expect(hotFiles!.priority).toBe(8);
   });
@@ -288,11 +288,12 @@ describe("per-IDE section emphasis", () => {
     expect(constraints!.priority).toBe(1);
   });
 
-  it("architecture section is absent (R5 ablation)", async () => {
+  it("Cursor boosts architecture to priority 2", async () => {
     const sections = await buildSections(mockCtx(), mockAnswers({ ides: ["cursor"] }), null, mockAnalysis());
 
     const architecture = sections.find((s) => s.id === "architecture");
-    expect(architecture).toBeUndefined();
+    expect(architecture).toBeDefined();
+    expect(architecture!.priority).toBe(2);
   });
 
   it("Copilot boosts conventions to priority 2 and code-snapshot to priority 3", async () => {
@@ -321,8 +322,10 @@ describe("per-IDE section emphasis", () => {
     const sections = await buildSections(mockCtx(), mockAnswers({ ides: ["claude", "cursor"] }), null, mockAnalysis());
 
     const guidelines = sections.find((s) => s.id === "working-guidelines");
-    // Default priority: working-guidelines=2 (no boost applied for multi-IDE)
+    const architecture = sections.find((s) => s.id === "architecture");
+    // Default priorities: working-guidelines=2, architecture=4
     expect(guidelines!.priority).toBe(2);
+    expect(architecture!.priority).toBe(4);
   });
 
   it("does not apply boosts for aider IDE", async () => {

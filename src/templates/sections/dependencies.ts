@@ -5,21 +5,35 @@ import { findFeedbackEdges } from "../../graph/cycles.js";
 export function renderDependencySections(analysis: ContextAnalysis): ContextSection[] {
   const sections: ContextSection[] = [];
 
-  // R5 ablation: circular-deps, dead-files, cross-cutting, chokepoints,
-  // tight-coupling and hidden-coupling are noise or hurt on real-world tasks.
-  // Commented out for lean-context experiment.
-  // const circContent = renderCircularDepsContent(analysis);
-  // if (circContent) sections.push({ id: "circular-deps", priority: 3, content: circContent, tokens: estimateTokens(circContent) });
-  // const deadContent = renderDeadFilesContent(analysis);
-  // if (deadContent) sections.push({ id: "dead-files", priority: 9, content: deadContent, tokens: estimateTokens(deadContent) });
-  // const ccfContent = renderCrossCuttingContent(analysis);
-  // if (ccfContent) sections.push({ id: "cross-cutting", priority: 9, content: ccfContent, tokens: estimateTokens(ccfContent) });
-  // const cpContent = renderChokepointsContent(analysis);
-  // if (cpContent) sections.push({ id: "chokepoints", priority: 9, content: cpContent, tokens: estimateTokens(cpContent) });
-  // const tcContent = renderTightCouplingContent(analysis);
-  // if (tcContent) sections.push({ id: "tight-coupling", priority: 10, content: tcContent, tokens: estimateTokens(tcContent) });
-  // const smContent = renderHiddenCouplingContent(analysis);
-  // if (smContent) sections.push({ id: "hidden-coupling", priority: 10, content: smContent, tokens: estimateTokens(smContent) });
+  const circContent = renderCircularDepsContent(analysis);
+  if (circContent) {
+    sections.push({ id: "circular-deps", priority: 3, content: circContent, tokens: estimateTokens(circContent) });
+  }
+
+  const deadContent = renderDeadFilesContent(analysis);
+  if (deadContent) {
+    sections.push({ id: "dead-files", priority: 9, content: deadContent, tokens: estimateTokens(deadContent) });
+  }
+
+  const ccfContent = renderCrossCuttingContent(analysis);
+  if (ccfContent) {
+    sections.push({ id: "cross-cutting", priority: 9, content: ccfContent, tokens: estimateTokens(ccfContent) });
+  }
+
+  const cpContent = renderChokepointsContent(analysis);
+  if (cpContent) {
+    sections.push({ id: "chokepoints", priority: 9, content: cpContent, tokens: estimateTokens(cpContent) });
+  }
+
+  const tcContent = renderTightCouplingContent(analysis);
+  if (tcContent) {
+    sections.push({ id: "tight-coupling", priority: 10, content: tcContent, tokens: estimateTokens(tcContent) });
+  }
+
+  const smContent = renderHiddenCouplingContent(analysis);
+  if (smContent) {
+    sections.push({ id: "hidden-coupling", priority: 10, content: smContent, tokens: estimateTokens(smContent) });
+  }
 
   return sections;
 }

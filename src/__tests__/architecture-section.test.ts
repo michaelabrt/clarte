@@ -220,33 +220,41 @@ describe("renderArchitectureSections: architecture", () => {
     expect(sections.find((s) => s.id === "architecture")).toBeUndefined();
   });
 
-  // R5 ablation: architecture diagram section is disabled. These tests document the
-  // expected behaviour when it is re-enabled; for now they verify it is absent.
-  it("emits no architecture section even when layers.length >= 2 (R5 ablation)", async () => {
+  it("emits architecture section when layers.length >= 2", async () => {
     const analysis = makeAnalysis({
       layers: [makeLayer("types"), makeLayer("services")],
       layerEdges: [],
     });
     const sections = await renderArchitectureSections(analysis, DETECTED);
-    expect(sections.find((s) => s.id === "architecture")).toBeUndefined();
+    const arch = sections.find((s) => s.id === "architecture");
+    expect(arch).toBeDefined();
+    expect(arch!.content).toContain("Dependency flow");
+    expect(arch!.content).toContain("`types`");
+    expect(arch!.content).toContain("`services`");
+    expect(arch!.content).toContain("`types` -> `services`");
   });
 
-  it("emits no architecture section with cross-layer edges (R5 ablation)", async () => {
+  it("includes cross-layer edges when they fall outside the main flow", async () => {
     const analysis = makeAnalysis({
       layers: [makeLayer("types"), makeLayer("utils"), makeLayer("services")],
-      layerEdges: [{ from: "services", to: "types" }],
+      layerEdges: [
+        { from: "services", to: "types" }, // cross-layer: not consecutive in main flow
+      ],
     });
     const sections = await renderArchitectureSections(analysis, DETECTED);
-    expect(sections.find((s) => s.id === "architecture")).toBeUndefined();
+    const arch = sections.find((s) => s.id === "architecture");
+    expect(arch!.content).toContain("Cross-layer edges:");
+    expect(arch!.content).toContain("services -> types");
   });
 
-  it("emits no architecture section regardless of layerEdges (R5 ablation)", async () => {
+  it("omits cross-layer section when all layerEdges are in the main flow", async () => {
     const analysis = makeAnalysis({
       layers: [makeLayer("types"), makeLayer("utils")],
-      layerEdges: [{ from: "types", to: "utils" }],
+      layerEdges: [{ from: "types", to: "utils" }], // this IS the main flow
     });
     const sections = await renderArchitectureSections(analysis, DETECTED);
-    expect(sections.find((s) => s.id === "architecture")).toBeUndefined();
+    const arch = sections.find((s) => s.id === "architecture");
+    expect(arch!.content).not.toContain("Cross-layer edges:");
   });
 });
 
