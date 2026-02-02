@@ -112,6 +112,8 @@ const STOP_WORDS = new Set([
   "commas",
 ]);
 
+const TEST_FILE_RE = /(?:^|\/)(?:test|spec|__tests__|__mocks__)\/|\.(?:test|spec)\.[jt]sx?$/;
+
 const BM25_K1 = 1.2;
 const BM25_B = 0.75;
 const EXPANSION_FACTOR = 0.3;
@@ -182,7 +184,7 @@ export function resolveEditTargets(
   const queryTerms = tokenizeQuery(query);
   if (queryTerms.length === 0) return [];
 
-  const filePaths = Object.keys(graph.files);
+  const filePaths = Object.keys(graph.files).filter((fp) => !TEST_FILE_RE.test(fp));
   if (filePaths.length === 0) return [];
 
   // Collect exported symbol names per file: symbols other files import from it
