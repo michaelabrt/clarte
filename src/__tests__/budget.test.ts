@@ -234,7 +234,9 @@ describe("buildMainContext with budget", () => {
     const result = await buildMainContext(mockCtx(), mockAnswers(), null, mockAnalysis(), 0);
     expect(result).toContain("## Tech Stack");
     expect(result).toContain("## Key Files");
+    expect(result).toContain("## Architecture");
     expect(result).toContain("## Recently Active Files");
+    expect(result).toContain("## Dead Files");
     expect(result).not.toContain("<!-- Sections omitted");
   });
 
@@ -258,7 +260,7 @@ describe("buildMainContext with budget", () => {
     expect(result).toContain("## Tech Stack");
     expect(result).toContain("## Key Files");
     // With 2000 tokens there should be room for several more sections
-    expect(result).toContain("## Recently Active Files");
+    expect(result).toContain("## Architecture");
   });
 
   it("omitted sections list is correct", async () => {
@@ -400,7 +402,7 @@ describe("buildMainContext character budget integration", () => {
     expect(result.length).toBeGreaterThan(0);
     // Should contain all sections with no char trimming
     expect(result).toContain("## Tech Stack");
-    expect(result).toContain("## Recently Active Files");
+    expect(result).toContain("## Dead Files");
   });
 
   it("tight maxChars drops P3+ sections but keeps P0-P2", async () => {
