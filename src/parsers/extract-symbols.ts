@@ -50,6 +50,25 @@ function extractJavaSymbols(root: Node): string[] {
   return collectNames(root, ["method_declaration", "class_declaration", "interface_declaration"]);
 }
 
+/** Extract symbol names from an already-parsed tree-sitter root node. */
+export function extractSymbolNamesFromRoot(root: Node, language: Language): string[] {
+  switch (language) {
+    case "typescript":
+    case "javascript":
+      return extractTsSymbols(root);
+    case "python":
+      return extractPythonSymbols(root);
+    case "go":
+      return extractGoSymbols(root);
+    case "rust":
+      return extractRustSymbols(root);
+    case "java":
+      return extractJavaSymbols(root);
+    default:
+      return [];
+  }
+}
+
 /**
  * Extract all function, method and class names from a source file.
  * Returns raw identifier names (not tokenized).
@@ -57,21 +76,7 @@ function extractJavaSymbols(root: Node): string[] {
 export function extractSymbolNames(content: string, language: Language, filePath?: string): string[] {
   try {
     const root = parseSource(content, language, filePath);
-    switch (language) {
-      case "typescript":
-      case "javascript":
-        return extractTsSymbols(root);
-      case "python":
-        return extractPythonSymbols(root);
-      case "go":
-        return extractGoSymbols(root);
-      case "rust":
-        return extractRustSymbols(root);
-      case "java":
-        return extractJavaSymbols(root);
-      default:
-        return [];
-    }
+    return extractSymbolNamesFromRoot(root, language);
   } catch {
     return [];
   }
