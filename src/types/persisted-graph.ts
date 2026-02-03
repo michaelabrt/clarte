@@ -41,6 +41,8 @@ export interface FileRecord {
   hasTests: boolean;
   testFiles: string[];
   communityId: number | null;
+  /** All function/method/class names defined in this file, for BM25 symbol indexing */
+  symbolNames?: string[];
 }
 
 export interface EdgeRecord {

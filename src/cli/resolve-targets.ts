@@ -155,10 +155,10 @@ export function tokenizeQuery(query: string): string[] {
 
 type FileDoc = { tokens: string[]; termFreq: Map<string, number> };
 
-/** Build a BM25 document from a file path and its exported symbol names. */
-function buildDocument(filePath: string, exportedNames: string[]): FileDoc {
+/** Build a BM25 document from a file path, its exported symbol names and all defined symbols. */
+function buildDocument(filePath: string, exportedNames: string[], definedSymbols: string[]): FileDoc {
   const pathTokens = filePath.split(/[/\\.]/).flatMap((seg) => tokenizeIdentifier(seg));
-  const symbolTokens = exportedNames.flatMap((name) => tokenizeIdentifier(name));
+  const symbolTokens = [...exportedNames, ...definedSymbols].flatMap((name) => tokenizeIdentifier(name));
   const tokens = [...pathTokens, ...symbolTokens];
   const termFreq = new Map<string, number>();
   for (const t of tokens) {
@@ -198,7 +198,7 @@ export function resolveEditTargets(
 
   // Build BM25 documents
   const docs = new Map<string, FileDoc>(
-    filePaths.map((fp) => [fp, buildDocument(fp, exportedNames.get(fp) ?? [])]),
+    filePaths.map((fp) => [fp, buildDocument(fp, exportedNames.get(fp) ?? [], graph.files[fp]?.symbolNames ?? [])]),
   );
 
   // Compute IDF inputs
@@ -231,7 +231,8 @@ export function resolveEditTargets(
 
   const directMatches = new Set(scores.keys());
 
-  // Import graph expansion: 1-hop neighbors (both importers and imports)
+  // Import graph expansion: 1-hop neighbors (both importers and imports).
+  // Uses max so neighbors that already have a BM25 score can still be boosted.
   const neighbors = new Map<string, string[]>();
   for (const edge of graph.edges) {
     if (!neighbors.has(edge.from)) neighbors.set(edge.from, []);
@@ -241,9 +242,10 @@ export function resolveEditTargets(
   }
   for (const [file, score] of [...scores.entries()]) {
     if (!directMatches.has(file)) continue;
+    const expandedScore = score * EXPANSION_FACTOR;
     for (const neighbor of neighbors.get(file) ?? []) {
-      if (!scores.has(neighbor)) {
-        scores.set(neighbor, score * EXPANSION_FACTOR);
+      if (expandedScore > (scores.get(neighbor) ?? 0)) {
+        scores.set(neighbor, expandedScore);
       }
     }
   }

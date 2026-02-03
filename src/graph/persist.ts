@@ -49,6 +49,7 @@ function buildPersistedGraph(rootDir: string, graph: ImportGraph, analysis: Cont
     const crossCutting = crossCuttingByPath.get(filePath);
     const tests = sourceToTests.get(filePath) ?? [];
 
+    const symbols = graph.symbolNames?.get(filePath);
     files[filePath] = {
       role: hub?.role ?? deriveRole(authority, hubScore, isBarrel),
       authority,
@@ -64,6 +65,7 @@ function buildPersistedGraph(rootDir: string, graph: ImportGraph, analysis: Cont
       hasTests: tests.length > 0,
       testFiles: tests,
       communityId: fileToCommunity.get(filePath) ?? null,
+      ...(symbols && symbols.length > 0 && { symbolNames: symbols }),
     };
   }
 
