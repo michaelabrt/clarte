@@ -1,13 +1,13 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
 import { readFileOr } from "../utils.js";
-import { initForLanguage } from "../parsers/init.js";
+import { initForLanguage, parseSource } from "../parsers/init.js";
 import { detectBarrelAst } from "../parsers/barrel.js";
 import { computeHITS, computeBetweenness } from "./centrality.js";
-import { extractSymbolNames } from "../parsers/extract-symbols.js";
+import { extractSymbolNamesFromRoot } from "../parsers/extract-symbols.js";
+import { parseImportsAstFromRoot } from "../parsers/parse-imports.js";
 import {
   getSourceGlob,
-  parseImports,
   isRelativeSpecifier,
   resolveImport,
   resolveAliasImport,
@@ -148,8 +148,14 @@ export async function buildImportGraph(
     const content = await readFileOr(absPath);
     if (!content) continue;
 
-    const rawImports = parseImports(content, language);
-    const symbols = extractSymbolNames(content, language, file);
+    let root;
+    try {
+      root = parseSource(content, language, file);
+    } catch {
+      continue;
+    }
+    const rawImports = parseImportsAstFromRoot(root, language);
+    const symbols = extractSymbolNamesFromRoot(root, language);
     if (symbols.length > 0) symbolNames.set(file, symbols);
 
     for (const raw of rawImports) {
