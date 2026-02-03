@@ -2,27 +2,26 @@ import { parseSource } from "./init.js";
 import type { Language } from "../types/detection.js";
 import type { Node } from "web-tree-sitter";
 
-/** Collect non-empty names from descendantsOfType, filtering out short/private names. */
-function collectNames(root: Node, ...types: string[]): string[] {
+/** Single-pass descendantsOfType for multiple node types. */
+function collectNames(root: Node, types: string[]): string[] {
   const names: string[] = [];
-  for (const type of types) {
-    for (const node of root.descendantsOfType(type)) {
-      const name = node.childForFieldName("name")?.text;
-      if (name && name.length > 1 && !name.startsWith("_")) names.push(name);
-    }
+  for (const node of root.descendantsOfType(types)) {
+    const name = node.childForFieldName("name")?.text;
+    if (name && name.length > 1 && !name.startsWith("_")) names.push(name);
   }
   return names;
 }
 
 function extractTsSymbols(root: Node): string[] {
-  const names = collectNames(root, "function_declaration", "method_definition", "class_declaration");
+  const names = collectNames(root, ["function_declaration", "method_definition", "class_declaration"]);
 
   // Top-level const arrow functions: export const foo = (...) => ...
   for (const node of root.namedChildren) {
     if (node.type !== "export_statement" && node.type !== "lexical_declaration") continue;
     const decl = node.type === "export_statement" ? node.childForFieldName("declaration") : node;
     if (!decl || decl.type !== "lexical_declaration") continue;
-    for (const declarator of decl.descendantsOfType("variable_declarator")) {
+    for (const declarator of decl.namedChildren) {
+      if (declarator.type !== "variable_declarator") continue;
       const name = declarator.childForFieldName("name")?.text;
       const value = declarator.childForFieldName("value");
       if (name && name.length > 1 && value &&
@@ -36,24 +35,24 @@ function extractTsSymbols(root: Node): string[] {
 }
 
 function extractPythonSymbols(root: Node): string[] {
-  return collectNames(root, "function_definition", "class_definition");
+  return collectNames(root, ["function_definition", "class_definition"]);
 }
 
 function extractGoSymbols(root: Node): string[] {
-  return collectNames(root, "function_declaration", "method_declaration", "type_spec");
+  return collectNames(root, ["function_declaration", "method_declaration", "type_spec"]);
 }
 
 function extractRustSymbols(root: Node): string[] {
-  return collectNames(root, "function_item", "struct_item", "enum_item", "trait_item", "impl_item");
+  return collectNames(root, ["function_item", "struct_item", "enum_item", "trait_item"]);
 }
 
 function extractJavaSymbols(root: Node): string[] {
-  return collectNames(root, "method_declaration", "class_declaration", "interface_declaration");
+  return collectNames(root, ["method_declaration", "class_declaration", "interface_declaration"]);
 }
 
 /**
  * Extract all function, method and class names from a source file.
- * Returns an array of raw identifier names (not tokenized).
+ * Returns raw identifier names (not tokenized).
  */
 export function extractSymbolNames(content: string, language: Language, filePath?: string): string[] {
   try {
