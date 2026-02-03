@@ -42,13 +42,10 @@ const STOP_WORDS = new Set([
   "use",
   "run",
   "call",
-  "skip",
+  // Verbs that also serve as discriminative function-name stems are left to
+  // IDF rather than hard-stopped (parse, read, write, wrap, skip removed).
   "join",
-  "wrap",
   "split",
-  "read",
-  "write",
-  "parse",
   // Pronouns and determiners
   "that",
   "this",
@@ -116,6 +113,10 @@ const TEST_FILE_RE = /(?:^|\/)(?:test|spec|__tests__|__mocks__)\/|\.(?:test|spec
 
 const BM25_K1 = 1.2;
 const BM25_B = 0.75;
+// PATH_WEIGHT > SYMBOL_WEIGHT: path tokens have higher precision (3-5 tokens identify
+// file identity vs 50+ symbol tokens each less unique).
+const PATH_WEIGHT = 1.5;
+const SYMBOL_WEIGHT = 1.0;
 const EXPANSION_FACTOR = 0.3;
 const COUPLING_FACTOR = 0.4;
 const DEFAULT_MAX_TARGETS = 5;
@@ -153,18 +154,31 @@ export function tokenizeQuery(query: string): string[] {
   return [...new Set(tokenizeIdentifier(query))];
 }
 
-type FileDoc = { tokens: string[]; termFreq: Map<string, number> };
+type FieldData = { tokens: string[]; termFreq: Map<string, number> };
+type FileDoc = {
+  path: FieldData;
+  symbols: FieldData;
+  allTerms: Set<string>; // union of both fields; prevents double-counting in df
+};
 
-/** Build a BM25 document from a file path, its exported symbol names and all defined symbols. */
-function buildDocument(filePath: string, exportedNames: string[], definedSymbols: string[]): FileDoc {
+/** Build a BM25F document from a file path and its merged symbol list. */
+function buildDocument(filePath: string, symbols: string[]): FileDoc {
   const pathTokens = filePath.split(/[/\\.]/).flatMap((seg) => tokenizeIdentifier(seg));
-  const symbolTokens = [...exportedNames, ...definedSymbols].flatMap((name) => tokenizeIdentifier(name));
-  const tokens = [...pathTokens, ...symbolTokens];
-  const termFreq = new Map<string, number>();
-  for (const t of tokens) {
-    termFreq.set(t, (termFreq.get(t) ?? 0) + 1);
-  }
-  return { tokens, termFreq };
+  const symbolTokens = symbols.flatMap((name) => tokenizeIdentifier(name));
+
+  const pathTermFreq = new Map<string, number>();
+  for (const t of pathTokens) pathTermFreq.set(t, (pathTermFreq.get(t) ?? 0) + 1);
+
+  const symbolTermFreq = new Map<string, number>();
+  for (const t of symbolTokens) symbolTermFreq.set(t, (symbolTermFreq.get(t) ?? 0) + 1);
+
+  const allTerms = new Set<string>([...pathTermFreq.keys(), ...symbolTermFreq.keys()]);
+
+  return {
+    path: { tokens: pathTokens, termFreq: pathTermFreq },
+    symbols: { tokens: symbolTokens, termFreq: symbolTermFreq },
+    allTerms,
+  };
 }
 
 /**
@@ -196,38 +210,72 @@ export function resolveEditTargets(
     exportedNames.get(edge.to)!.push(...edge.importedNames);
   }
 
-  // Build BM25 documents
+  // Build BM25F documents (dedup exported + defined symbols to avoid double-counting)
   const docs = new Map<string, FileDoc>(
-    filePaths.map((fp) => [fp, buildDocument(fp, exportedNames.get(fp) ?? [], graph.files[fp]?.symbolNames ?? [])]),
+    filePaths.map((fp) => {
+      const allSymbols = [...new Set([...(exportedNames.get(fp) ?? []), ...(graph.files[fp]?.symbolNames ?? [])])];
+      return [fp, buildDocument(fp, allSymbols)];
+    }),
   );
 
-  // Compute IDF inputs
+  // Per-field avgdl for BM25F normalization
   const N = docs.size;
-  const avgdl = Math.max(1, [...docs.values()].reduce((sum, d) => sum + d.tokens.length, 0) / N);
+  const avgdlPath = Math.max(1, [...docs.values()].reduce((s, d) => s + d.path.tokens.length, 0) / N);
+  // Exclude zero-symbol docs (config files, .d.ts) to avoid deflating the average.
+  // Floor at 5 (typical minimum for a non-trivial source file).
+  const symbolDocs = [...docs.values()].filter((d) => d.symbols.tokens.length > 0);
+  const avgdlSymbols =
+    symbolDocs.length > 0
+      ? Math.max(5, symbolDocs.reduce((s, d) => s + d.symbols.tokens.length, 0) / symbolDocs.length)
+      : 5;
+
+  // df increments once per document regardless of which field(s) the term appears in.
   const df = new Map<string, number>();
   for (const doc of docs.values()) {
-    for (const term of doc.termFreq.keys()) {
+    for (const term of doc.allTerms) {
       df.set(term, (df.get(term) ?? 0) + 1);
     }
   }
 
-  // BM25 scoring
+  const debugBM25 = process.env.DEBUG_BM25 === "1";
+
+  // BM25F scoring
   const scores = new Map<string, number>();
   for (const [fp, doc] of docs) {
     let score = 0;
-    const dl = doc.tokens.length;
     for (const term of queryTerms) {
-      const tf = doc.termFreq.get(term) ?? 0;
-      if (tf === 0) continue;
       const docFreq = df.get(term) ?? 1;
       const idf = Math.log((N - docFreq + 0.5) / (docFreq + 0.5) + 1);
-      const tfNorm = (tf * (BM25_K1 + 1)) / (tf + BM25_K1 * (1 - BM25_B + BM25_B * (dl / avgdl)));
-      score += idf * tfNorm;
+
+      const tfPath = doc.path.termFreq.get(term) ?? 0;
+      const tfSymbol = doc.symbols.termFreq.get(term) ?? 0;
+
+      let fieldScore = 0;
+      if (tfPath > 0) {
+        const norm = tfPath + BM25_K1 * (1 - BM25_B + BM25_B * (doc.path.tokens.length / avgdlPath));
+        fieldScore += (PATH_WEIGHT * (tfPath * (BM25_K1 + 1))) / norm;
+      }
+      if (tfSymbol > 0) {
+        const norm = tfSymbol + BM25_K1 * (1 - BM25_B + BM25_B * (doc.symbols.tokens.length / avgdlSymbols));
+        fieldScore += (SYMBOL_WEIGHT * (tfSymbol * (BM25_K1 + 1))) / norm;
+      }
+
+      score += idf * fieldScore;
     }
     if (score > 0) scores.set(fp, score);
   }
 
   if (scores.size === 0) return [];
+
+  if (debugBM25) {
+    for (const [fp, score] of [...scores.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)) {
+      const doc = docs.get(fp)!;
+      const matched = queryTerms.filter((t) => doc.allTerms.has(t));
+      console.error(
+        JSON.stringify({ file: fp, score, matched, pathLen: doc.path.tokens.length, symLen: doc.symbols.tokens.length }),
+      );
+    }
+  }
 
   const directMatches = new Set(scores.keys());
 
