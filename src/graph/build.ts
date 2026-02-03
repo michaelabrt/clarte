@@ -4,6 +4,7 @@ import { readFileOr } from "../utils.js";
 import { initForLanguage } from "../parsers/init.js";
 import { detectBarrelAst } from "../parsers/barrel.js";
 import { computeHITS, computeBetweenness } from "./centrality.js";
+import { extractSymbolNames } from "../parsers/extract-symbols.js";
 import {
   getSourceGlob,
   parseImports,
@@ -134,6 +135,8 @@ export async function buildImportGraph(
     directInDegree.set(file, 0);
   }
 
+  const symbolNames = new Map<string, string[]>();
+
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
 
@@ -146,6 +149,8 @@ export async function buildImportGraph(
     if (!content) continue;
 
     const rawImports = parseImports(content, language);
+    const symbols = extractSymbolNames(content, language, file);
+    if (symbols.length > 0) symbolNames.set(file, symbols);
 
     for (const raw of rawImports) {
       const isRelative = isRelativeSpecifier(raw.specifier, language);
@@ -318,6 +323,7 @@ export async function buildImportGraph(
     hubScores,
     barrelFiles: detectedBarrels,
     betweennessScores,
+    symbolNames,
   };
 }
 

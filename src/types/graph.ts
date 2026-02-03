@@ -42,6 +42,8 @@ export interface ImportGraph {
   barrelFiles?: Set<string>;
   /** Approximate betweenness centrality scores (0-1) from sampled Brandes */
   betweennessScores?: Map<string, number>;
+  /** All function/method/class names defined in each file, for BM25 symbol indexing */
+  symbolNames?: Map<string, string[]>;
 }
 
 /** A highly-connected file identified by HITS analysis */
