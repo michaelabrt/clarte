@@ -475,6 +475,34 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     }
   }
 
+  // Copy sample/example/template config files if their counterpart is missing (non-critical).
+  // Handles .env.example → .env, ormconfig.sample.json → ormconfig.json, etc.
+  if (!dryRun) {
+    try {
+      const entries = await fs.readdir(rootDir);
+      const copied: string[] = [];
+      for (const entry of entries) {
+        const dest = entry
+          .replace(/\.sample(\.[^.]+)$/, "$1")
+          .replace(/\.example(\.[^.]+)$/, "$1")
+          .replace(/\.template(\.[^.]+)$/, "$1")
+          .replace(/\.sample$/, "")
+          .replace(/\.example$/, "")
+          .replace(/\.template$/, "");
+        if (dest === entry) continue; // no pattern matched
+        if (await fileExists(path.join(rootDir, dest))) continue; // already exists
+        await fs.copyFile(path.join(rootDir, entry), path.join(rootDir, dest));
+        copied.push(`${entry} → ${dest}`);
+        verboseLog(`Copied sample config: ${entry} → ${dest}`);
+      }
+      if (copied.length > 0) {
+        p.log.info(`Copied ${copied.length} sample config file${copied.length > 1 ? "s" : ""}: ${copied.join(", ")}`);
+      }
+    } catch (err) {
+      verboseLog(`Sample config copy failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   if (!savedConfig && !dryRun) {
     const gitDir = path.join(rootDir, ".git");
     if (await fileExists(gitDir)) {
