@@ -732,20 +732,75 @@ CLARTE_CFG_EOF
   echo "[pre-flight] Running clarte --yes to generate graph + hooks..."
   (cd "$work_dir" && node "$CLARTE_ROOT/dist/index.js" --yes 2>/dev/null) || true
 
-  # Resolve targets and write task-context.md to arm the gate
+  # Strip check-tests.sh directive from generated CLAUDE.md - it runs `pnpm test`
+  # which triggers the full integration suite on TypeORM (DB connections, hangs).
+  if [ -f "$work_dir/CLAUDE.md" ]; then
+    sed -i '/check-tests\.sh/d' "$work_dir/CLAUDE.md"
+    echo "[pre-flight] Stripped check-tests.sh directive from CLAUDE.md."
+  fi
+
+  # Filter copied ormconfig.json to SQLite-only entries.
+  # TypeORM's sample has postgres/mysql entries that need a running DB server.
+  # Keeping only zero-config drivers prevents connection-error debugging loops.
+  if [ -f "$work_dir/ormconfig.json" ]; then
+    node -e "
+      const fs = require('fs');
+      const cfg = JSON.parse(fs.readFileSync('$work_dir/ormconfig.json', 'utf-8'));
+      const zeroConfig = new Set(['sqlite', 'better-sqlite3', 'sqljs']);
+      if (Array.isArray(cfg)) {
+        const filtered = cfg.filter(c => zeroConfig.has(c.type));
+        if (filtered.length > 0 && filtered.length < cfg.length) {
+          fs.writeFileSync('$work_dir/ormconfig.json', JSON.stringify(filtered, null, 2));
+          console.log('[pre-flight] ormconfig.json: kept ' + filtered.length + '/' + cfg.length + ' SQLite entries.');
+        }
+      }
+    " 2>/dev/null || true
+  fi
+
+  # Resolve targets and write enriched task-context.md to arm the gate.
+  # The script writes task-context.md directly (it has the graph loaded) and
+  # prints resolved paths on stdout so bash can decide which claude invocation to use.
   local resolve_script="$work_dir/_resolve-targets.mts"
+  local task_context_out="$work_dir/.clarte/task-context.md"
+  mkdir -p "$work_dir/.clarte"
   cat > "$resolve_script" << RESOLVE_EOF
 import { loadPersistedGraph } from "$CLARTE_ROOT/src/graph/persist.ts";
 import { resolveEditTargets } from "$CLARTE_ROOT/src/cli/resolve-targets.ts";
+import { writeFileSync } from "node:fs";
+
 const graph = await loadPersistedGraph("$work_dir");
 if (!graph) process.exit(0);
+
 const targets = resolveEditTargets(process.argv[2], graph);
-if (targets.length > 0) process.stdout.write(targets.join("\n"));
+if (targets.length === 0) process.exit(0);
+
+// Build enriched task-context.md with per-file symbol hints
+const lines: string[] = [
+  "# Edit targets (clarte)",
+  "",
+  "Based on dependency graph analysis, these files are most likely to need editing.",
+  "For each file, key symbols defined inside are listed so you can navigate directly",
+  "to the right function without a broad search.",
+  "",
+];
+for (const fp of targets) {
+  lines.push(\`## \${fp}\`);
+  const symbols = graph.files[fp]?.symbolNames ?? [];
+  if (symbols.length > 0) {
+    const top = symbols.slice(0, 8).join(", ");
+    lines.push(\`Key symbols: \${top}\`);
+  }
+  lines.push("");
+}
+writeFileSync(process.argv[3], lines.join("\n"));
+
+// Output paths for bash flow control
+process.stdout.write(targets.join("\n"));
 RESOLVE_EOF
 
   local targets resolve_stderr
   resolve_stderr=$(mktemp)
-  targets=$(npx tsx "$resolve_script" "$ISSUE_TEXT" 2>"$resolve_stderr") || true
+  targets=$(npx tsx "$resolve_script" "$ISSUE_TEXT" "$task_context_out" 2>"$resolve_stderr") || true
   if [ -s "$resolve_stderr" ]; then
     echo "[pre-flight] Resolve stderr: $(cat "$resolve_stderr")"
   fi
@@ -756,16 +811,6 @@ RESOLVE_EOF
   if [ -n "$targets" ]; then
     echo "[pre-flight] Targets resolved:"
     echo "$targets" | sed 's/^/  - /'
-
-    # Write task-context.md to arm the pre-flight gate
-    mkdir -p "$work_dir/.clarte"
-    {
-      echo "# Edit targets (clarte)"
-      echo ""
-      echo "Based on dependency graph analysis, these files are most likely to need editing:"
-      echo ""
-      echo "$targets" | sed 's/^/- /'
-    } > "$work_dir/.clarte/task-context.md"
 
     echo "[pre-flight] Running claude -p with pre-flight gate (budget \$$MAX_BUDGET)..."
     (cd "$work_dir" && env -u CLAUDECODE claude -p "$ISSUE_TEXT" \

@@ -224,6 +224,15 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
         lines.push("```bash");
         lines.push(runPrefix("test"));
         lines.push("```");
+        // Detect slow compile-then-test scripts (gulp, tsc followed by test runner).
+        // Warn the agent to avoid triggering a 60s+ compile for quick checks.
+        const slowCompileRe = /\b(gulp|tsc)\b.*&&/;
+        if (slowCompileRe.test(scripts.test)) {
+          lines.push("");
+          lines.push(
+            `Note: \`${runPrefix("test")}\` includes a full TypeScript compilation (slow). For type checking only, use \`./node_modules/.bin/tsc --noEmit\`.`,
+          );
+        }
       }
       if (scripts.build) {
         lines.push("");
