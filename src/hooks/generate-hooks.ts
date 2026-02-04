@@ -213,11 +213,140 @@ const root = process.cwd();
 // New task: reset the pre-flight gate so the diagnostic agent runs again
 try { rmSync(resolve(root, "${PRE_FLIGHT_DONE}"), { force: true }); } catch {}
 
+// ── Primary: BM25F graph-based target resolution ──────────────────────────────
+// Uses persisted import graph + AST symbol names. Falls through to git history if no graph.
+const graphPath = resolve(root, ".clarte/graph.json");
+if (existsSync(graphPath)) {
+  let graph;
+  try { graph = JSON.parse(readFileSync(graphPath, "utf-8")); } catch {}
+  if (graph) {
+    // Stop words: common words that match too many files and add no retrieval signal.
+    // Verbs that are also discriminative function-name stems (parse, read, write) are
+    // left to IDF rather than hard-stopped.
+    const STOP = new Set([
+      "a","an","the","in","on","at","to","for","of","and","or","is","it","be","are","was","has",
+      "have","do","does","did","will","can","if","so","no","as","by","fix","bug","add","update",
+      "change","make","set","get","use","run","call","join","split","that","this","with","from",
+      "not","but","should","when","what","how","why","like","also","only","each","more","some",
+      "just","into","true","false","null","type","values","value","default","string","strings",
+      "array","arrays","number","object","function","class","file","files","test","tests",
+      "column","columns","options","config","index","generated","stored","against","individual",
+      "quoted","numeric","serialized","deserialized","validated","validates","generation","three","bugs",
+    ]);
+    const TEST_RE = /(?:^|\\/)(?:test|spec|__tests__|__mocks__)\\/|\\.(?:test|spec)\\.[jt]sx?$/;
+    const K1 = 1.2, B = 0.75, PW = 1.5, SW = 1.0, EF = 0.3, CF = 0.4, MC = 0.5;
+
+    function splitCC(s) { return s.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ").filter(Boolean); }
+    function tokId(id) {
+      return id.split(/[^a-zA-Z0-9]+/).flatMap(p => splitCC(p)).map(t => t.toLowerCase()).filter(t => t.length >= 2 && !STOP.has(t));
+    }
+    function tokQ(q) { return [...new Set(tokId(q))]; }
+
+    function resolveTargets(q, g) {
+      const terms = tokQ(q);
+      if (!terms.length) return [];
+      const fps = Object.keys(g.files || {}).filter(fp => !TEST_RE.test(fp));
+      if (!fps.length) return [];
+
+      // Collect exported symbol names per file from import edges
+      const exported = new Map();
+      for (const e of (g.edges || [])) {
+        if (!exported.has(e.to)) exported.set(e.to, []);
+        exported.get(e.to).push(...(e.importedNames || []));
+      }
+
+      // Build BM25F documents: path field + symbols field (deduped)
+      const docs = new Map();
+      for (const fp of fps) {
+        const syms = [...new Set([...(exported.get(fp) || []), ...((g.files[fp] && g.files[fp].symbolNames) || [])])];
+        const pt = fp.split(/[/.]+/).flatMap(s => tokId(s));
+        const st = syms.flatMap(n => tokId(n));
+        const ptf = new Map(), stf = new Map();
+        for (const t of pt) ptf.set(t, (ptf.get(t) || 0) + 1);
+        for (const t of st) stf.set(t, (stf.get(t) || 0) + 1);
+        docs.set(fp, { pt, st, ptf, stf, all: new Set([...ptf.keys(), ...stf.keys()]) });
+      }
+
+      // Per-field avgdl for BM25F normalization
+      const N = docs.size;
+      const aPL = Math.max(1, [...docs.values()].reduce((s, d) => s + d.pt.length, 0) / N);
+      const sdocs = [...docs.values()].filter(d => d.st.length > 0);
+      const aSL = sdocs.length ? Math.max(5, sdocs.reduce((s, d) => s + d.st.length, 0) / sdocs.length) : 5;
+
+      // Unified IDF: term counts once per document regardless of which field it appears in
+      const df = new Map();
+      for (const doc of docs.values()) for (const t of doc.all) df.set(t, (df.get(t) || 0) + 1);
+
+      const scores = new Map();
+      for (const [fp, doc] of docs) {
+        let sc = 0;
+        for (const term of terms) {
+          const dfc = df.get(term) || 1;
+          const idf = Math.log((N - dfc + 0.5) / (dfc + 0.5) + 1);
+          const tfP = doc.ptf.get(term) || 0, tfS = doc.stf.get(term) || 0;
+          let fs = 0;
+          if (tfP > 0) { const n = tfP + K1 * (1 - B + B * doc.pt.length / aPL); fs += PW * tfP * (K1 + 1) / n; }
+          if (tfS > 0) { const n = tfS + K1 * (1 - B + B * doc.st.length / aSL); fs += SW * tfS * (K1 + 1) / n; }
+          sc += idf * fs;
+        }
+        if (sc > 0) scores.set(fp, sc);
+      }
+      if (!scores.size) return [];
+
+      // 1-hop import neighbor expansion
+      const direct = new Set(scores.keys());
+      const nbrs = new Map();
+      for (const e of (g.edges || [])) {
+        if (!nbrs.has(e.from)) nbrs.set(e.from, []);
+        if (!nbrs.has(e.to)) nbrs.set(e.to, []);
+        nbrs.get(e.from).push(e.to);
+        nbrs.get(e.to).push(e.from);
+      }
+      for (const [f, sc] of scores) {
+        if (!direct.has(f)) continue;
+        const ex = sc * EF;
+        for (const nb of (nbrs.get(f) || [])) if (ex > (scores.get(nb) || 0)) scores.set(nb, ex);
+      }
+
+      // Co-change coupling
+      for (const c of (g.changeCoupling || [])) {
+        if (c.confidence < MC) continue;
+        if (direct.has(c.fileA) && !scores.has(c.fileB) && g.files[c.fileB]) scores.set(c.fileB, (scores.get(c.fileA) || 1) * CF);
+        if (direct.has(c.fileB) && !scores.has(c.fileA) && g.files[c.fileA]) scores.set(c.fileA, (scores.get(c.fileB) || 1) * CF);
+      }
+
+      return [...scores.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([fp]) => fp);
+    }
+
+    const targets = resolveTargets(prompt, graph);
+    if (targets.length > 0) {
+      const lines = [
+        "# Edit targets (clarte)", "",
+        "Based on dependency graph analysis, these files are most likely to need editing.",
+        "Key symbols are listed so you can navigate directly without a broad search.", "",
+      ];
+      for (const fp of targets) {
+        lines.push("## " + fp);
+        const syms = ((graph.files[fp] && graph.files[fp].symbolNames) || []).slice(0, 8);
+        if (syms.length) lines.push("Key symbols: " + syms.join(", "));
+        lines.push("");
+      }
+      try {
+        mkdirSync(resolve(root, ".clarte"), { recursive: true });
+        writeFileSync(resolve(root, ".clarte/task-context.md"), lines.join("\\n"));
+      } catch {}
+      process.exit(0);
+    }
+  }
+}
+
+// ── Fallback: git commit history BM25 ────────────────────────────────────────
+// When no graph is available, find the most similar past commit by prompt similarity
+// and surface the files it touched as candidates.
 function tokenize(text) {
   return text.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 3);
 }
 
-// BM25 on git commit messages - find commits most similar to this task
 const K1 = 1.5, B = 0.75;
 let logOutput;
 try {
