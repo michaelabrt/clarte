@@ -224,9 +224,9 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
         lines.push("```bash");
         lines.push(runPrefix("test"));
         lines.push("```");
-        // Detect slow compile-then-test scripts (gulp, tsc followed by test runner).
+        // Detect slow compile-then-test scripts (gulp, tsc, or a compile sub-script chained with &&).
         // Warn the agent to avoid triggering a 60s+ compile for quick checks.
-        const slowCompileRe = /\b(gulp|tsc)\b.*&&/;
+        const slowCompileRe = /\b(gulp|tsc|compile)\b.*&&/;
         if (slowCompileRe.test(scripts.test)) {
           lines.push("");
           lines.push(
@@ -288,7 +288,11 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
     lines.push(`Linter: **${ctx.linter}**`);
   }
 
-  if (ctx.testFramework) {
+  // Only show check-tests.sh directive when the script was actually generated.
+  // Scripts with slow compile steps (gulp, tsc, compile chained with &&) are skipped at
+  // generation time; showing the directive for them would send the agent into a compile loop.
+  const slowCompileRe = /\b(gulp|tsc|compile)\b.*&&/;
+  if (ctx.testFramework && !slowCompileRe.test(scripts.test ?? "")) {
     lines.push("");
     lines.push("Always use `.clarte/scripts/check-tests.sh` instead of running tests directly. It runs the same test command but appends a one-line structured summary (pass/fail counts and failure names).");
   }
