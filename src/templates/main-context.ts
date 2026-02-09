@@ -289,11 +289,9 @@ export async function buildSections(
 function buildGraphToolsSection(): string {
   return `## Graph Tools
 
-clarte enforces a pre-flight diagnostic before any file reads.
-
-**When a Read or Grep is blocked by the pre-flight gate**, spawn the diagnostic agent:
+When \`.clarte/task-context.md\` exists, always run the pre-flight scan first:
 \`Agent(subagent_type="clarte-pre-flight", prompt="<task description>")\`
-It reads \`.clarte/task-context.md\`, analyzes the relevant files and returns exact edit instructions. Apply them directly - do not read files first.
+It reads the target files and returns the exact edit locations with full code context. Apply its findings directly - the code is already in your context, no need to re-read those files.
 
 | Trigger | Tool | What it returns |
 |---------|------|-----------------|
