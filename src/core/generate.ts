@@ -188,7 +188,7 @@ export async function generateFiles(
         const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
         await addFile(
           claudeMdPath,
-          `# Project Context\n\nSee \`.claude/rules/clarte.md\` for full architectural context.\n\n<!-- clarte: generated ${ts}. Run npx clarte to regenerate. -->\n`,
+          `# Project Context\n\nSee \`.claude/rules/clarte.md\` for full architectural context.\n\nFirst action on every coding task: call Agent(subagent_type="clarte-pre-flight", prompt="<your full task>") - it identifies the exact files and lines to edit. Do not read files before this call returns.\n\n<!-- clarte: generated ${ts}. Run npx clarte to regenerate. -->\n`,
         );
       }
     }
