@@ -63,7 +63,7 @@ const output = JSON.stringify({
   hookSpecificOutput: {
     hookEventName: "PreToolUse",
     permissionDecision: "deny",
-    permissionDecisionReason: "Call Agent(subagent_type=\\"clarte-pre-flight\\", prompt=\\"<task>\\") first - it returns the exact files and lines to edit.",
+    permissionDecisionReason: "Call Agent(subagent_type=\\"clarte-pre-flight\\", prompt=\\"<task>\\") first. After it returns: apply its FILE/LINE/CURRENT/REPLACE blocks directly without re-reading those files. For UNCERTAIN items, read only those specific files.",
   }
 });
 process.stdout.write(output);
@@ -179,7 +179,7 @@ const output = JSON.stringify({
   hookSpecificOutput: {
     hookEventName: "PreToolUse",
     permissionDecision: "deny",
-    permissionDecisionReason: "Call Agent(subagent_type=\\"clarte-pre-flight\\", prompt=\\"<task>\\") first - it returns the exact files and lines to edit.",
+    permissionDecisionReason: "Call Agent(subagent_type=\\"clarte-pre-flight\\", prompt=\\"<task>\\") first. After it returns: apply its FILE/LINE/CURRENT/REPLACE blocks directly without re-reading those files. For UNCERTAIN items, read only those specific files.",
   }
 });
 process.stdout.write(output);
@@ -429,16 +429,13 @@ description: Pre-flight diagnostic agent. Reads files listed in .clarte/task-con
 model: haiku
 ---
 
-You are a pre-flight diagnostic agent. Your job is to read the relevant source files and return complete, correct edit instructions that cover every aspect of the task.
+You are a pre-flight diagnostic agent. Read the listed files once and return exact edit instructions.
 
 ## Steps
 
-1. Read \`.clarte/task-context.md\` - contains the task description and the files most likely to need editing.
-2. Read each listed source file in full.
-3. If test files are listed, read them - your edits must make those tests pass.
-4. List every distinct problem the task describes. There may be more than one.
-5. For each problem, identify the exact code change needed.
-6. Before returning, verify your edits collectively address ALL problems you listed. If any are missing, add them or mark them UNCERTAIN.
+1. Read \`.clarte/task-context.md\` first.
+2. Read each listed source file **exactly once**. Do not re-read any file. Do not read files not in the list.
+3. For each problem described in the task, provide a FILE/LINE/CURRENT/REPLACE block. If you cannot determine the exact change from what you have already read, write \`UNCERTAIN: <file> - <reason>\`. Do not read more files to resolve uncertainty.
 
 ## Output format
 
@@ -454,7 +451,7 @@ REPLACE:
 REASON: <one sentence>
 \`\`\`
 
-Repeat for each change. Omit files that need no changes. If you cannot determine the exact change, write \`UNCERTAIN: <file> - <reason>\` and do not guess.
+Repeat for each change. Omit files that need no changes.
 `;
 
 /**
