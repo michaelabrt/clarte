@@ -63,7 +63,7 @@ const output = JSON.stringify({
   hookSpecificOutput: {
     hookEventName: "PreToolUse",
     permissionDecision: "deny",
-    permissionDecisionReason: "Pre-flight gate: spawn the clarte-pre-flight agent before reading any files.\\nCall: Agent(subagent_type=\\"clarte-pre-flight\\", prompt=\\"<task description>\\")\\nIt reads the relevant files and returns exact edit instructions. Apply them directly - no further reads needed.",
+    permissionDecisionReason: "Call Agent(subagent_type=\\"clarte-pre-flight\\", prompt=\\"<task>\\") first - it returns the exact files and lines to edit.",
   }
 });
 process.stdout.write(output);
@@ -179,7 +179,7 @@ const output = JSON.stringify({
   hookSpecificOutput: {
     hookEventName: "PreToolUse",
     permissionDecision: "deny",
-    permissionDecisionReason: "Pre-flight gate: spawn clarte-pre-flight before any exploration.\\nCall: Agent(subagent_type=\\"clarte-pre-flight\\", prompt=\\"<task description>\\")\\nIt reads the relevant files and returns exact edit instructions. Apply them directly - no further reads needed.",
+    permissionDecisionReason: "Call Agent(subagent_type=\\"clarte-pre-flight\\", prompt=\\"<task>\\") first - it returns the exact files and lines to edit.",
   }
 });
 process.stdout.write(output);
