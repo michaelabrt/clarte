@@ -180,8 +180,32 @@ fi`;
  * Returns the relative path if generated, null if no test command detected.
  */
 // Matches test scripts that include a pre-compilation step (gulp, tsc, or a compile sub-script).
-// Running these repeatedly is slow (60s+) and unreliable as a quick check.
 const SLOW_COMPILE_RE = /\b(gulp|tsc|compile)\b.*&&/;
+
+// Recognizes compile-only segments (gulp, tsc, or pnpm/npm run compile).
+export const COMPILE_SEGMENT_RE = /\b(gulp|tsc|compile)\b/;
+// Recognizes test runner segments - required to confirm there's actually a test step.
+const TEST_SEGMENT_RE =
+  /\b(mocha|jest|vitest|pytest|karma|ava|jasmine)\b|test:(fast|unit|quick|only|run|local)\b/;
+
+/**
+ * For test scripts with slow compile steps (e.g. "gulp clean && tsc && mocha"),
+ * extract just the test-runner segments (dropping all compile segments).
+ * Returns null if no test runner is found or the script has no compile step.
+ *
+ * Example: "pnpm run compile && pnpm run test:fast --" → "pnpm run test:fast --"
+ */
+export function extractFastTestCmd(rawTest: string): string | null {
+  const parts = rawTest.split("&&").map((p) => p.trim());
+  if (parts.length < 2) return null;
+
+  const hasCompile = parts.some((p) => COMPILE_SEGMENT_RE.test(p));
+  const testParts = parts.filter((p) => !COMPILE_SEGMENT_RE.test(p));
+  if (!hasCompile || testParts.length === 0) return null;
+  if (!testParts.some((p) => TEST_SEGMENT_RE.test(p))) return null;
+
+  return testParts.join(" && ");
+}
 
 export async function generateCheckTestsScript(
   rootDir: string,
@@ -190,22 +214,36 @@ export async function generateCheckTestsScript(
   const testCmd = resolveTestCommand(ctx);
   if (!testCmd) return null;
 
-  // Skip generation when the raw test script includes a slow compile step.
-  // The agent would invoke `pnpm test` which triggers a 60s+ build, making
-  // check-tests.sh harmful rather than helpful.
+  const scriptPath = path.join(rootDir, SCRIPTS_DIR, "check-tests.sh");
+
+  // When the test script includes a slow compile step, try to generate a faster variant.
+  // If we can't optimize, delete any stale script and bail out so CLAUDE.md won't mention it.
   try {
     const pkg = JSON.parse(await fs.readFile(path.join(rootDir, "package.json"), "utf-8")) as {
       scripts?: Record<string, string>;
     };
     const rawTest = pkg.scripts?.test ?? "";
-    if (SLOW_COMPILE_RE.test(rawTest)) return null;
+    if (SLOW_COMPILE_RE.test(rawTest)) {
+      const fastCmd = extractFastTestCmd(rawTest);
+      if (!fastCmd) {
+        // Can't identify a fast test step - remove stale script so CLAUDE.md won't reference it
+        try {
+          await fs.unlink(scriptPath);
+        } catch {}
+        return null;
+      }
+      // Generate check-tests.sh with only the fast test step (no compile).
+      // CLAUDE.md tells the agent to compile separately before running this script.
+      const scriptContent = buildCheckTestsScript(fastCmd, ctx.testFramework);
+      await writeFileSafe(scriptPath, scriptContent);
+      await fs.chmod(scriptPath, 0o755);
+      return `${SCRIPTS_DIR}/check-tests.sh`;
+    }
   } catch {
     // No package.json or unreadable - proceed with generation
   }
 
   const scriptContent = buildCheckTestsScript(testCmd, ctx.testFramework);
-  const scriptPath = path.join(rootDir, SCRIPTS_DIR, "check-tests.sh");
-
   await writeFileSafe(scriptPath, scriptContent);
   await fs.chmod(scriptPath, 0o755);
 

@@ -172,11 +172,14 @@ function buildTechStackSection(ctx: DetectedContext, summary: string): string {
   return lines.join("\n");
 }
 
+const SLOW_COMPILE_RE = /\b(gulp|tsc|compile)\b.*&&/;
+
 async function buildDevSection(ctx: DetectedContext): Promise<string> {
   const lines: string[] = [];
 
   const pkg = await readJsonFile(path.join(ctx.rootDir, "package.json"));
   const scripts = (pkg?.scripts as Record<string, string> | undefined) ?? {};
+  const hasSlowCompile = SLOW_COMPILE_RE.test(scripts.test ?? "");
 
   const runPrefix = (script: string) => {
     switch (ctx.packageManager) {
@@ -224,13 +227,11 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
         lines.push("```bash");
         lines.push(runPrefix("test"));
         lines.push("```");
-        // Detect slow compile-then-test scripts (gulp, tsc, or a compile sub-script chained with &&).
-        // Warn the agent to avoid triggering a 60s+ compile for quick checks.
-        const slowCompileRe = /\b(gulp|tsc|compile)\b.*&&/;
-        if (slowCompileRe.test(scripts.test)) {
+        if (hasSlowCompile) {
+          const compileCmd = scripts.compile ? runPrefix("compile") : runPrefix("test");
           lines.push("");
           lines.push(
-            `Note: \`${runPrefix("test")}\` includes a full TypeScript compilation (slow). For type checking only, use \`./node_modules/.bin/tsc --noEmit\`.`,
+            `Note: \`${runPrefix("test")}\` includes a compilation step. After source edits, recompile with \`${compileCmd}\` before running tests.`,
           );
         }
       }
@@ -288,15 +289,21 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
     lines.push(`Linter: **${ctx.linter}**`);
   }
 
-  // Only show check-tests.sh directive when the script was actually generated.
-  // Scripts with slow compile steps (gulp, tsc, compile chained with &&) are skipped at
-  // generation time; showing the directive for them would send the agent into a compile loop.
-  const slowCompileRe = /\b(gulp|tsc|compile)\b.*&&/;
-  if (ctx.testFramework && !slowCompileRe.test(scripts.test ?? "")) {
+  if (ctx.testFramework) {
     lines.push("");
-    lines.push("Always use `.clarte/scripts/check-tests.sh` instead of running tests directly. It runs the same test command but appends a one-line structured summary (pass/fail counts and failure names).");
+    if (hasSlowCompile) {
+      lines.push(
+        "Always use `.clarte/scripts/check-tests.sh` instead of running tests directly. It runs the fast test step (no recompilation) and appends a structured summary. Recompile first when source files changed (see note above). Pass a file path to run a single test file (e.g. `.clarte/scripts/check-tests.sh -- path/to/test.ts`) - always prefer targeted tests over the full suite.",
+      );
+    } else {
+      lines.push(
+        "Always use `.clarte/scripts/check-tests.sh` instead of running tests directly. It runs the same test command but appends a one-line structured summary (pass/fail counts and failure names). Pass a file path to run a single test file (e.g. `.clarte/scripts/check-tests.sh -- path/to/test.ts`) - always prefer targeted tests over the full suite.",
+      );
+    }
   }
 
+  lines.push("");
+  lines.push("When tests pass, commit immediately. Do not re-run tests on unmodified code to check for pre-existing failures - note any unrelated failures in the commit message instead.");
   lines.push("");
   lines.push("After significant changes, use `/check` to verify no architectural regressions.");
 
