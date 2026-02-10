@@ -209,6 +209,69 @@ describe("resolveEditTargets", () => {
   });
 });
 
+// ── test-file proxy scoring ──────────────────────────────────────────
+
+describe("test-file proxy scoring", () => {
+  it("finds source file via its test file path", () => {
+    const graph = makeGraph({
+      files: {
+        "src/driver/sqlite/SqliteQueryRunner.ts": makeFileRecord(),
+        "src/utils/helpers.ts": makeFileRecord(),
+        "test/driver/sqlite/SqliteQueryRunner.test.ts": makeFileRecord(),
+      },
+      testMapping: {
+        "src/driver/sqlite/SqliteQueryRunner.ts": ["test/driver/sqlite/SqliteQueryRunner.test.ts"],
+      },
+    });
+    const targets = resolveEditTargets("sqlite query runner", graph);
+    expect(targets).toContain("src/driver/sqlite/SqliteQueryRunner.ts");
+  });
+
+  it("does not include the test file itself in results", () => {
+    const graph = makeGraph({
+      files: {
+        "src/auth.ts": makeFileRecord(),
+        "test/auth.test.ts": makeFileRecord(),
+      },
+      testMapping: {
+        "src/auth.ts": ["test/auth.test.ts"],
+      },
+    });
+    const targets = resolveEditTargets("auth", graph);
+    expect(targets).not.toContain("test/auth.test.ts");
+  });
+
+  it("does not override a higher direct BM25F score", () => {
+    const graph = makeGraph({
+      files: {
+        "src/auth/login.ts": makeFileRecord({ symbolNames: ["authenticate", "validateToken"] }),
+        "test/auth/login.test.ts": makeFileRecord(),
+      },
+      testMapping: {
+        "src/auth/login.ts": ["test/auth/login.test.ts"],
+      },
+    });
+    const targets = resolveEditTargets("auth login", graph);
+    expect(targets[0]).toBe("src/auth/login.ts");
+  });
+
+  it("boosts source file when test matches but source does not", () => {
+    // Source file has an opaque name; its test file encodes the feature
+    const graph = makeGraph({
+      files: {
+        "src/core/processor.ts": makeFileRecord(),
+        "src/utils.ts": makeFileRecord(),
+        "test/core/markdown-renderer.test.ts": makeFileRecord(),
+      },
+      testMapping: {
+        "src/core/processor.ts": ["test/core/markdown-renderer.test.ts"],
+      },
+    });
+    const targets = resolveEditTargets("markdown renderer", graph);
+    expect(targets).toContain("src/core/processor.ts");
+  });
+});
+
 // ── offline scoring ───────────────────────────────────────────────────
 
 describe("offline scoring - known queries", () => {
