@@ -293,11 +293,19 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
     lines.push("");
     if (hasSlowCompile) {
       lines.push(
-        "Always use `.clarte/scripts/check-tests.sh` instead of running tests directly. It runs the fast test step (no recompilation) and appends a structured summary. Recompile first when source files changed (see note above). Pass a file path to run a single test file (e.g. `.clarte/scripts/check-tests.sh -- path/to/test.ts`) - always prefer targeted tests over the full suite.",
+        "Always use `.clarte/scripts/check-tests.sh` instead of running tests directly. It runs the fast test step (no recompilation) and appends a structured summary. Recompile first when source files changed (see note above).",
       );
     } else {
       lines.push(
-        "Always use `.clarte/scripts/check-tests.sh` instead of running tests directly. It runs the same test command but appends a one-line structured summary (pass/fail counts and failure names). Pass a file path to run a single test file (e.g. `.clarte/scripts/check-tests.sh -- path/to/test.ts`) - always prefer targeted tests over the full suite.",
+        "Always use `.clarte/scripts/check-tests.sh` instead of running tests directly. It runs the same test command but appends a one-line structured summary (pass/fail counts and failure names).",
+      );
+    }
+
+    const hasRunTest = ["Mocha", "Jest", "Vitest", "pytest"].includes(ctx.testFramework);
+    if (hasRunTest) {
+      lines.push("");
+      lines.push(
+        "Always use `.clarte/scripts/run-test.sh '<pattern>'` to run a subset of tests by name. It handles compilation and the correct test runner flags automatically. Never run the full suite when you only need to verify specific tests.",
       );
     }
   }
