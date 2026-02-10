@@ -243,13 +243,34 @@ if (existsSync(graphPath)) {
       "quoted","numeric","serialized","deserialized","validated","validates","generation","three","bugs",
     ]);
     const TEST_RE = /(?:^|\\/)(?:test|spec|__tests__|__mocks__)\\/|\\.(?:test|spec)\\.[jt]sx?$/;
-    const K1 = 1.2, B = 0.75, PW = 1.5, SW = 1.0, EF = 0.3, CF = 0.4, MC = 0.5;
+    const K1 = 1.2, B = 0.75, PW = 1.5, SW = 1.0, EF = 0.3, CF = 0.4, TP = 0.6, MC = 0.5;
 
     function splitCC(s) { return s.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ").filter(Boolean); }
     function tokId(id) {
       return id.split(/[^a-zA-Z0-9]+/).flatMap(p => splitCC(p)).map(t => t.toLowerCase()).filter(t => t.length >= 2 && !STOP.has(t));
     }
     function tokQ(q) { return [...new Set(tokId(q))]; }
+    function buildDoc(fp, syms) {
+      const pt = fp.split(/[/.]+/).flatMap(s => tokId(s));
+      const st = syms.flatMap(n => tokId(n));
+      const ptf = new Map(), stf = new Map();
+      for (const t of pt) ptf.set(t, (ptf.get(t) || 0) + 1);
+      for (const t of st) stf.set(t, (stf.get(t) || 0) + 1);
+      return { pt, st, ptf, stf, all: new Set([...ptf.keys(), ...stf.keys()]) };
+    }
+    function scoreBM25F(doc, terms, df, N, aPL, aSL) {
+      let sc = 0;
+      for (const term of terms) {
+        const dfc = df.get(term) || 1;
+        const idf = Math.log((N - dfc + 0.5) / (dfc + 0.5) + 1);
+        const tfP = doc.ptf.get(term) || 0, tfS = doc.stf.get(term) || 0;
+        let fs = 0;
+        if (tfP > 0) { const n = tfP + K1 * (1 - B + B * doc.pt.length / aPL); fs += PW * tfP * (K1 + 1) / n; }
+        if (tfS > 0) { const n = tfS + K1 * (1 - B + B * doc.st.length / aSL); fs += SW * tfS * (K1 + 1) / n; }
+        sc += idf * fs;
+      }
+      return sc;
+    }
 
     function resolveTargets(q, g) {
       const terms = tokQ(q);
@@ -268,12 +289,7 @@ if (existsSync(graphPath)) {
       const docs = new Map();
       for (const fp of fps) {
         const syms = [...new Set([...(exported.get(fp) || []), ...((g.files[fp] && g.files[fp].symbolNames) || [])])];
-        const pt = fp.split(/[/.]+/).flatMap(s => tokId(s));
-        const st = syms.flatMap(n => tokId(n));
-        const ptf = new Map(), stf = new Map();
-        for (const t of pt) ptf.set(t, (ptf.get(t) || 0) + 1);
-        for (const t of st) stf.set(t, (stf.get(t) || 0) + 1);
-        docs.set(fp, { pt, st, ptf, stf, all: new Set([...ptf.keys(), ...stf.keys()]) });
+        docs.set(fp, buildDoc(fp, syms));
       }
 
       // Per-field avgdl for BM25F normalization
@@ -288,18 +304,33 @@ if (existsSync(graphPath)) {
 
       const scores = new Map();
       for (const [fp, doc] of docs) {
-        let sc = 0;
-        for (const term of terms) {
-          const dfc = df.get(term) || 1;
-          const idf = Math.log((N - dfc + 0.5) / (dfc + 0.5) + 1);
-          const tfP = doc.ptf.get(term) || 0, tfS = doc.stf.get(term) || 0;
-          let fs = 0;
-          if (tfP > 0) { const n = tfP + K1 * (1 - B + B * doc.pt.length / aPL); fs += PW * tfP * (K1 + 1) / n; }
-          if (tfS > 0) { const n = tfS + K1 * (1 - B + B * doc.st.length / aSL); fs += SW * tfS * (K1 + 1) / n; }
-          sc += idf * fs;
-        }
+        const sc = scoreBM25F(doc, terms, df, N, aPL, aSL);
         if (sc > 0) scores.set(fp, sc);
       }
+
+      // Test-file proxy: score test files, transfer to their source files
+      const tm = g.testMapping || {};
+      const tmEntries = Object.entries(tm);
+      if (tmEntries.length > 0) {
+        const t2s = new Map();
+        for (const [src, tests] of tmEntries) {
+          for (const t of tests) {
+            if (!t2s.has(t)) t2s.set(t, []);
+            t2s.get(t).push(src);
+          }
+        }
+        for (const [tfp, srcs] of t2s) {
+          if (!g.files[tfp]) continue;
+          const syms = [...new Set([...(exported.get(tfp) || []), ...((g.files[tfp] && g.files[tfp].symbolNames) || [])])];
+          const tDoc = buildDoc(tfp, syms);
+          const tSc = scoreBM25F(tDoc, terms, df, N, aPL, aSL);
+          if (tSc > 0) {
+            const proxy = tSc * TP;
+            for (const src of srcs) if (proxy > (scores.get(src) || 0)) scores.set(src, proxy);
+          }
+        }
+      }
+
       if (!scores.size) return [];
 
       // 1-hop import neighbor expansion

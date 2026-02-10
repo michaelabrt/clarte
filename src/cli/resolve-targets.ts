@@ -119,6 +119,7 @@ const PATH_WEIGHT = 1.5;
 const SYMBOL_WEIGHT = 1.0;
 const EXPANSION_FACTOR = 0.3;
 const COUPLING_FACTOR = 0.4;
+const TEST_PROXY_FACTOR = 0.6;
 const DEFAULT_MAX_TARGETS = 5;
 const MIN_COUPLING_CONFIDENCE = 0.5;
 
@@ -161,6 +162,38 @@ type FileDoc = {
   allTerms: Set<string>; // union of both fields; prevents double-counting in df
 };
 
+/** Score a single document against query terms using BM25F. */
+function scoreBM25F(
+  doc: FileDoc,
+  queryTerms: string[],
+  df: Map<string, number>,
+  N: number,
+  avgdlPath: number,
+  avgdlSymbols: number,
+): number {
+  let score = 0;
+  for (const term of queryTerms) {
+    const docFreq = df.get(term) ?? 1;
+    const idf = Math.log((N - docFreq + 0.5) / (docFreq + 0.5) + 1);
+
+    const tfPath = doc.path.termFreq.get(term) ?? 0;
+    const tfSymbol = doc.symbols.termFreq.get(term) ?? 0;
+
+    let fieldScore = 0;
+    if (tfPath > 0) {
+      const norm = tfPath + BM25_K1 * (1 - BM25_B + BM25_B * (doc.path.tokens.length / avgdlPath));
+      fieldScore += (PATH_WEIGHT * (tfPath * (BM25_K1 + 1))) / norm;
+    }
+    if (tfSymbol > 0) {
+      const norm = tfSymbol + BM25_K1 * (1 - BM25_B + BM25_B * (doc.symbols.tokens.length / avgdlSymbols));
+      fieldScore += (SYMBOL_WEIGHT * (tfSymbol * (BM25_K1 + 1))) / norm;
+    }
+
+    score += idf * fieldScore;
+  }
+  return score;
+}
+
 /** Build a BM25F document from a file path and its merged symbol list. */
 function buildDocument(filePath: string, symbols: string[]): FileDoc {
   const pathTokens = filePath.split(/[/\\.]/).flatMap((seg) => tokenizeIdentifier(seg));
@@ -186,8 +219,8 @@ function buildDocument(filePath: string, symbols: string[]): FileDoc {
  *
  * Algorithm:
  * 1. Tokenize query (camelCase-aware, stop-word filtered)
- * 2. Build BM25 documents: file path tokens + exported symbol names (from importedNames on edges)
- * 3. Score each file with BM25
+ * 2. Build BM25F documents: path field + symbols field (exported names from edges, deduped with AST-defined symbolNames)
+ * 3. Score each file with BM25F (per-field avgdl normalization, unified IDF)
  * 4. Expand: add 1-hop import neighbors at EXPANSION_FACTOR of the seed's score
  * 5. Add co-change partners above confidence threshold at COUPLING_FACTOR of seed score
  * 6. Sort by score descending, return top N
@@ -242,27 +275,37 @@ export function resolveEditTargets(
   // BM25F scoring
   const scores = new Map<string, number>();
   for (const [fp, doc] of docs) {
-    let score = 0;
-    for (const term of queryTerms) {
-      const docFreq = df.get(term) ?? 1;
-      const idf = Math.log((N - docFreq + 0.5) / (docFreq + 0.5) + 1);
-
-      const tfPath = doc.path.termFreq.get(term) ?? 0;
-      const tfSymbol = doc.symbols.termFreq.get(term) ?? 0;
-
-      let fieldScore = 0;
-      if (tfPath > 0) {
-        const norm = tfPath + BM25_K1 * (1 - BM25_B + BM25_B * (doc.path.tokens.length / avgdlPath));
-        fieldScore += (PATH_WEIGHT * (tfPath * (BM25_K1 + 1))) / norm;
-      }
-      if (tfSymbol > 0) {
-        const norm = tfSymbol + BM25_K1 * (1 - BM25_B + BM25_B * (doc.symbols.tokens.length / avgdlSymbols));
-        fieldScore += (SYMBOL_WEIGHT * (tfSymbol * (BM25_K1 + 1))) / norm;
-      }
-
-      score += idf * fieldScore;
-    }
+    const score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols);
     if (score > 0) scores.set(fp, score);
+  }
+
+  // Test-file proxy: score test files using source-file IDF, transfer to source files.
+  // Test file paths encode what they test (e.g. "test/sqlite-query-runner.test.ts"),
+  // so they match queries that the source file's path alone might miss.
+  const testMappingEntries = Object.entries(graph.testMapping);
+  if (testMappingEntries.length > 0) {
+    const testToSource = new Map<string, string[]>();
+    for (const [source, tests] of testMappingEntries) {
+      for (const test of tests) {
+        if (!testToSource.has(test)) testToSource.set(test, []);
+        testToSource.get(test)!.push(source);
+      }
+    }
+
+    for (const [testFp, sources] of testToSource) {
+      if (!graph.files[testFp]) continue;
+      const allSymbols = [...new Set([...(exportedNames.get(testFp) ?? []), ...(graph.files[testFp]?.symbolNames ?? [])])];
+      const testDoc = buildDocument(testFp, allSymbols);
+      const testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols);
+      if (testScore > 0) {
+        const proxyScore = testScore * TEST_PROXY_FACTOR;
+        for (const source of sources) {
+          if (proxyScore > (scores.get(source) ?? 0)) {
+            scores.set(source, proxyScore);
+          }
+        }
+      }
+    }
   }
 
   if (scores.size === 0) return [];
