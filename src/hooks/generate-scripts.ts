@@ -250,6 +250,203 @@ export async function generateCheckTestsScript(
   return `${SCRIPTS_DIR}/check-tests.sh`;
 }
 
+/**
+ * Detect whether tests require compilation and what the compile command is.
+ * Checks mocharc spec paths (pointing to build/dist/compiled dirs) and package.json scripts.
+ */
+async function detectCompileStep(
+  rootDir: string,
+  ctx: DetectedContext,
+): Promise<{ compileCmd: string | null; testsFromCompiled: boolean }> {
+  // "run" prefix for arbitrary script names (compile, build, tsc).
+  // Unlike lifecycle scripts (test, start), these always need "run".
+  const runPrefix = (() => {
+    switch (ctx.packageManager) {
+      case "pnpm":
+        return "pnpm run";
+      case "yarn":
+        return "yarn run";
+      case "bun":
+        return "bun run";
+      case "npm":
+        return "npm run";
+      default:
+        return null;
+    }
+  })();
+
+  // Check mocharc for spec paths pointing to compiled output
+  if (ctx.testFramework === "Mocha") {
+    for (const name of [".mocharc.json", ".mocharc.yaml", ".mocharc.yml", ".mocharc.js", ".mocharc.cjs"]) {
+      try {
+        const content = await fs.readFile(path.join(rootDir, name), "utf-8");
+        // Only parse JSON reliably; YAML/JS just check for build path patterns
+        if (name.endsWith(".json")) {
+          const rc = JSON.parse(content) as { spec?: string | string[]; file?: string | string[] };
+          const specs = Array.isArray(rc.spec) ? rc.spec : rc.spec ? [rc.spec] : [];
+          const files = Array.isArray(rc.file) ? rc.file : rc.file ? [rc.file] : [];
+          const all = [...specs, ...files];
+          if (all.some((s) => /\b(build|dist|compiled|out)\b/.test(s))) {
+            // Find the compile script
+            if (runPrefix) {
+              try {
+                const pkg = JSON.parse(await fs.readFile(path.join(rootDir, "package.json"), "utf-8")) as {
+                  scripts?: Record<string, string>;
+                };
+                const scripts = pkg.scripts ?? {};
+                const compileKey = ["compile", "build", "tsc"].find((k) => scripts[k]);
+                if (compileKey) {
+                  return { compileCmd: `${runPrefix} ${compileKey}`, testsFromCompiled: true };
+                }
+              } catch {}
+            }
+            return { compileCmd: null, testsFromCompiled: true };
+          }
+        } else if (/\b(build|dist|compiled|out)\b/.test(content)) {
+          return { compileCmd: runPrefix ? `${runPrefix} compile` : null, testsFromCompiled: true };
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  // Check package.json test script for compile step
+  if (runPrefix) {
+    try {
+      const pkg = JSON.parse(await fs.readFile(path.join(rootDir, "package.json"), "utf-8")) as {
+        scripts?: Record<string, string>;
+      };
+      const rawTest = pkg.scripts?.test ?? "";
+      if (SLOW_COMPILE_RE.test(rawTest)) {
+        const scripts = pkg.scripts ?? {};
+        const compileKey = ["compile", "build"].find((k) => scripts[k]);
+        return { compileCmd: compileKey ? `${runPrefix} ${compileKey}` : null, testsFromCompiled: true };
+      }
+    } catch {}
+  }
+
+  return { compileCmd: null, testsFromCompiled: false };
+}
+
+/**
+ * Build the filter flag for a given test framework.
+ * Returns the CLI flag that filters tests by name pattern.
+ */
+function buildTestFilterFlag(framework: string | undefined): string | null {
+  switch (framework) {
+    case "Mocha":
+      return "--grep";
+    case "Jest":
+    case "Vitest":
+      return "-t";
+    case "pytest":
+      return "-k";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Build the run-test.sh script that compiles (if needed) and runs filtered tests.
+ */
+function buildRunTestScript(
+  testCmd: string,
+  framework: string | undefined,
+  compileCmd: string | null,
+): string {
+  const filterFlag = buildTestFilterFlag(framework);
+  // Package manager scripts need "--" to pass flags to the underlying runner.
+  // Skip if the command already ends with "--" (e.g. extracted fast test commands).
+  const needsSeparator = /^(npm run|pnpm|yarn|bun run)\b/.test(testCmd) && !testCmd.trimEnd().endsWith("--");
+  const sep = needsSeparator ? "-- " : "";
+  const filterLine = (() => {
+    switch (framework) {
+      case "Mocha":
+      case "Jest":
+      case "Vitest":
+      case "pytest":
+        return `CMD="${testCmd} ${sep}${filterFlag} '$1'"`;
+      default:
+        // cargo test uses positional, go test uses -run
+        if (testCmd.startsWith("cargo")) return `CMD="${testCmd} '$1'"`;
+        if (testCmd.startsWith("go")) return `CMD="${testCmd} -run '$1'"`;
+        return `CMD="${testCmd} '$1'"`;
+    }
+  })();
+
+  const compileBlock = compileCmd
+    ? `
+# Compile before running tests (this project runs tests from compiled output)
+echo "[run-test] Compiling..."
+${compileCmd} 2>&1 | tail -3
+if [ $? -ne 0 ]; then
+  echo "Compilation failed. Fix errors before running tests."
+  exit 1
+fi
+echo ""
+`
+    : "";
+
+  return `#!/usr/bin/env bash
+# Generated by clarte - do not edit
+# Runs a filtered subset of tests by name pattern.
+# Usage: .clarte/scripts/run-test.sh '<pattern>'
+# Example: .clarte/scripts/run-test.sh 'simple enum'
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+  echo "Usage: .clarte/scripts/run-test.sh '<pattern>'"
+  echo "Runs tests matching the given name pattern."
+  exit 1
+fi
+${compileBlock}
+${filterLine}
+eval "$CMD"
+`;
+}
+
+/**
+ * Generate the run-test.sh script in .clarte/scripts/.
+ * Returns the relative path if generated, null if no test command or filter mechanism detected.
+ */
+export async function generateRunTestScript(
+  rootDir: string,
+  ctx: DetectedContext,
+): Promise<string | null> {
+  // Only generate for frameworks where we know the filter mechanism
+  const filterFlag = buildTestFilterFlag(ctx.testFramework);
+  const isPositionalFilter = ctx.packageManager === "cargo" || ctx.packageManager === "go";
+  if (!filterFlag && !isPositionalFilter) return null;
+
+  // Resolve the fast test command (without compile step)
+  let testCmd: string | null = null;
+  if (ctx.packageManager && !["pip", "poetry", "cargo", "go"].includes(ctx.packageManager)) {
+    try {
+      const pkg = JSON.parse(await fs.readFile(path.join(rootDir, "package.json"), "utf-8")) as {
+        scripts?: Record<string, string>;
+      };
+      const rawTest = pkg.scripts?.test ?? "";
+      if (SLOW_COMPILE_RE.test(rawTest)) {
+        testCmd = extractFastTestCmd(rawTest);
+      }
+    } catch {}
+  }
+  if (!testCmd) {
+    testCmd = resolveTestCommand(ctx);
+  }
+  if (!testCmd) return null;
+
+  const { compileCmd } = await detectCompileStep(rootDir, ctx);
+
+  const scriptContent = buildRunTestScript(testCmd, ctx.testFramework, compileCmd);
+  const scriptPath = path.join(rootDir, SCRIPTS_DIR, "run-test.sh");
+  await writeFileSafe(scriptPath, scriptContent);
+  await fs.chmod(scriptPath, 0o755);
+
+  return `${SCRIPTS_DIR}/run-test.sh`;
+}
+
 /** Per-file graph data baked into the clarte-grep script at generate time. */
 interface GrepGraphEntry {
   importers: string[];

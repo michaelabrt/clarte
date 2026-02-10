@@ -455,11 +455,12 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     }
   }
 
-  // Generate check-tests.sh skill script (non-critical)
+  // Generate check-tests.sh and run-test.sh skill scripts (non-critical)
   if (!dryRun && answers.ides.includes("claude")) {
     try {
-      const { generateCheckTestsScript } = await import("../hooks/generate-scripts.js");
+      const { generateCheckTestsScript, generateRunTestScript } = await import("../hooks/generate-scripts.js");
       await generateCheckTestsScript(rootDir, detected);
+      await generateRunTestScript(rootDir, detected);
     } catch (err) {
       verboseLog(`Script generation failed: ${err instanceof Error ? err.message : String(err)}`);
     }
