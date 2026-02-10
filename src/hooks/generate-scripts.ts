@@ -360,13 +360,21 @@ function buildRunTestScript(
   // Skip if the command already ends with "--" (e.g. extracted fast test commands).
   const needsSeparator = /^(npm run|pnpm|yarn|bun run)\b/.test(testCmd) && !testCmd.trimEnd().endsWith("--");
   const sep = needsSeparator ? "-- " : "";
+  // Mocha's --grep interprets the pattern as a regex. Escape metacharacters
+  // so test names with parens, brackets etc. match literally.
+  const escapeGrep =
+    framework === "Mocha"
+      ? `\nPATTERN=$(printf '%s' "$1" | sed 's/[][(){}.*+?^$|\\\\]/\\\\&/g')`
+      : "";
+  const patVar = framework === "Mocha" ? "\$PATTERN" : "\$1";
+
   const filterLine = (() => {
     switch (framework) {
       case "Mocha":
       case "Jest":
       case "Vitest":
       case "pytest":
-        return `CMD="${testCmd} ${sep}${filterFlag} '$1'"`;
+        return `CMD="${testCmd} ${sep}${filterFlag} '${patVar}'"`;
       default:
         // cargo test uses positional, go test uses -run
         if (testCmd.startsWith("cargo")) return `CMD="${testCmd} '$1'"`;
@@ -400,7 +408,7 @@ if [ $# -eq 0 ]; then
   echo "Runs tests matching the given name pattern."
   exit 1
 fi
-${compileBlock}
+${compileBlock}${escapeGrep}
 ${filterLine}
 eval "$CMD"
 `;

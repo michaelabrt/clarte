@@ -93,6 +93,8 @@ describe("generateRunTestScript", () => {
     expect(result).toBe(".clarte/scripts/run-test.sh");
     const script = await readScript();
     expect(script).toContain("--grep");
+    expect(script).toContain("PATTERN=");
+    expect(script).toContain("sed");
     expect(script).not.toContain("Compiling");
   });
 
@@ -118,6 +120,25 @@ describe("generateRunTestScript", () => {
     expect(result).toBe(".clarte/scripts/run-test.sh");
     const script = await readScript();
     expect(script).toContain("-k '$1'");
+  });
+
+  it("escapes regex metacharacters for mocha grep", async () => {
+    await setupTmpDir({ scripts: { test: "mocha" } });
+    await generateRunTestScript(tmpDir, makeCtx({ rootDir: tmpDir, packageManager: "npm", testFramework: "Mocha" }));
+    const script = await readScript();
+    // The sed command should use a POSIX bracket expression with ] first
+    expect(script).toContain("sed 's/[][(){}.*+?^$|\\\\]/\\\\&/g'");
+    // Pattern variable should be used instead of $1
+    expect(script).toContain("'$PATTERN'");
+    expect(script).not.toContain("'$1'");
+  });
+
+  it("does not escape for non-mocha frameworks", async () => {
+    await setupTmpDir({ scripts: { test: "vitest run" } });
+    await generateRunTestScript(tmpDir, makeCtx({ rootDir: tmpDir, testFramework: "Vitest" }));
+    const script = await readScript();
+    expect(script).not.toContain("PATTERN=");
+    expect(script).toContain("'$1'");
   });
 
   it("returns null for unknown frameworks", async () => {
