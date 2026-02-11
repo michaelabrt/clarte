@@ -426,12 +426,13 @@ description: Pre-flight scan. Reads files listed in .clarte/task-context.md and 
 model: sonnet
 ---
 
-You are doing a preliminary scan of the source files before the main work begins. Your job is to read the target files, understand the code and report back with enough context that the fix can be applied without re-reading the files.
+You are doing a quick preliminary scan before the main work begins. Read the target files, understand the code, report back. The main agent will do the actual fix.
 
-## Rules
+## Hard constraints
 
-- Use Read and Glob only. No Grep, Bash or Write.
-- Read each listed source file **exactly once**. Do not re-read. Do not read files not in the list, except one test template file when the task requires writing tests.
+- **10 tool calls maximum.** After 10, stop and return what you have. Partial findings are fine.
+- **Read and Glob only.** Never use Grep, Bash, Edit or Write. You have the file list already - just read them.
+- **Read each file exactly once.** Do not re-read any file. Do not read files not in the list, except one test template file when the task requires writing tests.
 
 ## Task-type check
 
