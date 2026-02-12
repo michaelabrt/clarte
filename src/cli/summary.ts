@@ -21,10 +21,6 @@ export function printSummary(
   let totalBytes = 0;
   let totalTokens = 0;
 
-  // Group files: main context vs scoped rules
-  const mainFiles = files.filter((f) => !f.path.includes(".cursor/rules/"));
-  const ruleFiles = files.filter((f) => f.path.includes(".cursor/rules/"));
-
   // Pre-compute row data for aligned output
   const fileRows: Array<{
     indent: string;
@@ -35,7 +31,7 @@ export function printSummary(
     isHeader: boolean;
   }> = [];
 
-  for (const file of mainFiles) {
+  for (const file of files) {
     const bytes = Buffer.byteLength(file.content, "utf-8");
     const tokens = estimateTokens(file.content);
     totalBytes += bytes;
@@ -49,36 +45,6 @@ export function printSummary(
       isUpdated: !!file.existed,
       isHeader: false,
     });
-  }
-
-  if (ruleFiles.length > 0) {
-    fileRows.push({
-      indent: "  ",
-      name: ".cursor/rules/",
-      size: "",
-      tokens: "",
-      isUpdated: false,
-      isHeader: true,
-    });
-
-    // global.md is always-on, others are scoped
-    for (const file of ruleFiles) {
-      const bytes = Buffer.byteLength(file.content, "utf-8");
-      const tokens = estimateTokens(file.content);
-      totalBytes += bytes;
-      totalTokens += tokens;
-
-      const filename = file.path.split("/").pop() ?? file.path;
-
-      fileRows.push({
-        indent: "    ",
-        name: filename,
-        size: formatBytes(bytes),
-        tokens: `(~${formatNumber(tokens)} tokens)`,
-        isUpdated: !!file.existed,
-        isHeader: false,
-      });
-    }
   }
 
   // Derive column widths from row data

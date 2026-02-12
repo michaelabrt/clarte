@@ -321,7 +321,7 @@ export function getMainContextFilename(ide: IDETarget): string {
     case "claude":
       return ".claude/rules/clarte.md";
     case "cursor":
-      return ".cursor/rules/clarte.mdc";
+      return ".cursor/rules/clarte.md";
     case "opencode":
       return "AGENTS.md";
     case "copilot":

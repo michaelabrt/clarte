@@ -12,7 +12,7 @@ import { fileExists, readFileOr, writeFileSafe } from "../utils.js";
 /** Known context files in priority order */
 const CONTEXT_FILES = [
   ".claude/rules/clarte.md",
-  ".cursor/rules/clarte.mdc",
+  ".cursor/rules/clarte.md",
   "AGENTS.md",
   ".github/copilot-instructions.md",
   ".windsurfrules",
