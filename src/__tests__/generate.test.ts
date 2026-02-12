@@ -12,7 +12,7 @@ vi.mock("../templates/main-context.js", () => ({
       case "claude":
         return ".claude/rules/clarte.md";
       case "cursor":
-        return ".cursor/rules/clarte.mdc";
+        return ".cursor/rules/clarte.md";
       case "opencode":
         return "AGENTS.md";
       case "copilot":
@@ -33,13 +33,6 @@ vi.mock("../templates/main-context.js", () => ({
   }),
 }));
 
-vi.mock("../templates/cursor-rules.js", () => ({
-  buildCursorRules: vi.fn().mockResolvedValue([
-    { filename: "global.md", scope: "global", body: "Global rule content" },
-    { filename: "testing.md", scope: "testing", body: "Testing rule content" },
-  ]),
-  renderCursorRule: vi.fn((rule: { body: string }) => `---\n${rule.body}`),
-}));
 
 vi.mock("../templates/claude-skills.js", () => ({
   buildClaudeSkills: vi.fn().mockResolvedValue([]),
@@ -147,18 +140,22 @@ describe("generateFiles", () => {
     expect(claudeFile!.content).toContain("Main Context");
   });
 
-  it("produces cursor rules for cursor target", async () => {
+  it("produces MCP config and pre-flight agent for cursor target", async () => {
     const files = await generateFiles(makeCtx(), makeAnswers({ ides: ["cursor"] }), null, true, true);
 
-    // Should have the main file + rule files
-    const mainFile = files.find((f) => f.path === ".cursor/rules/clarte.mdc");
+    const mainFile = files.find((f) => f.path === ".cursor/rules/clarte.md");
     expect(mainFile).toBeDefined();
-    expect(mainFile!.content).toContain("alwaysApply: true");
+    expect(mainFile!.content).not.toContain("alwaysApply: true");
 
-    const ruleFiles = files.filter((f) => f.path.startsWith(".cursor/rules/") && f.path !== ".cursor/rules/clarte.mdc");
-    expect(ruleFiles.length).toBe(2);
-    expect(ruleFiles.map((f) => f.path)).toContain(".cursor/rules/global.md");
-    expect(ruleFiles.map((f) => f.path)).toContain(".cursor/rules/testing.md");
+    const mcpFile = files.find((f) => f.path === ".cursor/mcp.json");
+    expect(mcpFile).toBeDefined();
+    const mcpConfig = JSON.parse(mcpFile!.content);
+    expect(mcpConfig.mcpServers.clarte.command).toBe("npx");
+    expect(mcpConfig.mcpServers.clarte.args).toContain("--mcp");
+
+    const agentFile = files.find((f) => f.path === ".cursor/agents/clarte-pre-flight.md");
+    expect(agentFile).toBeDefined();
+    expect(agentFile!.content).toContain("name: clarte-pre-flight");
   });
 
   it("produces aider config for aider target", async () => {
@@ -206,7 +203,7 @@ describe("generateFiles", () => {
     const files = await generateFiles(makeCtx(), makeAnswers({ ides: ["claude", "cursor"] }), null, true, true);
 
     const claudeFile = files.find((f) => f.path === ".claude/rules/clarte.md");
-    const cursorFile = files.find((f) => f.path === ".cursor/rules/clarte.mdc");
+    const cursorFile = files.find((f) => f.path === ".cursor/rules/clarte.md");
     expect(claudeFile).toBeDefined();
     expect(cursorFile).toBeDefined();
     expect(claudeFile!.path).not.toBe(cursorFile!.path);
