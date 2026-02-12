@@ -129,9 +129,77 @@ constraint, saved arrays are returned as raw comma-separated strings (e.g. '0,1'
 proper arrays (e.g. [0, 1]), and default values for these columns cause SQL syntax errors. Fix \
 the bug and add tests."
     ;;
+  hono-jsx)
+    REPO="honojs/hono"
+    COMMIT="f7d272abe1644e50ab5fe9cb53f5965c35d77226"
+    ISSUE_TAG="#4582 (JSX context lost after await)"
+    INSTALL_CMD="npm install --silent"
+    MAX_BUDGET="3.00"
+
+    PLACEBO_TEXT="# hono
+A TypeScript web framework. Tests use vitest."
+
+    ISSUE_DETAILED="In src/jsx/context.ts, the context provider's finally block pops the context \
+value synchronously. When an async component uses await before returning with the html helper, \
+the finally block runs before the Promise resolves, so children that call useRequestContext() \
+throw 'RequestContext is not provided'. Replace the finally block with explicit handling: if \
+the result is a Promise, pop context in .finally() on the promise; if synchronous, pop \
+immediately. Fix the bug and add tests."
+
+    ISSUE_OPAQUE="When an async JSX component uses await before returning with the html helper, \
+descendant components that call useRequestContext() throw 'RequestContext is not provided'. \
+Using await with JSX tags works fine. Using html without await works fine. Only the combination \
+of await + html in an async component triggers the error. Fix the bug and add tests."
+    ;;
+  hono-url)
+    REPO="honojs/hono"
+    COMMIT="5ca5c3e9764486b31ad7db4c0c19b2c926753ae3"
+    ISSUE_TAG="#4440 (URL fragments in getPath)"
+    INSTALL_CMD="npm install --silent"
+    MAX_BUDGET="3.00"
+
+    PLACEBO_TEXT="# hono
+A TypeScript web framework. Tests use vitest."
+
+    ISSUE_DETAILED="The getPath() function in src/utils/url.ts does not strip fragment identifiers \
+(#) from URLs. It already handles query strings (?) but treats # as a regular path character. \
+The function has two code paths: a fast character-by-character loop and a percent-encoding \
+fallback using indexOf. Both need to terminate on # (charCode 35) in addition to ? (charCode \
+63). In Service Worker contexts, URLs contain fragments that servers normally never see. Fix \
+the bug and add tests."
+
+    ISSUE_OPAQUE="In Service Worker contexts, route parameters include URL fragment identifiers. \
+A route like /users/:id matching /users/1#profile-section gives id = '1#profile-section' \
+instead of id = '1'. Query strings are correctly stripped, but fragments (#) are treated as \
+regular path characters. The same URL without a fragment matches correctly. Fix the bug and \
+add tests."
+    ;;
+  hono-form)
+    REPO="honojs/hono"
+    COMMIT="df97e5f49771a2a219770515859b9cc1d80abab0"
+    ISSUE_TAG="#4753 (prototype pollution in form validator)"
+    INSTALL_CMD="npm install --silent"
+    MAX_BUDGET="3.00"
+
+    PLACEBO_TEXT="# hono
+A TypeScript web framework. Tests use vitest."
+
+    ISSUE_DETAILED="In src/validator/validator.ts, the form data parser creates its accumulator \
+with {} and checks for existing keys with 'key in form'. Since {} inherits from \
+Object.prototype, inherited property names like toString and __proto__ trigger the \
+duplicate-key array-coercion logic incorrectly. For example, submitting toString=hello \
+produces {toString: [null, 'hello']} instead of {toString: 'hello'}. Use Object.create(null) \
+for the accumulator and Object.hasOwn() for key checks. Fix the bug and add tests."
+
+    ISSUE_OPAQUE="When submitting form data with keys that match JavaScript built-in property \
+names like toString or __proto__, the parsed form values are incorrectly wrapped in arrays. \
+For example, submitting toString=hello produces {toString: [null, 'hello']} instead of \
+{toString: 'hello'}. Regular keys like username=hello work correctly. Fix the bug and add \
+tests."
+    ;;
   *)
     echo "Unknown target: $TARGET"
-    echo "Supported: TARGET=hono, TARGET=directus, TARGET=nestjs, or TARGET=typeorm"
+    echo "Supported: TARGET=hono|hono-jsx|hono-url|hono-form|directus|nestjs|typeorm"
     exit 1
     ;;
 esac
@@ -1409,6 +1477,227 @@ CLARTE_CFG_EOF
     fi
     echo ""
     ;;
+  pre-flight-ab)
+    PF_CONDITIONS="placebo pre-flight"
+
+    # Auto-detect starting run number from existing results
+    START_RUN=1
+    while [ -f "$RESULTS_DIR/placebo-${START_RUN}.json" ] && [ -s "$RESULTS_DIR/placebo-${START_RUN}.json" ]; do
+      START_RUN=$((START_RUN + 1))
+    done
+    TOTAL_RUNS=$((START_RUN + RUNS - 1))
+    if [ "$START_RUN" -gt 1 ]; then
+      echo "Found existing results up to run $((START_RUN - 1)), starting at run $START_RUN"
+    fi
+
+    KILLED=0
+    for i in $(seq "$START_RUN" "$TOTAL_RUNS"); do
+      echo ""
+      echo "════════════════════ Run $i of $TOTAL_RUNS ════════════════════"
+      RUN_BENCH="$BENCH_DIR/run-$i"
+      mkdir -p "$RUN_BENCH"
+
+      run_pf_single() {
+        local name="$1"
+        local work_dir="$RUN_BENCH/$name"
+        clone_repo "$work_dir" "$name"
+
+        case "$name" in
+          placebo)
+            echo "$PLACEBO_TEXT" > "$work_dir/CLAUDE.md"
+            ;;
+          pre-flight)
+            cat > "$work_dir/.clarte.json" << 'CLARTE_CFG_EOF'
+{
+  "_version": 2,
+  "ides": ["claude"],
+  "projectPurpose": "",
+  "keyPatterns": "",
+  "gotchas": "",
+  "generateSnapshot": true,
+  "snapshotPaths": [],
+  "stackCorrections": "",
+  "generatePerPackage": true
+}
+CLARTE_CFG_EOF
+
+            echo "[$name] Running clarte --yes to generate graph + hooks..."
+            (cd "$work_dir" && node "$CLARTE_ROOT/dist/index.js" --yes 2>/dev/null) || true
+
+            # Strip check-tests.sh for targets with problematic test suites
+            case "$TARGET" in
+              typeorm)
+                [ -f "$work_dir/CLAUDE.md" ] && sed -i '/check-tests\.sh/d' "$work_dir/CLAUDE.md"
+                # Filter ormconfig.json to SQLite-only entries
+                if [ -f "$work_dir/ormconfig.json" ]; then
+                  node -e "
+                    const fs = require('fs');
+                    const cfg = JSON.parse(fs.readFileSync('$work_dir/ormconfig.json', 'utf-8'));
+                    const zeroConfig = new Set(['sqlite', 'better-sqlite3', 'sqljs']);
+                    if (Array.isArray(cfg)) {
+                      const filtered = cfg.filter(c => zeroConfig.has(c.type));
+                      if (filtered.length > 0 && filtered.length < cfg.length) {
+                        fs.writeFileSync('$work_dir/ormconfig.json', JSON.stringify(filtered, null, 2));
+                      }
+                    }
+                  " 2>/dev/null || true
+                fi
+                ;;
+            esac
+
+            # Resolve targets and write task-context.md
+            local resolve_script="$work_dir/_resolve-targets.mts"
+            local task_context_out="$work_dir/.clarte/task-context.md"
+            mkdir -p "$work_dir/.clarte"
+            cat > "$resolve_script" << RESOLVE_EOF
+import { loadPersistedGraph } from "$CLARTE_ROOT/src/graph/persist.ts";
+import { resolveEditTargets } from "$CLARTE_ROOT/src/cli/resolve-targets.ts";
+import { writeFileSync } from "node:fs";
+
+const graph = await loadPersistedGraph("$work_dir");
+if (!graph) process.exit(0);
+
+const targets = resolveEditTargets(process.argv[2], graph);
+if (targets.length === 0) process.exit(0);
+
+const lines: string[] = [
+  "# Edit targets (clarte)",
+  "",
+  "Based on dependency graph analysis, these files are most likely to need editing.",
+  "For each file, key symbols defined inside are listed so you can navigate directly",
+  "to the right function without a broad search.",
+  "",
+];
+for (const fp of targets) {
+  lines.push(\`## \${fp}\`);
+  const symbols = graph.files[fp]?.symbolNames ?? [];
+  if (symbols.length > 0) {
+    const top = symbols.slice(0, 8).join(", ");
+    lines.push(\`Key symbols: \${top}\`);
+  }
+  lines.push("");
+}
+writeFileSync(process.argv[3], lines.join("\n"));
+process.stdout.write(targets.join("\n"));
+RESOLVE_EOF
+
+            local targets_out resolve_stderr
+            resolve_stderr=$(mktemp)
+            targets_out=$(npx tsx "$resolve_script" "$ISSUE_TEXT" "$task_context_out" 2>"$resolve_stderr") || true
+            rm -f "$resolve_script" "$resolve_stderr"
+
+            if [ -n "$targets_out" ]; then
+              echo "[$name] Targets:"
+              echo "$targets_out" | sed 's/^/  - /'
+            fi
+            ;;
+        esac
+
+        local result_file="$RESULTS_DIR/${name}-${i}.json"
+        local allowed="$ALLOWED_TOOLS"
+        # Pre-flight needs Agent tool for the pre-flight subagent
+        [ "$name" = "pre-flight" ] && allowed="$ALLOWED_TOOLS,Agent"
+
+        echo "[$name] Running claude -p (budget \$$MAX_BUDGET)..."
+        (cd "$work_dir" && env -u CLAUDECODE claude -p "$ISSUE_TEXT" \
+          --output-format json \
+          --model "${MODEL:-sonnet}" \
+          --max-budget-usd "$MAX_BUDGET" \
+          --allowedTools "$allowed" \
+          --dangerously-skip-permissions \
+          > "$result_file" 2>/dev/null) || true
+        echo "[$name] Run $i done."
+        collect_session_log "$name" "$work_dir" "$result_file"
+      }
+
+      for cond in $PF_CONDITIONS; do
+        run_pf_single "$cond" &
+      done
+      wait
+
+      GATE_RESULT=$(check_kill_gate "$RESULTS_DIR/placebo-${i}.json" "$RESULTS_DIR/pre-flight-${i}.json" "$i")
+      GATE_DECISION=$(echo "$GATE_RESULT" | cut -d'|' -f1)
+      GATE_MSG=$(echo "$GATE_RESULT" | cut -d'|' -f2-)
+
+      echo "[kill-gate] $GATE_MSG"
+
+      if [ "$GATE_DECISION" = "KILL" ]; then
+        echo ""
+        echo "══════════════════════════════════════════════════════════════"
+        echo "  KILL GATE TRIGGERED on run $i"
+        echo "  Experimental cost exceeded placebo by >20%."
+        echo "  Stopping benchmark. Rethink the approach."
+        echo "══════════════════════════════════════════════════════════════"
+        KILLED=1
+        rm -rf "$RUN_BENCH"
+        break
+      fi
+
+      rm -rf "$RUN_BENCH"
+    done
+
+    # Print results
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════"
+    if [ "$KILLED" = "1" ]; then
+      echo "  PRE-FLIGHT A/B RESULTS (killed after run $i)"
+    else
+      echo "  PRE-FLIGHT A/B RESULTS ($TOTAL_RUNS runs)"
+    fi
+    echo "  Repo: $REPO @ ${COMMIT:0:8}"
+    echo "  Issue: $ISSUE_TAG"
+    echo "  Model: ${MODEL:-sonnet}"
+    if [ "${OPAQUE:-}" = "1" ]; then echo "  Prompt: opaque"; else echo "  Prompt: detailed"; fi
+    echo "  Kill gate: +20% cost"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo ""
+    printf "%-12s | %4s | %6s | %8s\n" "Condition" "Run" "Turns" "Cost"
+    printf "%-12s-|-%4s-|-%6s-|-%8s\n" "------------" "----" "------" "--------"
+
+    for name in $PF_CONDITIONS; do
+      j=1
+      while [ -f "$RESULTS_DIR/${name}-${j}.json" ]; do
+        file="$RESULTS_DIR/${name}-${j}.json"
+        if [ -s "$file" ]; then
+          IFS='|' read -r turns cw cr output cost <<< "$(extract_metrics "$file")"
+          printf "%-12s | %4s | %6s | \$%s\n" "$name" "$j" "$turns" "$cost"
+        fi
+        j=$((j + 1))
+      done
+    done
+
+    echo ""
+    printf "%-12s | %10s | %10s\n" "Condition" "Avg Turns" "Avg Cost"
+    printf "%-12s-|-%10s-|-%10s\n" "------------" "----------" "----------"
+    for name in $PF_CONDITIONS; do
+      node --eval "
+        const fs = require('fs');
+        let turns = [], costs = [];
+        for (let j = 1; ; j++) {
+          const f = '$RESULTS_DIR/${name}-' + j + '.json';
+          if (!fs.existsSync(f)) break;
+          try {
+            const d = JSON.parse(fs.readFileSync(f, 'utf8'));
+            if (d.num_turns) turns.push(d.num_turns);
+            if (d.total_cost_usd) costs.push(d.total_cost_usd);
+          } catch {}
+        }
+        if (turns.length === 0) { console.log('$name'.padEnd(12) + ' |        N/A |        N/A'); }
+        else {
+          const n = turns.length;
+          const at = (turns.reduce((a,b)=>a+b,0)/n).toFixed(1);
+          const ac = (costs.reduce((a,b)=>a+b,0)/n).toFixed(2);
+          console.log('$name'.padEnd(12) + ' | ' + (at+' (n='+n+')').padStart(10) + ' | ' + ('\$'+ac).padStart(10));
+        }
+      " 2>/dev/null || true
+    done
+
+    if [ "$KILLED" = "1" ]; then
+      echo ""
+      echo "  VERDICT: NO-GO (killed by automatic kill gate)"
+    fi
+    echo ""
+    ;;
   all)
     run_placebo
     run_direct
@@ -1416,7 +1705,7 @@ CLARTE_CFG_EOF
     ;;
   *)
     echo "Unknown condition: $CONDITION"
-    echo "Usage: TARGET=hono|directus $0 [placebo|clarte|pointer|direct|direct-1|direct-2|direct-3|edit-targets|pre-flight|parallel|r7|r9|fail-fast-ab|all]"
+    echo "Usage: TARGET=hono|directus $0 [placebo|clarte|pointer|direct|direct-1|direct-2|direct-3|edit-targets|pre-flight|pre-flight-ab|parallel|r7|r9|fail-fast-ab|all]"
     exit 1
     ;;
 esac

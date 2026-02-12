@@ -165,7 +165,22 @@ We benchmark how Clarté context affects AI agent performance. Same tasks, same 
 | Duration (median) | 130s | **98s** | **-24.8%** | p<0.001, small effect |
 | Pass rate | 100% | 93% | -7pp | n.s. |
 
-A placebo condition (generic context with no structural analysis) showed -1.3% cost (not significant, negligible effect), confirming the improvement comes from Clarté's analysis, not from having any system prompt content.
+A placebo condition (generic context with no structural analysis) showed -1.3% cost (not significant, negligible effect), confirming the improvement comes from Clarte's analysis, not from having any system prompt content.
+
+### Real-world benchmarks
+
+Fixture benchmarks are controlled but synthetic. We also test on real bug fixes in open-source repos (opaque prompts, Sonnet, `claude -p`):
+
+| Task | Repo | Without Context | With Context | Delta |
+|------|------|-----------------|-------------|-------|
+| URL fragment stripping | Hono | 15t / $0.42 | 12t / $0.31 | **-26% cost** |
+| JSX async context loss | Hono | did not finish | 17t / $0.48 | context only |
+| Form validator prototype pollution | Hono | did not finish | 18t / $0.41 | context only |
+| SQLite simple-enum array | TypeORM | ~22t | ~11t | **~-50% turns** |
+
+Context finished all 4 tasks. Without context, the agent finished 2 of 4 within the same budget.
+
+For the full research story (20+ experiments, 400+ sessions), see [docs/research.md](docs/research.md).
 
 **Claude Haiku 4.5** - 3 tasks, 7 repetitions (127 sessions):
 
