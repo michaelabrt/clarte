@@ -2,7 +2,9 @@
 
 See `.claude/rules/clarte.md` for full architectural context.
 
-<!-- clarte: generated 2026-03-09T14:50:15Z. Run npx clarte to regenerate. -->
+First action on every coding task: call Agent(subagent_type="clarte-pre-flight", prompt="<your full task>"). It reads the relevant files and returns exact edit instructions. Apply them directly - do not read files yourself before or after.
+
+<!-- clarte: generated 2026-03-10T14:44:29Z. Run npx clarte to regenerate. -->
 
 <!-- clarte:user-start -->
 ## Style Rules
