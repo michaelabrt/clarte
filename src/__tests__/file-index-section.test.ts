@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { ImportEdge, ImportGraph } from "../types.js";
-import { renderFileIndexSection, renderCompressedFileIndexSection } from "../templates/sections/file-index.js";
+import { renderFileIndexSection } from "../templates/sections/file-index.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -166,50 +166,5 @@ describe("renderFileIndexSection", () => {
     const graph = makeGraph([makeEdge("src/a.ts", "src/b.ts", ["x"])]);
     const section = renderFileIndexSection(graph)!;
     expect(section.tokens).toBeGreaterThan(0);
-  });
-});
-
-describe("renderCompressedFileIndexSection", () => {
-  it("returns null for empty graph", () => {
-    const graph = makeGraph([]);
-    expect(renderCompressedFileIndexSection(graph)).toBeNull();
-  });
-
-  it("renders flat lines instead of a markdown table", () => {
-    const graph = makeGraph([
-      makeEdge("src/app.ts", "src/utils.ts", ["slugify", "isTestFile"]),
-      makeEdge("src/cli.ts", "src/utils.ts", ["estimateTokens"]),
-    ]);
-    const section = renderCompressedFileIndexSection(graph);
-    expect(section).not.toBeNull();
-    expect(section!.id).toBe("file-index");
-    expect(section!.content).toContain("## File Index");
-    // Should NOT contain markdown table syntax
-    expect(section!.content).not.toContain("| File |");
-    expect(section!.content).not.toContain("|---");
-    // Should contain flat format: "path: exports"
-    expect(section!.content).toContain("src/utils.ts:");
-  });
-
-  it("truncates to 5 exports with ellipsis", () => {
-    const names = ["a", "b", "c", "d", "e", "f", "g"];
-    const graph = makeGraph([makeEdge("src/app.ts", "src/big.ts", names)]);
-    const section = renderCompressedFileIndexSection(graph)!;
-    const line = section.content.split("\n").find((l) => l.includes("src/big.ts"))!;
-    expect(line).toContain("...");
-    const exports = line.split(": ")[1].replace(", ...", "").split(", ");
-    expect(exports).toHaveLength(5);
-  });
-
-  it("filters out test and fixture files", () => {
-    const graph = makeGraph([
-      makeEdge("src/app.ts", "src/utils.ts", ["foo"]),
-      makeEdge("src/app.ts", "src/__tests__/helper.ts", ["bar"]),
-      makeEdge("src/test.ts", "src/fixtures/data.ts", ["testData"]),
-    ]);
-    const section = renderCompressedFileIndexSection(graph)!;
-    expect(section.content).toContain("src/utils.ts:");
-    expect(section.content).not.toContain("__tests__");
-    expect(section.content).not.toContain("fixtures");
   });
 });

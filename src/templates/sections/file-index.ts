@@ -81,33 +81,3 @@ export function renderFileIndexSection(graph: ImportGraph): ContextSection | nul
   const content = lines.join("\n");
   return { id: "file-index", priority: 2, content, tokens: estimateTokens(content) };
 }
-
-/**
- * Render a compressed file index: flat lines instead of a markdown table.
- * Format: `path: export1, export2, ...`
- */
-export function renderCompressedFileIndexSection(graph: ImportGraph): ContextSection | null {
-  const entries = collectImportedNames(graph);
-
-  const barrels = graph.barrelFiles ?? new Set<string>();
-  const filtered = entries.filter((e) => {
-    if (isTestFile(e.path)) return false;
-    if (barrels.has(e.path)) return false;
-    if (/\bfixtures?\b/.test(e.path)) return false;
-    return true;
-  });
-
-  if (filtered.length === 0) return null;
-
-  filtered.sort((a, b) => a.path.localeCompare(b.path));
-
-  const lines: string[] = ["## File Index", ""];
-  for (const entry of filtered) {
-    const shown = entry.names.slice(0, MAX_EXPORTS_PER_FILE);
-    const suffix = entry.names.length > MAX_EXPORTS_PER_FILE ? ", ..." : "";
-    lines.push(`${entry.path}: ${shown.join(", ")}${suffix}`);
-  }
-
-  const content = lines.join("\n");
-  return { id: "file-index", priority: 2, content, tokens: estimateTokens(content) };
-}
