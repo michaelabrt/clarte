@@ -42,7 +42,6 @@ export type IDETarget =
   | "windsurf"
   | "cline"
   | "continue"
-  | "aider"
   | "generic";
 
 /** Detected programming language */

@@ -23,8 +23,6 @@ vi.mock("../templates/main-context.js", () => ({
         return ".clinerules";
       case "continue":
         return ".continuerules";
-      case "aider":
-        return ".aider.conf.yml";
       case "generic":
         return "CONTEXT.md";
       default:
@@ -37,10 +35,6 @@ vi.mock("../templates/main-context.js", () => ({
 vi.mock("../templates/claude-skills.js", () => ({
   buildClaudeSkills: vi.fn().mockResolvedValue([]),
   renderClaudeSkill: vi.fn(() => ""),
-}));
-
-vi.mock("../templates/aider-context.js", () => ({
-  buildAiderContext: vi.fn().mockResolvedValue("# Aider Context\nread:\n  - README.md\n"),
 }));
 
 vi.mock("../detect/detect.js", () => ({
@@ -156,14 +150,6 @@ describe("generateFiles", () => {
     const agentFile = files.find((f) => f.path === ".cursor/agents/clarte-pre-flight.md");
     expect(agentFile).toBeDefined();
     expect(agentFile!.content).toContain("name: clarte-pre-flight");
-  });
-
-  it("produces aider config for aider target", async () => {
-    const files = await generateFiles(makeCtx(), makeAnswers({ ides: ["aider"] }), null, true, true);
-
-    const aiderFile = files.find((f) => f.path === ".aider.conf.yml");
-    expect(aiderFile).toBeDefined();
-    expect(aiderFile!.content).toContain("Aider Context");
   });
 
   it("dry run returns files without writing to disk", async () => {

@@ -29,7 +29,6 @@ export async function runPrompts(
     { value: "windsurf" as const, label: "Windsurf" },
     { value: "cline" as const, label: "Cline" },
     { value: "continue" as const, label: "Continue.dev" },
-    { value: "aider" as const, label: "Aider" },
     { value: "generic" as const, label: "Other (generic CONTEXT.md)" },
   ];
 

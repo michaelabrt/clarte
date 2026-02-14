@@ -119,34 +119,6 @@ describe("refreshSnapshot", () => {
     expect(updated).not.toContain("Old snapshot content here");
   });
 
-  it("replaces aider YAML snapshot between markers", async () => {
-    const original = [
-      "read:",
-      "  - README.md",
-      "",
-      "# --- Code Snapshot (for reference) ---",
-      "# Old snapshot",
-      "# --- /Code Snapshot ---",
-      "",
-      "extra-config: true",
-    ].join("\n");
-
-    await fs.writeFile(path.join(tmpDir, ".aider.conf.yml"), original);
-
-    await refreshSnapshot(tmpDir);
-
-    const updated = await fs.readFile(path.join(tmpDir, ".aider.conf.yml"), "utf-8");
-
-    // Should contain new snapshot in YAML comment format
-    expect(updated).toContain("# --- Code Snapshot");
-    expect(updated).toContain("# --- /Code Snapshot ---");
-    // Should preserve surrounding config
-    expect(updated).toContain("read:");
-    expect(updated).toContain("extra-config: true");
-    // Old content should be gone
-    expect(updated).not.toContain("# Old snapshot");
-  });
-
   it("throws budget-trimmed error message", async () => {
     // File with "Sections omitted" and "code-snapshot" but no markers
     const content = ["# Project", "", "<!-- Sections omitted to fit token budget: code-snapshot. -->"].join("\n");

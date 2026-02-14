@@ -14,7 +14,6 @@ import type { PersistedGraph } from "../types/persisted-graph.js";
 import { fileExists, readFileOr, writeFileSafe } from "../utils.js";
 import { buildMainContext, getMainContextFilename, type SectionFilterOptions } from "../templates/main-context.js";
 import { buildClaudeSkills, renderClaudeSkill } from "../templates/claude-skills.js";
-import { buildAiderContext } from "../templates/aider-context.js";
 import { buildPreFlightAgent } from "../templates/pre-flight-agent.js";
 import { detectContext } from "../detect/detect.js";
 import { generateSnapshot } from "../snapshot/snapshot.js";
@@ -123,23 +122,20 @@ export async function generateFiles(
 
   for (const ide of answers.ides) {
     const mainFilename = getMainContextFilename(ide);
-    const mainContent =
-      ide === "aider"
-        ? await buildAiderContext(ctx, answers, snapshot, analysis)
-        : await buildMainContext(
-            ctx,
-            answers,
-            snapshot,
-            analysis,
-            budget,
-            ide === "claude" ? effectiveSectionFilter : sectionFilter,
-            maxChars,
-            reservedChars,
-            graph,
-            ide === "claude" ? excludeDirectives : undefined,
-            ide === "claude" ? delivery?.onDemandSkills : undefined,
-            ide === "claude" ? mcpEnabled : undefined,
-          );
+    const mainContent = await buildMainContext(
+      ctx,
+      answers,
+      snapshot,
+      analysis,
+      budget,
+      ide === "claude" ? effectiveSectionFilter : sectionFilter,
+      maxChars,
+      reservedChars,
+      graph,
+      ide === "claude" ? excludeDirectives : undefined,
+      ide === "claude" ? delivery?.onDemandSkills : undefined,
+      ide === "claude" ? mcpEnabled : undefined,
+    );
     await addFile(mainFilename, mainContent);
 
     if (ide === "cursor") {
@@ -212,13 +208,8 @@ export async function generateFiles(
       };
 
       for (const ide of answers.ides) {
-        const pkgMainFilename = ide === "aider" ? ".aider.conf.yml" : getMainContextFilename(ide);
-
-        const pkgContent =
-          ide === "aider"
-            ? await buildAiderContext(pkgCtx, pkgAnswers, pkgSnapshot)
-            : await buildMainContext(pkgCtx, pkgAnswers, pkgSnapshot);
-
+        const pkgMainFilename = getMainContextFilename(ide);
+        const pkgContent = await buildMainContext(pkgCtx, pkgAnswers, pkgSnapshot);
         const pkgFilePath = path.join(pkg.path, pkgMainFilename);
         await addFile(pkgFilePath, pkgContent);
       }
