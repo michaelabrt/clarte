@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, unlinkSync, rmdirSync } from "node:fs";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 
@@ -50,8 +50,50 @@ if (!existsSync(distEntry)) {
     let proc: ChildProcess;
     let accumulator: { buf: Buffer; resolvers: Array<(msg: unknown) => void> };
     let nextId = 1;
+    let createdGraphDir = false;
+    let createdGraphFile = false;
 
     beforeAll(async () => {
+      // Ensure .clarte/graph.json exists so scope/impact tools work in CI
+      const graphDir = path.join(projectRoot, ".clarte");
+      const graphPath = path.join(graphDir, "graph.json");
+      if (!existsSync(graphDir)) {
+        mkdirSync(graphDir, { recursive: true });
+        createdGraphDir = true;
+      }
+      if (!existsSync(graphPath)) {
+        const minimalGraph = {
+          version: 1,
+          timestamp: new Date().toISOString(),
+          files: {
+            "src/mcp/server.ts": {
+              role: null,
+              authority: 0,
+              hubScore: 0,
+              betweenness: 0,
+              instability: null,
+              importedByCount: 0,
+              isChokepoint: false,
+              separatesComponents: 0,
+              isCrossCutting: false,
+              layerSpread: 0,
+              layers: [],
+              hasTests: false,
+              testFiles: [],
+              communityId: null,
+            },
+          },
+          edges: [],
+          communities: [],
+          changeCoupling: [],
+          structuralMismatches: [],
+          testMapping: {},
+          lagCouplings: [],
+        };
+        writeFileSync(graphPath, JSON.stringify(minimalGraph));
+        createdGraphFile = true;
+      }
+
       accumulator = { buf: Buffer.alloc(0), resolvers: [] };
 
       proc = spawn("node", [distEntry, "serve"], {
@@ -96,6 +138,13 @@ if (!existsSync(distEntry)) {
 
     afterAll(() => {
       proc?.kill();
+      // Clean up graph files we created for CI
+      if (createdGraphFile) {
+        try { unlinkSync(path.join(projectRoot, ".clarte", "graph.json")); } catch {}
+      }
+      if (createdGraphDir) {
+        try { rmdirSync(path.join(projectRoot, ".clarte")); } catch {}
+      }
     });
 
     it("initialize response has protocolVersion, tools capability and serverInfo.name === clarte", async () => {
