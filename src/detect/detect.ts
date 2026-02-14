@@ -355,7 +355,6 @@ export async function detectIDEs(rootDir: string): Promise<IDETarget[]> {
     { path: ".windsurfrules", ide: "windsurf" },
     { path: ".clinerules", ide: "cline" },
     { path: ".continuerules", ide: "continue" },
-    { path: ".aider.conf.yml", ide: "aider" },
     { path: "AGENTS.md", ide: "opencode" },
   ];
 

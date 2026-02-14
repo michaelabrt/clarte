@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { buildSections, resetProjectNameCache } from "../templates/main-context.js";
-import { buildAiderContext } from "../templates/aider-context.js";
 import { renderArchitectureSections } from "../templates/sections/architecture.js";
 import type { ContextAnalysis, DetectedContext, ImportGraph, UserAnswers } from "../types.js";
 
@@ -179,89 +178,6 @@ describe("section ordering (sectionOrder)", () => {
   });
 });
 
-// ── Task 1b: Aider context enrichment ───────────────────────────────────
-
-describe("aider context enrichment", () => {
-  it("includes dead file warnings (max 5)", async () => {
-    const analysis = mockAnalysis({
-      deadFiles: [
-        "src/unused1.ts",
-        "src/unused2.ts",
-        "src/unused3.ts",
-        "src/unused4.ts",
-        "src/unused5.ts",
-        "src/unused6.ts",
-      ],
-    });
-
-    const result = await buildAiderContext(mockCtx(), mockAnswers(), null, analysis);
-
-    expect(result).toContain("DEAD FILE: src/unused1.ts has no importers. Consider removing.");
-    expect(result).toContain("DEAD FILE: src/unused5.ts has no importers. Consider removing.");
-    // 6th entry should be excluded (max 5)
-    expect(result).not.toContain("DEAD FILE: src/unused6.ts");
-  });
-
-  it("includes circular dependency details", async () => {
-    const analysis = mockAnalysis({
-      circularDeps: [{ chain: ["src/a.ts", "src/b.ts", "src/a.ts"], severity: 0.5, breakHint: "Extract shared type" }],
-    });
-
-    const result = await buildAiderContext(mockCtx(), mockAnswers(), null, analysis);
-
-    expect(result).toContain("CIRCULAR DEP:");
-    expect(result).toContain("src/a.ts -> src/b.ts -> src/a.ts");
-    expect(result).toContain("Extract shared type");
-  });
-
-  it("includes structural mismatch warnings (max 3)", async () => {
-    const analysis = mockAnalysis({
-      structuralMismatches: [
-        {
-          fileA: "src/schema.ts",
-          fileB: "src/migration.ts",
-          graphDistance: -1,
-          coChangeConfidence: 0.9,
-          coChangeCount: 8,
-        },
-        {
-          fileA: "src/config.ts",
-          fileB: "src/refresh.ts",
-          graphDistance: 3,
-          coChangeConfidence: 0.75,
-          coChangeCount: 5,
-        },
-        { fileA: "src/a.ts", fileB: "src/b.ts", graphDistance: 2, coChangeConfidence: 0.7, coChangeCount: 4 },
-        { fileA: "src/c.ts", fileB: "src/d.ts", graphDistance: -1, coChangeConfidence: 0.6, coChangeCount: 3 },
-      ],
-    });
-
-    const result = await buildAiderContext(mockCtx(), mockAnswers(), null, analysis);
-
-    expect(result).toContain(
-      "HIDDEN COUPLING: src/schema.ts and src/migration.ts change together but have no import link.",
-    );
-    expect(result).toContain(
-      "HIDDEN COUPLING: src/config.ts and src/refresh.ts change together but have no import link.",
-    );
-    expect(result).toContain("HIDDEN COUPLING: src/a.ts and src/b.ts change together but have no import link.");
-    // 4th entry should be excluded (max 3)
-    expect(result).not.toContain("HIDDEN COUPLING: src/c.ts");
-  });
-
-  it("omits dead file section when no dead files", async () => {
-    const analysis = mockAnalysis({ deadFiles: [] });
-    const result = await buildAiderContext(mockCtx(), mockAnswers(), null, analysis);
-    expect(result).not.toContain("DEAD FILE:");
-  });
-
-  it("omits structural mismatch section when no mismatches", async () => {
-    const analysis = mockAnalysis({ structuralMismatches: undefined });
-    const result = await buildAiderContext(mockCtx(), mockAnswers(), null, analysis);
-    expect(result).not.toContain("HIDDEN COUPLING:");
-  });
-});
-
 // ── Task 1c: Per-IDE section emphasis ───────────────────────────────────
 
 describe("per-IDE section emphasis", () => {
@@ -328,13 +244,6 @@ describe("per-IDE section emphasis", () => {
     expect(architecture!.priority).toBe(4);
   });
 
-  it("does not apply boosts for aider IDE", async () => {
-    const sections = await buildSections(mockCtx(), mockAnswers({ ides: ["aider"] }), null, mockAnalysis());
-
-    // All sections should have their default priorities
-    const guidelines = sections.find((s) => s.id === "working-guidelines");
-    expect(guidelines!.priority).toBe(2);
-  });
 });
 
 // ── Task 3: getProjectName caching ──────────────────────────────────────

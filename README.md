@@ -234,7 +234,6 @@ Clarté works with any AI coding tool that reads context files.
 | Windsurf | `.windsurfrules` | [docs.windsurf.com](https://docs.windsurf.com/windsurf/cascade/memories) |
 | Cline | `.clinerules` | [docs.cline.bot](https://docs.cline.bot/features/cline-rules/overview) |
 | Continue.dev | `.continuerules` | [continue.dev/docs](https://docs.continue.dev/customize/deep-dives/rules) |
-| Aider | `.aider.conf.yml` | [aider.chat](https://aider.chat/docs/config/aider_conf.html) |
 | Generic | `CONTEXT.md` | - |
 
 Deep integrations add per-file graph context delivery for tools that support it:

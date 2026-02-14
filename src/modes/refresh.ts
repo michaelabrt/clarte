@@ -25,29 +25,14 @@ const CONTEXT_FILES = [
 const MD_START = /<!-- CODE SNAPSHOT[^>]*-->/;
 const MD_END = /<!-- \/CODE SNAPSHOT -->/;
 
-/** Aider YAML comment markers */
-const AIDER_START = /^# --- Code Snapshot/m;
-const AIDER_END = /^# --- \/Code Snapshot ---$/m;
-
 /**
  * Find the first existing context file in the project root.
- * Also checks for .aider.conf.yml.
  */
-async function findContextFile(rootDir: string): Promise<{ path: string; isAider: boolean } | null> {
-  // Check aider first since it has a unique format
-  const aiderPath = path.join(rootDir, ".aider.conf.yml");
-  if (await fileExists(aiderPath)) {
-    const content = await readFileOr(aiderPath);
-    if (content && AIDER_START.test(content)) {
-      return { path: ".aider.conf.yml", isAider: true };
-    }
-  }
-
-  // Check markdown context files
+async function findContextFile(rootDir: string): Promise<string | null> {
   for (const file of CONTEXT_FILES) {
     const absPath = path.join(rootDir, file);
     if (await fileExists(absPath)) {
-      return { path: file, isAider: false };
+      return file;
     }
   }
 
@@ -65,35 +50,24 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
     throw new ClarteError("No context file found. Run clarte first to generate one.", ExitCode.MISSING);
   }
 
-  const absPath = path.join(rootDir, found.path);
+  const absPath = path.join(rootDir, found);
   const content = await readFileOr(absPath);
   if (!content) {
-    throw new ClarteError(`Could not read ${found.path}`, ExitCode.MISSING);
+    throw new ClarteError(`Could not read ${found}`, ExitCode.MISSING);
   }
 
   // 2. Verify snapshot markers exist
   const budgetOmitted = content.includes("Sections omitted") && content.includes("code-snapshot");
-  if (found.isAider) {
-    if (!AIDER_START.test(content) || !AIDER_END.test(content)) {
-      throw new ClarteError(
-        budgetOmitted
-          ? `Snapshot was omitted from ${found.path} to fit token budget. Run clarte --full to include it.`
-          : `No code snapshot markers found in ${found.path}. Run clarte to regenerate.`,
-        ExitCode.MISSING,
-      );
-    }
-  } else {
-    if (!MD_START.test(content) || !MD_END.test(content)) {
-      throw new ClarteError(
-        budgetOmitted
-          ? `Snapshot was omitted from ${found.path} to fit token budget. Run clarte --full to include it.`
-          : `No code snapshot markers found in ${found.path}. Run clarte to regenerate.`,
-        ExitCode.MISSING,
-      );
-    }
+  if (!MD_START.test(content) || !MD_END.test(content)) {
+    throw new ClarteError(
+      budgetOmitted
+        ? `Snapshot was omitted from ${found} to fit token budget. Run clarte --full to include it.`
+        : `No code snapshot markers found in ${found}. Run clarte to regenerate.`,
+      ExitCode.MISSING,
+    );
   }
 
-  p.log.info(t.text("Refreshing snapshot in ") + t.accent(found.path));
+  p.log.info(t.text("Refreshing snapshot in ") + t.accent(found));
 
   // 3. Detect context and generate new snapshot
   const shimmer = startShimmer("Scanning source files...");
@@ -127,47 +101,22 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
   }
 
   // 4. Replace the snapshot section
-  let updated: string;
-
-  if (found.isAider) {
-    // Replace YAML comment block
-    const startMatch = content.match(AIDER_START);
-    const endMatch = content.match(AIDER_END);
-    if (!startMatch || !endMatch) {
-      throw new ClarteError("Failed to parse snapshot markers.", ExitCode.PARSE_ERROR);
-    }
-
-    const startIdx = content.indexOf(startMatch[0]);
-    const endIdx = content.indexOf(endMatch[0]) + endMatch[0].length;
-
-    let newBlock = "# --- Code Snapshot (for reference) ---";
-    if (snapshot.markdown) {
-      for (const line of snapshot.markdown.split("\n")) {
-        newBlock += `\n# ${line}`;
-      }
-    }
-    newBlock += "\n# --- /Code Snapshot ---";
-
-    updated = content.slice(0, startIdx) + newBlock + content.slice(endIdx);
-  } else {
-    // Replace markdown block
-    const startMatch = content.match(MD_START);
-    const endMatch = content.match(MD_END);
-    if (!startMatch || !endMatch) {
-      throw new ClarteError("Failed to parse snapshot markers.", ExitCode.PARSE_ERROR);
-    }
-
-    const startIdx = content.indexOf(startMatch[0]);
-    const endIdx = content.indexOf(endMatch[0]) + endMatch[0].length;
-
-    let newBlock = "<!-- CODE SNAPSHOT (auto-generated, update when types/stores/services change) -->";
-    if (snapshot.markdown) {
-      newBlock += "\n\n" + snapshot.markdown + "\n";
-    }
-    newBlock += "\n<!-- /CODE SNAPSHOT -->";
-
-    updated = content.slice(0, startIdx) + newBlock + content.slice(endIdx);
+  const startMatch = content.match(MD_START);
+  const endMatch = content.match(MD_END);
+  if (!startMatch || !endMatch) {
+    throw new ClarteError("Failed to parse snapshot markers.", ExitCode.PARSE_ERROR);
   }
+
+  const startIdx = content.indexOf(startMatch[0]);
+  const endIdx = content.indexOf(endMatch[0]) + endMatch[0].length;
+
+  let newBlock = "<!-- CODE SNAPSHOT (auto-generated, update when types/stores/services change) -->";
+  if (snapshot.markdown) {
+    newBlock += "\n\n" + snapshot.markdown + "\n";
+  }
+  newBlock += "\n<!-- /CODE SNAPSHOT -->";
+
+  const updated = content.slice(0, startIdx) + newBlock + content.slice(endIdx);
 
   // 5. Write back
   await writeFileSafe(absPath, updated);
@@ -179,5 +128,5 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
     await saveConfig(rootDir, answers, newHash, config.language ?? detected.language);
   }
 
-  p.log.success(t.text("Updated snapshot in ") + t.accent(found.path));
+  p.log.success(t.text("Updated snapshot in ") + t.accent(found));
 }

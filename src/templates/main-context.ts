@@ -332,8 +332,6 @@ export function getMainContextFilename(ide: IDETarget): string {
       return ".clinerules";
     case "continue":
       return ".continuerules";
-    case "aider":
-      return ".aider.conf.yml";
     case "generic":
       return "CONTEXT.md";
   }
