@@ -2,7 +2,13 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs/promises";
-import { buildCallGraph, persistCallGraph, loadCallGraph, buildCallerIndex, buildFileCallIndex } from "../graph/build-call-graph.js";
+import {
+  buildCallGraph,
+  persistCallGraph,
+  loadCallGraph,
+  buildCallerIndex,
+  buildFileCallIndex,
+} from "../graph/build-call-graph.js";
 import { makeImportGraph } from "./helpers/factories.js";
 
 const FIXTURE_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), "fixtures/call-graph");
@@ -59,9 +65,7 @@ describe("buildCallerIndex", () => {
   });
 
   it("skips sites with null calleeFile", () => {
-    const sites = [
-      { caller: "src/a.ts", callerFn: "foo", callee: "external", calleeFile: null, line: 1 },
-    ];
+    const sites = [{ caller: "src/a.ts", callerFn: "foo", callee: "external", calleeFile: null, line: 1 }];
     const index = buildCallerIndex(sites);
     expect(index.size).toBe(0);
   });
@@ -113,9 +117,7 @@ describe("buildCallGraph - extraction", () => {
     const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
 
     // No calls to console, Object, Array, etc.
-    const builtinCalls = callGraph.sites.filter((s) =>
-      ["console", "Object", "Array", "Math"].includes(s.callee),
-    );
+    const builtinCalls = callGraph.sites.filter((s) => ["console", "Object", "Array", "Math"].includes(s.callee));
     expect(builtinCalls).toHaveLength(0);
   });
 
@@ -286,10 +288,7 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
           importedNames: ["doThing"],
         },
       ],
-      [
-        "src/__tests__/fixtures/call-graph/barrel-calls.ts",
-        "src/__tests__/fixtures/call-graph/barrel.ts",
-      ],
+      ["src/__tests__/fixtures/call-graph/barrel-calls.ts", "src/__tests__/fixtures/call-graph/barrel.ts"],
     );
     const files = ["src/__tests__/fixtures/call-graph/barrel-calls.ts"];
 

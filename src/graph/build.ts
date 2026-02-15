@@ -148,7 +148,7 @@ export async function buildImportGraph(
     const content = await readFileOr(absPath);
     if (!content) continue;
 
-    let root;
+    let root: import("web-tree-sitter").Node;
     try {
       root = parseSource(content, language, file);
     } catch {

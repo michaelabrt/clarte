@@ -287,7 +287,6 @@ describe("generateHookFiles", () => {
     const stateRefWithoutResolve = /(?<!resolve\([^)]*)"\.clarte\/hooks\/\.state"/.test(script);
     expect(stateRefWithoutResolve).toBe(false);
   });
-
 });
 
 // ── configureClaudeHooks ────────────────────────────────────────────────────
@@ -381,12 +380,8 @@ describe("configureClaudeHooks", () => {
       path.join(tmpDir, ".claude/settings.json"),
       JSON.stringify({
         hooks: {
-          PreToolUse: [
-            { hooks: [{ type: "command", command: "node .clarte/hooks/on-session-start.mjs" }] },
-          ],
-          SessionStart: [
-            { hooks: [{ type: "command", command: "node .clarte/hooks/on-session-start.mjs" }] },
-          ],
+          PreToolUse: [{ hooks: [{ type: "command", command: "node .clarte/hooks/on-session-start.mjs" }] }],
+          SessionStart: [{ hooks: [{ type: "command", command: "node .clarte/hooks/on-session-start.mjs" }] }],
         },
       }),
     );
@@ -445,5 +440,4 @@ describe("configureClaudeHooks", () => {
     const settings = JSON.parse(content);
     expect(settings.hooks.PreToolUse).toHaveLength(2);
   });
-
 });

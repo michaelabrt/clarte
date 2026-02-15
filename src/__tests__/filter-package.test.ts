@@ -9,9 +9,33 @@ describe("filterAnalysisForPackage", () => {
   it("filters hubFiles to package prefix and strips paths", () => {
     const analysis = makeContextAnalysis({
       hubFiles: [
-        { path: "packages/api/src/index.ts", centrality: 0.9, authority: 0.9, hubScore: 0.1, role: "Foundation", importedBy: 10, imports: 2 },
-        { path: "packages/web/src/app.ts", centrality: 0.5, authority: 0.5, hubScore: 0.5, role: "Leaf", importedBy: 3, imports: 5 },
-        { path: "shared/utils.ts", centrality: 0.3, authority: 0.3, hubScore: 0.1, role: "Leaf", importedBy: 1, imports: 0 },
+        {
+          path: "packages/api/src/index.ts",
+          centrality: 0.9,
+          authority: 0.9,
+          hubScore: 0.1,
+          role: "Foundation",
+          importedBy: 10,
+          imports: 2,
+        },
+        {
+          path: "packages/web/src/app.ts",
+          centrality: 0.5,
+          authority: 0.5,
+          hubScore: 0.5,
+          role: "Leaf",
+          importedBy: 3,
+          imports: 5,
+        },
+        {
+          path: "shared/utils.ts",
+          centrality: 0.3,
+          authority: 0.3,
+          hubScore: 0.1,
+          role: "Leaf",
+          importedBy: 1,
+          imports: 0,
+        },
       ],
     });
 
@@ -67,7 +91,13 @@ describe("filterAnalysisForPackage", () => {
         naming: { functions: "camelCase", types: "PascalCase", constants: "UPPER_SNAKE_CASE", files: "camelCase" },
         exportStyle: { preferNamed: true, defaultExportPercent: 5, barrelFileCount: 2 },
       },
-      graphTopology: { componentCount: 1, componentSizes: [10], approximateDiameter: 3, reachability: 1, isFragmented: false },
+      graphTopology: {
+        componentCount: 1,
+        componentSizes: [10],
+        approximateDiameter: 3,
+        reachability: 1,
+        isFragmented: false,
+      },
       monorepoAnalysis: { crossPackageEdges: [], encapsulationViolations: [], packageDependencies: new Map() },
     });
 
@@ -90,8 +120,20 @@ describe("filterAnalysisForPackage", () => {
           { path: "packages/web/src/b.ts", commits: 5, lastChanged: "2026-01-02" },
         ],
         changeCoupling: [
-          { fileA: "packages/api/src/a.ts", fileB: "packages/api/src/c.ts", coChangeCount: 3, support: 0.5, confidence: 0.6 },
-          { fileA: "packages/api/src/a.ts", fileB: "packages/web/src/b.ts", coChangeCount: 2, support: 0.3, confidence: 0.4 },
+          {
+            fileA: "packages/api/src/a.ts",
+            fileB: "packages/api/src/c.ts",
+            coChangeCount: 3,
+            support: 0.5,
+            confidence: 0.6,
+          },
+          {
+            fileA: "packages/api/src/a.ts",
+            fileB: "packages/web/src/b.ts",
+            coChangeCount: 2,
+            support: 0.3,
+            confidence: 0.4,
+          },
         ],
         lagCouplings: [
           { fileA: "packages/api/src/a.ts", fileB: "packages/api/src/c.ts", sameCommitCount: 2, lagScore: 0.8 },
@@ -163,10 +205,13 @@ describe("filterAnalysisForPackage", () => {
   it("filters changeImpact keys and value files", () => {
     const analysis = makeContextAnalysis({
       changeImpact: new Map([
-        ["packages/api/src/a.ts", [
-          { file: "packages/api/src/b.ts", score: 0.9 },
-          { file: "packages/web/src/c.ts", score: 0.5 },
-        ]],
+        [
+          "packages/api/src/a.ts",
+          [
+            { file: "packages/api/src/b.ts", score: 0.9 },
+            { file: "packages/web/src/c.ts", score: 0.5 },
+          ],
+        ],
         ["packages/web/src/x.ts", [{ file: "packages/web/src/y.ts", score: 0.8 }]],
       ]),
     });
@@ -182,8 +227,24 @@ describe("filterAnalysisForPackage", () => {
   it("does not match packages/api-docs when filtering for packages/api", () => {
     const analysis = makeContextAnalysis({
       hubFiles: [
-        { path: "packages/api/src/index.ts", centrality: 0.9, authority: 0.9, hubScore: 0.1, role: "Foundation", importedBy: 10, imports: 2 },
-        { path: "packages/api-docs/src/main.ts", centrality: 0.5, authority: 0.5, hubScore: 0.5, role: "Leaf", importedBy: 3, imports: 5 },
+        {
+          path: "packages/api/src/index.ts",
+          centrality: 0.9,
+          authority: 0.9,
+          hubScore: 0.1,
+          role: "Foundation",
+          importedBy: 10,
+          imports: 2,
+        },
+        {
+          path: "packages/api-docs/src/main.ts",
+          centrality: 0.5,
+          authority: 0.5,
+          hubScore: 0.5,
+          role: "Leaf",
+          importedBy: 3,
+          imports: 5,
+        },
       ],
     });
 
@@ -195,7 +256,15 @@ describe("filterAnalysisForPackage", () => {
   it("returns empty analysis for package with no matching files", () => {
     const analysis = makeContextAnalysis({
       hubFiles: [
-        { path: "packages/web/src/app.ts", centrality: 0.5, authority: 0.5, hubScore: 0.5, role: "Leaf", importedBy: 3, imports: 5 },
+        {
+          path: "packages/web/src/app.ts",
+          centrality: 0.5,
+          authority: 0.5,
+          hubScore: 0.5,
+          role: "Leaf",
+          importedBy: 3,
+          imports: 5,
+        },
       ],
       circularDeps: [{ chain: ["packages/web/src/a.ts", "packages/web/src/b.ts"] }],
       deadFiles: ["packages/web/src/dead.ts"],
@@ -216,7 +285,15 @@ describe("filterAnalysisForPackage", () => {
   it("handles trailing slash in packagePath", () => {
     const analysis = makeContextAnalysis({
       hubFiles: [
-        { path: "packages/api/src/index.ts", centrality: 0.9, authority: 0.9, hubScore: 0.1, role: "Foundation", importedBy: 10, imports: 2 },
+        {
+          path: "packages/api/src/index.ts",
+          centrality: 0.9,
+          authority: 0.9,
+          hubScore: 0.1,
+          role: "Foundation",
+          importedBy: 10,
+          imports: 2,
+        },
       ],
     });
 
@@ -245,9 +322,18 @@ describe("filterGraphForPackage", () => {
   it("filters Map fields by key prefix and strips keys", () => {
     const graph: ImportGraph = {
       edges: [],
-      inDegree: new Map([["packages/api/src/a.ts", 3], ["packages/web/src/b.ts", 1]]),
-      centrality: new Map([["packages/api/src/a.ts", 0.8], ["packages/web/src/b.ts", 0.2]]),
-      externalImportCounts: new Map([["express", 5], ["lodash", 2]]),
+      inDegree: new Map([
+        ["packages/api/src/a.ts", 3],
+        ["packages/web/src/b.ts", 1],
+      ]),
+      centrality: new Map([
+        ["packages/api/src/a.ts", 0.8],
+        ["packages/web/src/b.ts", 0.2],
+      ]),
+      externalImportCounts: new Map([
+        ["express", 5],
+        ["lodash", 2],
+      ]),
       authority: new Map([["packages/api/src/a.ts", 0.9]]),
       hubScores: new Map([["packages/api/src/a.ts", 0.1]]),
     };
@@ -286,7 +372,10 @@ describe("filterGraphForPackage", () => {
       externalImportCounts: new Map(),
       authority: new Map(),
       hubScores: new Map(),
-      betweennessScores: new Map([["packages/api/src/core.ts", 0.7], ["packages/web/src/app.ts", 0.3]]),
+      betweennessScores: new Map([
+        ["packages/api/src/core.ts", 0.7],
+        ["packages/web/src/app.ts", 0.3],
+      ]),
     };
 
     const result = filterGraphForPackage(graph, "packages/api");
@@ -306,9 +395,7 @@ describe("filterGraphForPackage", () => {
   });
 
   it("returns empty graph for package with no matching files", () => {
-    const graph = makeImportGraph([
-      { from: "packages/web/src/a.ts", to: "packages/web/src/b.ts" },
-    ]);
+    const graph = makeImportGraph([{ from: "packages/web/src/a.ts", to: "packages/web/src/b.ts" }]);
 
     const result = filterGraphForPackage(graph, "packages/api");
     expect(result.edges).toHaveLength(0);

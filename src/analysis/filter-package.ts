@@ -5,17 +5,12 @@ import type { ContextAnalysis, ImportGraph, ImportEdge } from "../types.js";
  * Paths are filtered by `packagePath + "/"` prefix and then stripped so they're relative
  * to the package root.
  */
-export function filterAnalysisForPackage(
-  analysis: ContextAnalysis,
-  packagePath: string,
-): ContextAnalysis {
+export function filterAnalysisForPackage(analysis: ContextAnalysis, packagePath: string): ContextAnalysis {
   const prefix = packagePath.endsWith("/") ? packagePath : `${packagePath}/`;
   const has = (p: string) => p.startsWith(prefix);
   const strip = (p: string) => p.slice(prefix.length);
 
-  const hubFiles = analysis.hubFiles
-    .filter((h) => has(h.path))
-    .map((h) => ({ ...h, path: strip(h.path) }));
+  const hubFiles = analysis.hubFiles.filter((h) => has(h.path)).map((h) => ({ ...h, path: strip(h.path) }));
 
   const circularDeps = analysis.circularDeps
     .filter((cd) => cd.chain.every((f) => has(f)))
@@ -31,9 +26,7 @@ export function filterAnalysisForPackage(
     }))
     .filter((l) => l.files.length > 0);
 
-  const instabilities = analysis.instabilities
-    .filter((i) => has(i.path))
-    .map((i) => ({ ...i, path: strip(i.path) }));
+  const instabilities = analysis.instabilities.filter((i) => has(i.path)).map((i) => ({ ...i, path: strip(i.path) }));
 
   const communities = analysis.communities
     .map((c) => ({
@@ -87,18 +80,17 @@ export function filterAnalysisForPackage(
         testTypes: analysis.testMapping.testTypes
           ? filterStripKeyMap(analysis.testMapping.testTypes, prefix)
           : undefined,
-        exemplarTestFile: analysis.testMapping.exemplarTestFile && has(analysis.testMapping.exemplarTestFile)
-          ? strip(analysis.testMapping.exemplarTestFile)
-          : undefined,
+        exemplarTestFile:
+          analysis.testMapping.exemplarTestFile && has(analysis.testMapping.exemplarTestFile)
+            ? strip(analysis.testMapping.exemplarTestFile)
+            : undefined,
       }
     : undefined;
 
   const gitActivity = analysis.gitActivity
     ? {
         commitCounts: filterStripKeyMap(analysis.gitActivity.commitCounts, prefix),
-        hotFiles: analysis.gitActivity.hotFiles
-          .filter((h) => has(h.path))
-          .map((h) => ({ ...h, path: strip(h.path) })),
+        hotFiles: analysis.gitActivity.hotFiles.filter((h) => has(h.path)).map((h) => ({ ...h, path: strip(h.path) })),
         changeCoupling: analysis.gitActivity.changeCoupling
           .filter((c) => has(c.fileA) && has(c.fileB))
           .map((c) => ({ ...c, fileA: strip(c.fileA), fileB: strip(c.fileB) })),
@@ -147,10 +139,7 @@ export function filterAnalysisForPackage(
  * Filter an ImportGraph to contain only edges and data within a single package.
  * Both endpoints of each edge must be in the package. Paths are prefix-stripped.
  */
-export function filterGraphForPackage(
-  graph: ImportGraph,
-  packagePath: string,
-): ImportGraph {
+export function filterGraphForPackage(graph: ImportGraph, packagePath: string): ImportGraph {
   const prefix = packagePath.endsWith("/") ? packagePath : `${packagePath}/`;
   const has = (p: string) => p.startsWith(prefix);
   const strip = (p: string) => p.slice(prefix.length);
@@ -167,12 +156,8 @@ export function filterGraphForPackage(
     externalImportCounts: new Map(graph.externalImportCounts),
     authority: filterStripKeyMap(graph.authority, prefix),
     hubScores: filterStripKeyMap(graph.hubScores, prefix),
-    barrelFiles: graph.barrelFiles
-      ? new Set([...graph.barrelFiles].filter(has).map(strip))
-      : undefined,
-    betweennessScores: graph.betweennessScores
-      ? filterStripKeyMap(graph.betweennessScores, prefix)
-      : undefined,
+    barrelFiles: graph.barrelFiles ? new Set([...graph.barrelFiles].filter(has).map(strip)) : undefined,
+    betweennessScores: graph.betweennessScores ? filterStripKeyMap(graph.betweennessScores, prefix) : undefined,
   };
 }
 
@@ -190,11 +175,7 @@ function filterStripKeyMap<V>(map: Map<string, V>, prefix: string): Map<string, 
 }
 
 /** Filter a Map by key prefix, strip prefix, and transform values. */
-function filterStripMap<V>(
-  map: Map<string, V>,
-  prefix: string,
-  transformValue: (v: V) => V,
-): Map<string, V> {
+function filterStripMap<V>(map: Map<string, V>, prefix: string, transformValue: (v: V) => V): Map<string, V> {
   const result = new Map<string, V>();
   for (const [k, v] of map) {
     if (k.startsWith(prefix)) {

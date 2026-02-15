@@ -89,7 +89,10 @@ describe("generateRunTestScript", () => {
 
   it("generates --grep for mocha projects", async () => {
     await setupTmpDir({ scripts: { test: "mocha" } });
-    const result = await generateRunTestScript(tmpDir, makeCtx({ rootDir: tmpDir, packageManager: "npm", testFramework: "Mocha" }));
+    const result = await generateRunTestScript(
+      tmpDir,
+      makeCtx({ rootDir: tmpDir, packageManager: "npm", testFramework: "Mocha" }),
+    );
     expect(result).toBe(".clarte/scripts/run-test.sh");
     const script = await readScript();
     expect(script).toContain("--grep");
@@ -116,7 +119,10 @@ describe("generateRunTestScript", () => {
 
   it("generates -k for pytest projects", async () => {
     await setupTmpDir({});
-    const result = await generateRunTestScript(tmpDir, makeCtx({ rootDir: tmpDir, packageManager: "pip", testFramework: "pytest" }));
+    const result = await generateRunTestScript(
+      tmpDir,
+      makeCtx({ rootDir: tmpDir, packageManager: "pip", testFramework: "pytest" }),
+    );
     expect(result).toBe(".clarte/scripts/run-test.sh");
     const script = await readScript();
     expect(script).toContain("-k '$1'");
@@ -158,7 +164,10 @@ describe("generateRunTestScript", () => {
       { scripts: { test: "pnpm run compile && mocha", compile: "gulp clean && tsc" } },
       { ".mocharc.json": JSON.stringify({ spec: ["./build/compiled/test/**/*.test.js"] }) },
     );
-    const result = await generateRunTestScript(tmpDir, makeCtx({ rootDir: tmpDir, packageManager: "pnpm", testFramework: "Mocha" }));
+    const result = await generateRunTestScript(
+      tmpDir,
+      makeCtx({ rootDir: tmpDir, packageManager: "pnpm", testFramework: "Mocha" }),
+    );
     expect(result).toBe(".clarte/scripts/run-test.sh");
     const script = await readScript();
     expect(script).toContain("pnpm run compile");

@@ -31,7 +31,6 @@ vi.mock("../templates/main-context.js", () => ({
   }),
 }));
 
-
 vi.mock("../templates/claude-skills.js", () => ({
   buildClaudeSkills: vi.fn().mockResolvedValue([]),
   renderClaudeSkill: vi.fn(() => ""),

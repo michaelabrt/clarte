@@ -221,9 +221,8 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const diffFilterSet = new Set(diffFilterFiles);
   const subcommands = new Set(["ci", "learn", "run", "serve"]);
   const targetDir =
-    rawArgs.find(
-      (a) => !a.startsWith("-") && !diffFilterSet.has(a) && !subcommands.has(a) && a !== learnSessionPath,
-    ) ?? process.cwd();
+    rawArgs.find((a) => !a.startsWith("-") && !diffFilterSet.has(a) && !subcommands.has(a) && a !== learnSessionPath) ??
+    process.cwd();
   const rootDir = path.resolve(targetDir);
 
   if (diffFile && !diffMode) {

@@ -243,7 +243,6 @@ describe("per-IDE section emphasis", () => {
     expect(guidelines!.priority).toBe(2);
     expect(architecture!.priority).toBe(4);
   });
-
 });
 
 // ── Task 3: getProjectName caching ──────────────────────────────────────
