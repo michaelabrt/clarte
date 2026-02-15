@@ -163,9 +163,7 @@ describe("resolveEditTargets", () => {
         "src/auth.ts": makeFileRecord(),
         "src/config.ts": makeFileRecord(),
       },
-      changeCoupling: [
-        { fileA: "src/config.ts", fileB: "src/auth.ts", confidence: 0.6, coChangeCount: 3 },
-      ],
+      changeCoupling: [{ fileA: "src/config.ts", fileB: "src/auth.ts", confidence: 0.6, coChangeCount: 3 }],
     });
     const targets = resolveEditTargets("auth", graph);
     expect(targets).toContain("src/auth.ts");

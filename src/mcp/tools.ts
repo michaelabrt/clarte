@@ -51,9 +51,7 @@ export function handleScope(args: Record<string, unknown>, state: ServerState): 
     parts.push(`\nCONTENTS:\n${contents}`);
   }
 
-  const importers = (state.edgesByTarget.get(filePath) ?? [])
-    .map((e) => e.from)
-    .slice(0, MAX_IMPORTER_SNIPPETS);
+  const importers = (state.edgesByTarget.get(filePath) ?? []).map((e) => e.from).slice(0, MAX_IMPORTER_SNIPPETS);
 
   if (importers.length > 0) {
     const snippetLines: string[] = ["\nIMPORTER_SNIPPETS:"];
@@ -151,9 +149,7 @@ function bm25Score(queryTokens: string[], doc: string[], corpus: Corpus): number
     if (termTf === 0) continue;
     const dfVal = corpus.df.get(term) ?? 0;
     const idf = Math.log((N - dfVal + 0.5) / (dfVal + 0.5) + 1);
-    const tfNorm =
-      (termTf * (BM25_K1 + 1)) /
-      (termTf + BM25_K1 * (1 - BM25_B + BM25_B * (dl / corpus.avgdl)));
+    const tfNorm = (termTf * (BM25_K1 + 1)) / (termTf + BM25_K1 * (1 - BM25_B + BM25_B * (dl / corpus.avgdl)));
     score += idf * tfNorm;
   }
   return score;
@@ -201,9 +197,7 @@ export function handleRoute(args: Record<string, unknown>, state: ServerState): 
     .filter((c): c is { sha: string; message: string } => c !== null);
 
   if (commits.length === 0) {
-    return ok(
-      JSON.stringify({ task, files: [], matchedCommits: [], note: "no commits found" }, null, 2),
-    );
+    return ok(JSON.stringify({ task, files: [], matchedCommits: [], note: "no commits found" }, null, 2));
   }
 
   // 2. BM25 rank commits by task description
@@ -223,11 +217,7 @@ export function handleRoute(args: Record<string, unknown>, state: ServerState): 
 
   if (topCommits.length === 0) {
     return ok(
-      JSON.stringify(
-        { task, files: [], matchedCommits: [], note: "no commits matched the task description" },
-        null,
-        2,
-      ),
+      JSON.stringify({ task, files: [], matchedCommits: [], note: "no commits matched the task description" }, null, 2),
     );
   }
 
@@ -235,21 +225,21 @@ export function handleRoute(args: Record<string, unknown>, state: ServerState): 
   const topCommit = topCommits[0];
   let diffOutput: string;
   try {
-    diffOutput = execSync(
-      `git diff-tree --no-commit-id -r --name-only ${topCommit.sha}`,
-      { cwd: rootDir, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] },
-    );
+    diffOutput = execSync(`git diff-tree --no-commit-id -r --name-only ${topCommit.sha}`, {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
   } catch {
     return ok(
-      JSON.stringify(
-        { task, files: [], matchedCommits: [topCommit.message], note: "git diff-tree failed" },
-        null,
-        2,
-      ),
+      JSON.stringify({ task, files: [], matchedCommits: [topCommit.message], note: "git diff-tree failed" }, null, 2),
     );
   }
 
-  const changedFiles = diffOutput.split("\n").map((l) => l.trim()).filter(Boolean);
+  const changedFiles = diffOutput
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
 
   // 4. Pick the single best file: first non-test src file that exists on disk,
   //    falling back to any existing file if all are test files.
@@ -278,11 +268,7 @@ export function handleRoute(args: Record<string, unknown>, state: ServerState): 
 
     const coChanges =
       state.graph?.changeCoupling
-        .filter(
-          (c) =>
-            (c.fileA === filePath || c.fileB === filePath) &&
-            c.confidence >= ROUTE_CO_CHANGE_THRESHOLD,
-        )
+        .filter((c) => (c.fileA === filePath || c.fileB === filePath) && c.confidence >= ROUTE_CO_CHANGE_THRESHOLD)
         .sort((a, b) => b.coChangeCount - a.coChangeCount)
         .slice(0, 3)
         .map((c) => ({
@@ -291,10 +277,7 @@ export function handleRoute(args: Record<string, unknown>, state: ServerState): 
         })) ?? [];
 
     const graphRecord = state.graph?.files[filePath];
-    const testFile =
-      graphRecord?.testFiles && graphRecord.testFiles.length > 0
-        ? graphRecord.testFiles[0]
-        : undefined;
+    const testFile = graphRecord?.testFiles && graphRecord.testFiles.length > 0 ? graphRecord.testFiles[0] : undefined;
 
     return {
       path: filePath,

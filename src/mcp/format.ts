@@ -25,11 +25,7 @@ function formatRole(record: FileRecord): string {
 /**
  * Format a clarte_scope response for a file.
  */
-export function formatScope(
-  filePath: string,
-  graph: PersistedGraph,
-  edgesByTarget: Map<string, EdgeEntry[]>,
-): string {
+export function formatScope(filePath: string, graph: PersistedGraph, edgesByTarget: Map<string, EdgeEntry[]>): string {
   const record = graph.files[filePath];
   if (!record) {
     return `${filePath}: not in graph (run clarte generate to update)`;
@@ -41,9 +37,7 @@ export function formatScope(
   if (roleStr) lines.push(`ROLE: ${roleStr}`);
 
   const importers = (edgesByTarget.get(filePath) ?? []).map((e) => e.from);
-  lines.push(
-    `IMPORTERS: ${importers.length === 0 ? "none" : `${importers.length} (use clarte_impact for full list)`}`,
-  );
+  lines.push(`IMPORTERS: ${importers.length === 0 ? "none" : `${importers.length} (use clarte_impact for full list)`}`);
 
   const coChanges = graph.changeCoupling
     .filter((c) => (c.fileA === filePath || c.fileB === filePath) && c.confidence >= CO_CHANGE_THRESHOLD)
@@ -100,9 +94,7 @@ export function formatFunction(
   const lines: string[] = [`FUNCTION: ${name} (${displayFile})`];
 
   if (allCallers.length === 0) {
-    lines.push(
-      "CALLED BY: none (note: interface dispatch and higher-order calls may not be captured)",
-    );
+    lines.push("CALLED BY: none (note: interface dispatch and higher-order calls may not be captured)");
   } else {
     lines.push(`CALLED BY (${allCallers.length}):`);
     for (const site of allCallers.slice(0, 20)) {
@@ -116,9 +108,7 @@ export function formatFunction(
   // Find callees - need the file where this function is defined
   const targetFile = inferredFile;
   if (!targetFile) {
-    lines.push(
-      "CALLS: provide path= to see callees (function not found in caller index)",
-    );
+    lines.push("CALLS: provide path= to see callees (function not found in caller index)");
     return lines.join("\n");
   }
 

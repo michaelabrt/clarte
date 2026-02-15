@@ -61,8 +61,8 @@ function buildCheckTestsScript(testCmd: string, framework?: string): string {
 # Usage: .clarte/scripts/check-tests.sh [extra-args...]
 set -o pipefail
 
-EXTRA_ARGS="\$*"
-CMD="${testCmd}\${EXTRA_ARGS:+ \$EXTRA_ARGS}"
+EXTRA_ARGS="$*"
+CMD="${testCmd}\${EXTRA_ARGS:+ $EXTRA_ARGS}"
 
 TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
@@ -185,8 +185,7 @@ const SLOW_COMPILE_RE = /\b(gulp|tsc|compile)\b.*&&/;
 // Recognizes compile-only segments (gulp, tsc, or pnpm/npm run compile).
 export const COMPILE_SEGMENT_RE = /\b(gulp|tsc|compile)\b/;
 // Recognizes test runner segments - required to confirm there's actually a test step.
-const TEST_SEGMENT_RE =
-  /\b(mocha|jest|vitest|pytest|karma|ava|jasmine)\b|test:(fast|unit|quick|only|run|local)\b/;
+const TEST_SEGMENT_RE = /\b(mocha|jest|vitest|pytest|karma|ava|jasmine)\b|test:(fast|unit|quick|only|run|local)\b/;
 
 /**
  * For test scripts with slow compile steps (e.g. "gulp clean && tsc && mocha"),
@@ -207,10 +206,7 @@ export function extractFastTestCmd(rawTest: string): string | null {
   return testParts.join(" && ");
 }
 
-export async function generateCheckTestsScript(
-  rootDir: string,
-  ctx: DetectedContext,
-): Promise<string | null> {
+export async function generateCheckTestsScript(rootDir: string, ctx: DetectedContext): Promise<string | null> {
   const testCmd = resolveTestCommand(ctx);
   if (!testCmd) return null;
 
@@ -305,9 +301,7 @@ async function detectCompileStep(
         } else if (/\b(build|dist|compiled|out)\b/.test(content)) {
           return { compileCmd: runPrefix ? `${runPrefix} compile` : null, testsFromCompiled: true };
         }
-      } catch {
-        continue;
-      }
+      } catch {}
     }
   }
 
@@ -350,11 +344,7 @@ function buildTestFilterFlag(framework: string | undefined): string | null {
 /**
  * Build the run-test.sh script that compiles (if needed) and runs filtered tests.
  */
-function buildRunTestScript(
-  testCmd: string,
-  framework: string | undefined,
-  compileCmd: string | null,
-): string {
+function buildRunTestScript(testCmd: string, framework: string | undefined, compileCmd: string | null): string {
   const filterFlag = buildTestFilterFlag(framework);
   // Package manager scripts need "--" to pass flags to the underlying runner.
   // Skip if the command already ends with "--" (e.g. extracted fast test commands).
@@ -362,11 +352,8 @@ function buildRunTestScript(
   const sep = needsSeparator ? "-- " : "";
   // Mocha's --grep interprets the pattern as a regex. Escape metacharacters
   // so test names with parens, brackets etc. match literally.
-  const escapeGrep =
-    framework === "Mocha"
-      ? `\nPATTERN=$(printf '%s' "$1" | sed 's/[][(){}.*+?^$|\\\\]/\\\\&/g')`
-      : "";
-  const patVar = framework === "Mocha" ? "\$PATTERN" : "\$1";
+  const escapeGrep = framework === "Mocha" ? `\nPATTERN=$(printf '%s' "$1" | sed 's/[][(){}.*+?^$|\\\\]/\\\\&/g')` : "";
+  const patVar = framework === "Mocha" ? "$PATTERN" : "$1";
 
   const filterLine = (() => {
     switch (framework) {
@@ -418,10 +405,7 @@ eval "$CMD"
  * Generate the run-test.sh script in .clarte/scripts/.
  * Returns the relative path if generated, null if no test command or filter mechanism detected.
  */
-export async function generateRunTestScript(
-  rootDir: string,
-  ctx: DetectedContext,
-): Promise<string | null> {
+export async function generateRunTestScript(rootDir: string, ctx: DetectedContext): Promise<string | null> {
   // Only generate for frameworks where we know the filter mechanism
   const filterFlag = buildTestFilterFlag(ctx.testFramework);
   const isPositionalFilter = ctx.packageManager === "cargo" || ctx.packageManager === "go";
@@ -487,10 +471,7 @@ function buildGrepGraphData(graph: PersistedGraph): Record<string, GrepGraphEntr
     const importers = importersByTarget.get(filePath) ?? [];
 
     const coChanges: Array<[string, number]> = graph.changeCoupling
-      .filter(
-        (c) =>
-          (c.fileA === filePath || c.fileB === filePath) && c.confidence >= CO_CHANGE_THRESHOLD,
-      )
+      .filter((c) => (c.fileA === filePath || c.fileB === filePath) && c.confidence >= CO_CHANGE_THRESHOLD)
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 3)
       .map((c) => {
@@ -595,10 +576,7 @@ if (lastFile !== null) {
  * Generate the clarte-grep script in .clarte/scripts/ with baked-in graph data.
  * Returns the relative path on success.
  */
-export async function generateClarteGrepScript(
-  rootDir: string,
-  graph: PersistedGraph,
-): Promise<string> {
+export async function generateClarteGrepScript(rootDir: string, graph: PersistedGraph): Promise<string> {
   const graphData = buildGrepGraphData(graph);
   const scriptContent = buildClarteGrepScript(graphData);
   const scriptPath = path.join(rootDir, SCRIPTS_DIR, "clarte-grep");

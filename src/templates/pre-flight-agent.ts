@@ -35,7 +35,7 @@ export function buildPreFlightAgent(): string {
     "TEMPLATE: <path to nearest existing test file>\n" +
     "IMPORTS: <key imports the test file uses>\n" +
     "SETUP: <DataSource/connection setup pattern, 2-4 lines>\n" +
-    "ASSERTION STYLE: <e.g. \"chai should\" or \"expect()\">\n" +
+    'ASSERTION STYLE: <e.g. "chai should" or "expect()">\n' +
     "```\n"
   );
 }

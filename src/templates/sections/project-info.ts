@@ -311,7 +311,9 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
   }
 
   lines.push("");
-  lines.push("When tests pass, commit immediately. Do not re-run tests on unmodified code to check for pre-existing failures - note any unrelated failures in the commit message instead.");
+  lines.push(
+    "When tests pass, commit immediately. Do not re-run tests on unmodified code to check for pre-existing failures - note any unrelated failures in the commit message instead.",
+  );
   lines.push("");
   lines.push("After significant changes, use `/check` to verify no architectural regressions.");
 

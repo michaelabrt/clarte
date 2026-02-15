@@ -225,11 +225,7 @@ function buildDocument(filePath: string, symbols: string[]): FileDoc {
  * 5. Add co-change partners above confidence threshold at COUPLING_FACTOR of seed score
  * 6. Sort by score descending, return top N
  */
-export function resolveEditTargets(
-  query: string,
-  graph: PersistedGraph,
-  maxTargets = DEFAULT_MAX_TARGETS,
-): string[] {
+export function resolveEditTargets(query: string, graph: PersistedGraph, maxTargets = DEFAULT_MAX_TARGETS): string[] {
   const queryTerms = tokenizeQuery(query);
   if (queryTerms.length === 0) return [];
 
@@ -294,7 +290,9 @@ export function resolveEditTargets(
 
     for (const [testFp, sources] of testToSource) {
       if (!graph.files[testFp]) continue;
-      const allSymbols = [...new Set([...(exportedNames.get(testFp) ?? []), ...(graph.files[testFp]?.symbolNames ?? [])])];
+      const allSymbols = [
+        ...new Set([...(exportedNames.get(testFp) ?? []), ...(graph.files[testFp]?.symbolNames ?? [])]),
+      ];
       const testDoc = buildDocument(testFp, allSymbols);
       const testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols);
       if (testScore > 0) {
@@ -315,7 +313,13 @@ export function resolveEditTargets(
       const doc = docs.get(fp)!;
       const matched = queryTerms.filter((t) => doc.allTerms.has(t));
       console.error(
-        JSON.stringify({ file: fp, score, matched, pathLen: doc.path.tokens.length, symLen: doc.symbols.tokens.length }),
+        JSON.stringify({
+          file: fp,
+          score,
+          matched,
+          pathLen: doc.path.tokens.length,
+          symLen: doc.symbols.tokens.length,
+        }),
       );
     }
   }

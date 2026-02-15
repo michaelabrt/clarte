@@ -36,9 +36,7 @@ function collectImportedNames(graph: ImportGraph): FileExportEntry[] {
 
   const entries: FileExportEntry[] = [];
   for (const [filePath, nameCounts] of fileNameCounts) {
-    const sorted = [...nameCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([name]) => name);
+    const sorted = [...nameCounts.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
     entries.push({ path: filePath, names: sorted });
   }
 

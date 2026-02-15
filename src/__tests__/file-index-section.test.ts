@@ -96,10 +96,7 @@ describe("renderFileIndexSection", () => {
 
   it("filters out barrel files", () => {
     const graph = makeGraph(
-      [
-        makeEdge("src/app.ts", "src/types/index.ts", ["Foo"]),
-        makeEdge("src/app.ts", "src/types/graph.ts", ["Bar"]),
-      ],
+      [makeEdge("src/app.ts", "src/types/index.ts", ["Foo"]), makeEdge("src/app.ts", "src/types/graph.ts", ["Bar"])],
       ["src/types/index.ts"],
     );
     const section = renderFileIndexSection(graph)!;

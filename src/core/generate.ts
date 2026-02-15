@@ -146,9 +146,11 @@ export async function generateFiles(
     }
 
     const agentPath =
-      ide === "claude" ? ".claude/agents/clarte-pre-flight.md" :
-      ide === "cursor" ? ".cursor/agents/clarte-pre-flight.md" :
-      null;
+      ide === "claude"
+        ? ".claude/agents/clarte-pre-flight.md"
+        : ide === "cursor"
+          ? ".cursor/agents/clarte-pre-flight.md"
+          : null;
     if (agentPath) await addFile(agentPath, buildPreFlightAgent());
 
     if (generateSkills && ide === "claude") {

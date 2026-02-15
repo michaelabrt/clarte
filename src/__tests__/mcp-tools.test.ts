@@ -42,13 +42,9 @@ describe("handleScope", () => {
           testFiles: ["src/__tests__/utils.test.ts"],
         }),
       },
-      changeCoupling: [
-        { fileA: "src/utils.ts", fileB: "src/index.ts", confidence: 0.9, coChangeCount: 15 },
-      ],
+      changeCoupling: [{ fileA: "src/utils.ts", fileB: "src/index.ts", confidence: 0.9, coChangeCount: 15 }],
     });
-    const { edgesByTarget } = makeEdgesByFile([
-      { from: "src/index.ts", to: "src/utils.ts", importedNames: ["foo"] },
-    ]);
+    const { edgesByTarget } = makeEdgesByFile([{ from: "src/index.ts", to: "src/utils.ts", importedNames: ["foo"] }]);
     const state = makeState({ graph, edgesByTarget });
 
     const result = handleScope({ path: "src/utils.ts" }, state);

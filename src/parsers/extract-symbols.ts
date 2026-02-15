@@ -24,8 +24,12 @@ function extractTsSymbols(root: Node): string[] {
       if (declarator.type !== "variable_declarator") continue;
       const name = declarator.childForFieldName("name")?.text;
       const value = declarator.childForFieldName("value");
-      if (name && name.length > 1 && value &&
-          (value.type === "arrow_function" || value.type === "function_expression")) {
+      if (
+        name &&
+        name.length > 1 &&
+        value &&
+        (value.type === "arrow_function" || value.type === "function_expression")
+      ) {
         names.push(name);
       }
     }

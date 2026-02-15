@@ -215,21 +215,12 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
   if (mcpMode) {
     try {
       const { buildCallGraph, persistCallGraph } = await import("../graph/build-call-graph.js");
-      const callGraph = await buildCallGraph(
-        rootDir,
-        graph,
-        [...graph.inDegree.keys()],
-        detected.language,
-      );
+      const callGraph = await buildCallGraph(rootDir, graph, [...graph.inDegree.keys()], detected.language);
       await persistCallGraph(rootDir, callGraph);
       verboseLog(`Call graph: ${callGraph.sites.length} resolved call sites`);
     } catch (err) {
       if (!jsonMode) {
-        p.log.warn(
-          t.warn(
-            `Call graph extraction failed: ${err instanceof Error ? err.message : String(err)}`,
-          ),
-        );
+        p.log.warn(t.warn(`Call graph extraction failed: ${err instanceof Error ? err.message : String(err)}`));
       }
     }
   }
@@ -428,17 +419,14 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
   // Generate Claude Code hooks for graph context delivery (non-critical)
   if (!dryRun && persistedGraph && answers.ides.includes("claude") && savedConfig?.hooks !== false) {
     try {
-      const { generateHookFiles, configureClaudeHooks, generatePreFlightAgentFile } = await import("../hooks/generate-hooks.js");
+      const { generateHookFiles, configureClaudeHooks, generatePreFlightAgentFile } = await import(
+        "../hooks/generate-hooks.js"
+      );
       let hookDirectives: string[] | undefined;
       if (savedConfig?.delivery?.enrichedHooks) {
         hookDirectives = buildDirectives(analysis, detected);
       }
-      await generateHookFiles(
-        rootDir,
-        persistedGraph,
-        savedConfig?.delivery?.enrichedHooks,
-        hookDirectives,
-      );
+      await generateHookFiles(rootDir, persistedGraph, savedConfig?.delivery?.enrichedHooks, hookDirectives);
       await configureClaudeHooks(rootDir);
       await generatePreFlightAgentFile(rootDir);
     } catch (err) {

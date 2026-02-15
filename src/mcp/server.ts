@@ -2,11 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  ListToolsRequestSchema,
-  CallToolRequestSchema,
-  type Tool,
-} from "@modelcontextprotocol/sdk/types.js";
+import { ListToolsRequestSchema, CallToolRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import { CLARTE_DIR } from "../config/config.js";
 import { loadPersistedGraph } from "../graph/persist.js";
 import { loadCallGraph, buildCallerIndex, buildFileCallIndex } from "../graph/build-call-graph.js";
