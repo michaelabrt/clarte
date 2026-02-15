@@ -34,15 +34,7 @@ export interface ConfigConstraints {
 }
 
 /** Supported AI IDE/tool targets */
-export type IDETarget =
-  | "claude"
-  | "cursor"
-  | "opencode"
-  | "copilot"
-  | "windsurf"
-  | "cline"
-  | "continue"
-  | "generic";
+export type IDETarget = "claude" | "cursor" | "opencode" | "copilot" | "windsurf" | "cline" | "continue" | "generic";
 
 /** Detected programming language */
 export type Language = "typescript" | "javascript" | "python" | "go" | "rust" | "java" | "other";

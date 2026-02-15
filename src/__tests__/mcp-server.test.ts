@@ -140,10 +140,14 @@ if (!existsSync(distEntry)) {
       proc?.kill();
       // Clean up graph files we created for CI
       if (createdGraphFile) {
-        try { unlinkSync(path.join(projectRoot, ".clarte", "graph.json")); } catch {}
+        try {
+          unlinkSync(path.join(projectRoot, ".clarte", "graph.json"));
+        } catch {}
       }
       if (createdGraphDir) {
-        try { rmdirSync(path.join(projectRoot, ".clarte")); } catch {}
+        try {
+          rmdirSync(path.join(projectRoot, ".clarte"));
+        } catch {}
       }
     });
 
