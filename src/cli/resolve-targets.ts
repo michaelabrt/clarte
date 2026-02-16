@@ -362,3 +362,11 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
     .slice(0, maxTargets)
     .map(([fp]) => fp);
 }
+
+/**
+ * Check whether the prompt already mentions any of the resolved targets.
+ * When true, the agent can self-localize and pre-flight adds no value.
+ */
+export function promptMentionsTargets(query: string, targets: string[]): boolean {
+  return targets.some((t) => query.includes(t));
+}
