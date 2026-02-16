@@ -306,17 +306,9 @@ describe("configureClaudeHooks", () => {
     const settings = JSON.parse(content);
     expect(settings.hooks.SessionStart).toHaveLength(1);
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("on-session-start.mjs");
-    // 2 PreToolUse hooks: fail-fast (no matcher) + pre-agent (Agent)
-    expect(settings.hooks.PreToolUse).toHaveLength(2);
-    const failFastHook = settings.hooks.PreToolUse.find(
-      (h: { matcher?: string; hooks: { command: string }[] }) =>
-        !h.matcher && h.hooks[0].command.includes("on-fail-fast.mjs"),
-    );
-    expect(failFastHook).toBeDefined();
-    expect(failFastHook.matcher).toBeUndefined();
-    const preAgentHook = settings.hooks.PreToolUse.find((h: { matcher?: string }) => h.matcher === "Agent");
-    expect(preAgentHook).toBeDefined();
-    expect(preAgentHook.hooks[0].command).toContain("on-pre-agent.mjs");
+    expect(settings.hooks.PreToolUse).toHaveLength(1);
+    expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain("on-fail-fast.mjs");
+    expect(settings.hooks.PreToolUse[0].matcher).toBeUndefined();
   });
 
   it("preserves existing hooks", async () => {
@@ -337,7 +329,7 @@ describe("configureClaudeHooks", () => {
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
     expect(settings.someOtherSetting).toBe(true);
-    expect(settings.hooks.PreToolUse).toHaveLength(3);
+    expect(settings.hooks.PreToolUse).toHaveLength(2);
     expect(settings.hooks.PreToolUse[0].matcher).toBe("Write");
     const failFast2 = settings.hooks.PreToolUse.find(
       (h: { matcher?: string; hooks: { command: string }[] }) =>
@@ -362,8 +354,8 @@ describe("configureClaudeHooks", () => {
 
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
-    // Old clarte hook cleaned up, replaced with fail-fast + pre-agent
-    expect(settings.hooks.PreToolUse).toHaveLength(2);
+    // Old clarte hook cleaned up, replaced with fail-fast
+    expect(settings.hooks.PreToolUse).toHaveLength(1);
     const failFast3 = settings.hooks.PreToolUse.find(
       (h: { matcher?: string; hooks: { command: string }[] }) =>
         !h.matcher && h.hooks[0].command.includes("on-fail-fast.mjs"),
@@ -390,8 +382,8 @@ describe("configureClaudeHooks", () => {
 
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
-    // Should have exactly 2 PreToolUse hooks (fail-fast + pre-agent) and 1 SessionStart
-    expect(settings.hooks.PreToolUse).toHaveLength(2);
+    // Should have exactly 1 PreToolUse hook (fail-fast) and 1 SessionStart
+    expect(settings.hooks.PreToolUse).toHaveLength(1);
     const failFast4 = settings.hooks.PreToolUse.find(
       (h: { matcher?: string; hooks: { command: string }[] }) =>
         !h.matcher && h.hooks[0].command.includes("on-fail-fast.mjs"),
@@ -438,6 +430,6 @@ describe("configureClaudeHooks", () => {
 
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
-    expect(settings.hooks.PreToolUse).toHaveLength(2);
+    expect(settings.hooks.PreToolUse).toHaveLength(1);
   });
 });
