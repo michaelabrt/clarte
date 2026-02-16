@@ -1,6 +1,7 @@
 /**
  * Shared pre-flight agent content for both Claude Code and Cursor.
- * Written to .claude/agents/clarte-pre-flight.md and .cursor/agents/clarte-pre-flight.md.
+ * Written to .clarte/agents/clarte-pre-flight.md (Claude) and .cursor/agents/clarte-pre-flight.md (Cursor).
+ * For Claude, the on-prompt hook copies to .claude/agents/ on demand when the prompt is opaque.
  */
 export function buildPreFlightAgent(): string {
   return (

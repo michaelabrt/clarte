@@ -145,13 +145,15 @@ export async function generateFiles(
       );
     }
 
-    const agentPath =
-      ide === "claude"
-        ? ".claude/agents/clarte-pre-flight.md"
-        : ide === "cursor"
-          ? ".cursor/agents/clarte-pre-flight.md"
-          : null;
-    if (agentPath) await addFile(agentPath, buildPreFlightAgent());
+    // Always write agent to .clarte/agents/ (source of truth).
+    // For Cursor, also copy to .cursor/agents/ (no hook mechanism to do it later).
+    // For Claude, the on-prompt hook copies to .claude/agents/ on demand.
+    if (ide === "claude" || ide === "cursor") {
+      await addFile(".clarte/agents/clarte-pre-flight.md", buildPreFlightAgent());
+      if (ide === "cursor") {
+        await addFile(".cursor/agents/clarte-pre-flight.md", buildPreFlightAgent());
+      }
+    }
 
     if (generateSkills && ide === "claude") {
       const skills = buildClaudeSkills(analysis, delivery?.onDemandSkills);
@@ -182,7 +184,7 @@ export async function generateFiles(
         const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
         await addFile(
           claudeMdPath,
-          `# Project Context\n\nSee \`.claude/rules/clarte.md\` for full architectural context.\n\nFirst action on every coding task: call Agent(subagent_type="clarte-pre-flight", prompt="<your full task>"). It reads the relevant files and returns exact edit instructions. Apply them directly - do not read files yourself before or after.\n\n<!-- clarte: generated ${ts}. Run npx clarte to regenerate. -->\n`,
+          `# Project Context\n\nSee \`.claude/rules/clarte.md\` for full architectural context.\n\nFirst action on every coding task: call Agent(subagent_type="clarte-pre-flight", prompt="<your full task>"). It reads the relevant files and returns exact edit instructions. Apply them directly - do not read files yourself before or after. Skip this step if \`.clarte/task-context.md\` does not exist.\n\n<!-- clarte: generated ${ts}. Run npx clarte to regenerate. -->\n`,
         );
       }
     }
