@@ -36,7 +36,7 @@ Clarté completed 5 of 5. Without it, the agent completed 3 of 5 within the same
 
 ## What We Learned
 
-We tested 20 approaches across 700+ sessions to find what actually changes agent behavior. Eighteen failed.
+We tested 20+ approaches across 700+ sessions to find what actually changes agent behavior. Eighteen failed.
 
 **What doesn't work:** giving agents more information. We ran 15 content experiments - richer analysis, better formatting, more sections. Zero wins. A [placebo](#placebo) (minimal context with project language and test framework, no structural analysis) performed identically to the full analysis. When we analyzed 170 sessions (7,595 turns), we found agents spend most of their time exploring code they never edit, and 75% of tail waste is test-retry loops where the agent re-runs the same failing command without changing code.
 
