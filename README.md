@@ -8,9 +8,9 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
-<p align="center"><strong>Architecture intelligence engine for agentic development.</strong></p>
+<p align="center"><em>Knows your codebase so the agent doesn't have to guess.</em></p>
 
-Clarté builds a dependency graph from your codebase and uses it to steer tools like Claude Code, Cursor and Copilot - predicting where to edit before the agent starts exploring.
+Clarté builds a graph from your codebase, mapping how files connect and change together. It predicts where to edit before the agent starts exploring.
 
 In [real-world tests](#case-studies), Clarté completed tasks that agents couldn't finish alone, at 26-50% lower cost.
 
@@ -60,12 +60,12 @@ For the full research story (20 experiments, ablation studies, statistical metho
 
 ```mermaid
 graph LR
-    A[Your Codebase] --> B[Dependency Graph<br><small>20 static analyses</small>]
-    B --> C[Context File<br><small>background knowledge</small>]
-    B --> D[Prompt Hook<br><small>BM25F edit targets</small>]
-    D --> E[Pre-flight Agent<br><small>exact code locations</small>]
+    A[Your Codebase] --> B[Dependency Graph]
+    B --> C[Context File]
+    B --> D[Prompt Hook]
+    D --> E[Pre-flight Agent]
     C & E --> F((Agent))
-    B --> G[MCP Tools<br><small>on-demand queries</small>]
+    B --> G[MCP Tools]
     G --> F
     F -. "edits + commits" .-> A
 ```
@@ -128,22 +128,18 @@ For Claude Code, Clarté installs hooks and a pre-flight diagnostic agent on top
 
 1. You submit a task prompt
 2. The prompt hook runs BM25F retrieval over the dependency graph (file paths + AST symbol names), writes the top-5 predicted edit targets to `.clarte/task-context.md` with key symbols. Falls back to git history similarity when no graph is present.
-3. The pre-agent hook blocks any subagent until the pre-flight scan has run
-4. The pre-flight agent reads each target file exactly once and returns exact code locations with verbatim surrounding context and a proposed fix
-5. The main agent's first action is an edit, not an exploration
+3. The pre-flight agent reads each target file exactly once and returns exact code locations with verbatim surrounding context and a proposed fix
+4. The main agent's first action is an edit, not an exploration
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | Context file | `.claude/rules/clarte.md` | Architecture map, always loaded |
 | Prompt hook | `.clarte/hooks/on-prompt.mjs` | BM25F target resolution on every prompt |
-| Pre-agent hook | `.clarte/hooks/on-pre-agent.mjs` | Enforces pre-flight before other subagents |
 | Fail-fast hook | `.clarte/hooks/on-fail-fast.mjs` | Blocks repeated test/build without a code edit (threshold: 3) |
 | Session hook | `.clarte/hooks/on-session-start.mjs` | Resets hook state, disables hooks for Haiku |
 | Pre-flight agent | `.claude/agents/clarte-pre-flight.md` | Reads targets, returns exact edit locations |
 
 Hooks wire into `.claude/settings.json` automatically. The pre-flight agent is installed to your project's `.claude/agents/` directory.
-
-> The pre-flight gate only fires when `.clarte/task-context.md` is present - when the prompt hook found matching targets. On repos without a graph, hooks are transparent.
 
 ## MCP Tools
 
