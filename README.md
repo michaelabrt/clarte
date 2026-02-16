@@ -128,9 +128,10 @@ For Claude Code, Clarté installs hooks and a pre-flight diagnostic agent on top
 **The flow:**
 
 1. You submit a task prompt
-2. The prompt hook runs BM25F retrieval over the dependency graph (file paths + AST symbol names), writes the top-5 predicted edit targets to `.clarte/task-context.md` with key symbols. Falls back to git history similarity when no graph is present.
-3. The pre-flight agent reads each target file exactly once and returns exact code locations with verbatim surrounding context and a proposed fix
-4. The main agent's first action is an edit, not an exploration
+2. The prompt hook checks whether the prompt already mentions file paths from the dependency graph. If it does, the agent already knows where to edit - steps 3-4 are skipped (zero overhead).
+3. Otherwise, the hook runs BM25F retrieval over the graph (file paths + AST symbol names), writes the top-5 predicted edit targets to `.clarte/task-context.md` with key symbols and installs the pre-flight agent. Falls back to git history similarity when no graph is present.
+4. The pre-flight agent reads each target file exactly once and returns exact code locations with verbatim surrounding context and a proposed fix
+5. The main agent's first action is an edit, not an exploration
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
