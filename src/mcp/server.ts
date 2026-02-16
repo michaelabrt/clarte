@@ -16,7 +16,7 @@ const CALL_GRAPH_PATH = path.join(CLARTE_DIR, "call-graph.json");
 
 const MCP_INSTRUCTIONS =
   "clarte provides code graph tools for this project. See CLAUDE.md for usage instructions.\n" +
-  "Tools: clarte_route, clarte_scope, clarte_function, clarte_impact.";
+  "Tools: clarte_route, clarte_scope, clarte_calls, clarte_impact.";
 
 export interface EdgeEntry {
   from: string;
@@ -150,7 +150,7 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "clarte_function",
+    name: "clarte_calls",
     description:
       "Returns all call sites of a function (who calls it) and all functions it calls " +
       "(what it invokes), with file paths and line numbers. Call this BEFORE renaming, " +
@@ -225,7 +225,7 @@ export async function createMcpServer(rootDir: string): Promise<{ server: Server
     switch (name) {
       case "clarte_scope":
         return handleScope(safeArgs, state);
-      case "clarte_function":
+      case "clarte_calls":
         return handleFunction(safeArgs, state);
       case "clarte_impact":
         return handleImpact(safeArgs, state);

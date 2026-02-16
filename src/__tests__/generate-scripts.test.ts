@@ -80,7 +80,7 @@ describe("generateRunTestScript", () => {
   }
 
   async function readScript(): Promise<string> {
-    return readFile(path.join(tmpDir, ".clarte/scripts/run-test.sh"), "utf-8");
+    return readFile(path.join(tmpDir, ".clarte/scripts/run-tests.sh"), "utf-8");
   }
 
   afterEach(async () => {
@@ -93,7 +93,7 @@ describe("generateRunTestScript", () => {
       tmpDir,
       makeCtx({ rootDir: tmpDir, packageManager: "npm", testFramework: "Mocha" }),
     );
-    expect(result).toBe(".clarte/scripts/run-test.sh");
+    expect(result).toBe(".clarte/scripts/run-tests.sh");
     const script = await readScript();
     expect(script).toContain("--grep");
     expect(script).toContain("PATTERN=");
@@ -104,7 +104,7 @@ describe("generateRunTestScript", () => {
   it("generates -t for vitest projects", async () => {
     await setupTmpDir({ scripts: { test: "vitest run" } });
     const result = await generateRunTestScript(tmpDir, makeCtx({ rootDir: tmpDir, testFramework: "Vitest" }));
-    expect(result).toBe(".clarte/scripts/run-test.sh");
+    expect(result).toBe(".clarte/scripts/run-tests.sh");
     const script = await readScript();
     expect(script).toContain("-t '$1'");
   });
@@ -112,7 +112,7 @@ describe("generateRunTestScript", () => {
   it("generates -t for jest projects", async () => {
     await setupTmpDir({ scripts: { test: "jest" } });
     const result = await generateRunTestScript(tmpDir, makeCtx({ rootDir: tmpDir, testFramework: "Jest" }));
-    expect(result).toBe(".clarte/scripts/run-test.sh");
+    expect(result).toBe(".clarte/scripts/run-tests.sh");
     const script = await readScript();
     expect(script).toContain("-t '$1'");
   });
@@ -123,7 +123,7 @@ describe("generateRunTestScript", () => {
       tmpDir,
       makeCtx({ rootDir: tmpDir, packageManager: "pip", testFramework: "pytest" }),
     );
-    expect(result).toBe(".clarte/scripts/run-test.sh");
+    expect(result).toBe(".clarte/scripts/run-tests.sh");
     const script = await readScript();
     expect(script).toContain("-k '$1'");
   });
@@ -168,7 +168,7 @@ describe("generateRunTestScript", () => {
       tmpDir,
       makeCtx({ rootDir: tmpDir, packageManager: "pnpm", testFramework: "Mocha" }),
     );
-    expect(result).toBe(".clarte/scripts/run-test.sh");
+    expect(result).toBe(".clarte/scripts/run-tests.sh");
     const script = await readScript();
     expect(script).toContain("pnpm run compile");
     expect(script).toContain("Compiling");
@@ -178,7 +178,7 @@ describe("generateRunTestScript", () => {
   it("includes compile step when test script has slow compile", async () => {
     await setupTmpDir({ scripts: { test: "tsc && jest", build: "tsc" } });
     const result = await generateRunTestScript(tmpDir, makeCtx({ rootDir: tmpDir, testFramework: "Jest" }));
-    expect(result).toBe(".clarte/scripts/run-test.sh");
+    expect(result).toBe(".clarte/scripts/run-tests.sh");
     const script = await readScript();
     expect(script).toContain("npm run build");
     expect(script).toContain("Compiling");

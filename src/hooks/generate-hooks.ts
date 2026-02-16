@@ -1,5 +1,4 @@
 import path from "node:path";
-import os from "node:os";
 import { readJsonFile, writeFileSafe } from "../utils.js";
 import type { PersistedGraph } from "../types/persisted-graph.js";
 import { buildContextMap } from "./context-map.js";
@@ -505,11 +504,9 @@ export async function generateHookFiles(
 /**
  * Generate the pre-flight diagnostic agent file at .claude/agents/clarte-pre-flight.md.
  */
-export async function generatePreFlightAgentFile(_rootDir: string): Promise<void> {
-  // Must be in ~/.claude/agents/ (user-global) for subagent_type to be recognized.
-  // Project-level .claude/agents/ is not loaded as a subagent_type source by Claude Code.
-  const userAgentsDir = path.join(os.homedir(), ".claude", "agents");
-  await writeFileSafe(path.join(userAgentsDir, "clarte-pre-flight.md"), PRE_FLIGHT_AGENT_CONTENT);
+export async function generatePreFlightAgentFile(rootDir: string): Promise<void> {
+  const agentsDir = path.join(rootDir, ".claude", "agents");
+  await writeFileSafe(path.join(agentsDir, "clarte-pre-flight.md"), PRE_FLIGHT_AGENT_CONTENT);
 }
 
 interface HookEntry {

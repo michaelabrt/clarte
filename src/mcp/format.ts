@@ -60,7 +60,7 @@ export function formatScope(filePath: string, graph: PersistedGraph, edgesByTarg
 }
 
 /**
- * Format a clarte_function response for a named function.
+ * Format a clarte_calls response for a named function.
  */
 export function formatFunction(
   name: string,
