@@ -1,6 +1,6 @@
 # Research: How Static Analysis Affects AI Coding Agents
 
-We ran 20+ experiments across 400+ agent sessions to understand how architectural context affects AI coding agent performance. The goal: measure what helps, what hurts and why.
+We ran 20+ experiments across 700+ agent sessions to understand how architectural context affects AI coding agent performance. The goal: measure what helps, what hurts and why.
 
 **TL;DR**: Most approaches to injecting static analysis into agent context either do nothing or actively hurt. Content doesn't matter nearly as much as behavior. The breakthrough came from using the dependency graph to predict edit targets and inject them as confidence signals, cutting the agent's exploration phase. This approach (pre-flight) won on all tested tasks, including single-package repos where full context historically hurt.
 
@@ -127,16 +127,34 @@ The [BM25F retrieval](experiments/bm25-retrieval.md) experiment combined all ins
 2. **Task-context file** listing predicted edit targets with key symbols per file
 3. **Generated CLAUDE.md** with imperative directives ("Always use .clarte/scripts/check-tests.sh")
 
-Tested on 4 real-world bug fixes (3 Hono single-package, 1 TypeORM monorepo), opaque prompts:
+Tested on 4 real-world bug fixes (3 Hono single-package, 1 TypeORM monorepo), opaque prompts. The URL fragment row pools the original pilot (n=1) with a later controlled AB (n=7):
 
-| Task | Placebo | Pre-flight | Delta |
-|---|---|---|---|
-| Hono: URL fragment stripping | 15t / $0.42 | 12t / $0.31 | -26% cost |
-| Hono: JSX async context | did not finish | 17t / $0.48 | pre-flight only |
-| Hono: form validator prototype pollution | did not finish | 18t / $0.41 | pre-flight only |
-| TypeORM: SQLite simple-enum array | ~22t baseline | 11t / $0.56 | ~-50% turns |
+| Task | Placebo | Pre-flight | Delta | n |
+|---|---|---|---|---|
+| Hono: URL fragment (opaque) | $0.34 | $0.28 | -17% cost | 8+8 |
+| Hono: URL fragment (detailed) | $0.16 | $0.15 | parity | 10+1 |
+| Hono: JSX async context | did not finish | 17t / $0.48 | pre-flight only | 1+1 |
+| Hono: form validator | did not finish | 18t / $0.41 | pre-flight only | 1+1 |
+| TypeORM: SQLite simple-enum array | ~22t | ~11t | ~-50% turns | 1+1 |
 
-Pre-flight finished all 4 tasks. Placebo finished 2 of 4 (and was slower on both). This is the first approach to beat placebo on single-package repos.
+Pre-flight finished all 4 opaque tasks. Placebo finished 2 of 4 (and was slower on both). On hono-url (the only task with controlled n=8 data), pre-flight variance was 3x tighter ($0.25-$0.31 vs $0.26-$0.42). This is the first approach to beat placebo on single-package repos.
+
+## Phase 5: On-demand delivery
+
+The pre-flight system from R.20 loaded its agent file into every session's system prompt. On detailed prompts where the agent already knows which files to edit, this added per-turn cost with no benefit.
+
+### On-demand agent mechanism
+
+The prompt hook checks whether the prompt mentions known file paths from the dependency graph. If it does: no task-context.md, no agent copy, zero overhead.
+
+**AB benchmark (hono #4440, URL fragment stripping, Sonnet)**:
+
+| Prompt type | Placebo | Pre-flight | Delta | n |
+|---|---|---|---|---|
+| Detailed | $0.16 | $0.15 | parity | 10 vs 1 |
+| Opaque | $0.34 | $0.28 | **-17% cost** | 8 vs 8 |
+
+Pre-flight variance on opaque: $0.25-$0.31 (spread $0.06) vs placebo $0.26-$0.42 (spread $0.16).
 
 ## What we learned
 
@@ -155,6 +173,8 @@ Pre-flight finished all 4 tasks. Placebo finished 2 of 4 (and was slower on both
 7. **Imperative phrasing is obeyed; soft phrasing is ignored.** "Always use X instead of Y" works. "To verify tests, run X" does not (R.19).
 
 8. **Hook mechanisms are limited.** Only `permissionDecision: "deny"` works in Claude Code. All other hook outputs (additionalContext, updatedInput) are silently ignored (R.12, R.13b, R.19).
+
+9. **On-demand delivery eliminates detailed-prompt overhead.** Pre-flight costs nothing when the agent already knows where to edit. The prompt hook gates agent installation on prompt opacity.
 
 ## Experiment index
 
