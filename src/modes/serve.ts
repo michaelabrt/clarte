@@ -12,7 +12,7 @@ export async function runServeMode(rootDir: string): Promise<void> {
   const callGraphPath = path.join(rootDir, CLARTE_DIR, "call-graph.json");
   if (!fs.existsSync(callGraphPath)) {
     process.stderr.write(
-      "[clarte] call-graph.json not found - clarte_function will be unavailable. Run `clarte generate --mcp` to build it.\n",
+      "[clarte] call-graph.json not found - clarte_calls will be unavailable. Run `clarte generate --mcp` to build it.\n",
     );
   }
   await runMcpServer(rootDir);

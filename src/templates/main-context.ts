@@ -295,11 +295,11 @@ It reads the target files and returns the exact edit locations with full code co
 
 | Trigger | Tool | What it returns |
 |---------|------|-----------------|
-| **Before renaming or removing** a function | \`clarte_function(<name>)\` | All call sites + all functions it calls |
+| **Before renaming or removing** a function | \`clarte_calls(<name>)\` | All call sites + all functions it calls |
 | **Before changing** a public API or export | \`clarte_impact(<path>)\` | Full transitive dependent set + risk level |
 
 **STOP CONDITIONS:**
-- Do NOT call \`clarte_function\` for trivial one-line functions.
+- Do NOT call \`clarte_calls\` for trivial one-line functions.
 - Do NOT call \`clarte_impact\` on leaf files with zero importers.`;
 }
 

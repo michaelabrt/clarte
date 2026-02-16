@@ -305,7 +305,7 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
     if (hasRunTest) {
       lines.push("");
       lines.push(
-        "Always use `.clarte/scripts/run-test.sh '<pattern>'` to run a subset of tests by name. It compiles automatically before running - never run the compile step separately. Never run the full suite when you only need to verify specific tests.",
+        "Always use `.clarte/scripts/run-tests.sh '<pattern>'` to run a subset of tests by name. It compiles automatically before running - never run the compile step separately. Never run the full suite when you only need to verify specific tests.",
       );
     }
   }

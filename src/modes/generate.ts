@@ -443,7 +443,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     }
   }
 
-  // Generate check-tests.sh and run-test.sh skill scripts (non-critical)
+  // Generate check-tests.sh and run-tests.sh skill scripts (non-critical)
   if (!dryRun && answers.ides.includes("claude")) {
     try {
       const { generateCheckTestsScript, generateRunTestScript } = await import("../hooks/generate-scripts.js");
