@@ -1,6 +1,6 @@
 # Research: How Static Analysis Affects AI Coding Agents
 
-We ran 20+ experiments across 700+ agent sessions to understand how architectural context affects AI coding agent performance. The goal: measure what helps, what hurts and why.
+We ran 30+ experiments across 700+ agent sessions to understand how architectural context affects AI coding agent performance. The goal: measure what helps, what hurts and why.
 
 **TL;DR**: Most approaches to injecting static analysis into agent context either do nothing or actively hurt. Content doesn't matter nearly as much as behavior. The breakthrough came from using the dependency graph to predict edit targets and inject them as confidence signals, cutting the agent's exploration phase. This approach (pre-flight) won on all tested tasks, including single-package repos where full context historically hurt.
 
@@ -86,13 +86,13 @@ After 18 experiments with 0 content wins, we stepped back and measured what actu
 
 | Experiment | Finding | Doc |
 |---|---|---|
-| [Failure Patterns (R.11)](experiments/failure-patterns.md) | 170 sessions, 7595 turns. 59% exploration, 28% edit, 13% tail. Test output parsing loops are 75% of tail waste. | |
-| [Quality Measurement (R.10)](experiments/quality-measurement.md) | Code patches identical across conditions. No quality signal on simple bug fixes. | |
-| [Evolving Context (Gate A/B)](experiments/evolving-context.md) | 100% of missed files are already in CLAUDE.md. Utilization problem, not coverage. | |
+| [Failure Patterns (R.11)](studies/failure-patterns.md) | 170 sessions, 7595 turns. 59% exploration, 28% edit, 13% tail. Test output parsing loops are 75% of tail waste. | |
+| [Quality Measurement (R.10)](studies/quality-measurement.md) | Code patches identical across conditions. No quality signal on simple bug fixes. | |
+| [Evolving Context (Gate A/B)](studies/evolving-context.md) | 100% of missed files are already in CLAUDE.md. Utilization problem, not coverage. | |
 
 ### The first-edit timing breakthrough (R.18)
 
-The [research synthesis](experiments/research-synthesis.md) analyzed 426 passing sessions (4775 turns) across all conditions and found a strong predictor: **first-edit turn predicts total cost at r=0.70-1.00**. Every delayed first-edit turn adds ~1.3 total turns.
+The [research synthesis](studies/research-synthesis.md) analyzed 426 passing sessions (4775 turns) across all conditions and found a strong predictor: **first-edit turn predicts total cost at r=0.70-1.00**. Every delayed first-edit turn adds ~1.3 total turns.
 
 With context, agents start editing at turn 5.0. Without context, turn 7.8. The mechanism isn't knowledge (agents find the right files anyway); it's confidence to stop reading and start editing.
 
@@ -178,4 +178,4 @@ Pre-flight variance on opaque: $0.25-$0.31 (spread $0.06) vs placebo $0.26-$0.42
 
 ## Experiment index
 
-All experiment write-ups are in [`docs/experiments/`](experiments/). The [research pipeline](../memory/) in project memory has raw data and intermediate findings.
+All experiment write-ups are in [`docs/experiments/`](experiments/). Observational studies, meta-analyses and design docs are in [`docs/studies/`](studies/). The [research pipeline](../memory/) in project memory has raw data and intermediate findings.
