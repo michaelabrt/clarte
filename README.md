@@ -22,21 +22,23 @@ Zero config. Detects your stack, scans source files, generates everything. Node.
 
 ## Case Studies
 
-The full Clarté stack (dependency graph + BM25F prompt targeting + pre-flight agent) on real bug fixes in open-source repos. Opaque prompts, Sonnet, `claude -p`:
+Real bug fixes in open-source repos. Opaque prompts, Sonnet, `claude -p`:
 
-| Task | Repo | Without Clarté | With Clarté | n |
-|------|------|----------------|-------------|---|
-| URL fragment stripping | Hono | $0.34 avg | **$0.28 avg (-17%)** | 8+8 |
-| JSX async context loss | Hono | did not finish | **17 turns / $0.48** | 1+1 |
-| Form validator prototype pollution | Hono | did not finish | **18 turns / $0.41** | 1+1 |
-| SQLite simple-enum array | TypeORM | ~22 turns | **~11 turns** | 1+1 |
-| WebSocket adapter shutdown | NestJS | 53 turns / $2.70 | **38 turns / $2.17 (-20%)** | 7+7 |
+| Task | Repo | Without Clarté | With Clarté | n | Stack |
+|------|------|----------------|-------------|---|-------|
+| URL fragment stripping | Hono | $0.34 avg | **$0.28 avg (-17%)** | 8+8 | pre-flight |
+| JSX async context loss | Hono | did not finish | **17 turns / $0.48** | 1+1 | pre-flight |
+| Form validator prototype pollution | Hono | did not finish | **18 turns / $0.41** | 1+1 | pre-flight |
+| SQLite simple-enum array | TypeORM | ~22 turns | **~11 turns** | 1+1 | pre-flight |
+| WebSocket adapter shutdown | NestJS | 53 turns / $2.70 | **38 turns / $2.17 (-20%)** | 7+7 | context file |
+
+**Stack**: *pre-flight* = dependency graph + BM25F prompt targeting + pre-flight agent. *context file* = dependency graph + generated context file (no pre-flight).
 
 Clarté completed 5 of 5. Without it, the agent completed 3 of 5 within the same budget. The URL fragment and WebSocket rows are pooled from multiple controlled runs; JSX, form validator and TypeORM are single-run pilots. For controlled evidence with statistical testing, see [fixture benchmarks](#fixture-benchmarks).
 
 ## What We Learned
 
-We tested 20+ approaches across 700+ sessions to find what actually changes agent behavior. Eighteen failed.
+We tested 20+ approaches across 700+ sessions to find what actually changes agent behavior. Over 80% failed.
 
 **What doesn't work:** giving agents more information. We ran 15 content experiments - richer analysis, better formatting, more sections. Zero wins. A [placebo](#placebo) (minimal context with project language and test framework, no structural analysis) performed identically to the full analysis. When we analyzed 170 sessions (7,595 turns), we found agents spend most of their time exploring code they never edit, and 75% of tail waste is test-retry loops where the agent re-runs the same failing command without changing code.
 
