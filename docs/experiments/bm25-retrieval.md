@@ -2,7 +2,7 @@
 
 ## Status
 
-GO (2026-03-10)
+GO (2026-03-10). Consolidated with n=8 controlled replication on 2026-03-11.
 
 ## Context
 
