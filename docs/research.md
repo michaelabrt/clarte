@@ -141,7 +141,7 @@ Pre-flight finished all 4 opaque tasks. Placebo finished 2 of 4 (and was slower 
 
 ## Phase 5: On-demand delivery
 
-The pre-flight system from R.20 loaded its agent file into every session's system prompt. On detailed prompts where the agent already knows which files to edit, this added per-turn cost with no benefit.
+The pre-flight system from R.20 loaded its agent file into every session's system prompt. On detailed prompts where the agent already knows which files to edit, this added per-turn cost with no benefit. Full write-up: [on-demand delivery](experiments/on-demand-delivery.md).
 
 ### On-demand agent mechanism
 
