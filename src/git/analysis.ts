@@ -149,6 +149,14 @@ export function analyzeGitActivity(
     const commits = parseGitLog(rootDir, window);
     if (commits.length === 0) return null;
 
+    // Normalize renamed files so coupling history survives renames
+    const renameMap = detectRenames(rootDir, window);
+    if (renameMap.size > 0) {
+      for (const commit of commits) {
+        commit.files = [...new Set(commit.files.map((f) => renameMap.get(f) ?? f))];
+      }
+    }
+
     onProgress?.(`Parsed ${commits.length} commits`);
     const result = processCommits(commits, analysisDays, onProgress);
     if (!result) return null;
@@ -483,6 +491,83 @@ export function computeLagCoupling(commits: ParsedCommit[], couplingResults: Cha
   return results;
 }
 
+/**
+ * Detect file renames in git history and build a normalization map.
+ * Maps old file names to their current (newest) name, resolved transitively.
+ */
+function detectRenames(rootDir: string, window: TimeWindow): Map<string, string> {
+  try {
+    const rangeArg = "ref" in window ? `${window.ref}..HEAD` : `--since=${window.days} days ago`;
+    const output = gitExec(["log", "--no-merges", rangeArg, "-M", "--diff-filter=R", "--name-status", "--format="], {
+      cwd: rootDir,
+      timeout: 15000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    if (!output?.trim()) return new Map();
+
+    const renameMap = new Map<string, string>();
+    for (const line of output.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const parts = trimmed.split("\t");
+      if (parts.length >= 3 && parts[0].startsWith("R")) {
+        renameMap.set(parts[1], parts[2]);
+      }
+    }
+
+    // Resolve transitive renames: A->B, B->C => A->C
+    for (const [oldName] of renameMap) {
+      let current = renameMap.get(oldName)!;
+      const seen = new Set<string>([oldName]);
+      while (renameMap.has(current) && !seen.has(current)) {
+        seen.add(current);
+        current = renameMap.get(current)!;
+      }
+      renameMap.set(oldName, current);
+    }
+
+    return renameMap;
+  } catch {
+    return new Map();
+  }
+}
+
+async function detectRenamesAsync(rootDir: string, window: TimeWindow): Promise<Map<string, string>> {
+  try {
+    const rangeArg = "ref" in window ? `${window.ref}..HEAD` : `--since=${window.days} days ago`;
+    const { stdout } = await execFileAsync(
+      "git",
+      ["log", "--no-merges", rangeArg, "-M", "--diff-filter=R", "--name-status", "--format="],
+      { cwd: rootDir, timeout: 15000, maxBuffer: 10 * 1024 * 1024 },
+    );
+    if (!stdout?.trim()) return new Map();
+
+    const renameMap = new Map<string, string>();
+    for (const line of stdout.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const parts = trimmed.split("\t");
+      if (parts.length >= 3 && parts[0].startsWith("R")) {
+        renameMap.set(parts[1], parts[2]);
+      }
+    }
+
+    for (const [oldName] of renameMap) {
+      let current = renameMap.get(oldName)!;
+      const seen = new Set<string>([oldName]);
+      while (renameMap.has(current) && !seen.has(current)) {
+        seen.add(current);
+        current = renameMap.get(current)!;
+      }
+      renameMap.set(oldName, current);
+    }
+
+    return renameMap;
+  } catch {
+    return new Map();
+  }
+}
+
 // --- Async variants for watch mode (non-blocking event loop) ---
 
 function buildGitLogArgs(window: TimeWindow): string[] {
@@ -585,6 +670,13 @@ export async function analyzeGitActivityAsync(
 
     const commits = await parseGitLogAsync(rootDir, window);
     if (commits.length === 0) return null;
+
+    const renameMap = await detectRenamesAsync(rootDir, window);
+    if (renameMap.size > 0) {
+      for (const commit of commits) {
+        commit.files = [...new Set(commit.files.map((f) => renameMap.get(f) ?? f))];
+      }
+    }
 
     onProgress?.(`Parsed ${commits.length} commits`);
     const result = processCommits(commits, analysisDays, onProgress);

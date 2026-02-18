@@ -50,36 +50,53 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
   components.sort((a, b) => b.length - a.length);
   const componentSizes = components.map((c) => c.length);
 
-  // 2. Approximate diameter of the largest component using multi-source BFS
+  // 2. Double-sweep diameter approximation (2-approximation guarantee)
   const largest = components[0];
   let approximateDiameter = 0;
 
   if (largest.length > 1) {
-    // Sample up to 3 nodes deterministically (first, middle, last)
-    const samples = [largest[0], largest[Math.floor(largest.length / 2)], largest[largest.length - 1]];
-
-    for (const start of samples) {
-      // BFS to find max distance from start
+    // Pass 1: BFS from arbitrary node to find a peripheral node
+    let peripheral = largest[0];
+    {
       const dist = new Map<string, number>();
-      dist.set(start, 0);
-      const bfsQueue = [start];
-      let bfsHead = 0;
+      dist.set(largest[0], 0);
+      const q = [largest[0]];
+      let h = 0;
       let maxDist = 0;
-
-      while (bfsHead < bfsQueue.length) {
-        const current = bfsQueue[bfsHead++]!;
-        const d = dist.get(current)!;
-        for (const neighbor of adj.get(current) ?? []) {
-          if (!dist.has(neighbor)) {
+      while (h < q.length) {
+        const cur = q[h++]!;
+        const d = dist.get(cur)!;
+        for (const nb of adj.get(cur) ?? []) {
+          if (!dist.has(nb)) {
             const nd = d + 1;
-            dist.set(neighbor, nd);
-            if (nd > maxDist) maxDist = nd;
-            bfsQueue.push(neighbor);
+            dist.set(nb, nd);
+            if (nd > maxDist) {
+              maxDist = nd;
+              peripheral = nb;
+            }
+            q.push(nb);
           }
         }
       }
-
-      if (maxDist > approximateDiameter) approximateDiameter = maxDist;
+    }
+    // Pass 2: BFS from peripheral; max distance approximates diameter
+    {
+      const dist = new Map<string, number>();
+      dist.set(peripheral, 0);
+      const q = [peripheral];
+      let h = 0;
+      while (h < q.length) {
+        const cur = q[h++]!;
+        const d = dist.get(cur)!;
+        for (const nb of adj.get(cur) ?? []) {
+          if (!dist.has(nb)) {
+            const nd = d + 1;
+            dist.set(nb, nd);
+            if (nd > approximateDiameter) approximateDiameter = nd;
+            q.push(nb);
+          }
+        }
+      }
     }
   }
 

@@ -363,13 +363,16 @@ export async function buildGraphWithCache(
             });
           }
 
-          // Unresolved names route to star export sources
+          // Unresolved names route to star export sources that actually export them
           if (unresolved.length > 0 && barrelStars) {
-            for (const starSource of barrelStars) {
+            for (const [starSource, exportedNames] of barrelStars) {
+              const matching =
+                exportedNames.size > 0 ? unresolved.filter((n) => exportedNames.has(n)) : unresolved;
+              if (matching.length === 0) continue;
               newEdges.push({
                 ...edge,
                 to: starSource,
-                importedNames: unresolved,
+                importedNames: matching,
                 isBarrelRouted: true,
               });
             }
