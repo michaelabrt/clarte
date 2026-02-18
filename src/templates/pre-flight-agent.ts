@@ -30,7 +30,10 @@ export function buildPreFlightAgent(): string {
     "REASON: <one sentence>\n" +
     "```\n\n" +
     "Repeat for each change. Omit files that need no changes. Write `UNCERTAIN: <file> - <reason>` for anything you are not certain about.\n\n" +
-    "If tests are needed, end with:\n\n" +
+    "**If you cannot identify any edit locations**, output exactly:\n" +
+    "`NO_TARGETS: Could not identify edit locations from the listed files.`\n" +
+    "Do NOT return a TEST SCAFFOLD without edit locations. A test scaffold alone wastes the calling agent's time.\n\n" +
+    "If tests are needed AND you found edit locations, end with:\n\n" +
     "```\n" +
     "TEST SCAFFOLD:\n" +
     "TEMPLATE: <path to nearest existing test file>\n" +

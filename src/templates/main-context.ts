@@ -292,6 +292,7 @@ function buildGraphToolsSection(): string {
 When \`.clarte/task-context.md\` exists, always run the pre-flight scan first:
 \`Agent(subagent_type="clarte-pre-flight", prompt="<task description>")\`
 It reads the target files and returns the exact edit locations with full code context. Apply its findings directly - the code is already in your context, no need to re-read those files.
+If it returns \`NO_TARGETS\`, proceed with normal exploration - do not spawn a second sub-agent for the same purpose.
 
 | Trigger | Tool | What it returns |
 |---------|------|-----------------|
