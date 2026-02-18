@@ -2,7 +2,7 @@ import path from "node:path";
 import { IGNORE_GLOBS } from "../config/ignore-patterns.js";
 import { readFileOr, readJsonFile } from "../utils.js";
 import { parseImportsAst } from "../parsers/parse-imports.js";
-import { resolveBarrelExportsAst } from "../parsers/barrel.js";
+import { extractExportedNamesAst, resolveBarrelExportsAst } from "../parsers/barrel.js";
 import type { Language } from "../types.js";
 
 export type { RawImport } from "../types/parser.js";
@@ -436,8 +436,8 @@ export function resolveImport(
 export interface BarrelExportMap {
   /** barrel file -> { exportedName -> source file } */
   namedExports: Map<string, Map<string, string>>;
-  /** barrel file -> set of files re-exported with `export *` (names unknown) */
-  starExports: Map<string, Set<string>>;
+  /** barrel file -> { source file -> exported names from that source } */
+  starExports: Map<string, Map<string, Set<string>>>;
 }
 
 /**
@@ -453,7 +453,7 @@ export async function resolveBarrelFiles(
   detectedBarrels?: Set<string>,
 ): Promise<BarrelExportMap> {
   const namedExports = new Map<string, Map<string, string>>();
-  const starExports = new Map<string, Set<string>>();
+  const starExports = new Map<string, Map<string, Set<string>>>();
 
   const candidates = detectedBarrels ?? fileSet;
   for (const file of candidates) {
@@ -468,7 +468,7 @@ export async function resolveBarrelFiles(
 
     const { namedExports: barrelNamed, starExports: barrelStars } = resolveBarrelExportsAst(content, file);
     const nameMap = new Map<string, string>();
-    const starSet = new Set<string>();
+    const starMap = new Map<string, Set<string>>();
 
     for (const [exportedName, specifier] of barrelNamed) {
       if (!specifier.startsWith("./") && !specifier.startsWith("../")) continue;
@@ -479,11 +479,22 @@ export async function resolveBarrelFiles(
     for (const specifier of barrelStars) {
       if (!specifier.startsWith("./") && !specifier.startsWith("../")) continue;
       const resolved = resolveJsImport(specifier, file, fileSet);
-      if (resolved) starSet.add(resolved);
+      if (resolved) {
+        // Parse the star source to determine which names it actually exports
+        const absSource = path.join(rootDir, resolved);
+        const sourceContent = await readFileOr(absSource);
+        if (sourceContent) {
+          const exportedNames = extractExportedNamesAst(sourceContent, resolved);
+          starMap.set(resolved, exportedNames);
+        } else {
+          // Cannot determine exports; allow all names through
+          starMap.set(resolved, new Set());
+        }
+      }
     }
 
     if (nameMap.size > 0) namedExports.set(file, nameMap);
-    if (starSet.size > 0) starExports.set(file, starSet);
+    if (starMap.size > 0) starExports.set(file, starMap);
   }
 
   return { namedExports, starExports };

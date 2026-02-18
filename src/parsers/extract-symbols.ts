@@ -35,6 +35,51 @@ function extractTsSymbols(root: Node): string[] {
     }
   }
 
+  // CommonJS exports: module.exports = { ... }, module.exports.foo = ..., exports.foo = ...
+  for (const node of root.namedChildren) {
+    if (node.type !== "expression_statement") continue;
+    const expr = node.namedChildren[0];
+    if (!expr || expr.type !== "assignment_expression") continue;
+
+    const left = expr.childForFieldName("left");
+    if (!left || left.type !== "member_expression") continue;
+
+    const obj = left.childForFieldName("object");
+    const prop = left.childForFieldName("property");
+    if (!obj || !prop) continue;
+
+    if (obj.type === "identifier" && obj.text === "module" && prop.text === "exports") {
+      // module.exports = { foo, bar } or module.exports = { foo: fn }
+      const right = expr.childForFieldName("right");
+      if (right?.type === "object") {
+        for (const child of right.namedChildren) {
+          if (child.type === "shorthand_property_identifier") {
+            if (child.text.length > 1) names.push(child.text);
+          } else if (child.type === "pair") {
+            const key = child.childForFieldName("key");
+            if (key && (key.type === "property_identifier" || key.type === "string") && key.text.length > 1) {
+              names.push(key.text);
+            }
+          }
+        }
+      }
+    } else if (obj.type === "member_expression") {
+      // module.exports.foo = ...
+      const innerObj = obj.childForFieldName("object");
+      const innerProp = obj.childForFieldName("property");
+      if (innerObj?.type === "identifier" && innerObj.text === "module" && innerProp?.text === "exports") {
+        if (prop.type === "property_identifier" && prop.text.length > 1) {
+          names.push(prop.text);
+        }
+      }
+    } else if (obj.type === "identifier" && obj.text === "exports") {
+      // exports.foo = ...
+      if (prop.type === "property_identifier" && prop.text.length > 1) {
+        names.push(prop.text);
+      }
+    }
+  }
+
   return names;
 }
 

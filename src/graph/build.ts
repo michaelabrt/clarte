@@ -201,21 +201,25 @@ export async function buildImportGraph(
               }
             }
 
-            // Unresolved names (could be from star exports): create edges to star sources
+            // Unresolved names (could be from star exports): create edges only to
+            // star sources that actually export those names
             if (unresolved.length > 0 && barrelStars) {
-              for (const starSource of barrelStars) {
+              for (const [starSource, exportedNames] of barrelStars) {
+                // Filter to names actually exported by this source (empty set = unknown, allow all)
+                const matching =
+                  exportedNames.size > 0 ? unresolved.filter((n) => exportedNames.has(n)) : unresolved;
+                if (matching.length === 0) continue;
                 edges.push({
                   from: file,
                   to: starSource,
                   isExternal: false,
                   specifier: raw.specifier,
-                  importedNames: unresolved,
+                  importedNames: matching,
                   isTypeOnly: raw.isTypeOnly,
                   isDynamic: raw.isDynamic,
                   isBarrelRouted: true,
                 });
                 inDegree.set(starSource, (inDegree.get(starSource) ?? 0) + 1);
-                // Star-routed imports from non-barrel consumers are genuine usage
                 if (!barrelFilePaths.has(file)) {
                   directInDegree.set(starSource, (directInDegree.get(starSource) ?? 0) + 1);
                 }

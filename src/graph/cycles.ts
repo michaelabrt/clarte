@@ -178,8 +178,8 @@ export function findCircularDeps(graph: ImportGraph, maxCycles = 10): CircularDe
 
 /**
  * Find the most impactful edges to break in order to resolve circular dependencies.
- * Uses a greedy approach: count how many cycles each edge participates in,
- * then report the top edges whose removal would resolve the most cycles.
+ * Uses DFS on the cycle subgraph to identify back-edges (guaranteed to form a
+ * feedback arc set), then ranks by how many detected cycles each resolves.
  *
  * @returns Array of { from, to, cyclesResolved } sorted by impact descending, max 3 items.
  */
@@ -189,11 +189,71 @@ export function findFeedbackEdges(
 ): Array<{ from: string; to: string; cyclesResolved: number }> {
   if (cycles.length === 0) return [];
 
+  // Build adjacency from cycle edges only
+  const adj = new Map<string, string[]>();
+  const allNodes = new Set<string>();
+  for (const cycle of cycles) {
+    for (let i = 0; i < cycle.chain.length - 1; i++) {
+      allNodes.add(cycle.chain[i]);
+      const list = adj.get(cycle.chain[i]) ?? [];
+      list.push(cycle.chain[i + 1]);
+      adj.set(cycle.chain[i], list);
+    }
+  }
+
+  // DFS to find back-edges (edges to a gray/in-progress ancestor)
+  const WHITE = 0;
+  const GRAY = 1;
+  const BLACK = 2;
+  const color = new Map<string, number>();
+  for (const node of allNodes) color.set(node, WHITE);
+
+  const backEdges = new Set<string>();
+
+  for (const start of [...allNodes].sort()) {
+    if (color.get(start) !== WHITE) continue;
+    const stack: Array<{ node: string; idx: number }> = [{ node: start, idx: 0 }];
+    color.set(start, GRAY);
+
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1]!;
+      const neighbors = adj.get(frame.node) ?? [];
+
+      if (frame.idx < neighbors.length) {
+        const next = neighbors[frame.idx]!;
+        frame.idx++;
+        if (color.get(next) === WHITE) {
+          color.set(next, GRAY);
+          stack.push({ node: next, idx: 0 });
+        } else if (color.get(next) === GRAY) {
+          backEdges.add(`${frame.node}||${next}`);
+        }
+      } else {
+        color.set(frame.node, BLACK);
+        stack.pop();
+      }
+    }
+  }
+
+  // Count how many cycles each back-edge resolves
   const edgeCounts = new Map<string, number>();
   for (const cycle of cycles) {
     for (let i = 0; i < cycle.chain.length - 1; i++) {
       const key = `${cycle.chain[i]}||${cycle.chain[i + 1]}`;
-      edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
+      if (backEdges.has(key)) {
+        edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
+      }
+    }
+  }
+
+  // Fallback: if no back-edges match detected cycles (e.g. DFS tree choice),
+  // count all cycle edges
+  if (edgeCounts.size === 0) {
+    for (const cycle of cycles) {
+      for (let i = 0; i < cycle.chain.length - 1; i++) {
+        const key = `${cycle.chain[i]}||${cycle.chain[i + 1]}`;
+        edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
+      }
     }
   }
 

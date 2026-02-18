@@ -252,11 +252,24 @@ export function computeBetweenness(
   if (sampleSize >= n) {
     sources = files;
   } else {
-    // Fisher-Yates partial shuffle to pick sampleSize elements
+    // Degree-proportional sampling: high-degree nodes produce more representative
+    // shortest-path trees, reducing variance in the betweenness estimator.
     const shuffled = [...files];
     for (let i = 0; i < sampleSize; i++) {
-      const j = i + Math.floor(rng() * (n - i));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      let totalWeight = 0;
+      for (let j = i; j < n; j++) {
+        totalWeight += (adj.get(shuffled[j])?.size ?? 0) + 1;
+      }
+      let target = rng() * totalWeight;
+      let chosen = i;
+      for (let j = i; j < n; j++) {
+        target -= (adj.get(shuffled[j])?.size ?? 0) + 1;
+        if (target <= 0) {
+          chosen = j;
+          break;
+        }
+      }
+      [shuffled[i], shuffled[chosen]] = [shuffled[chosen], shuffled[i]];
     }
     sources = shuffled.slice(0, sampleSize);
   }

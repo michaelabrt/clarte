@@ -91,3 +91,48 @@ export function resolveBarrelExportsAst(
 
   return { namedExports, starExports };
 }
+
+/**
+ * Extract all directly exported names from a source file (ESM only).
+ * Used to resolve which names a star-exported source actually provides.
+ */
+export function extractExportedNamesAst(content: string, filePath?: string): Set<string> {
+  const root = parseSource(content, "typescript", filePath);
+  const names = new Set<string>();
+
+  for (const node of root.namedChildren) {
+    if (node.type !== "export_statement") continue;
+    // Skip re-exports (they have a source)
+    if (node.childForFieldName("source")) continue;
+
+    // export { foo, bar }
+    const exportClause = node.namedChildren.find((c) => c.type === "export_clause");
+    if (exportClause) {
+      for (const spec of exportClause.namedChildren) {
+        if (spec.type === "export_specifier") {
+          const name = spec.childForFieldName("name");
+          if (name) names.add(name.text);
+        }
+      }
+      continue;
+    }
+
+    // export function foo(), export class Bar, export enum Baz, etc.
+    const decl = node.childForFieldName("declaration");
+    if (decl) {
+      const name = decl.childForFieldName("name")?.text;
+      if (name) names.add(name);
+      // export const foo = ..., export let bar = ...
+      if (decl.type === "lexical_declaration") {
+        for (const declarator of decl.namedChildren) {
+          if (declarator.type === "variable_declarator") {
+            const varName = declarator.childForFieldName("name")?.text;
+            if (varName) names.add(varName);
+          }
+        }
+      }
+    }
+  }
+
+  return names;
+}
