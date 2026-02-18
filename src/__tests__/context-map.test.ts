@@ -306,9 +306,12 @@ describe("configureClaudeHooks", () => {
     const settings = JSON.parse(content);
     expect(settings.hooks.SessionStart).toHaveLength(1);
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("on-session-start.mjs");
-    expect(settings.hooks.PreToolUse).toHaveLength(1);
+    expect(settings.hooks.PreToolUse).toHaveLength(2);
     expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain("on-fail-fast.mjs");
     expect(settings.hooks.PreToolUse[0].matcher).toBeUndefined();
+    expect(settings.hooks.PreToolUse[1].hooks[0].command).toContain("on-pre-flight-limit.mjs");
+    expect(settings.hooks.SubagentStart).toHaveLength(1);
+    expect(settings.hooks.SubagentStart[0].matcher).toBe("clarte-pre-flight");
   });
 
   it("preserves existing hooks", async () => {
@@ -329,7 +332,7 @@ describe("configureClaudeHooks", () => {
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
     expect(settings.someOtherSetting).toBe(true);
-    expect(settings.hooks.PreToolUse).toHaveLength(2);
+    expect(settings.hooks.PreToolUse).toHaveLength(3);
     expect(settings.hooks.PreToolUse[0].matcher).toBe("Write");
     const failFast2 = settings.hooks.PreToolUse.find(
       (h: { matcher?: string; hooks: { command: string }[] }) =>
@@ -354,8 +357,8 @@ describe("configureClaudeHooks", () => {
 
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
-    // Old clarte hook cleaned up, replaced with fail-fast
-    expect(settings.hooks.PreToolUse).toHaveLength(1);
+    // Old clarte hook cleaned up, replaced with fail-fast + pre-flight-limit
+    expect(settings.hooks.PreToolUse).toHaveLength(2);
     const failFast3 = settings.hooks.PreToolUse.find(
       (h: { matcher?: string; hooks: { command: string }[] }) =>
         !h.matcher && h.hooks[0].command.includes("on-fail-fast.mjs"),
@@ -382,8 +385,8 @@ describe("configureClaudeHooks", () => {
 
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
-    // Should have exactly 1 PreToolUse hook (fail-fast) and 1 SessionStart
-    expect(settings.hooks.PreToolUse).toHaveLength(1);
+    // Should have exactly 2 PreToolUse hooks (fail-fast + pre-flight-limit) and 1 SessionStart
+    expect(settings.hooks.PreToolUse).toHaveLength(2);
     const failFast4 = settings.hooks.PreToolUse.find(
       (h: { matcher?: string; hooks: { command: string }[] }) =>
         !h.matcher && h.hooks[0].command.includes("on-fail-fast.mjs"),
@@ -430,6 +433,6 @@ describe("configureClaudeHooks", () => {
 
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
-    expect(settings.hooks.PreToolUse).toHaveLength(1);
+    expect(settings.hooks.PreToolUse).toHaveLength(2);
   });
 });
