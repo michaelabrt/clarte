@@ -452,7 +452,12 @@ const HOOK_DEFS: HookDef[] = [
   { event: "SessionStart", file: "on-session-start.mjs", script: SESSION_START_SCRIPT },
   { event: "PreToolUse", file: "on-fail-fast.mjs", script: FAIL_FAST_SCRIPT },
   { event: "PreToolUse", file: "on-pre-flight-limit.mjs", script: PRE_FLIGHT_LIMITER_SCRIPT },
-  { event: "SubagentStart", file: "on-pre-flight-start.mjs", matcher: "clarte-pre-flight", script: PRE_FLIGHT_START_SCRIPT },
+  {
+    event: "SubagentStart",
+    file: "on-pre-flight-start.mjs",
+    matcher: "clarte-pre-flight",
+    script: PRE_FLIGHT_START_SCRIPT,
+  },
   { event: "UserPromptSubmit", file: "on-prompt.mjs", script: PROMPT_SCRIPT },
 ];
 
