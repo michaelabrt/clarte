@@ -127,7 +127,7 @@ The [BM25F retrieval](experiments/bm25-retrieval.md) experiment combined all ins
 2. **Task-context file** listing predicted edit targets with key symbols per file
 3. **Generated CLAUDE.md** with imperative directives ("Always use .clarte/scripts/check-tests.sh")
 
-Tested on 4 real-world bug fixes (3 Hono single-package, 1 TypeORM monorepo), opaque prompts. The URL fragment row pools the original pilot (n=1) with a later controlled AB (n=7):
+Tested on 4 real-world bug fixes (3 Hono single-package, 1 TypeORM monorepo), opaque prompts. The URL fragment and TypeORM rows pool pilots with later controlled ABs:
 
 | Task | Placebo | Pre-flight | Delta | n |
 |---|---|---|---|---|
@@ -135,9 +135,9 @@ Tested on 4 real-world bug fixes (3 Hono single-package, 1 TypeORM monorepo), op
 | Hono: URL fragment (detailed) | $0.16 | $0.15 | parity | 10+1 |
 | Hono: JSX async context | did not finish | 17t / $0.48 | pre-flight only | 1+1 |
 | Hono: form validator | did not finish | 18t / $0.41 | pre-flight only | 1+1 |
-| TypeORM: SQLite simple-enum array | ~22t | ~11t | ~-50% turns | 1+1 |
+| TypeORM: SQLite simple-enum array | 47.7t / $1.47 | 16.3t / $0.43 | -66% turns, -71% cost | 3+3 |
 
-Pre-flight finished all 4 opaque tasks. Placebo finished 2 of 4 (and was slower on both). On hono-url (the only task with controlled n=8 data), pre-flight variance was 3x tighter ($0.25-$0.31 vs $0.26-$0.42). This is the first approach to beat placebo on single-package repos.
+Pre-flight finished all 4 opaque tasks. Placebo finished 2 of 4 (and was slower on both). On hono-url (n=8), pre-flight variance was 3x tighter ($0.25-$0.31 vs $0.26-$0.42). On TypeORM (n=3), the gap was even larger: -66% turns and -71% cost. This is the first approach to beat placebo on single-package repos.
 
 ## Phase 5: On-demand delivery
 
