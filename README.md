@@ -12,7 +12,7 @@
 
 Clarté builds a graph from your codebase, mapping how files connect and change together. It predicts where to edit before the agent starts exploring.
 
-In [real-world tests](#case-studies), Clarté completed tasks that agents couldn't finish alone, at 17-50% lower cost.
+In [real-world tests](#case-studies), Clarté completed tasks that agents couldn't finish alone, at 17-71% lower cost.
 
 ```bash
 npx clarte
@@ -29,12 +29,12 @@ Real bug fixes in open-source repos. Opaque prompts, Sonnet, `claude -p`:
 | URL fragment stripping | Hono | $0.34 avg | **$0.28 avg (-17%)** | 8+8 | pre-flight |
 | JSX async context loss | Hono | did not finish | **17 turns / $0.48** | 1+1 | pre-flight |
 | Form validator prototype pollution | Hono | did not finish | **18 turns / $0.41** | 1+1 | pre-flight |
-| SQLite simple-enum array | TypeORM | ~22 turns | **~11 turns** | 1+1 | pre-flight |
+| SQLite simple-enum array | TypeORM | 47.7 turns / $1.47 | **16.3 turns / $0.43 (-71%)** | 3+3 | pre-flight |
 | WebSocket adapter shutdown | NestJS | 53 turns / $2.70 | **38 turns / $2.17 (-20%)** | 7+7 | context file |
 
 **Stack**: *pre-flight* = dependency graph + BM25F prompt targeting + pre-flight agent. *context file* = dependency graph + generated context file (no pre-flight).
 
-Clarté completed 5 of 5. Without it, the agent completed 3 of 5 within the same budget. The URL fragment and WebSocket rows are pooled from multiple controlled runs; JSX, form validator and TypeORM are single-run pilots. For controlled evidence with statistical testing, see [fixture benchmarks](#fixture-benchmarks).
+Clarté completed 5 of 5. Without it, the agent completed 3 of 5 within the same budget. The URL fragment, TypeORM and WebSocket rows are pooled from multiple controlled runs; JSX and form validator are single-run pilots. For controlled evidence with statistical testing, see [fixture benchmarks](#fixture-benchmarks).
 
 ## What We Learned
 
