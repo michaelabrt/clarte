@@ -206,8 +206,7 @@ export async function buildImportGraph(
             if (unresolved.length > 0 && barrelStars) {
               for (const [starSource, exportedNames] of barrelStars) {
                 // Filter to names actually exported by this source (empty set = unknown, allow all)
-                const matching =
-                  exportedNames.size > 0 ? unresolved.filter((n) => exportedNames.has(n)) : unresolved;
+                const matching = exportedNames.size > 0 ? unresolved.filter((n) => exportedNames.has(n)) : unresolved;
                 if (matching.length === 0) continue;
                 edges.push({
                   from: file,
