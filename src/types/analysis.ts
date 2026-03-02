@@ -105,6 +105,10 @@ export interface GraphTopology {
   reachability: number;
   /** Whether the codebase has independent subsystems (>1 component with 5+ files) */
   isFragmented: boolean;
+  /** Longest directed path after SCC condensation (depth of deepest transitive dependency chain) */
+  criticalChainLength?: number;
+  /** Newman's modularity Q using directory-based partitioning (0 = random, ~0.3-0.7 = well-structured) */
+  modularityQ?: number;
 }
 
 /** Classification of test file type */

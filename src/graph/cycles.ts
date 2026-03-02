@@ -178,8 +178,13 @@ export function findCircularDeps(graph: ImportGraph, maxCycles = 10): CircularDe
 
 /**
  * Find the most impactful edges to break in order to resolve circular dependencies.
- * Uses DFS on the cycle subgraph to identify back-edges (guaranteed to form a
- * feedback arc set), then ranks by how many detected cycles each resolves.
+ * Uses the Eades-Lin-Smyth (1993) greedy heuristic to compute a linear ordering
+ * that minimizes backward edges, then ranks by how many detected cycles each
+ * backward edge resolves.
+ *
+ * The greedy heuristic produces smaller feedback arc sets than DFS back-edge
+ * detection because it accounts for the full degree structure of the cycle
+ * subgraph rather than depending on arbitrary DFS traversal order.
  *
  * @returns Array of { from, to, cyclesResolved } sorted by impact descending, max 3 items.
  */
@@ -189,53 +194,121 @@ export function findFeedbackEdges(
 ): Array<{ from: string; to: string; cyclesResolved: number }> {
   if (cycles.length === 0) return [];
 
-  // Build adjacency from cycle edges only
-  const adj = new Map<string, string[]>();
+  // Build directed adjacency from cycle edges only
+  const adj = new Map<string, Set<string>>();
+  const revAdj = new Map<string, Set<string>>();
   const allNodes = new Set<string>();
+
   for (const cycle of cycles) {
     for (let i = 0; i < cycle.chain.length - 1; i++) {
-      allNodes.add(cycle.chain[i]);
-      const list = adj.get(cycle.chain[i]) ?? [];
-      list.push(cycle.chain[i + 1]);
-      adj.set(cycle.chain[i], list);
+      const from = cycle.chain[i];
+      const to = cycle.chain[i + 1];
+      allNodes.add(from);
+      allNodes.add(to);
+      getOrSet(adj, from, () => new Set()).add(to);
+      getOrSet(revAdj, to, () => new Set()).add(from);
     }
   }
 
-  // DFS to find back-edges (edges to a gray/in-progress ancestor)
-  const WHITE = 0;
-  const GRAY = 1;
-  const BLACK = 2;
-  const color = new Map<string, number>();
-  for (const node of allNodes) color.set(node, WHITE);
+  for (const node of allNodes) {
+    if (!adj.has(node)) adj.set(node, new Set());
+    if (!revAdj.has(node)) revAdj.set(node, new Set());
+  }
 
-  const backEdges = new Set<string>();
+  // Eades-Lin-Smyth greedy heuristic: build a linear ordering that maximizes
+  // forward edges by repeatedly removing sources (to the left) and sinks
+  // (to the right), then greedily picking the node with max (outDeg - inDeg).
+  const remaining = new Set(allNodes);
+  const outDeg = new Map<string, number>();
+  const inDeg = new Map<string, number>();
 
-  for (const start of [...allNodes].sort()) {
-    if (color.get(start) !== WHITE) continue;
-    const stack: Array<{ node: string; idx: number }> = [{ node: start, idx: 0 }];
-    color.set(start, GRAY);
+  for (const node of allNodes) {
+    let out = 0;
+    for (const nb of adj.get(node)!) {
+      if (allNodes.has(nb)) out++;
+    }
+    outDeg.set(node, out);
+    let inp = 0;
+    for (const nb of revAdj.get(node)!) {
+      if (allNodes.has(nb)) inp++;
+    }
+    inDeg.set(node, inp);
+  }
 
-    while (stack.length > 0) {
-      const frame = stack[stack.length - 1]!;
-      const neighbors = adj.get(frame.node) ?? [];
+  const leftSeq: string[] = [];
+  const rightSeq: string[] = [];
 
-      if (frame.idx < neighbors.length) {
-        const next = neighbors[frame.idx]!;
-        frame.idx++;
-        if (color.get(next) === WHITE) {
-          color.set(next, GRAY);
-          stack.push({ node: next, idx: 0 });
-        } else if (color.get(next) === GRAY) {
-          backEdges.add(`${frame.node}||${next}`);
+  const removeNode = (node: string) => {
+    remaining.delete(node);
+    for (const succ of adj.get(node)!) {
+      if (remaining.has(succ)) inDeg.set(succ, inDeg.get(succ)! - 1);
+    }
+    for (const pred of revAdj.get(node)!) {
+      if (remaining.has(pred)) outDeg.set(pred, outDeg.get(pred)! - 1);
+    }
+  };
+
+  while (remaining.size > 0) {
+    // Remove sinks (outDeg == 0) - they go to the right end of the ordering
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const node of remaining) {
+        if (outDeg.get(node)! === 0) {
+          rightSeq.push(node);
+          removeNode(node);
+          changed = true;
         }
-      } else {
-        color.set(frame.node, BLACK);
-        stack.pop();
+      }
+    }
+    // Remove sources (inDeg == 0) - they go to the left end of the ordering
+    changed = true;
+    while (changed) {
+      changed = false;
+      for (const node of remaining) {
+        if (inDeg.get(node)! === 0) {
+          leftSeq.push(node);
+          removeNode(node);
+          changed = true;
+        }
+      }
+    }
+    // Pick node with max (outDeg - inDeg), deterministic tiebreak
+    if (remaining.size > 0) {
+      let bestNode = "";
+      let bestDelta = -Infinity;
+      for (const node of [...remaining].sort()) {
+        const delta = outDeg.get(node)! - inDeg.get(node)!;
+        if (delta > bestDelta) {
+          bestDelta = delta;
+          bestNode = node;
+        }
+      }
+      leftSeq.push(bestNode);
+      removeNode(bestNode);
+    }
+  }
+
+  // Build position map: left sequence followed by reversed right sequence
+  const ordering = [...leftSeq, ...rightSeq.reverse()];
+  const position = new Map<string, number>();
+  for (let i = 0; i < ordering.length; i++) {
+    position.set(ordering[i], i);
+  }
+
+  // Backward edges in the ordering form the feedback arc set
+  const backEdges = new Set<string>();
+  for (const cycle of cycles) {
+    for (let i = 0; i < cycle.chain.length - 1; i++) {
+      const from = cycle.chain[i];
+      const to = cycle.chain[i + 1];
+      if (position.get(from)! >= position.get(to)!) {
+        backEdges.add(`${from}||${to}`);
       }
     }
   }
 
-  // Count how many cycles each back-edge resolves
+  // Count how many cycles each backward edge resolves
   const edgeCounts = new Map<string, number>();
   for (const cycle of cycles) {
     for (let i = 0; i < cycle.chain.length - 1; i++) {
@@ -246,8 +319,7 @@ export function findFeedbackEdges(
     }
   }
 
-  // Fallback: if no back-edges match detected cycles (e.g. DFS tree choice),
-  // count all cycle edges
+  // Fallback: if no backward edges match detected cycles, count all cycle edges
   if (edgeCounts.size === 0) {
     for (const cycle of cycles) {
       for (let i = 0; i < cycle.chain.length - 1; i++) {
