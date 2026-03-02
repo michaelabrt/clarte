@@ -51,7 +51,8 @@ export function parseJsImportsAst(root: Node): RawImport[] {
       const spec = extractStringContent(firstArg);
       if (spec && !importSpecifiers.has(spec)) {
         importSpecifiers.add(spec);
-        imports.push({ specifier: spec, importedNames: [] });
+        const names = extractRequireDestructuring(call);
+        imports.push({ specifier: spec, importedNames: names });
       }
     }
   }
@@ -113,6 +114,27 @@ function parseJsExportReexport(exportNode: Node, source: Node): RawImport | null
   }
 
   return { specifier, importedNames: names, isTypeOnly };
+}
+
+/** Extract destructured names from `const { foo, bar } = require('...')` */
+function extractRequireDestructuring(callNode: Node): string[] {
+  // call_expression -> variable_declarator -> name: object_pattern
+  const declarator = callNode.parent;
+  if (!declarator || declarator.type !== "variable_declarator") return [];
+
+  const name = declarator.childForFieldName("name");
+  if (!name || name.type !== "object_pattern") return [];
+
+  const names: string[] = [];
+  for (const child of name.namedChildren) {
+    if (child.type === "shorthand_property_identifier_pattern") {
+      names.push(child.text);
+    } else if (child.type === "pair_pattern") {
+      const value = child.childForFieldName("value");
+      if (value) names.push(value.text);
+    }
+  }
+  return names;
 }
 
 export function extractStringContent(node: Node): string | null {
