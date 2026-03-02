@@ -22,7 +22,7 @@ import { BETWEENNESS_K } from "../config/thresholds.js";
 const CACHE_DIR = CLARTE_DIR;
 const ANALYSIS_CACHE_FILE = "analysis-cache.json";
 
-export const ANALYSIS_CACHE_VERSION = 3;
+export const ANALYSIS_CACHE_VERSION = 4;
 
 /** Cached graph-derived analysis results (deterministic given edges + config) */
 export interface AnalysisCacheData {

@@ -440,10 +440,11 @@ describe("findChokepoints", () => {
     expect(result).toHaveLength(0);
   });
 
-  it("sorts by upstreamCount descending then downstreamCount", () => {
+  it("sorts by upstream * downstream product (Henry-Kafura scoring)", () => {
     // a→b→c→d→e, f→d, g→c (7 nodes, threshold=ceil(sqrt(7))=3)
-    // d: upstream=5 (a,b,c,f,g), downstream=1 (e)
-    // c: upstream=3 (a,b,g), downstream=2 (d,e)
+    // d: upstream=5, downstream=1, product=5
+    // c: upstream=3, downstream=2, product=6
+    // c ranks first because 3*2=6 > 5*1=5 (better bridging score)
     const graph = makeGraph(
       ["a", "b", "c", "d", "e", "f", "g"],
       [edge("a", "b"), edge("b", "c"), edge("c", "d"), edge("d", "e"), edge("f", "d"), edge("g", "c")],
@@ -451,10 +452,12 @@ describe("findChokepoints", () => {
 
     const result = findChokepoints(graph);
     expect(result.length).toBe(2);
-    expect(result[0].file).toBe("d");
-    expect(result[0].upstreamCount).toBe(5);
-    expect(result[1].file).toBe("c");
-    expect(result[1].upstreamCount).toBe(3);
+    expect(result[0].file).toBe("c");
+    expect(result[0].upstreamCount).toBe(3);
+    expect(result[0].downstreamCount).toBe(2);
+    expect(result[1].file).toBe("d");
+    expect(result[1].upstreamCount).toBe(5);
+    expect(result[1].downstreamCount).toBe(1);
   });
 
   it("includes importedBy count", () => {

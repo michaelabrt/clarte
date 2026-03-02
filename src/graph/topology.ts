@@ -2,11 +2,11 @@ import type { GraphTopology, ImportGraph } from "../types.js";
 
 /**
  * Compute graph topology metrics: connected components, approximate diameter,
- * and reachability. Helps LLMs understand whether a project has independent
- * subsystems or is a tightly connected monolith.
+ * reachability, critical chain length and modularity Q.
  */
 export function computeGraphTopology(graph: ImportGraph): GraphTopology {
   const adj = new Map<string, Set<string>>();
+  const dirAdj = new Map<string, Set<string>>();
   const allFiles = new Set<string>();
 
   for (const edge of graph.edges) {
@@ -14,10 +14,15 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
     allFiles.add(edge.from);
     allFiles.add(edge.to);
 
+    // Undirected adjacency (for components, diameter, modularity)
     if (!adj.has(edge.from)) adj.set(edge.from, new Set());
     if (!adj.has(edge.to)) adj.set(edge.to, new Set());
     adj.get(edge.from)!.add(edge.to);
     adj.get(edge.to)!.add(edge.from);
+
+    // Directed adjacency (for critical chain)
+    if (!dirAdj.has(edge.from)) dirAdj.set(edge.from, new Set());
+    dirAdj.get(edge.from)!.add(edge.to);
   }
 
   const totalFiles = allFiles.size;
@@ -101,9 +106,200 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
   }
 
   const reachability = totalFiles > 0 ? largest.length / totalFiles : 0;
-
-  // 4. Fragmentation: more than one component with 5+ files
   const isFragmented = components.length > 1 && components[1].length >= 5;
 
-  return { componentCount: components.length, componentSizes, approximateDiameter, reachability, isFragmented };
+  // 3. Critical chain length: longest directed path after SCC condensation
+  const criticalChainLength = computeCriticalChain(allFiles, dirAdj);
+
+  // 4. Newman's modularity Q using directory-based partitioning
+  const modularityQ = computeModularityQ(allFiles, adj);
+
+  return {
+    componentCount: components.length,
+    componentSizes,
+    approximateDiameter,
+    reachability,
+    isFragmented,
+    criticalChainLength,
+    modularityQ,
+  };
+}
+
+/**
+ * Compute the longest directed path after collapsing SCCs to single nodes.
+ * Uses iterative Tarjan for SCC detection, then topological sort + DP on the
+ * condensation DAG. O(V + E).
+ */
+function computeCriticalChain(allFiles: Set<string>, dirAdj: Map<string, Set<string>>): number {
+  if (allFiles.size === 0) return 0;
+
+  // Pre-compute neighbor arrays to avoid repeated Set-to-Array conversion
+  const neighborArrays = new Map<string, string[]>();
+  for (const file of allFiles) {
+    neighborArrays.set(file, [...(dirAdj.get(file) ?? [])]);
+  }
+
+  // Tarjan's SCC (iterative, returns ALL components including singletons)
+  let index = 0;
+  const indices = new Map<string, number>();
+  const lowlinks = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const sccs: string[][] = [];
+  const callStack: Array<{ v: string; neighborIdx: number }> = [];
+
+  for (const file of [...allFiles].sort()) {
+    if (indices.has(file)) continue;
+
+    callStack.push({ v: file, neighborIdx: 0 });
+    indices.set(file, index);
+    lowlinks.set(file, index);
+    index++;
+    stack.push(file);
+    onStack.add(file);
+
+    while (callStack.length > 0) {
+      const frame = callStack[callStack.length - 1]!;
+      const neighbors = neighborArrays.get(frame.v)!;
+
+      if (frame.neighborIdx < neighbors.length) {
+        const w = neighbors[frame.neighborIdx]!;
+        frame.neighborIdx++;
+        if (!allFiles.has(w)) continue;
+        if (!indices.has(w)) {
+          callStack.push({ v: w, neighborIdx: 0 });
+          indices.set(w, index);
+          lowlinks.set(w, index);
+          index++;
+          stack.push(w);
+          onStack.add(w);
+        } else if (onStack.has(w)) {
+          lowlinks.set(frame.v, Math.min(lowlinks.get(frame.v)!, indices.get(w)!));
+        }
+      } else {
+        if (lowlinks.get(frame.v) === indices.get(frame.v)) {
+          const scc: string[] = [];
+          let w: string;
+          do {
+            w = stack.pop()!;
+            onStack.delete(w);
+            scc.push(w);
+          } while (w !== frame.v);
+          sccs.push(scc);
+        }
+        callStack.pop();
+        if (callStack.length > 0) {
+          const parent = callStack[callStack.length - 1]!;
+          lowlinks.set(parent.v, Math.min(lowlinks.get(parent.v)!, lowlinks.get(frame.v)!));
+        }
+      }
+    }
+  }
+
+  // Build condensation DAG
+  const fileToSCC = new Map<string, number>();
+  for (let i = 0; i < sccs.length; i++) {
+    for (const file of sccs[i]) fileToSCC.set(file, i);
+  }
+
+  const sccAdj = new Map<number, Set<number>>();
+  const sccInDeg = new Map<number, number>();
+  for (let i = 0; i < sccs.length; i++) {
+    sccAdj.set(i, new Set());
+    sccInDeg.set(i, 0);
+  }
+
+  for (const [from, neighbors] of dirAdj) {
+    const fromSCC = fileToSCC.get(from);
+    if (fromSCC === undefined) continue;
+    for (const to of neighbors) {
+      const toSCC = fileToSCC.get(to);
+      if (toSCC === undefined || toSCC === fromSCC) continue;
+      if (!sccAdj.get(fromSCC)!.has(toSCC)) {
+        sccAdj.get(fromSCC)!.add(toSCC);
+        sccInDeg.set(toSCC, sccInDeg.get(toSCC)! + 1);
+      }
+    }
+  }
+
+  // Topological sort + DP longest path
+  const dist = new Map<number, number>();
+  const queue: number[] = [];
+  for (let i = 0; i < sccs.length; i++) {
+    dist.set(i, 0);
+    if (sccInDeg.get(i)! === 0) queue.push(i);
+  }
+
+  let qHead = 0;
+  let maxDist = 0;
+  while (qHead < queue.length) {
+    const u = queue[qHead++];
+    const du = dist.get(u)!;
+    for (const v of sccAdj.get(u)!) {
+      const newDist = du + 1;
+      if (newDist > dist.get(v)!) dist.set(v, newDist);
+      sccInDeg.set(v, sccInDeg.get(v)! - 1);
+      if (sccInDeg.get(v)! === 0) queue.push(v);
+    }
+    if (du > maxDist) maxDist = du;
+  }
+
+  return maxDist;
+}
+
+/**
+ * Compute Newman's modularity Q using directory-based partitioning.
+ * Q = sum_c [ e_c/m - (a_c/(2m))^2 ]
+ * where e_c = internal edges in community c, a_c = sum of degrees, m = total edges.
+ * Returns 0 for graphs with no edges. Typical well-structured projects score 0.3-0.7.
+ */
+function computeModularityQ(allFiles: Set<string>, adj: Map<string, Set<string>>): number {
+  if (allFiles.size === 0) return 0;
+
+  // Directory-based community assignment
+  const community = new Map<string, string>();
+  for (const file of allFiles) {
+    const parts = file.split("/");
+    community.set(file, parts.length > 1 ? parts.slice(0, -1).join("/") : ".");
+  }
+
+  // Total edges (undirected: sum of degrees / 2)
+  let totalDegree = 0;
+  for (const file of allFiles) {
+    totalDegree += adj.get(file)?.size ?? 0;
+  }
+  const m = totalDegree / 2;
+  if (m === 0) return 0;
+
+  // Group files by community
+  const groups = new Map<string, string[]>();
+  for (const file of allFiles) {
+    const c = community.get(file)!;
+    const group = groups.get(c) ?? [];
+    group.push(file);
+    groups.set(c, group);
+  }
+
+  // Q = sum_c [ e_c/m - (a_c/(2m))^2 ]
+  let q = 0;
+  for (const members of groups.values()) {
+    const memberSet = new Set(members);
+    let internalEdges = 0;
+    let ac = 0;
+
+    for (const file of members) {
+      const neighbors = adj.get(file);
+      if (!neighbors) continue;
+      ac += neighbors.size;
+      for (const nb of neighbors) {
+        if (memberSet.has(nb)) internalEdges++;
+      }
+    }
+    // Each internal edge counted from both endpoints
+    internalEdges /= 2;
+
+    q += internalEdges / m - (ac / (2 * m)) ** 2;
+  }
+
+  return q;
 }

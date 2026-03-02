@@ -167,6 +167,13 @@ export function logTopology(graphTopology: GraphTopology, log: LogCtx): void {
       `${t.brand("Topology")}       single connected graph, diameter ~${graphTopology.approximateDiameter} hops`,
     );
   }
+  if (log.verbose && graphTopology.criticalChainLength != null) {
+    p.log.info(t.muted(`  Critical chain: ${graphTopology.criticalChainLength} layers deep`));
+  }
+  if (log.verbose && graphTopology.modularityQ != null) {
+    const qStr = graphTopology.modularityQ.toFixed(2);
+    p.log.info(t.muted(`  Modularity Q: ${qStr} (directory-based)`));
+  }
 }
 
 export function logGitActivity(gitActivity: ContextAnalysis["gitActivity"], analysisDays: number, log: LogCtx): void {

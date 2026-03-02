@@ -46,9 +46,12 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
     });
   }
 
+  // Henry-Kafura scoring: rank by upstream * downstream product.
+  // This favors files that bridge many dependents TO many dependencies (true bottlenecks)
+  // over files that are lopsided (e.g. 100 upstream, 1 downstream).
   results.sort(
     (a, b) =>
-      b.upstreamCount - a.upstreamCount || b.downstreamCount - a.downstreamCount || a.file.localeCompare(b.file),
+      b.upstreamCount * b.downstreamCount - a.upstreamCount * a.downstreamCount || a.file.localeCompare(b.file),
   );
   return results;
 }
