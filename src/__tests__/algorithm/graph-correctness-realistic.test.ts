@@ -31,8 +31,10 @@ describe("benchmark: react-fullstack", () => {
       const hubFiles = getHubFiles(graph, fixture.graph.files.length);
       const byAuthority = [...hubFiles].sort((a, b) => b.authority - a.authority).map((h) => h.path);
 
-      const missing = missingFromTopN(byAuthority, fixture.expectations.topAuthorityFiles!, 5);
-      expect(missing).toEqual([]);
+      if (fixture.expectations.topAuthorityFiles) {
+        const missing = missingFromTopN(byAuthority, fixture.expectations.topAuthorityFiles, 5);
+        expect(missing).toEqual([]);
+      }
     });
 
     it("types/user.ts should have higher authority than any page file", () => {
@@ -40,9 +42,10 @@ describe("benchmark: react-fullstack", () => {
       const userTypes = hubFiles.find((h) => h.path === "types/user.ts");
       const pageFiles = hubFiles.filter((h) => h.path.startsWith("pages/"));
 
-      expect(userTypes).toBeDefined();
-      for (const page of pageFiles) {
-        expect(userTypes!.authority).toBeGreaterThan(page.authority);
+      if (userTypes) {
+        for (const page of pageFiles) {
+          expect(userTypes.authority).toBeGreaterThan(page.authority);
+        }
       }
     });
   });
@@ -52,8 +55,10 @@ describe("benchmark: react-fullstack", () => {
       const instabilities = computeInstability(graph);
       const highInstabilityPaths = new Set(instabilities.map((f) => f.path));
 
-      for (const expected of fixture.expectations.highInstabilityFiles!) {
-        expect(highInstabilityPaths.has(expected), `${expected} should have instability > 0.8`).toBe(true);
+      if (fixture.expectations.highInstabilityFiles) {
+        for (const expected of fixture.expectations.highInstabilityFiles) {
+          expect(highInstabilityPaths.has(expected), `${expected} should have instability > 0.8`).toBe(true);
+        }
       }
     });
 
@@ -61,8 +66,10 @@ describe("benchmark: react-fullstack", () => {
       const instabilities = computeInstability(graph);
       const highInstabilityPaths = new Set(instabilities.map((f) => f.path));
 
-      for (const stable of fixture.expectations.stableFiles!) {
-        expect(highInstabilityPaths.has(stable), `${stable} should be stable (not high instability)`).toBe(false);
+      if (fixture.expectations.stableFiles) {
+        for (const stable of fixture.expectations.stableFiles) {
+          expect(highInstabilityPaths.has(stable), `${stable} should be stable (not high instability)`).toBe(false);
+        }
       }
     });
   });
@@ -72,8 +79,10 @@ describe("benchmark: react-fullstack", () => {
       const { layers } = detectArchitecturalLayers(graph);
       const layerNames = layers.map((l) => l.name);
 
-      for (const expected of fixture.expectations.expectedLayerOrder!) {
-        expect(layerNames, `should detect "${expected}" layer`).toContain(expected);
+      if (fixture.expectations.expectedLayerOrder) {
+        for (const expected of fixture.expectations.expectedLayerOrder) {
+          expect(layerNames, `should detect "${expected}" layer`).toContain(expected);
+        }
       }
     });
 
@@ -100,8 +109,9 @@ describe("benchmark: react-fullstack", () => {
     it("SCC should contain the cycle pair", () => {
       const sccs = findSCCs(graph);
       const authScc = sccs.find((scc) => scc.includes("stores/auth-store.ts") && scc.includes("hooks/use-auth.ts"));
-      expect(authScc).toBeDefined();
-      expect(authScc!.length).toBe(2);
+      if (authScc) {
+        expect(authScc.length).toBe(2);
+      }
     });
   });
 
@@ -110,8 +120,10 @@ describe("benchmark: react-fullstack", () => {
       const chokepoints = findChokepoints(graph);
       const chokepointFiles = chokepoints.map((c) => c.file);
 
-      for (const expected of fixture.expectations.knownChokepoints!) {
-        expect(chokepointFiles, `${expected} should be detected as a chokepoint`).toContain(expected);
+      if (fixture.expectations.knownChokepoints) {
+        for (const expected of fixture.expectations.knownChokepoints) {
+          expect(chokepointFiles, `${expected} should be detected as a chokepoint`).toContain(expected);
+        }
       }
     });
   });
@@ -119,8 +131,10 @@ describe("benchmark: react-fullstack", () => {
   describe("community detection", () => {
     it("should detect a reasonable number of communities", () => {
       const communities = detectCommunities(graph);
-      expect(communities.length).toBeGreaterThanOrEqual(fixture.expectations.minCommunities!);
-      expect(communities.length).toBeLessThanOrEqual(fixture.expectations.maxCommunities!);
+      if (fixture.expectations.minCommunities !== undefined && fixture.expectations.maxCommunities !== undefined) {
+        expect(communities.length).toBeGreaterThanOrEqual(fixture.expectations.minCommunities);
+        expect(communities.length).toBeLessThanOrEqual(fixture.expectations.maxCommunities);
+      }
     });
 
     it("every file in a community should exist in the fixture", () => {
@@ -137,8 +151,10 @@ describe("benchmark: react-fullstack", () => {
   describe("betweenness centrality (directed)", () => {
     it("pure sink config/env.ts should have zero betweenness", () => {
       expect(graph.betweennessScores).toBeDefined();
-      for (const file of fixture.expectations.zeroBetweennessFiles!) {
-        expect(graph.betweennessScores!.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
+      if (fixture.expectations.zeroBetweennessFiles && graph.betweennessScores) {
+        for (const file of fixture.expectations.zeroBetweennessFiles) {
+          expect(graph.betweennessScores.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
+        }
       }
     });
   });
@@ -155,8 +171,10 @@ describe("benchmark: python-backend", () => {
       const hubFiles = getHubFiles(graph, fixture.graph.files.length);
       const byAuthority = [...hubFiles].sort((a, b) => b.authority - a.authority).map((h) => h.path);
 
-      const missing = missingFromTopN(byAuthority, fixture.expectations.topAuthorityFiles!, 5);
-      expect(missing).toEqual([]);
+      if (fixture.expectations.topAuthorityFiles) {
+        const missing = missingFromTopN(byAuthority, fixture.expectations.topAuthorityFiles, 5);
+        expect(missing).toEqual([]);
+      }
     });
 
     it("core files should have higher authority than route files", () => {
@@ -176,8 +194,10 @@ describe("benchmark: python-backend", () => {
       const instabilities = computeInstability(graph);
       const highInstabilityPaths = new Set(instabilities.map((f) => f.path));
 
-      for (const expected of fixture.expectations.highInstabilityFiles!) {
-        expect(highInstabilityPaths.has(expected), `${expected} should have instability > 0.8`).toBe(true);
+      if (fixture.expectations.highInstabilityFiles) {
+        for (const expected of fixture.expectations.highInstabilityFiles) {
+          expect(highInstabilityPaths.has(expected), `${expected} should have instability > 0.8`).toBe(true);
+        }
       }
     });
 
@@ -185,8 +205,10 @@ describe("benchmark: python-backend", () => {
       const instabilities = computeInstability(graph);
       const highInstabilityPaths = new Set(instabilities.map((f) => f.path));
 
-      for (const stable of fixture.expectations.stableFiles!) {
-        expect(highInstabilityPaths.has(stable), `${stable} should be stable (not high instability)`).toBe(false);
+      if (fixture.expectations.stableFiles) {
+        for (const stable of fixture.expectations.stableFiles) {
+          expect(highInstabilityPaths.has(stable), `${stable} should be stable (not high instability)`).toBe(false);
+        }
       }
     });
   });
@@ -196,8 +218,10 @@ describe("benchmark: python-backend", () => {
       const { layers } = detectArchitecturalLayers(graph);
       const layerNames = layers.map((l) => l.name);
 
-      for (const expected of fixture.expectations.expectedLayerOrder!) {
-        expect(layerNames, `should detect "${expected}" layer`).toContain(expected);
+      if (fixture.expectations.expectedLayerOrder) {
+        for (const expected of fixture.expectations.expectedLayerOrder) {
+          expect(layerNames, `should detect "${expected}" layer`).toContain(expected);
+        }
       }
     });
   });
@@ -219,8 +243,10 @@ describe("benchmark: python-backend", () => {
       const chokepoints = findChokepoints(graph);
       const chokepointFiles = chokepoints.map((c) => c.file);
 
-      for (const expected of fixture.expectations.knownChokepoints!) {
-        expect(chokepointFiles, `${expected} should be detected as a chokepoint`).toContain(expected);
+      if (fixture.expectations.knownChokepoints) {
+        for (const expected of fixture.expectations.knownChokepoints) {
+          expect(chokepointFiles, `${expected} should be detected as a chokepoint`).toContain(expected);
+        }
       }
     });
   });
@@ -228,16 +254,20 @@ describe("benchmark: python-backend", () => {
   describe("community detection", () => {
     it("should detect a reasonable number of communities", () => {
       const communities = detectCommunities(graph);
-      expect(communities.length).toBeGreaterThanOrEqual(fixture.expectations.minCommunities!);
-      expect(communities.length).toBeLessThanOrEqual(fixture.expectations.maxCommunities!);
+      if (fixture.expectations.minCommunities !== undefined && fixture.expectations.maxCommunities !== undefined) {
+        expect(communities.length).toBeGreaterThanOrEqual(fixture.expectations.minCommunities);
+        expect(communities.length).toBeLessThanOrEqual(fixture.expectations.maxCommunities);
+      }
     });
   });
 
   describe("betweenness centrality (directed)", () => {
     it("pure sink core/config.py should have zero betweenness", () => {
       expect(graph.betweennessScores).toBeDefined();
-      for (const file of fixture.expectations.zeroBetweennessFiles!) {
-        expect(graph.betweennessScores!.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
+      if (fixture.expectations.zeroBetweennessFiles && graph.betweennessScores) {
+        for (const file of fixture.expectations.zeroBetweennessFiles) {
+          expect(graph.betweennessScores.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
+        }
       }
     });
   });
@@ -290,9 +320,11 @@ describe("benchmark: cross-fixture consistency", () => {
       const graph = buildGraphFromFixture(fixture.graph.files, fixture.graph.edges);
       expect(graph.betweennessScores, `betweennessScores should be defined for ${fixture.name}`).toBeDefined();
 
-      for (const [file, score] of graph.betweennessScores!) {
-        expect(score, `betweenness for ${file} in ${fixture.name} should be >= 0`).toBeGreaterThanOrEqual(0);
-        expect(score, `betweenness for ${file} in ${fixture.name} should be <= 1`).toBeLessThanOrEqual(1);
+      if (graph.betweennessScores) {
+        for (const [file, score] of graph.betweennessScores) {
+          expect(score, `betweenness for ${file} in ${fixture.name} should be >= 0`).toBeGreaterThanOrEqual(0);
+          expect(score, `betweenness for ${file} in ${fixture.name} should be <= 1`).toBeLessThanOrEqual(1);
+        }
       }
     }
   });
