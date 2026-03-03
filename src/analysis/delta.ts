@@ -12,6 +12,8 @@ export interface AnalysisSnapshot {
   deadFiles: string[];
   chokepointPaths: string[];
   layerViolationCount: number;
+  criticalChainLength?: number;
+  modularityQ?: number;
 }
 
 export interface ArchitectureDelta {
@@ -24,6 +26,8 @@ export interface ArchitectureDelta {
   newChokepoints: string[];
   resolvedChokepoints: string[];
   layerViolationDelta: number;
+  criticalChainDelta?: number;
+  modularityQDelta?: number;
 }
 
 export async function loadPreviousSnapshot(rootDir: string): Promise<AnalysisSnapshot | null> {
@@ -63,6 +67,8 @@ export function extractSnapshot(analysis: ContextAnalysis): AnalysisSnapshot {
     deadFiles,
     chokepointPaths,
     layerViolationCount,
+    criticalChainLength: analysis.graphTopology?.criticalChainLength,
+    modularityQ: analysis.graphTopology?.modularityQ,
   };
 }
 
@@ -98,6 +104,14 @@ export function computeDelta(previous: AnalysisSnapshot, current: AnalysisSnapsh
 
   const layerViolationDelta = current.layerViolationCount - previous.layerViolationCount;
 
+  const criticalChainDelta =
+    current.criticalChainLength != null && previous.criticalChainLength != null
+      ? current.criticalChainLength - previous.criticalChainLength
+      : undefined;
+
+  const modularityQDelta =
+    current.modularityQ != null && previous.modularityQ != null ? current.modularityQ - previous.modularityQ : undefined;
+
   return {
     newHubFiles,
     demotedHubFiles,
@@ -108,6 +122,8 @@ export function computeDelta(previous: AnalysisSnapshot, current: AnalysisSnapsh
     newChokepoints,
     resolvedChokepoints,
     layerViolationDelta,
+    criticalChainDelta,
+    modularityQDelta,
   };
 }
 
@@ -122,7 +138,9 @@ export function isDeltaEmpty(delta: ArchitectureDelta): boolean {
     delta.resurrectedFiles.length === 0 &&
     delta.newChokepoints.length === 0 &&
     delta.resolvedChokepoints.length === 0 &&
-    delta.layerViolationDelta === 0
+    delta.layerViolationDelta === 0 &&
+    (delta.criticalChainDelta ?? 0) === 0 &&
+    Math.abs(delta.modularityQDelta ?? 0) < 0.01
   );
 }
 
@@ -198,6 +216,22 @@ export function renderDeltaSection(delta: ArchitectureDelta): string | null {
     );
   }
 
+  if (delta.criticalChainDelta != null && delta.criticalChainDelta !== 0) {
+    if (delta.criticalChainDelta > 0) {
+      lines.push(`- Critical chain grew by ${delta.criticalChainDelta} (deeper dependency layering). Consider breaking long import chains.`);
+    } else {
+      lines.push(`- Critical chain shortened by ${Math.abs(delta.criticalChainDelta)} (flatter dependency structure).`);
+    }
+  }
+
+  if (delta.modularityQDelta != null && Math.abs(delta.modularityQDelta) >= 0.01) {
+    if (delta.modularityQDelta < 0) {
+      lines.push(`- Modularity Q dropped by ${Math.abs(delta.modularityQDelta).toFixed(2)}. Cross-directory dependencies increased.`);
+    } else {
+      lines.push(`- Modularity Q improved by ${delta.modularityQDelta.toFixed(2)}. Directory boundaries are better respected.`);
+    }
+  }
+
   return lines.join("\n");
 }
 
@@ -233,6 +267,14 @@ export function buildDeltaDirectives(delta: ArchitectureDelta): string[] {
     directives.push(
       `${delta.layerViolationDelta} new layer violation${delta.layerViolationDelta === 1 ? "" : "s"} detected. Do not add more upward dependencies.`,
     );
+  }
+
+  if (delta.criticalChainDelta != null && delta.criticalChainDelta > 0) {
+    directives.push(`Critical chain grew by ${delta.criticalChainDelta}. Avoid adding more layers to long import chains.`);
+  }
+
+  if (delta.modularityQDelta != null && delta.modularityQDelta < -0.01) {
+    directives.push(`Modularity Q dropped by ${Math.abs(delta.modularityQDelta).toFixed(2)}. Avoid adding more cross-directory dependencies.`);
   }
 
   return directives;

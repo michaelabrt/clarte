@@ -33,6 +33,8 @@ export function buildClaudeSkills(analysis?: ContextAnalysis, onDemandSkills?: b
         "2. **New chokepoints** (files whose removal would disconnect the graph)",
         "3. **Coupling increases** (new tight-coupling or hidden-coupling pairs)",
         "4. **New dead files** (files with zero importers)",
+        "5. **Critical chain growth** (longer dependency chains = slower builds, harder reasoning)",
+        "6. **Modularity Q drop** (more cross-directory imports = weaker module boundaries)",
         "",
         "Report only NEW issues (not already documented in the context file). If no regressions are found, confirm the changes are clean.",
       ].join("\n"),
@@ -106,6 +108,24 @@ function buildHealthSkill(analysis: ContextAnalysis): ClaudeSkill | null {
 
   const lc = renderLayerConsistencySection(analysis);
   if (lc) parts.push(lc.content);
+
+  const topo = analysis.graphTopology;
+  if (topo) {
+    const topoLines: string[] = ["## Graph Topology"];
+    topoLines.push("");
+    topoLines.push(`| Metric | Value |`);
+    topoLines.push(`|--------|-------|`);
+    topoLines.push(`| Components | ${topo.componentCount} (${topo.isFragmented ? "fragmented" : "connected"}) |`);
+    topoLines.push(`| Diameter | ~${topo.approximateDiameter} hops |`);
+    topoLines.push(`| Reachability | ${(topo.reachability * 100).toFixed(0)}% |`);
+    if (topo.criticalChainLength != null) {
+      topoLines.push(`| Critical chain | ${topo.criticalChainLength} layers |`);
+    }
+    if (topo.modularityQ != null) {
+      topoLines.push(`| Modularity Q | ${topo.modularityQ.toFixed(2)} (directory-based) |`);
+    }
+    parts.push(topoLines.join("\n"));
+  }
 
   if (parts.length === 0) return null;
 
