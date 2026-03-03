@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { existsSync, mkdirSync, writeFileSync, unlinkSync, rmdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, rmdirSync } from "node:fs";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 
@@ -51,48 +51,49 @@ if (!existsSync(distEntry)) {
     let accumulator: { buf: Buffer; resolvers: Array<(msg: unknown) => void> };
     let nextId = 1;
     let createdGraphDir = false;
-    let createdGraphFile = false;
+    let originalGraph: Buffer | null = null;
 
     beforeAll(async () => {
-      // Ensure .clarte/graph.json exists so scope/impact tools work in CI
+      // Always write a minimal graph so scope/impact tools have a known file entry
       const graphDir = path.join(projectRoot, ".clarte");
       const graphPath = path.join(graphDir, "graph.json");
       if (!existsSync(graphDir)) {
         mkdirSync(graphDir, { recursive: true });
         createdGraphDir = true;
       }
-      if (!existsSync(graphPath)) {
-        const minimalGraph = {
-          version: 1,
-          timestamp: new Date().toISOString(),
-          files: {
-            "src/mcp/server.ts": {
-              role: null,
-              authority: 0,
-              hubScore: 0,
-              betweenness: 0,
-              instability: null,
-              importedByCount: 0,
-              isChokepoint: false,
-              separatesComponents: 0,
-              isCrossCutting: false,
-              layerSpread: 0,
-              layers: [],
-              hasTests: false,
-              testFiles: [],
-              communityId: null,
-            },
-          },
-          edges: [],
-          communities: [],
-          changeCoupling: [],
-          structuralMismatches: [],
-          testMapping: {},
-          lagCouplings: [],
-        };
-        writeFileSync(graphPath, JSON.stringify(minimalGraph));
-        createdGraphFile = true;
+      // Back up any existing graph so we can restore it after the test
+      if (existsSync(graphPath)) {
+        originalGraph = readFileSync(graphPath);
       }
+      const minimalGraph = {
+        version: 1,
+        timestamp: new Date().toISOString(),
+        files: {
+          "src/mcp/server.ts": {
+            role: null,
+            authority: 0,
+            hubScore: 0,
+            betweenness: 0,
+            instability: null,
+            importedByCount: 0,
+            isChokepoint: false,
+            separatesComponents: 0,
+            isCrossCutting: false,
+            layerSpread: 0,
+            layers: [],
+            hasTests: false,
+            testFiles: [],
+            communityId: null,
+          },
+        },
+        edges: [],
+        communities: [],
+        changeCoupling: [],
+        structuralMismatches: [],
+        testMapping: {},
+        lagCouplings: [],
+      };
+      writeFileSync(graphPath, JSON.stringify(minimalGraph));
 
       accumulator = { buf: Buffer.alloc(0), resolvers: [] };
 
@@ -138,10 +139,15 @@ if (!existsSync(distEntry)) {
 
     afterAll(() => {
       proc?.kill();
-      // Clean up graph files we created for CI
-      if (createdGraphFile) {
+      // Restore original graph or clean up
+      const graphPath = path.join(projectRoot, ".clarte", "graph.json");
+      if (originalGraph) {
         try {
-          unlinkSync(path.join(projectRoot, ".clarte", "graph.json"));
+          writeFileSync(graphPath, originalGraph);
+        } catch {}
+      } else {
+        try {
+          unlinkSync(graphPath);
         } catch {}
       }
       if (createdGraphDir) {

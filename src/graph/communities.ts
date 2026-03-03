@@ -138,6 +138,66 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     if (!changed) break;
   }
 
+  // Phase 3.5: Louvain-style modularity refinement (one round).
+  // Moves files to the community that maximizes modularity Q, using the
+  // directory-seeded assignment as initialization. This combines domain knowledge
+  // (directory structure) with a well-defined objective function.
+  const totalEdges = [...adj.values()].reduce((sum, neighbors) => sum + neighbors.size, 0) / 2;
+  if (totalEdges > 0) {
+    const m = totalEdges;
+    const degree = new Map<string, number>();
+    for (const file of files) {
+      degree.set(file, adj.get(file)?.size ?? 0);
+    }
+
+    // Sum of degrees per community
+    const communityDegree = new Map<number, number>();
+    for (const file of files) {
+      const label = fileToCommunity.get(file)!;
+      communityDegree.set(label, (communityDegree.get(label) ?? 0) + (degree.get(file) ?? 0));
+    }
+
+    for (const file of [...files].sort()) {
+      const currentLabel = fileToCommunity.get(file)!;
+      const neighbors = adj.get(file);
+      if (!neighbors || neighbors.size === 0) continue;
+
+      const ki = degree.get(file)!;
+      const dA = communityDegree.get(currentLabel)!;
+
+      // Count edges to each neighboring community
+      const edgesToCommunity = new Map<number, number>();
+      for (const neighbor of neighbors) {
+        const nLabel = fileToCommunity.get(neighbor);
+        if (nLabel != null) {
+          edgesToCommunity.set(nLabel, (edgesToCommunity.get(nLabel) ?? 0) + 1);
+        }
+      }
+
+      const edgesToCurrent = edgesToCommunity.get(currentLabel) ?? 0;
+
+      let bestLabel = currentLabel;
+      let bestDeltaQ = 0;
+
+      for (const [candidateLabel, kiB] of edgesToCommunity) {
+        if (candidateLabel === currentLabel) continue;
+        const dB = communityDegree.get(candidateLabel) ?? 0;
+        // ΔQ = (k_i,B - k_i,A)/m + k_i*(d_A - d_B - k_i)/(2m²)
+        const deltaQ = (kiB - edgesToCurrent) / m + (ki * (dA - dB - ki)) / (2 * m * m);
+        if (deltaQ > bestDeltaQ) {
+          bestDeltaQ = deltaQ;
+          bestLabel = candidateLabel;
+        }
+      }
+
+      if (bestLabel !== currentLabel) {
+        communityDegree.set(currentLabel, (communityDegree.get(currentLabel) ?? 0) - ki);
+        communityDegree.set(bestLabel, (communityDegree.get(bestLabel) ?? 0) + ki);
+        fileToCommunity.set(file, bestLabel);
+      }
+    }
+  }
+
   const finalGroups = groupByCommunity(fileToCommunity);
   const communities: Community[] = [];
   let id = 0;

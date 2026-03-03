@@ -174,7 +174,7 @@ export function computeLayerConsistency(
   }
 
   const violations: LayerViolation[] = [];
-  let correctCount = 0;
+  let correctWeight = 0;
 
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
@@ -195,12 +195,19 @@ export function computeLayerConsistency(
         toLayer,
       });
     } else {
-      correctCount++;
+      // Weight correct edges by skip distance (same as violations).
+      // In the else branch, fromRank >= toRank (consumer imports foundational).
+      correctWeight += fromRank - toRank;
     }
   }
 
-  const total = correctCount + violations.length;
-  const consistency = total === 0 ? 1 : correctCount / total;
+  // Weight violations by skip distance: a 3-layer-skip violation penalizes
+  // 3x more than a 1-layer skip in the consistency score.
+  const violationWeight = violations.reduce((sum, v) => {
+    return sum + Math.abs((rank.get(v.toLayer) ?? 0) - (rank.get(v.fromLayer) ?? 0));
+  }, 0);
+  const total = correctWeight + violationWeight;
+  const consistency = total === 0 ? 1 : correctWeight / total;
 
   // Sort violations by layer rank distance (most egregious first), alphabetical tiebreaker
   violations.sort((a, b) => {

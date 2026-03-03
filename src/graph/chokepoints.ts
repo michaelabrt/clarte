@@ -7,7 +7,13 @@ import type { Chokepoint, ImportGraph } from "../types.js";
  * - upstreamCount >= ceil(sqrt(N)) where N = internal file count (scales with project size)
  * - downstreamCount >= 1 (it bridges upstream files to at least 1 dependency)
  *
- * Runs in O(C * (V+E)) where C = files with inDegree >= 1.
+ * Two-phase approach for scalability:
+ * - Phase 1: early-termination BFS identifies candidates (upstream >= threshold).
+ *   Non-candidates terminate after visiting O(sqrt(N)) nodes instead of O(V+E).
+ * - Phase 2: exact BFS counts only for candidates (typically <5% of files).
+ *
+ * Worst case remains O(V*(V+E)) but average case is O(V*sqrt(V) + C*(V+E))
+ * where C = number of chokepoints.
  */
 export function findChokepoints(graph: ImportGraph): Chokepoint[] {
   const forward = new Map<string, Set<string>>();
@@ -28,11 +34,19 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
 
   const minUpstream = Math.max(2, Math.ceil(Math.sqrt(allFiles.size)));
 
-  const results: Chokepoint[] = [];
+  // Phase 1: identify candidates with early-termination BFS.
+  // For non-chokepoints (majority of files), BFS terminates after visiting
+  // at most minUpstream nodes instead of the full reachable set.
+  const candidates: string[] = [];
   for (const file of allFiles) {
     if ((graph.inDegree.get(file) ?? 0) < 1) continue;
+    if (bfsReaches(file, reverse, minUpstream)) candidates.push(file);
+  }
+
+  // Phase 2: exact counts only for candidates
+  const results: Chokepoint[] = [];
+  for (const file of candidates) {
     const upstreamCount = bfsCount(file, reverse);
-    if (upstreamCount < minUpstream) continue;
     const downstreamCount = bfsCount(file, forward);
     if (downstreamCount < 1) continue;
 
@@ -46,8 +60,8 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
     });
   }
 
-  // Henry-Kafura scoring: rank by upstream * downstream product.
-  // This favors files that bridge many dependents TO many dependencies (true bottlenecks)
+  // Reachability product scoring: rank by upstream * downstream.
+  // Favors files that bridge many dependents TO many dependencies (true bottlenecks)
   // over files that are lopsided (e.g. 100 upstream, 1 downstream).
   results.sort(
     (a, b) => b.upstreamCount * b.downstreamCount - a.upstreamCount * a.downstreamCount || a.file.localeCompare(b.file),
@@ -55,6 +69,24 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
   return results;
 }
 
+/** Check if BFS from start reaches at least `threshold` nodes. Terminates early. */
+function bfsReaches(start: string, adj: Map<string, Set<string>>, threshold: number): boolean {
+  const visited = new Set<string>([start]);
+  const queue = [start];
+  let qHead = 0;
+  while (qHead < queue.length) {
+    for (const neighbor of adj.get(queue[qHead++]!) ?? []) {
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor);
+        if (visited.size - 1 >= threshold) return true;
+        queue.push(neighbor);
+      }
+    }
+  }
+  return visited.size - 1 >= threshold;
+}
+
+/** Full BFS reachability count (exact). */
 function bfsCount(start: string, adj: Map<string, Set<string>>): number {
   const visited = new Set<string>([start]);
   const queue = [start];

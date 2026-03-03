@@ -112,7 +112,10 @@ const STOP_WORDS = new Set([
 const TEST_FILE_RE = /(?:^|\/)(?:test|spec|__tests__|__mocks__)\/|\.(?:test|spec)\.[jt]sx?$/;
 
 const BM25_K1 = 1.2;
-const BM25_B = 0.75;
+// b=0.4: lowered from TREC default (0.75) for short documents. File paths are
+// 3-5 tokens and symbol lists 5-50 tokens; b=0.75 over-penalizes naturally short
+// docs. Literature (Clinchant & Gaussier 2010) recommends b=0.3-0.5 for this range.
+const BM25_B = 0.4;
 // PATH_WEIGHT > SYMBOL_WEIGHT: path tokens have higher precision (3-5 tokens identify
 // file identity vs 50+ symbol tokens each less unique).
 const PATH_WEIGHT = 1.5;
@@ -162,7 +165,13 @@ type FileDoc = {
   allTerms: Set<string>; // union of both fields; prevents double-counting in df
 };
 
-/** Score a single document against query terms using BM25F. */
+/**
+ * Score a single document against query terms using true BM25F (Robertson et al. 2004).
+ *
+ * Combines weighted pseudo-term-frequencies across fields before applying saturation,
+ * rather than applying BM25 saturation independently per field. This avoids double
+ * saturation credit when a term appears in multiple fields.
+ */
 function scoreBM25F(
   doc: FileDoc,
   queryTerms: string[],
@@ -179,17 +188,18 @@ function scoreBM25F(
     const tfPath = doc.path.termFreq.get(term) ?? 0;
     const tfSymbol = doc.symbols.termFreq.get(term) ?? 0;
 
-    let fieldScore = 0;
+    // True BM25F: compute weighted pseudo-tf across fields, then apply saturation once
+    let pseudoTf = 0;
     if (tfPath > 0) {
-      const norm = tfPath + BM25_K1 * (1 - BM25_B + BM25_B * (doc.path.tokens.length / avgdlPath));
-      fieldScore += (PATH_WEIGHT * (tfPath * (BM25_K1 + 1))) / norm;
+      pseudoTf += (PATH_WEIGHT * tfPath) / (1 - BM25_B + BM25_B * (doc.path.tokens.length / avgdlPath));
     }
     if (tfSymbol > 0) {
-      const norm = tfSymbol + BM25_K1 * (1 - BM25_B + BM25_B * (doc.symbols.tokens.length / avgdlSymbols));
-      fieldScore += (SYMBOL_WEIGHT * (tfSymbol * (BM25_K1 + 1))) / norm;
+      pseudoTf += (SYMBOL_WEIGHT * tfSymbol) / (1 - BM25_B + BM25_B * (doc.symbols.tokens.length / avgdlSymbols));
     }
 
-    score += idf * fieldScore;
+    if (pseudoTf > 0) {
+      score += idf * ((pseudoTf * (BM25_K1 + 1)) / (pseudoTf + BM25_K1));
+    }
   }
   return score;
 }

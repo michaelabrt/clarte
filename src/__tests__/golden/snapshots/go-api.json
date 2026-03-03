@@ -35,7 +35,9 @@
   "layers": [
     {
       "name": "config",
-      "files": ["internal/config/config.go"],
+      "files": [
+        "internal/config/config.go"
+      ],
       "dependsOn": []
     }
   ],
@@ -43,7 +45,11 @@
   "instabilities": [],
   "communityCount": 2,
   "communityFiles": [
-    ["cmd/main.go", "internal/config/config.go", "internal/server/server.go"],
+    [
+      "cmd/main.go",
+      "internal/config/config.go",
+      "internal/server/server.go"
+    ],
     [
       "internal/handlers/user_handler.go",
       "internal/models/product.go",
@@ -51,7 +57,10 @@
       "internal/repository/user_repo.go"
     ]
   ],
-  "deadFiles": ["internal/models/user.go", "internal/repository/user_repo.go"],
+  "deadFiles": [
+    "internal/models/user.go",
+    "internal/repository/user_repo.go"
+  ],
   "crossCuttingFiles": [],
   "layerConsistency": {
     "consistency": 1,
@@ -89,7 +98,9 @@
   ],
   "graphTopology": {
     "componentCount": 1,
-    "componentSizes": [7],
+    "componentSizes": [
+      7
+    ],
     "approximateDiameter": 4,
     "reachability": 1,
     "isFragmented": false

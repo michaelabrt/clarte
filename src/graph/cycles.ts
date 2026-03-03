@@ -186,11 +186,13 @@ export function findCircularDeps(graph: ImportGraph, maxCycles = 10): CircularDe
  * detection because it accounts for the full degree structure of the cycle
  * subgraph rather than depending on arbitrary DFS traversal order.
  *
- * @returns Array of { from, to, cyclesResolved } sorted by impact descending, max 3 items.
+ * Adaptively returns enough edges to resolve >= 80% of cycles, up to topN.
+ *
+ * @returns Array of { from, to, cyclesResolved } sorted by impact descending.
  */
 export function findFeedbackEdges(
   cycles: CircularDependency[],
-  topN = 3,
+  topN = 10,
 ): Array<{ from: string; to: string; cyclesResolved: number }> {
   if (cycles.length === 0) return [];
 
@@ -329,12 +331,32 @@ export function findFeedbackEdges(
     }
   }
 
-  const sorted = [...edgeCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN);
+  const sorted = [...edgeCounts.entries()].sort((a, b) => b[1] - a[1]);
 
-  return sorted.map(([key, count]) => {
+  // Adaptive: take edges until 80% of cycles are resolved or topN is reached.
+  // Build a lookup: for each edge key, which cycle indices does it participate in?
+  const edgeToCycles = new Map<string, Set<number>>();
+  for (let ci = 0; ci < cycles.length; ci++) {
+    for (let i = 0; i < cycles[ci].chain.length - 1; i++) {
+      const key = `${cycles[ci].chain[i]}||${cycles[ci].chain[i + 1]}`;
+      if (!edgeToCycles.has(key)) edgeToCycles.set(key, new Set());
+      edgeToCycles.get(key)!.add(ci);
+    }
+  }
+
+  const targetResolved = Math.ceil(cycles.length * 0.8);
+  const resolvedCycles = new Set<number>();
+  const result: Array<{ from: string; to: string; cyclesResolved: number }> = [];
+
+  for (const [key, count] of sorted) {
+    if (result.length >= topN) break;
     const [from, to] = key.split("||");
-    return { from, to, cyclesResolved: count };
-  });
+    result.push({ from, to, cyclesResolved: count });
+    for (const ci of edgeToCycles.get(key) ?? []) resolvedCycles.add(ci);
+    if (resolvedCycles.size >= targetResolved) break;
+  }
+
+  return result;
 }
 
 /**

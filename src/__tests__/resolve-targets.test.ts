@@ -306,6 +306,80 @@ describe("offline scoring - known queries", () => {
   });
 });
 
+// ── BM25F true field combination ─────────────────────────────────────
+
+describe("BM25F scoring behavior", () => {
+  it("term in both path and symbols scores higher than term in only one field", () => {
+    // File A: term appears in both path and symbols
+    // File B: term appears only in symbols
+    const graph = makeGraph({
+      files: {
+        "src/auth/auth.ts": makeFileRecord({ symbolNames: ["authenticate", "authToken"] }),
+        "src/core/session.ts": makeFileRecord({ symbolNames: ["authenticate", "authToken"] }),
+      },
+    });
+    const targets = resolveEditTargets("auth", graph);
+    // auth.ts has "auth" in both path and symbols; session.ts only in symbols
+    expect(targets[0]).toBe("src/auth/auth.ts");
+  });
+
+  it("short document (3-token path) is not over-penalized relative to longer paths", () => {
+    // With b=0.4 (vs default 0.75), short documents should score comparably
+    // File A: short path "src/auth.ts" (3 tokens: src, auth, ts)
+    // File B: long path "src/services/authentication/auth-helper-utils.ts" (many tokens)
+    // Both have the query term "auth" in path
+    const graph = makeGraph({
+      files: {
+        "src/auth.ts": makeFileRecord(),
+        "src/services/authentication/auth-helper-utils.ts": makeFileRecord(),
+      },
+    });
+
+    const targets = resolveEditTargets("auth", graph);
+    // Short exact match should score at least as well as the longer path match
+    // (b=0.4 means less length normalization penalty for short docs)
+    expect(targets).toContain("src/auth.ts");
+    expect(targets[0]).toBe("src/auth.ts");
+  });
+
+  it("term appearing in both path and symbols combines pseudo-tf before saturation", () => {
+    // True BM25F: weighted pseudo-tf combines across fields before saturation.
+    // File with term in path AND symbols should outscore file with term in symbols only.
+    const graph = makeGraph({
+      files: {
+        // "cache" appears in path tokens AND as a symbol
+        "src/cache/handler.ts": makeFileRecord({ symbolNames: ["cache", "cacheResult"] }),
+        // "cache" appears only in symbols
+        "src/core/engine.ts": makeFileRecord({ symbolNames: ["cache", "cacheResult"] }),
+      },
+    });
+
+    const targets = resolveEditTargets("cache", graph);
+    // cache/handler.ts has "cache" in both path (from directory) and symbols
+    // engine.ts has "cache" only in symbols
+    expect(targets[0]).toBe("src/cache/handler.ts");
+  });
+
+  it("path match beats single symbol match due to PATH_WEIGHT > SYMBOL_WEIGHT", () => {
+    // Path tokens are weighted 1.5x vs 1.0x for symbols.
+    // A file with a term in the path should beat one with a single symbol match.
+    const graph = makeGraph({
+      files: {
+        "src/cache.ts": makeFileRecord({ symbolNames: ["initStore"] }),
+        "src/core/storage.ts": makeFileRecord({
+          // Single "cache" in symbols via camelCase split, no path match
+          symbolNames: ["cacheManager"],
+        }),
+      },
+    });
+
+    const targets = resolveEditTargets("cache", graph);
+    // cache.ts: path pseudo-tf = 1.5 * 1/norm. storage.ts: symbol pseudo-tf = 1.0 * 1/norm.
+    // PATH_WEIGHT (1.5) > SYMBOL_WEIGHT (1.0), so path match wins.
+    expect(targets[0]).toBe("src/cache.ts");
+  });
+});
+
 // ── formatEditDirective ──────────────────────────────────────────────
 
 describe("formatEditDirective", () => {

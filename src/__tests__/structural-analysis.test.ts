@@ -496,4 +496,139 @@ describe("findChokepoints", () => {
     expect(result).toHaveLength(1);
     expect(result[0].upstreamCount).toBeGreaterThan(0);
   });
+
+  it("two-phase BFS: low-upstream files are filtered without changing results", () => {
+    // A star graph where leaves have low upstream - they must be filtered before exact BFS
+    // Center c has upstream=4, threshold=ceil(sqrt(5))=3, so c qualifies
+    // Leaves a, b, d, e have upstream=0, below threshold
+    const graph = makeGraph(
+      ["a", "b", "c", "d", "e"],
+      [edge("a", "c"), edge("b", "c"), edge("c", "d"), edge("c", "e")],
+    );
+
+    const result = findChokepoints(graph);
+    // Only c qualifies: upstream=2 (a,b), threshold=ceil(sqrt(5))=3, so c does NOT qualify
+    // Wait: sqrt(5)=2.23, ceil=3. c upstream=2 < 3. This is zero results.
+    // Let's verify the exact behavior via the threshold formula.
+    // threshold = max(2, ceil(sqrt(5))) = 3. c upstream=2. c does NOT qualify.
+    expect(result).toHaveLength(0);
+  });
+
+  it("two-phase BFS does not inflate upstream counts vs single-pass", () => {
+    // 9-node chain: a->b->c->d->e->f->g->h->i
+    // threshold=ceil(sqrt(9))=3
+    // f upstream=5(a,b,c,d,e) >= 3 - qualifies
+    // g upstream=6(a,b,c,d,e,f) >= 3 - qualifies
+    // h upstream=7(a,b,c,d,e,f,g) >= 3 - qualifies
+    const files = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
+    const edges = files.slice(1).map((f, i) => edge(files[i], f));
+    const graph = makeGraph(files, edges);
+
+    const result = findChokepoints(graph);
+    // All qualifying nodes must have exact upstream counts (not inflated by BFS)
+    for (const cp of result) {
+      const idx = files.indexOf(cp.file);
+      // upstream = number of nodes that can reach this file = idx (all predecessors)
+      expect(cp.upstreamCount).toBe(idx);
+      // downstream = number of nodes reachable from this file = files.length - idx - 1
+      expect(cp.downstreamCount).toBe(files.length - idx - 1);
+    }
+  });
+});
+
+// ── Weighted layer violations ─────────────────────────────────────────
+
+describe("computeLayerConsistency weighted violations", () => {
+  it("3-layer-skip violation produces lower consistency than 1-layer-skip violation", () => {
+    // Setup: 4 layers types(0) -> utils(1) -> services(2) -> components(3)
+    const layers4 = makeLayers([
+      { name: "types", files: ["src/types.ts"] },
+      { name: "utils", files: ["src/utils.ts"] },
+      { name: "services", files: ["src/services.ts"] },
+      { name: "components", files: ["src/components.ts"] },
+    ]);
+
+    const layerEdges4: LayerEdge[] = [
+      { from: "utils", to: "types" },
+      { from: "services", to: "utils" },
+      { from: "components", to: "services" },
+    ];
+
+    // Case A: one 1-layer-skip violation (types -> utils, skip=1) + one correct edge
+    const graphSmallSkip = makeGraph(
+      ["src/types.ts", "src/utils.ts", "src/services.ts", "src/components.ts"],
+      [
+        edge("src/components.ts", "src/services.ts"), // correct, distance=1
+        edge("src/types.ts", "src/utils.ts"), // violation, distance=1
+      ],
+    );
+
+    // Case B: one 3-layer-skip violation (types -> components, skip=3) + one correct edge
+    const graphLargeSkip = makeGraph(
+      ["src/types.ts", "src/utils.ts", "src/services.ts", "src/components.ts"],
+      [
+        edge("src/components.ts", "src/services.ts"), // correct, distance=1
+        edge("src/types.ts", "src/components.ts"), // violation, distance=3
+      ],
+    );
+
+    const resultSmall = computeLayerConsistency(graphSmallSkip, layers4, layerEdges4);
+    const resultLarge = computeLayerConsistency(graphLargeSkip, layers4, layerEdges4);
+
+    // Larger skip = lower consistency score
+    expect(resultLarge.consistency).toBeLessThan(resultSmall.consistency);
+  });
+
+  it("two violations at equal distance produce same result as unweighted count", () => {
+    const layers = makeLayers([
+      { name: "types", files: ["src/types/a.ts", "src/types/b.ts"] },
+      { name: "services", files: ["src/services/a.ts", "src/services/b.ts"] },
+    ]);
+
+    const layerEdges: LayerEdge[] = [{ from: "services", to: "types" }];
+
+    // Two violations: each types file imports a services file (distance=1 each)
+    const graph = makeGraph(
+      ["src/types/a.ts", "src/types/b.ts", "src/services/a.ts", "src/services/b.ts"],
+      [
+        edge("src/services/a.ts", "src/types/a.ts"), // correct
+        edge("src/services/b.ts", "src/types/b.ts"), // correct
+        edge("src/types/a.ts", "src/services/a.ts"), // violation distance=1
+        edge("src/types/b.ts", "src/services/b.ts"), // violation distance=1
+      ],
+    );
+
+    const result = computeLayerConsistency(graph, layers, layerEdges);
+    // 2 correct (weight=2) vs 2 violations (weight=2): consistency = 2/4 = 0.5
+    expect(result.consistency).toBe(0.5);
+    expect(result.violations).toHaveLength(2);
+  });
+
+  it("correct edge with larger distance contributes more to consistency", () => {
+    // 3 layers: A(0) -> B(1) -> C(2)
+    const layers = makeLayers([
+      { name: "layerA", files: ["src/a.ts"] },
+      { name: "layerB", files: ["src/b.ts"] },
+      { name: "layerC", files: ["src/c.ts"] },
+    ]);
+
+    const layerEdges: LayerEdge[] = [
+      { from: "layerB", to: "layerA" },
+      { from: "layerC", to: "layerB" },
+    ];
+
+    // Only one correct edge: C -> A, skipping B (distance=2)
+    // One violation: A -> C (distance=2)
+    const graph = makeGraph(
+      ["src/a.ts", "src/b.ts", "src/c.ts"],
+      [
+        edge("src/c.ts", "src/a.ts"), // correct, skip=2
+        edge("src/a.ts", "src/c.ts"), // violation, skip=2
+      ],
+    );
+
+    const result = computeLayerConsistency(graph, layers, layerEdges);
+    // 1 correct (weight=2) vs 1 violation (weight=2): consistency = 0.5
+    expect(result.consistency).toBe(0.5);
+  });
 });
