@@ -220,7 +220,7 @@ const fixtures: FixtureDef[] = [
       // router.ts should have high betweenness (4 features funnel through it)
       const router = a.betweennessTopFiles.find((f) => f.file.includes("router"));
       expect(router, "router.ts should be in top 5 betweenness").toBeDefined();
-      expect(router!.score).toBeGreaterThan(0.3);
+      expect(router?.score).toBeGreaterThan(0.3);
       // Pure sinks (db.ts, cache.ts) should have zero betweenness
       const db = a.betweennessTopFiles.find((f) => f.file.includes("db"));
       const cache = a.betweennessTopFiles.find((f) => f.file.includes("cache"));
@@ -266,7 +266,7 @@ const fixtures: FixtureDef[] = [
       // User.java should be the highest-authority hub
       const userHub = a.hubFiles.find((h) => h.path.includes("model/User.java"));
       expect(userHub).toBeDefined();
-      expect(userHub!.authority).toBe(1);
+      expect(userHub?.authority).toBe(1);
       // UserService should be a chokepoint (chains through repository to model)
       expect(a.betweennessTopFiles.some((f) => f.file.includes("UserService") && f.score > 0.5)).toBe(true);
       // Should detect at least 2 layers

@@ -25,8 +25,8 @@ export function findStructuralTemporalMismatches(
     if (edge.isExternal) continue;
     if (!adj.has(edge.from)) adj.set(edge.from, new Set());
     if (!adj.has(edge.to)) adj.set(edge.to, new Set());
-    adj.get(edge.from)!.add(edge.to);
-    adj.get(edge.to)!.add(edge.from);
+    adj.get(edge.from)?.add(edge.to);
+    adj.get(edge.to)?.add(edge.from);
   }
 
   // Cache BFS results to avoid redundant traversals for the same source node

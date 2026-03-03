@@ -52,9 +52,9 @@ export enum StatusCode { Ok, Error }
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.naming.functions).toBe("camelCase");
-    expect(result!.naming.types).toBe("PascalCase");
-    expect(result!.naming.constants).toBe("UPPER_SNAKE_CASE");
+    expect(result?.naming.functions).toBe("camelCase");
+    expect(result?.naming.types).toBe("PascalCase");
+    expect(result?.naming.constants).toBe("UPPER_SNAKE_CASE");
   });
 
   it("detects snake_case functions (Python-style)", async () => {
@@ -71,7 +71,7 @@ export function update_profile(id) {}
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.naming.functions).toBe("snake_case");
+    expect(result?.naming.functions).toBe("snake_case");
   });
 
   it("returns mixed when no dominant pattern", async () => {
@@ -87,7 +87,7 @@ export function DeleteUser() {}
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.naming.functions).toBe("mixed");
+    expect(result?.naming.functions).toBe("mixed");
   });
 });
 
@@ -105,8 +105,8 @@ export type Baz = string;
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.exportStyle.preferNamed).toBe(true);
-    expect(result!.exportStyle.defaultExportPercent).toBe(0);
+    expect(result?.exportStyle.preferNamed).toBe(true);
+    expect(result?.exportStyle.defaultExportPercent).toBe(0);
   });
 
   it("detects default export usage", async () => {
@@ -121,7 +121,7 @@ export const helper = () => {};
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.exportStyle.defaultExportPercent).toBe(50);
+    expect(result?.exportStyle.defaultExportPercent).toBe(50);
   });
 
   it("counts barrel files", async () => {
@@ -143,7 +143,7 @@ export const VALUE = 1;
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.exportStyle.barrelFileCount).toBe(1);
+    expect(result?.exportStyle.barrelFileCount).toBe(1);
   });
 });
 
@@ -165,7 +165,7 @@ export function main() {}
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.importOrdering).toBe("external-first, blank-line separated");
+    expect(result?.importOrdering).toBe("external-first, blank-line separated");
   });
 
   it("detects external-first without separation", async () => {
@@ -183,9 +183,9 @@ export function main() {}
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.importOrdering).toContain("external-first");
+    expect(result?.importOrdering).toContain("external-first");
     // Should not have blank-line separated since there are no blank lines between groups
-    expect(result!.importOrdering).not.toContain("blank-line separated");
+    expect(result?.importOrdering).not.toContain("blank-line separated");
   });
 });
 
@@ -309,8 +309,8 @@ export type UserCardProps = {};
 
     // Global file naming should be mixed (camelCase from utils, PascalCase from components)
     // Directory overrides should capture the local patterns
-    if (result!.directoryOverrides) {
-      const componentOverride = result!.directoryOverrides.find((o) => o.directory === "src/components");
+    if (result?.directoryOverrides) {
+      const componentOverride = result?.directoryOverrides.find((o) => o.directory === "src/components");
       // Components should have PascalCase files if it differs from global
       if (componentOverride?.naming.files) {
         expect(componentOverride.naming.files).toBe("PascalCase");
@@ -345,7 +345,7 @@ export function validateInput(input: string) {}
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
     // No directory overrides needed when all match global
-    expect(result!.directoryOverrides).toBeUndefined();
+    expect(result?.directoryOverrides).toBeUndefined();
   });
 
   it("requires 5+ samples per directory for override", async () => {
@@ -378,7 +378,7 @@ export function ProcessData() {}
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
     // src/tiny/ has only 1 file with 1 function + 1 filename = 2 samples, below 5
-    const tinyOverride = result!.directoryOverrides?.find((o) => o.directory === "src/tiny");
+    const tinyOverride = result?.directoryOverrides?.find((o) => o.directory === "src/tiny");
     expect(tinyOverride).toBeUndefined();
   });
 });
@@ -400,11 +400,11 @@ export function formatDate() {}
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.namingPrefixes).toBeDefined();
-    const usePrefix = result!.namingPrefixes!.find((p) => p.prefix === "use");
+    expect(result?.namingPrefixes).toBeDefined();
+    const usePrefix = result?.namingPrefixes?.find((p) => p.prefix === "use");
     expect(usePrefix).toBeDefined();
-    expect(usePrefix!.count).toBe(5);
-    expect(usePrefix!.example).toBe("useAuth");
+    expect(usePrefix?.count).toBe(5);
+    expect(usePrefix?.example).toBe("useAuth");
   });
 
   it("detects is*/has* prefix pattern for predicates", async () => {
@@ -424,13 +424,13 @@ export function formatDate() {}
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.namingPrefixes).toBeDefined();
-    const isPrefix = result!.namingPrefixes!.find((p) => p.prefix === "is");
+    expect(result?.namingPrefixes).toBeDefined();
+    const isPrefix = result?.namingPrefixes?.find((p) => p.prefix === "is");
     expect(isPrefix).toBeDefined();
-    expect(isPrefix!.count).toBe(3);
-    const hasPrefix = result!.namingPrefixes!.find((p) => p.prefix === "has");
+    expect(isPrefix?.count).toBe(3);
+    const hasPrefix = result?.namingPrefixes?.find((p) => p.prefix === "has");
     expect(hasPrefix).toBeDefined();
-    expect(hasPrefix!.count).toBe(3);
+    expect(hasPrefix?.count).toBe(3);
   });
 
   it("detects get*/handle* prefix patterns", async () => {
@@ -449,13 +449,13 @@ export function handleChange() {}
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.namingPrefixes).toBeDefined();
-    const getPrefix = result!.namingPrefixes!.find((p) => p.prefix === "get");
+    expect(result?.namingPrefixes).toBeDefined();
+    const getPrefix = result?.namingPrefixes?.find((p) => p.prefix === "get");
     expect(getPrefix).toBeDefined();
-    expect(getPrefix!.count).toBe(3);
-    const handlePrefix = result!.namingPrefixes!.find((p) => p.prefix === "handle");
+    expect(getPrefix?.count).toBe(3);
+    const handlePrefix = result?.namingPrefixes?.find((p) => p.prefix === "handle");
     expect(handlePrefix).toBeDefined();
-    expect(handlePrefix!.count).toBe(3);
+    expect(handlePrefix?.count).toBe(3);
   });
 
   it("does not report prefix with fewer than 3 occurrences", async () => {
@@ -473,7 +473,7 @@ export function processData() {}
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
     // use* appears only 2 times, should not be reported
-    expect(result!.namingPrefixes).toBeUndefined();
+    expect(result?.namingPrefixes).toBeUndefined();
   });
 
   it("sorts prefixes by count descending", async () => {
@@ -497,10 +497,10 @@ export function isAdmin() {}
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.namingPrefixes).toBeDefined();
+    expect(result?.namingPrefixes).toBeDefined();
     // use* has 5 occurrences, get* and is* have 3 each
-    expect(result!.namingPrefixes![0].prefix).toBe("use");
-    expect(result!.namingPrefixes![0].count).toBe(5);
+    expect(result?.namingPrefixes?.[0].prefix).toBe("use");
+    expect(result?.namingPrefixes?.[0].count).toBe(5);
   });
 });
 
@@ -523,7 +523,7 @@ export function main() {}
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.importOrdering).toContain("alphabetical within groups");
+    expect(result?.importOrdering).toContain("alphabetical within groups");
   });
 
   it("does not report alphabetical when imports are not sorted", async () => {
@@ -544,8 +544,8 @@ export function main() {}
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.importOrdering).toContain("external-first");
-    expect(result!.importOrdering).not.toContain("alphabetical");
+    expect(result?.importOrdering).toContain("external-first");
+    expect(result?.importOrdering).not.toContain("alphabetical");
   });
 
   it("detects node: builtin imports separated from other external", async () => {
@@ -568,7 +568,7 @@ export function main() {}
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    expect(result!.importOrdering).toContain("node: builtins separated");
+    expect(result?.importOrdering).toContain("node: builtins separated");
   });
 
   it("does not report node: builtins separated when they are mixed with other externals", async () => {
@@ -589,8 +589,8 @@ export function main() {}
 
     const result = await inferConventions("/test", graph);
     expect(result).not.toBeNull();
-    if (result!.importOrdering) {
-      expect(result!.importOrdering).not.toContain("node: builtins separated");
+    if (result?.importOrdering) {
+      expect(result?.importOrdering).not.toContain("node: builtins separated");
     }
   });
 });
@@ -734,8 +734,8 @@ describe("renderConventionsSection", () => {
 
     const result = renderConventionsSection(conventions);
     // Count prefix directive lines (they contain "prefix")
-    const prefixLines = result!
-      .split("\n")
+    const prefixLines = result
+      ?.split("\n")
       .filter((l) => l.includes("prefix") || l.includes("`is`/`has`") || l.includes("`create`/`make`"));
     expect(prefixLines.length).toBeLessThanOrEqual(3);
   });

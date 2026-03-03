@@ -141,22 +141,22 @@ from mypackage.utils import helper
     // os import: not type-only
     const osImport = imports.find((i) => i.specifier === "os");
     expect(osImport).toBeDefined();
-    expect(osImport!.isTypeOnly).toBeUndefined();
+    expect(osImport?.isTypeOnly).toBeUndefined();
 
     // User import: type-only (inside TYPE_CHECKING)
     const userImport = imports.find((i) => i.specifier === "mypackage.models");
     expect(userImport).toBeDefined();
-    expect(userImport!.isTypeOnly).toBe(true);
+    expect(userImport?.isTypeOnly).toBe(true);
 
     // AuthService import: type-only (inside TYPE_CHECKING)
     const authImport = imports.find((i) => i.specifier === "mypackage.services");
     expect(authImport).toBeDefined();
-    expect(authImport!.isTypeOnly).toBe(true);
+    expect(authImport?.isTypeOnly).toBe(true);
 
     // helper import: not type-only (after TYPE_CHECKING block)
     const helperImport = imports.find((i) => i.specifier === "mypackage.utils");
     expect(helperImport).toBeDefined();
-    expect(helperImport!.isTypeOnly).toBeUndefined();
+    expect(helperImport?.isTypeOnly).toBeUndefined();
   });
 
   it("does NOT mark imports as type-only when no TYPE_CHECKING block exists", () => {
@@ -186,16 +186,16 @@ from mypackage.utils import helper
 
     const modelsImport = imports.find((i) => i.specifier === "mypackage.models");
     expect(modelsImport).toBeDefined();
-    expect(modelsImport!.isTypeOnly).toBe(true);
-    expect(modelsImport!.importedNames).toContain("User");
-    expect(modelsImport!.importedNames).toContain("Admin");
+    expect(modelsImport?.isTypeOnly).toBe(true);
+    expect(modelsImport?.importedNames).toContain("User");
+    expect(modelsImport?.importedNames).toContain("Admin");
 
     const cacheImport = imports.find((i) => i.specifier === "mypackage.cache");
     expect(cacheImport).toBeDefined();
-    expect(cacheImport!.isTypeOnly).toBe(true);
+    expect(cacheImport?.isTypeOnly).toBe(true);
 
     const helperImport = imports.find((i) => i.specifier === "mypackage.utils");
     expect(helperImport).toBeDefined();
-    expect(helperImport!.isTypeOnly).toBeUndefined();
+    expect(helperImport?.isTypeOnly).toBeUndefined();
   });
 });

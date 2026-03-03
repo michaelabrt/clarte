@@ -116,7 +116,7 @@ describe("computeChangeCoupling", () => {
       (r) => (r.fileA === "a.ts" && r.fileB === "b.ts") || (r.fileA === "b.ts" && r.fileB === "a.ts"),
     );
     expect(abPair).toBeDefined();
-    expect(abPair!.confidence).toBeCloseTo(0.4, 1);
+    expect(abPair?.confidence).toBeCloseTo(0.4, 1);
   });
 });
 
@@ -339,10 +339,10 @@ describe("computeChangeCoupling asymmetric confidence", () => {
     expect(asymPair).toBeDefined();
 
     // Jaccard should be low (well below 0.3)
-    expect(asymPair!.confidence).toBeLessThan(0.3);
+    expect(asymPair?.confidence).toBeLessThan(0.3);
 
     // But directional confidence (the B->A direction) should be high
-    const ba = asymPair!.fileA === "asymB.ts" ? (asymPair!.confidenceAB ?? 0) : (asymPair!.confidenceBA ?? 0);
+    const ba = asymPair?.fileA === "asymB.ts" ? (asymPair?.confidenceAB ?? 0) : (asymPair?.confidenceBA ?? 0);
     expect(ba).toBeGreaterThanOrEqual(0.6);
   });
 
@@ -367,9 +367,9 @@ describe("computeChangeCoupling asymmetric confidence", () => {
 
     // When fileA is dirA.ts: confidenceAB = 3/3 = 1.0, confidenceBA = 3/6 = 0.5
     // When fileA is dirB.ts: confidenceAB = 3/6 = 0.5, confidenceBA = 3/3 = 1.0
-    const isAFirst = pair!.fileA === "dirA.ts";
-    const abValue = isAFirst ? pair!.confidenceAB : pair!.confidenceBA;
-    const baValue = isAFirst ? pair!.confidenceBA : pair!.confidenceAB;
+    const isAFirst = pair?.fileA === "dirA.ts";
+    const abValue = isAFirst ? pair?.confidenceAB : pair?.confidenceBA;
+    const baValue = isAFirst ? pair?.confidenceBA : pair?.confidenceAB;
 
     expect(abValue).toBeCloseTo(1.0, 1);
     expect(baValue).toBeCloseTo(0.5, 1);

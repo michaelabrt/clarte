@@ -110,7 +110,7 @@ function topologicalSortLayers(layers: ArchitecturalLayer[], layerEdges: LayerEd
   // Edge direction for topo sort: to -> from (foundational -> consumer)
   for (const edge of layerEdges) {
     if (!layerNames.has(edge.from) || !layerNames.has(edge.to)) continue;
-    adj.get(edge.to)!.push(edge.from);
+    adj.get(edge.to)?.push(edge.from);
     inDeg.set(edge.from, (inDeg.get(edge.from) ?? 0) + 1);
   }
 

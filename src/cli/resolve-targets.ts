@@ -236,7 +236,7 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
   const exportedNames = new Map<string, string[]>();
   for (const edge of graph.edges) {
     if (!exportedNames.has(edge.to)) exportedNames.set(edge.to, []);
-    exportedNames.get(edge.to)!.push(...edge.importedNames);
+    exportedNames.get(edge.to)?.push(...edge.importedNames);
   }
 
   // Build BM25F documents (dedup exported + defined symbols to avoid double-counting)
@@ -284,7 +284,7 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
     for (const [source, tests] of testMappingEntries) {
       for (const test of tests) {
         if (!testToSource.has(test)) testToSource.set(test, []);
-        testToSource.get(test)!.push(source);
+        testToSource.get(test)?.push(source);
       }
     }
 
@@ -332,8 +332,8 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
   for (const edge of graph.edges) {
     if (!neighbors.has(edge.from)) neighbors.set(edge.from, []);
     if (!neighbors.has(edge.to)) neighbors.set(edge.to, []);
-    neighbors.get(edge.from)!.push(edge.to);
-    neighbors.get(edge.to)!.push(edge.from);
+    neighbors.get(edge.from)?.push(edge.to);
+    neighbors.get(edge.to)?.push(edge.from);
   }
   for (const [file, score] of [...scores.entries()]) {
     if (!directMatches.has(file)) continue;

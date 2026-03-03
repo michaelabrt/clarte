@@ -20,8 +20,8 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
     allFiles.add(edge.to);
     if (!forward.has(edge.from)) forward.set(edge.from, new Set());
     if (!reverse.has(edge.to)) reverse.set(edge.to, new Set());
-    forward.get(edge.from)!.add(edge.to);
-    reverse.get(edge.to)!.add(edge.from);
+    forward.get(edge.from)?.add(edge.to);
+    reverse.get(edge.to)?.add(edge.from);
   }
 
   if (allFiles.size === 0) return [];

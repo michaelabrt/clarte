@@ -40,7 +40,7 @@ export function findCrossCuttingFiles(
     if (!fromLayer) continue;
 
     if (!importerLayers.has(edge.to)) importerLayers.set(edge.to, new Set());
-    importerLayers.get(edge.to)!.add(fromLayer);
+    importerLayers.get(edge.to)?.add(fromLayer);
     importerCounts.set(edge.to, (importerCounts.get(edge.to) ?? 0) + 1);
   }
 

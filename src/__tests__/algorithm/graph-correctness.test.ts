@@ -83,7 +83,7 @@ describe("eval: layered-app", () => {
       expect(typesLayer).toBeDefined();
 
       // types should be imported by at least 3 other layers (utils, services, controllers, routes)
-      expect(typesLayer!.importedByLayers).toBeGreaterThanOrEqual(3);
+      expect(typesLayer?.importedByLayers).toBeGreaterThanOrEqual(3);
 
       // types should be in the top 2 most-imported layers
       expect(layers.slice(0, 2).map((l) => l.name)).toContain("types");
@@ -102,7 +102,7 @@ describe("eval: layered-app", () => {
       expect(graph.betweennessScores).toBeDefined();
       for (const file of fixture.expectations.zeroBetweennessFiles!) {
         expect(
-          graph.betweennessScores!.get(file) ?? 0,
+          graph.betweennessScores?.get(file) ?? 0,
           `${file} should have zero betweenness (pure sink, no outgoing edges)`,
         ).toBe(0);
       }
@@ -139,7 +139,7 @@ describe("eval: hub-and-spoke", () => {
 
       expect(apiClient).toBeDefined();
       for (const feature of featureFiles) {
-        expect(apiClient!.authority).toBeGreaterThan(feature.authority);
+        expect(apiClient?.authority).toBeGreaterThan(feature.authority);
       }
     });
   });
@@ -175,7 +175,7 @@ describe("eval: hub-and-spoke", () => {
       expect(featureFiles.length).toBeGreaterThan(0);
 
       // At least some feature files should have higher hub score than api-client
-      const featureWithHigherHub = featureFiles.filter((f) => f.hubScore > apiClient!.hubScore);
+      const featureWithHigherHub = featureFiles.filter((f) => f.hubScore > apiClient?.hubScore);
       expect(featureWithHigherHub.length).toBeGreaterThan(0);
     });
   });
@@ -184,13 +184,13 @@ describe("eval: hub-and-spoke", () => {
     it("pure sink config.ts should have zero betweenness", () => {
       expect(graph.betweennessScores).toBeDefined();
       for (const file of fixture.expectations.zeroBetweennessFiles!) {
-        expect(graph.betweennessScores!.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
+        expect(graph.betweennessScores?.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
       }
     });
 
     it("api-client.ts should rank in top-3 betweenness (bridge to config)", () => {
       expect(graph.betweennessScores).toBeDefined();
-      const ranked = [...graph.betweennessScores!.entries()].sort((a, b) => b[1] - a[1]).map(([file]) => file);
+      const ranked = [...graph.betweennessScores?.entries()].sort((a, b) => b[1] - a[1]).map(([file]) => file);
 
       const missing = missingFromTopN(ranked, fixture.expectations.topBetweennessFiles!, 3);
       expect(missing).toEqual([]);
@@ -214,21 +214,21 @@ describe("eval: circular-mess", () => {
       const sccs = findSCCs(graph);
       const twoNodeScc = sccs.find((scc) => scc.length === 2);
       expect(twoNodeScc).toBeDefined();
-      expect(twoNodeScc!.sort()).toEqual(["modules/a.ts", "modules/b.ts"]);
+      expect(twoNodeScc?.sort()).toEqual(["modules/a.ts", "modules/b.ts"]);
     });
 
     it("should identify the 3-node cycle (c, d, e)", () => {
       const sccs = findSCCs(graph);
       const threeNodeScc = sccs.find((scc) => scc.length === 3);
       expect(threeNodeScc).toBeDefined();
-      expect(threeNodeScc!.sort()).toEqual(["modules/c.ts", "modules/d.ts", "modules/e.ts"]);
+      expect(threeNodeScc?.sort()).toEqual(["modules/c.ts", "modules/d.ts", "modules/e.ts"]);
     });
 
     it("should identify the 4-node cycle (f, g, h, i)", () => {
       const sccs = findSCCs(graph);
       const fourNodeScc = sccs.find((scc) => scc.length === 4);
       expect(fourNodeScc).toBeDefined();
-      expect(fourNodeScc!.sort()).toEqual(["modules/f.ts", "modules/g.ts", "modules/h.ts", "modules/i.ts"]);
+      expect(fourNodeScc?.sort()).toEqual(["modules/f.ts", "modules/g.ts", "modules/h.ts", "modules/i.ts"]);
     });
 
     it("clean files should NOT appear in any SCC", () => {
@@ -280,7 +280,7 @@ describe("eval: circular-mess", () => {
     it("pure sink clean-z.ts should have zero betweenness", () => {
       expect(graph.betweennessScores).toBeDefined();
       for (const file of fixture.expectations.zeroBetweennessFiles!) {
-        expect(graph.betweennessScores!.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
+        expect(graph.betweennessScores?.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
       }
     });
   });
@@ -385,7 +385,7 @@ describe("eval: monolith", () => {
     it("pure sink shared/config.ts should have zero betweenness", () => {
       expect(graph.betweennessScores).toBeDefined();
       for (const file of fixture.expectations.zeroBetweennessFiles!) {
-        expect(graph.betweennessScores!.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
+        expect(graph.betweennessScores?.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
       }
     });
   });

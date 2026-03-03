@@ -45,11 +45,11 @@ describe("renderFileIndexSection", () => {
     ]);
     const section = renderFileIndexSection(graph);
     expect(section).not.toBeNull();
-    expect(section!.id).toBe("file-index");
-    expect(section!.priority).toBe(2);
-    expect(section!.content).toContain("## File Index");
-    expect(section!.content).toContain("| File | Exports |");
-    expect(section!.content).toContain("`src/utils.ts`");
+    expect(section?.id).toBe("file-index");
+    expect(section?.priority).toBe(2);
+    expect(section?.content).toContain("## File Index");
+    expect(section?.content).toContain("| File | Exports |");
+    expect(section?.content).toContain("`src/utils.ts`");
   });
 
   it("sorts exports by frequency (most imported first)", () => {

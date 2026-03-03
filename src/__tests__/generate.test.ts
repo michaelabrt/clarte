@@ -130,7 +130,7 @@ describe("generateFiles", () => {
     expect(files.length).toBeGreaterThanOrEqual(1);
     const claudeFile = files.find((f) => f.path === ".claude/rules/clarte.md");
     expect(claudeFile).toBeDefined();
-    expect(claudeFile!.content).toContain("Main Context");
+    expect(claudeFile?.content).toContain("Main Context");
   });
 
   it("produces MCP config and pre-flight agent for cursor target", async () => {
@@ -138,17 +138,17 @@ describe("generateFiles", () => {
 
     const mainFile = files.find((f) => f.path === ".cursor/rules/clarte.md");
     expect(mainFile).toBeDefined();
-    expect(mainFile!.content).not.toContain("alwaysApply: true");
+    expect(mainFile?.content).not.toContain("alwaysApply: true");
 
     const mcpFile = files.find((f) => f.path === ".cursor/mcp.json");
     expect(mcpFile).toBeDefined();
-    const mcpConfig = JSON.parse(mcpFile!.content);
+    const mcpConfig = JSON.parse(mcpFile?.content);
     expect(mcpConfig.mcpServers.clarte.command).toBe("npx");
     expect(mcpConfig.mcpServers.clarte.args).toContain("--mcp");
 
     const agentFile = files.find((f) => f.path === ".cursor/agents/clarte-pre-flight.md");
     expect(agentFile).toBeDefined();
-    expect(agentFile!.content).toContain("name: clarte-pre-flight");
+    expect(agentFile?.content).toContain("name: clarte-pre-flight");
   });
 
   it("dry run returns files without writing to disk", async () => {
@@ -191,7 +191,7 @@ describe("generateFiles", () => {
     const cursorFile = files.find((f) => f.path === ".cursor/rules/clarte.md");
     expect(claudeFile).toBeDefined();
     expect(cursorFile).toBeDefined();
-    expect(claudeFile!.path).not.toBe(cursorFile!.path);
+    expect(claudeFile?.path).not.toBe(cursorFile?.path);
   });
 });
 

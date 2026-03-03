@@ -37,7 +37,7 @@ function sendRequest(
 ): Promise<unknown> {
   return new Promise((resolve) => {
     accumulator.resolvers.push(resolve);
-    proc.stdin!.write(encodeMessage(payload));
+    proc.stdin?.write(encodeMessage(payload));
   });
 }
 
@@ -101,7 +101,7 @@ if (!existsSync(distEntry)) {
         stdio: ["pipe", "pipe", "pipe"],
       });
 
-      proc.stdout!.on("data", (chunk: Buffer) => {
+      proc.stdout?.on("data", (chunk: Buffer) => {
         accumulator.buf = Buffer.concat([accumulator.buf, chunk]);
         // Drain all complete lines
         let result = tryParseLine(accumulator.buf);
@@ -129,10 +129,10 @@ if (!existsSync(distEntry)) {
         accumulator.resolvers.push(() => {
           clearTimeout(timeout);
           // Send the required initialized notification to complete the handshake
-          proc.stdin!.write(encodeMessage({ jsonrpc: "2.0", method: "notifications/initialized" }));
+          proc.stdin?.write(encodeMessage({ jsonrpc: "2.0", method: "notifications/initialized" }));
           resolve();
         });
-        proc.stdin!.write(encodeMessage(initMsg));
+        proc.stdin?.write(encodeMessage(initMsg));
       });
     });
 

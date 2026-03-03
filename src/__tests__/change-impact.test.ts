@@ -91,7 +91,7 @@ describe("predictChangeImpact", () => {
     expect(bEntry).toBeDefined();
     // b.ts is rank 1 in structural ranking only (no shared path segments for directory proximity)
     // RRF with k=60: 1/(60+1) = 1/61
-    expect(bEntry!.score).toBeCloseTo(1 / 61, 4);
+    expect(bEntry?.score).toBeCloseTo(1 / 61, 4);
   });
 
   it("returns empty array when file has no connections", () => {
@@ -117,8 +117,8 @@ describe("predictChangeImpact", () => {
 
     // icon.ts should have a higher RRF score because it benefits from both
     // structural (distance 1) AND directory proximity (2/3 shared segments)
-    const iconScore = result.find((r) => r.file === "src/components/icon.ts")!.score;
-    const helpersScore = result.find((r) => r.file === "src/utils/helpers.ts")!.score;
+    const iconScore = result.find((r) => r.file === "src/components/icon.ts")?.score;
+    const helpersScore = result.find((r) => r.file === "src/utils/helpers.ts")?.score;
     expect(iconScore).toBeGreaterThanOrEqual(helpersScore);
   });
 });

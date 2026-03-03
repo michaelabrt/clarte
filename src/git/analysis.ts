@@ -351,7 +351,7 @@ export function computeChangeCoupling(
 
     for (const file of files) {
       if (!fileCommitSets.has(file)) fileCommitSets.set(file, new Set());
-      fileCommitSets.get(file)!.add(ci);
+      fileCommitSets.get(file)?.add(ci);
     }
 
     const pairWeight = 1 / (files.length - 1); // Inverse commit size

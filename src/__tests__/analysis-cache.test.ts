@@ -139,8 +139,8 @@ describe("loadAnalysisCache", () => {
     await fs.writeFile(cachePath, JSON.stringify(data));
     const loaded = await loadAnalysisCache(TMP);
     expect(loaded).not.toBeNull();
-    expect(loaded!.cacheKey).toBe("test-abc");
-    expect(loaded!.version).toBe(ANALYSIS_CACHE_VERSION);
+    expect(loaded?.cacheKey).toBe("test-abc");
+    expect(loaded?.version).toBe(ANALYSIS_CACHE_VERSION);
   });
 
   it("returns null for corrupted JSON without throwing", async () => {
@@ -170,8 +170,8 @@ describe("saveAnalysisCache", () => {
     await saveAnalysisCache(TMP, data);
     const loaded = await loadAnalysisCache(TMP);
     expect(loaded).not.toBeNull();
-    expect(loaded!.cacheKey).toBe("round-trip-key");
-    expect(loaded!.deadFiles).toEqual(["src/unused.ts", "src/dead.ts"]);
-    expect(loaded!.version).toBe(ANALYSIS_CACHE_VERSION);
+    expect(loaded?.cacheKey).toBe("round-trip-key");
+    expect(loaded?.deadFiles).toEqual(["src/unused.ts", "src/dead.ts"]);
+    expect(loaded?.version).toBe(ANALYSIS_CACHE_VERSION);
   });
 });

@@ -302,9 +302,9 @@ describe("runAnalysis", () => {
       noopProgress,
     );
 
-    expect(analysis.gitActivity!.hotFiles).toHaveLength(1);
-    expect(analysis.gitActivity!.hotFiles[0].path).toBe("src/alive.ts");
-    expect(analysis.gitActivity!.changeCoupling).toHaveLength(0);
+    expect(analysis.gitActivity?.hotFiles).toHaveLength(1);
+    expect(analysis.gitActivity?.hotFiles[0].path).toBe("src/alive.ts");
+    expect(analysis.gitActivity?.changeCoupling).toHaveLength(0);
   });
 
   it("calls monorepo analysis when monorepo is detected", async () => {

@@ -34,7 +34,7 @@ function applyFilters(sections: ContextSection[], options?: SectionFilterOptions
   let result = sections;
 
   if (options?.exclude?.size) {
-    result = result.filter((s) => !options.exclude!.has(s.id));
+    result = result.filter((s) => !options.exclude?.has(s.id));
   }
 
   if (options?.include?.size) {

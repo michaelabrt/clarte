@@ -125,7 +125,7 @@ describe("buildSections", () => {
     const sections = await buildSections(mockCtx(), mockAnswers(), null);
     const techStack = sections.find((s) => s.id === "tech-stack");
     expect(techStack).toBeDefined();
-    expect(techStack!.priority).toBe(1);
+    expect(techStack?.priority).toBe(1);
   });
 
   it("includes working-guidelines at priority 1 when single IDE is claude", async () => {
@@ -133,14 +133,14 @@ describe("buildSections", () => {
     const guidelines = sections.find((s) => s.id === "working-guidelines");
     expect(guidelines).toBeDefined();
     // Claude single-IDE boost: working-guidelines is boosted from 2 to 1
-    expect(guidelines!.priority).toBe(1);
+    expect(guidelines?.priority).toBe(1);
   });
 
   it("includes working-guidelines at default priority 2 when multiple IDEs", async () => {
     const sections = await buildSections(mockCtx(), mockAnswers({ ides: ["claude", "cursor"] }), null, mockAnalysis());
     const guidelines = sections.find((s) => s.id === "working-guidelines");
     expect(guidelines).toBeDefined();
-    expect(guidelines!.priority).toBe(2);
+    expect(guidelines?.priority).toBe(2);
   });
 });
 
@@ -471,15 +471,15 @@ describe("buildSections with graph parameter (betweenness pipeline)", () => {
     const sections = await buildSections(mockCtx(), mockAnswers(), null, mockAnalysis(), graph);
     const guidelines = sections.find((s) => s.id === "working-guidelines");
     expect(guidelines).toBeDefined();
-    expect(guidelines!.content).toContain("flow bottleneck");
-    expect(guidelines!.content).toContain("src/hot-path.ts");
+    expect(guidelines?.content).toContain("flow bottleneck");
+    expect(guidelines?.content).toContain("src/hot-path.ts");
   });
 
   it("buildSections excludes flow bottleneck when graph is not passed", async () => {
     const sections = await buildSections(mockCtx(), mockAnswers(), null, mockAnalysis());
     const guidelines = sections.find((s) => s.id === "working-guidelines");
     expect(guidelines).toBeDefined();
-    expect(guidelines!.content).not.toContain("flow bottleneck");
+    expect(guidelines?.content).not.toContain("flow bottleneck");
   });
 
   it("buildMainContext renders flow bottleneck directive end-to-end", async () => {

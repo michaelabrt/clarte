@@ -147,14 +147,14 @@ describe("filterAnalysisForPackage", () => {
 
     const result = filterAnalysisForPackage(analysis, "packages/api");
     expect(result.gitActivity).not.toBeNull();
-    expect(result.gitActivity!.commitCounts.size).toBe(1);
-    expect(result.gitActivity!.commitCounts.get("src/a.ts")).toBe(10);
-    expect(result.gitActivity!.hotFiles).toHaveLength(1);
-    expect(result.gitActivity!.hotFiles[0].path).toBe("src/a.ts");
-    expect(result.gitActivity!.changeCoupling).toHaveLength(1);
-    expect(result.gitActivity!.changeCoupling[0].fileA).toBe("src/a.ts");
-    expect(result.gitActivity!.lagCouplings).toHaveLength(1);
-    expect(result.gitActivity!.fileChurn!.size).toBe(1);
+    expect(result.gitActivity?.commitCounts.size).toBe(1);
+    expect(result.gitActivity?.commitCounts.get("src/a.ts")).toBe(10);
+    expect(result.gitActivity?.hotFiles).toHaveLength(1);
+    expect(result.gitActivity?.hotFiles[0].path).toBe("src/a.ts");
+    expect(result.gitActivity?.changeCoupling).toHaveLength(1);
+    expect(result.gitActivity?.changeCoupling[0].fileA).toBe("src/a.ts");
+    expect(result.gitActivity?.lagCouplings).toHaveLength(1);
+    expect(result.gitActivity?.fileChurn?.size).toBe(1);
   });
 
   it("filters testMapping fields by prefix", () => {
@@ -175,11 +175,11 @@ describe("filterAnalysisForPackage", () => {
 
     const result = filterAnalysisForPackage(analysis, "packages/api");
     expect(result.testMapping).toBeDefined();
-    expect(result.testMapping!.sourceToTests.size).toBe(1);
-    expect(result.testMapping!.sourceToTests.get("src/a.ts")).toEqual(["src/__tests__/a.test.ts"]);
-    expect(result.testMapping!.untestedFiles).toEqual(["src/c.ts"]);
-    expect(result.testMapping!.testTypes!.size).toBe(1);
-    expect(result.testMapping!.exemplarTestFile).toBe("src/__tests__/a.test.ts");
+    expect(result.testMapping?.sourceToTests.size).toBe(1);
+    expect(result.testMapping?.sourceToTests.get("src/a.ts")).toEqual(["src/__tests__/a.test.ts"]);
+    expect(result.testMapping?.untestedFiles).toEqual(["src/c.ts"]);
+    expect(result.testMapping?.testTypes?.size).toBe(1);
+    expect(result.testMapping?.exemplarTestFile).toBe("src/__tests__/a.test.ts");
   });
 
   it("filters chokepoints and strips dependent paths", () => {
@@ -198,8 +198,8 @@ describe("filterAnalysisForPackage", () => {
 
     const result = filterAnalysisForPackage(analysis, "packages/api");
     expect(result.chokepoints).toHaveLength(1);
-    expect(result.chokepoints![0].file).toBe("src/core.ts");
-    expect(result.chokepoints![0].dependents).toEqual(["src/a.ts"]);
+    expect(result.chokepoints?.[0].file).toBe("src/core.ts");
+    expect(result.chokepoints?.[0].dependents).toEqual(["src/a.ts"]);
   });
 
   it("filters changeImpact keys and value files", () => {
@@ -218,8 +218,8 @@ describe("filterAnalysisForPackage", () => {
 
     const result = filterAnalysisForPackage(analysis, "packages/api");
     expect(result.changeImpact).toBeDefined();
-    expect(result.changeImpact!.size).toBe(1);
-    const impacts = result.changeImpact!.get("src/a.ts")!;
+    expect(result.changeImpact?.size).toBe(1);
+    const impacts = result.changeImpact?.get("src/a.ts")!;
     expect(impacts).toHaveLength(1);
     expect(impacts[0].file).toBe("src/b.ts");
   });
@@ -360,8 +360,8 @@ describe("filterGraphForPackage", () => {
 
     const result = filterGraphForPackage(graph, "packages/api");
     expect(result.barrelFiles).toBeDefined();
-    expect(result.barrelFiles!.size).toBe(1);
-    expect(result.barrelFiles!.has("src/index.ts")).toBe(true);
+    expect(result.barrelFiles?.size).toBe(1);
+    expect(result.barrelFiles?.has("src/index.ts")).toBe(true);
   });
 
   it("filters betweennessScores by prefix and strips", () => {
@@ -379,8 +379,8 @@ describe("filterGraphForPackage", () => {
     };
 
     const result = filterGraphForPackage(graph, "packages/api");
-    expect(result.betweennessScores!.size).toBe(1);
-    expect(result.betweennessScores!.get("src/core.ts")).toBe(0.7);
+    expect(result.betweennessScores?.size).toBe(1);
+    expect(result.betweennessScores?.get("src/core.ts")).toBe(0.7);
   });
 
   it("does not match packages/api-docs when filtering for packages/api", () => {

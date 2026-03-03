@@ -38,8 +38,8 @@ describe("buildTestMapping — basic mapping", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.sourceToTests.get("src/utils.ts")).toEqual(["src/__tests__/utils.test.ts"]);
-    expect(result!.sourceToTests.get("src/graph.ts")).toEqual(["src/__tests__/graph.test.ts"]);
+    expect(result?.sourceToTests.get("src/utils.ts")).toEqual(["src/__tests__/utils.test.ts"]);
+    expect(result?.sourceToTests.get("src/graph.ts")).toEqual(["src/__tests__/graph.test.ts"]);
   });
 
   it("handles multiple tests for one source file", () => {
@@ -53,7 +53,7 @@ describe("buildTestMapping — basic mapping", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    const tests = result!.sourceToTests.get("src/utils.ts");
+    const tests = result?.sourceToTests.get("src/utils.ts");
     expect(tests).toHaveLength(2);
     expect(tests).toContain("src/__tests__/utils.test.ts");
     expect(tests).toContain("src/__tests__/utils.integration.test.ts");
@@ -67,7 +67,7 @@ describe("buildTestMapping — basic mapping", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.sourceToTests.get("src/service.ts")).toEqual(["src/service.spec.ts"]);
+    expect(result?.sourceToTests.get("src/service.ts")).toEqual(["src/service.spec.ts"]);
   });
 });
 
@@ -87,7 +87,7 @@ describe("buildTestMapping — untested files", () => {
     // graph.ts and orphan.ts are not imported by any test
     // graph.ts is imported by non-test files: no (it's the importer, not the imported)
     // orphan.ts is imported by graph.ts (non-test) -> untested
-    expect(result!.untestedFiles).toContain("src/orphan.ts");
+    expect(result?.untestedFiles).toContain("src/orphan.ts");
   });
 
   it("excludes types files from untested", () => {
@@ -101,7 +101,7 @@ describe("buildTestMapping — untested files", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.untestedFiles).not.toContain("src/types.ts");
+    expect(result?.untestedFiles).not.toContain("src/types.ts");
   });
 
   it("excludes index/barrel files from untested", () => {
@@ -115,7 +115,7 @@ describe("buildTestMapping — untested files", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.untestedFiles).not.toContain("src/index.ts");
+    expect(result?.untestedFiles).not.toContain("src/index.ts");
   });
 
   it("excludes config files from untested", () => {
@@ -129,7 +129,7 @@ describe("buildTestMapping — untested files", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.untestedFiles).not.toContain("src/vitest.config.ts");
+    expect(result?.untestedFiles).not.toContain("src/vitest.config.ts");
   });
 
   it("excludes files in types/ directory from untested", () => {
@@ -143,7 +143,7 @@ describe("buildTestMapping — untested files", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.untestedFiles).not.toContain("src/types/user.ts");
+    expect(result?.untestedFiles).not.toContain("src/types/user.ts");
   });
 });
 
@@ -159,7 +159,7 @@ describe("buildTestMapping — test pattern detection", () => {
 
     const result = buildTestMapping(graph, makeCtx({ testFramework: "Vitest" }));
     expect(result).not.toBeNull();
-    expect(result!.testPattern).toEqual({
+    expect(result?.testPattern).toEqual({
       framework: "Vitest",
       convention: "co-located .test files",
       filePattern: "*.test.{ts,tsx,js,jsx}",
@@ -177,7 +177,7 @@ describe("buildTestMapping — test pattern detection", () => {
 
     const result = buildTestMapping(graph, makeCtx({ testFramework: "Jest" }));
     expect(result).not.toBeNull();
-    expect(result!.testPattern).toEqual({
+    expect(result?.testPattern).toEqual({
       framework: "Jest",
       convention: "co-located .spec files",
       filePattern: "*.spec.{ts,tsx,js,jsx}",
@@ -198,7 +198,7 @@ describe("buildTestMapping — edge cases", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.sourceToTests.size).toBe(0);
+    expect(result?.sourceToTests.size).toBe(0);
   });
 
   it("does not treat test-to-test imports as coverage", () => {
@@ -214,7 +214,7 @@ describe("buildTestMapping — edge cases", () => {
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
     // Test files should not appear as covered source files
-    expect(result!.sourceToTests.has("src/__tests__/a.test.ts")).toBe(false);
+    expect(result?.sourceToTests.has("src/__tests__/a.test.ts")).toBe(false);
   });
 });
 
@@ -338,9 +338,9 @@ describe("buildTestMapping — test type classification", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.testTypes).toBeDefined();
-    expect(result!.testTypes!.get("src/__tests__/utils.test.ts")).toBe("unit");
-    expect(result!.testTypes!.get("src/__tests__/graph.test.ts")).toBe("unit");
+    expect(result?.testTypes).toBeDefined();
+    expect(result?.testTypes?.get("src/__tests__/utils.test.ts")).toBe("unit");
+    expect(result?.testTypes?.get("src/__tests__/graph.test.ts")).toBe("unit");
   });
 
   it("classifies e2e test files in the mapping", () => {
@@ -348,7 +348,7 @@ describe("buildTestMapping — test type classification", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.testTypes!.get("e2e/flow.spec.ts")).toBe("e2e");
+    expect(result?.testTypes?.get("e2e/flow.spec.ts")).toBe("e2e");
   });
 
   it("classifies integration test files by import count", () => {
@@ -363,7 +363,7 @@ describe("buildTestMapping — test type classification", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.testTypes!.get("src/__tests__/cross.test.ts")).toBe("integration");
+    expect(result?.testTypes?.get("src/__tests__/cross.test.ts")).toBe("integration");
   });
 });
 
@@ -415,7 +415,7 @@ describe("buildTestMapping — transitive coverage", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.untestedFiles).not.toContain("src/target.ts");
+    expect(result?.untestedFiles).not.toContain("src/target.ts");
   });
 
   it("marks a file 3 hops from a test as covered", () => {
@@ -432,7 +432,7 @@ describe("buildTestMapping — transitive coverage", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.untestedFiles).not.toContain("src/c.ts");
+    expect(result?.untestedFiles).not.toContain("src/c.ts");
   });
 
   it("does not mark a file 4+ hops away as covered (depth limit = 3)", () => {
@@ -451,7 +451,7 @@ describe("buildTestMapping — transitive coverage", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.untestedFiles).toContain("src/d.ts");
+    expect(result?.untestedFiles).toContain("src/d.ts");
   });
 
   it("does not leak transitive coverage across unrelated source chains", () => {
@@ -469,7 +469,7 @@ describe("buildTestMapping — transitive coverage", () => {
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
     // y is not reachable from the tested chain (only from x, which is not tested)
-    expect(result!.untestedFiles).toContain("src/y.ts");
+    expect(result?.untestedFiles).toContain("src/y.ts");
   });
 });
 
@@ -499,7 +499,7 @@ describe("buildTestMapping — monorepo per-package", () => {
     expect(result).not.toBeNull();
 
     // auth/login.ts should only have its own package's test
-    const authTests = result!.sourceToTests.get("packages/auth/src/login.ts");
+    const authTests = result?.sourceToTests.get("packages/auth/src/login.ts");
     expect(authTests).toEqual(["packages/auth/src/__tests__/login.test.ts"]);
     // The cross-package test from core should NOT be listed
     expect(authTests).not.toContain("packages/core/src/__tests__/integration.test.ts");
@@ -514,7 +514,7 @@ describe("buildTestMapping — monorepo per-package", () => {
 
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
-    expect(result!.sourceToTests.get("src/utils.ts")).toEqual(["src/__tests__/utils.test.ts"]);
+    expect(result?.sourceToTests.get("src/utils.ts")).toEqual(["src/__tests__/utils.test.ts"]);
   });
 
   it("allows same-package cross-directory test imports", () => {
@@ -529,8 +529,8 @@ describe("buildTestMapping — monorepo per-package", () => {
     const result = buildTestMapping(graph, makeCtx());
     expect(result).not.toBeNull();
     // Both source files within the same package should be covered
-    expect(result!.sourceToTests.get("packages/auth/src/login.ts")).toEqual(["packages/auth/tests/login.test.ts"]);
-    expect(result!.sourceToTests.get("packages/auth/src/session.ts")).toEqual(["packages/auth/tests/login.test.ts"]);
+    expect(result?.sourceToTests.get("packages/auth/src/login.ts")).toEqual(["packages/auth/tests/login.test.ts"]);
+    expect(result?.sourceToTests.get("packages/auth/src/session.ts")).toEqual(["packages/auth/tests/login.test.ts"]);
   });
 
   it("detects monorepo structure from apps/ prefix", () => {
@@ -555,7 +555,7 @@ describe("buildTestMapping — monorepo per-package", () => {
     expect(result).not.toBeNull();
 
     // api/server.ts should only have its own package test
-    const apiTests = result!.sourceToTests.get("apps/api/src/server.ts");
+    const apiTests = result?.sourceToTests.get("apps/api/src/server.ts");
     expect(apiTests).toEqual(["apps/api/src/__tests__/server.test.ts"]);
     // The cross-package test from web should NOT be listed
     expect(apiTests).not.toContain("apps/web/src/__tests__/cross.test.ts");

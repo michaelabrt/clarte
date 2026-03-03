@@ -168,9 +168,9 @@ describe("persistCallGraph / loadCallGraph - round-trip", () => {
       await persistCallGraph(tmpDir, original);
       const loaded = await loadCallGraph(tmpDir);
       expect(loaded).not.toBeNull();
-      expect(loaded!.sites).toHaveLength(1);
-      expect(loaded!.sites[0].callee).toBe("bar");
-      expect(loaded!.fileHashes["src/a.ts"]).toBe("abc123");
+      expect(loaded?.sites).toHaveLength(1);
+      expect(loaded?.sites[0].callee).toBe("bar");
+      expect(loaded?.fileHashes["src/a.ts"]).toBe("abc123");
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
@@ -224,8 +224,8 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
 
     const arrowFnSite = callGraph.sites.find((s) => s.callerFn === "arrowFn" && s.callee === "doThing");
     expect(arrowFnSite).toBeDefined();
-    expect(arrowFnSite!.calleeFile).toBe("src/__tests__/fixtures/call-graph/helper.ts");
-    expect(arrowFnSite!.caller).toBe("src/__tests__/fixtures/call-graph/arrow.ts");
+    expect(arrowFnSite?.calleeFile).toBe("src/__tests__/fixtures/call-graph/helper.ts");
+    expect(arrowFnSite?.caller).toBe("src/__tests__/fixtures/call-graph/arrow.ts");
   });
 
   it("method.ts: new Service() in constructor resolves calleeFile to service.ts", async () => {
@@ -247,9 +247,9 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
 
     const constructorSite = callGraph.sites.find((s) => s.callee === "Service");
     expect(constructorSite).toBeDefined();
-    expect(constructorSite!.calleeFile).toBe("src/__tests__/fixtures/call-graph/service.ts");
+    expect(constructorSite?.calleeFile).toBe("src/__tests__/fixtures/call-graph/service.ts");
     // Enclosing function for a new_expression in a class constructor method_definition
-    expect(constructorSite!.callerFn === "constructor" || constructorSite!.callerFn === "").toBe(true);
+    expect(constructorSite?.callerFn === "constructor" || constructorSite?.callerFn === "").toBe(true);
   });
 
   it("chained.ts: doThing() resolves but chained obj.b().c() produces no site for callee 'c'", async () => {
@@ -271,7 +271,7 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
 
     const doThingSite = callGraph.sites.find((s) => s.callee === "doThing");
     expect(doThingSite).toBeDefined();
-    expect(doThingSite!.calleeFile).toBe("src/__tests__/fixtures/call-graph/helper.ts");
+    expect(doThingSite?.calleeFile).toBe("src/__tests__/fixtures/call-graph/helper.ts");
 
     const chainedCSite = callGraph.sites.find((s) => s.callee === "c");
     expect(chainedCSite).toBeUndefined();
@@ -296,8 +296,8 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
 
     const site = callGraph.sites.find((s) => s.callee === "doThing" && s.callerFn === "callThroughBarrel");
     expect(site).toBeDefined();
-    expect(site!.calleeFile).toBe("src/__tests__/fixtures/call-graph/barrel.ts");
-    expect(site!.calleeFile).not.toBe("src/__tests__/fixtures/call-graph/helper.ts");
+    expect(site?.calleeFile).toBe("src/__tests__/fixtures/call-graph/barrel.ts");
+    expect(site?.calleeFile).not.toBe("src/__tests__/fixtures/call-graph/helper.ts");
   });
 });
 

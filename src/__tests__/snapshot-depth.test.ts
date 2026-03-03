@@ -91,7 +91,7 @@ def process_order(order: Order) -> Receipt:
 
     const entry = result.entries.find((e) => e.signature.includes("process_order"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toContain('# "Process an order and return a receipt."');
+    expect(entry?.signature).toContain('# "Process an order and return a receipt."');
   });
 
   it("appends single-line docstring to class header", async () => {
@@ -110,7 +110,7 @@ class OrderService:
 
     const classEntry = result.entries.find((e) => e.signature.includes("class OrderService"));
     expect(classEntry).toBeDefined();
-    expect(classEntry!.signature).toContain('# "Service for managing customer orders."');
+    expect(classEntry?.signature).toContain('# "Service for managing customer orders."');
   });
 
   it("extracts first line of multi-line docstring", async () => {
@@ -135,9 +135,9 @@ def complex_function(x: int, y: str) -> bool:
 
     const entry = result.entries.find((e) => e.signature.includes("complex_function"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toContain('# "Check if x matches the pattern in y."');
+    expect(entry?.signature).toContain('# "Check if x matches the pattern in y."');
     // Should not include the full docstring body
-    expect(entry!.signature).not.toContain("Args:");
+    expect(entry?.signature).not.toContain("Args:");
   });
 
   it("truncates long docstrings to 80 chars with ellipsis", async () => {
@@ -155,9 +155,9 @@ def long_documented(items: list[Item]) -> Result:
     const entry = result.entries.find((e) => e.signature.includes("long_documented"));
     expect(entry).toBeDefined();
     // The docstring comment should be present
-    expect(entry!.signature).toContain('# "');
+    expect(entry?.signature).toContain('# "');
     // Extract the docstring part
-    const docPart = entry!.signature.split('# "')[1];
+    const docPart = entry?.signature.split('# "')[1];
     // Should end with ..." (including the closing quote)
     expect(docPart).toContain("...");
     // The docstring portion (between the quotes) should not exceed 80 chars
@@ -179,7 +179,7 @@ def single_quoted(data: bytes) -> str:
 
     const entry = result.entries.find((e) => e.signature.includes("single_quoted"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toContain('# "Decode bytes to a UTF-8 string."');
+    expect(entry?.signature).toContain('# "Decode bytes to a UTF-8 string."');
   });
 
   it("does not append docstring when none present", async () => {
@@ -195,7 +195,7 @@ def no_docstring(x: int) -> int:
 
     const entry = result.entries.find((e) => e.signature.includes("no_docstring"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).not.toContain("#");
+    expect(entry?.signature).not.toContain("#");
   });
 
   it("handles multi-line docstring where summary is on the next line", async () => {
@@ -214,7 +214,7 @@ def delayed_summary(x: int) -> int:
 
     const entry = result.entries.find((e) => e.signature.includes("delayed_summary"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toContain('# "Compute the delayed value of x."');
+    expect(entry?.signature).toContain('# "Compute the delayed value of x."');
   });
 
   it("appends docstring to async function", async () => {
@@ -231,7 +231,7 @@ async def fetch_user(user_id: int) -> User:
 
     const entry = result.entries.find((e) => e.signature.includes("fetch_user"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toContain('# "Fetch a user by their unique ID."');
+    expect(entry?.signature).toContain('# "Fetch a user by their unique ID."');
   });
 
   it("appends docstring to class method", async () => {
@@ -249,7 +249,7 @@ class UserManager:
 
     const methodEntry = result.entries.find((e) => e.signature.includes("create_user"));
     expect(methodEntry).toBeDefined();
-    expect(methodEntry!.signature).toContain('# "Create a new user with the given name."');
+    expect(methodEntry?.signature).toContain('# "Create a new user with the given name."');
   });
 });
 
@@ -271,8 +271,8 @@ func (s *Server) Handle(ctx context.Context) error {
 
     const entry = result.entries.find((e) => e.signature.includes("Handle"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toBe("(Server).Handle(ctx context.Context) error");
-    expect(entry!.category).toBe("function");
+    expect(entry?.signature).toBe("(Server).Handle(ctx context.Context) error");
+    expect(entry?.category).toBe("function");
   });
 
   it("rewrites value receiver methods", async () => {
@@ -290,7 +290,7 @@ func (u User) String() string {
 
     const entry = result.entries.find((e) => e.signature.includes("String"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toBe("(User).String() string");
+    expect(entry?.signature).toBe("(User).String() string");
   });
 
   it("extracts struct, methods, and standalone functions from same file", async () => {
@@ -353,7 +353,7 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
     const entry = result.entries.find((e) => e.signature.includes("HandleRequest"));
     expect(entry).toBeDefined();
     // Standalone functions should retain the "func" prefix
-    expect(entry!.signature).toContain("func HandleRequest");
+    expect(entry?.signature).toContain("func HandleRequest");
   });
 
   it("handles methods for receiver type not defined in same file", async () => {
@@ -373,7 +373,7 @@ func (u *User) FullName() string {
 
     const entry = result.entries.find((e) => e.signature.includes("FullName"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toBe("(User).FullName() string");
+    expect(entry?.signature).toBe("(User).FullName() string");
   });
 
   it("handles multiple struct types with their respective methods", async () => {
@@ -412,11 +412,11 @@ func (w *Writer) Write(data []byte) (int, error) {
     // Methods should use the (ReceiverType).Method format
     const readerMethod = result.entries.find((e) => e.signature.includes("(Reader).Read"));
     expect(readerMethod).toBeDefined();
-    expect(readerMethod!.signature).toContain("(Reader).Read(buf []byte) (int, error)");
+    expect(readerMethod?.signature).toContain("(Reader).Read(buf []byte) (int, error)");
 
     const writerMethod = result.entries.find((e) => e.signature.includes("(Writer).Write"));
     expect(writerMethod).toBeDefined();
-    expect(writerMethod!.signature).toContain("(Writer).Write(data []byte) (int, error)");
+    expect(writerMethod?.signature).toContain("(Writer).Write(data []byte) (int, error)");
   });
 });
 
@@ -439,10 +439,10 @@ where
 
     const entry = result.entries.find((e) => e.signature.includes("process"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toContain("where");
-    expect(entry!.signature).toContain("T: Serialize + Send");
+    expect(entry?.signature).toContain("where");
+    expect(entry?.signature).toContain("T: Serialize + Send");
     // Should not include the opening brace
-    expect(entry!.signature).not.toContain("{");
+    expect(entry?.signature).not.toContain("{");
   });
 
   it("preserves multi-bound where clause", async () => {
@@ -462,9 +462,9 @@ where
 
     const entry = result.entries.find((e) => e.signature.includes("transform"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toContain("T: Serialize + Clone");
-    expect(entry!.signature).toContain("U: DeserializeOwned + Default");
-    expect(entry!.signature).not.toContain("{");
+    expect(entry?.signature).toContain("T: Serialize + Clone");
+    expect(entry?.signature).toContain("U: DeserializeOwned + Default");
+    expect(entry?.signature).not.toContain("{");
   });
 
   it("preserves async fn with where clause", async () => {
@@ -483,9 +483,9 @@ where
 
     const entry = result.entries.find((e) => e.signature.includes("fetch"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toContain("pub async fn fetch");
-    expect(entry!.signature).toContain("where");
-    expect(entry!.signature).toContain("T: DeserializeOwned");
+    expect(entry?.signature).toContain("pub async fn fetch");
+    expect(entry?.signature).toContain("where");
+    expect(entry?.signature).toContain("T: DeserializeOwned");
   });
 
   it("still handles functions without where clauses", async () => {
@@ -501,8 +501,8 @@ where
 
     const entry = result.entries.find((e) => e.signature.includes("simple_function"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toBe("pub fn simple_function(x: i32) -> i32");
-    expect(entry!.signature).not.toContain("{");
+    expect(entry?.signature).toBe("pub fn simple_function(x: i32) -> i32");
+    expect(entry?.signature).not.toContain("{");
   });
 
   it("handles where clause with lifetime bounds", async () => {
@@ -521,8 +521,8 @@ where
 
     const entry = result.entries.find((e) => e.signature.includes("parse"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toContain("where");
-    expect(entry!.signature).toContain("T: Deserialize<'a>");
+    expect(entry?.signature).toContain("where");
+    expect(entry?.signature).toContain("T: Deserialize<'a>");
   });
 });
 
@@ -555,11 +555,11 @@ public class UserController {
 
     const getMethod = result.entries.find((e) => e.signature.includes("getUser"));
     expect(getMethod).toBeDefined();
-    expect(getMethod!.signature).toContain('@GetMapping("/{id}")');
+    expect(getMethod?.signature).toContain('@GetMapping("/{id}")');
 
     const postMethod = result.entries.find((e) => e.signature.includes("createUser"));
     expect(postMethod).toBeDefined();
-    expect(postMethod!.signature).toContain("@PostMapping");
+    expect(postMethod?.signature).toContain("@PostMapping");
   });
 
   it("captures @Transactional on methods", async () => {
@@ -582,11 +582,11 @@ public class OrderService {
 
     const classEntry = result.entries.find((e) => e.signature.includes("OrderService"));
     expect(classEntry).toBeDefined();
-    expect(classEntry!.signature).toContain("@Service");
+    expect(classEntry?.signature).toContain("@Service");
 
     const methodEntry = result.entries.find((e) => e.signature.includes("processOrder"));
     expect(methodEntry).toBeDefined();
-    expect(methodEntry!.signature).toContain("@Transactional");
+    expect(methodEntry?.signature).toContain("@Transactional");
   });
 
   it("captures @Service, @Repository, @Controller annotations on classes", async () => {
@@ -608,7 +608,7 @@ public class UserRepository {
 
     const entry = result.entries.find((e) => e.signature.includes("UserRepository"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toContain("@Repository");
+    expect(entry?.signature).toContain("@Repository");
   });
 
   it("captures @Entity and @Table annotations", async () => {
@@ -631,8 +631,8 @@ public class User {
 
     const entry = result.entries.find((e) => e.signature.includes("public class User"));
     expect(entry).toBeDefined();
-    expect(entry!.signature).toContain("@Entity");
-    expect(entry!.signature).toContain("@Table");
+    expect(entry?.signature).toContain("@Entity");
+    expect(entry?.signature).toContain("@Table");
   });
 
   it("captures JPA field annotations on public fields", async () => {
@@ -662,11 +662,11 @@ public class Order {
     // Public fields with significant JPA annotations should be captured
     const customerField = result.entries.find((e) => e.signature.includes("public User customer"));
     expect(customerField).toBeDefined();
-    expect(customerField!.signature).toContain("@ManyToOne");
+    expect(customerField?.signature).toContain("@ManyToOne");
 
     const statusField = result.entries.find((e) => e.signature.includes("public String status"));
     expect(statusField).toBeDefined();
-    expect(statusField!.signature).toContain("@Column");
+    expect(statusField?.signature).toContain("@Column");
   });
 
   it("preserves annotation parameters with spaces", async () => {
@@ -690,8 +690,8 @@ public class ApiController {
     const entry = result.entries.find((e) => e.signature.includes("listUsers"));
     expect(entry).toBeDefined();
     // The full @GetMapping annotation with parameters should be preserved
-    expect(entry!.signature).toContain("@GetMapping");
-    expect(entry!.signature).toContain("/users");
+    expect(entry?.signature).toContain("@GetMapping");
+    expect(entry?.signature).toContain("/users");
   });
 
   it("does not capture public fields without significant annotations", async () => {
@@ -743,11 +743,11 @@ public class V2Controller {
 
     const classEntry = result.entries.find((e) => e.signature.includes("V2Controller"));
     expect(classEntry).toBeDefined();
-    expect(classEntry!.signature).toContain("@RestController");
-    expect(classEntry!.signature).toContain('@RequestMapping("/api/v2")');
+    expect(classEntry?.signature).toContain("@RestController");
+    expect(classEntry?.signature).toContain('@RequestMapping("/api/v2")');
 
     const deleteMethod = result.entries.find((e) => e.signature.includes("delete"));
     expect(deleteMethod).toBeDefined();
-    expect(deleteMethod!.signature).toContain('@DeleteMapping("/{id}")');
+    expect(deleteMethod?.signature).toContain('@DeleteMapping("/{id}")');
   });
 });

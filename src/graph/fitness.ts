@@ -21,7 +21,7 @@ function computeLayerOrdering(layers: ArchitecturalLayer[], layerEdges: LayerEdg
   // Build graph: to -> from (foundational -> consumer) for topo sort.
   for (const e of layerEdges) {
     if (!layerNames.has(e.from) || !layerNames.has(e.to)) continue;
-    adj.get(e.to)!.push(e.from);
+    adj.get(e.to)?.push(e.from);
     inDegree.set(e.from, (inDegree.get(e.from) ?? 0) + 1);
   }
 

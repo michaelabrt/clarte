@@ -67,9 +67,9 @@ describe("loadConfig", () => {
     const config = await loadConfig(tmpDir);
 
     expect(config).not.toBeNull();
-    expect(config!.ides).toEqual(["claude", "cursor"]);
-    expect(config!.projectPurpose).toBe("Test project");
-    expect(config!.generateSnapshot).toBe(true);
+    expect(config?.ides).toEqual(["claude", "cursor"]);
+    expect(config?.projectPurpose).toBe("Test project");
+    expect(config?.generateSnapshot).toBe(true);
   });
 
   it("migrates old single ide field to ides array", async () => {
@@ -83,7 +83,7 @@ describe("loadConfig", () => {
     const config = await loadConfig(tmpDir);
 
     expect(config).not.toBeNull();
-    expect(config!.ides).toEqual(["cursor"]);
+    expect(config?.ides).toEqual(["cursor"]);
   });
 
   it("prefers ides array over old ide field", async () => {
@@ -97,7 +97,7 @@ describe("loadConfig", () => {
 
     const config = await loadConfig(tmpDir);
 
-    expect(config!.ides).toEqual(["claude", "copilot"]);
+    expect(config?.ides).toEqual(["claude", "copilot"]);
   });
 
   it("fills in defaults for missing optional fields", async () => {
@@ -110,12 +110,12 @@ describe("loadConfig", () => {
 
     const config = await loadConfig(tmpDir);
 
-    expect(config!.keyPatterns).toBe("");
-    expect(config!.gotchas).toBe("");
-    expect(config!.generateSnapshot).toBe(false);
-    expect(config!.snapshotPaths).toEqual([]);
-    expect(config!.stackCorrections).toBe("");
-    expect(config!.generatePerPackage).toBe(false);
+    expect(config?.keyPatterns).toBe("");
+    expect(config?.gotchas).toBe("");
+    expect(config?.generateSnapshot).toBe(false);
+    expect(config?.snapshotPaths).toEqual([]);
+    expect(config?.stackCorrections).toBe("");
+    expect(config?.generatePerPackage).toBe(false);
   });
 
   it("loads delivery config", async () => {
@@ -129,7 +129,7 @@ describe("loadConfig", () => {
 
     const config = await loadConfig(tmpDir);
 
-    expect(config!.delivery).toEqual({ scopedRules: true, enrichedHooks: false, onDemandSkills: true });
+    expect(config?.delivery).toEqual({ scopedRules: true, enrichedHooks: false, onDemandSkills: true });
   });
 });
 
@@ -148,13 +148,13 @@ describe("saveConfig + loadConfig round-trip", () => {
     const loaded = await loadConfig(tmpDir);
 
     expect(loaded).not.toBeNull();
-    expect(loaded!.ides).toEqual(sampleAnswers.ides);
-    expect(loaded!.projectPurpose).toBe(sampleAnswers.projectPurpose);
-    expect(loaded!.keyPatterns).toBe(sampleAnswers.keyPatterns);
-    expect(loaded!.gotchas).toBe(sampleAnswers.gotchas);
-    expect(loaded!.generateSnapshot).toBe(sampleAnswers.generateSnapshot);
-    expect(loaded!.snapshotHash).toBe("deadbeef12345678");
-    expect(loaded!.language).toBe("typescript");
+    expect(loaded?.ides).toEqual(sampleAnswers.ides);
+    expect(loaded?.projectPurpose).toBe(sampleAnswers.projectPurpose);
+    expect(loaded?.keyPatterns).toBe(sampleAnswers.keyPatterns);
+    expect(loaded?.gotchas).toBe(sampleAnswers.gotchas);
+    expect(loaded?.generateSnapshot).toBe(sampleAnswers.generateSnapshot);
+    expect(loaded?.snapshotHash).toBe("deadbeef12345678");
+    expect(loaded?.language).toBe("typescript");
   });
 
   it("preserves existing staleDays on re-save", async () => {
@@ -170,7 +170,7 @@ describe("saveConfig + loadConfig round-trip", () => {
     await saveConfig(tmpDir, sampleAnswers);
     const loaded = await loadConfig(tmpDir);
 
-    expect(loaded!.staleDays).toBe(30);
+    expect(loaded?.staleDays).toBe(30);
   });
 
   it("preserves existing delivery config on re-save", async () => {
@@ -186,7 +186,7 @@ describe("saveConfig + loadConfig round-trip", () => {
     await saveConfig(tmpDir, sampleAnswers);
     const loaded = await loadConfig(tmpDir);
 
-    expect(loaded!.delivery).toEqual({ scopedRules: true, onDemandSkills: true });
+    expect(loaded?.delivery).toEqual({ scopedRules: true, onDemandSkills: true });
   });
 });
 
@@ -212,7 +212,7 @@ describe("layers config", () => {
     const loaded = await loadConfig(tmpDir);
 
     expect(loaded).not.toBeNull();
-    expect(loaded!.layers).toEqual([
+    expect(loaded?.layers).toEqual([
       { name: "domain", pattern: "(?:^|/)domain/" },
       { name: "infra", pattern: "(?:^|/)infra/" },
     ]);
@@ -237,7 +237,7 @@ describe("layers config", () => {
 
     const loaded = await loadConfig(tmpDir);
     expect(loaded).not.toBeNull();
-    expect(loaded!.layers).toBeUndefined();
+    expect(loaded?.layers).toBeUndefined();
   });
 });
 
@@ -495,8 +495,8 @@ describe("loadConfig with migration", () => {
     const config = await loadConfig(tmpDir);
 
     expect(config).not.toBeNull();
-    expect(config!.ides).toEqual(["cursor"]);
-    expect(config!.analysisDays).toBe(90);
+    expect(config?.ides).toEqual(["cursor"]);
+    expect(config?.analysisDays).toBe(90);
   });
 
   it("auto-migrates config with no version to v2", async () => {
@@ -509,8 +509,8 @@ describe("loadConfig with migration", () => {
     const config = await loadConfig(tmpDir);
 
     expect(config).not.toBeNull();
-    expect(config!.ides).toEqual(["claude"]);
-    expect(config!.analysisDays).toBe(90);
+    expect(config?.ides).toEqual(["claude"]);
+    expect(config?.analysisDays).toBe(90);
   });
 
   it("loads v2 config with analysisDays", async () => {
@@ -525,7 +525,7 @@ describe("loadConfig with migration", () => {
     const config = await loadConfig(tmpDir);
 
     expect(config).not.toBeNull();
-    expect(config!.analysisDays).toBe(30);
+    expect(config?.analysisDays).toBe(30);
   });
 
   it("preserves analysisDays through save round-trip", async () => {
@@ -540,6 +540,6 @@ describe("loadConfig with migration", () => {
     await saveConfig(tmpDir, sampleAnswers);
     const loaded = await loadConfig(tmpDir);
 
-    expect(loaded!.analysisDays).toBe(45);
+    expect(loaded?.analysisDays).toBe(45);
   });
 });

@@ -46,8 +46,8 @@ describe("scanConfigConstraints — tsconfig", () => {
 
     const result = await scanConfigConstraints("/test", makeCtx());
     expect(result.typescript).toBeDefined();
-    expect(result.typescript!.strict).toBe(true);
-    expect(result.typescript!.target).toBe("ES2022");
+    expect(result.typescript?.strict).toBe(true);
+    expect(result.typescript?.target).toBe("ES2022");
   });
 
   it("detects extra strict options beyond strict:true", async () => {
@@ -65,8 +65,8 @@ describe("scanConfigConstraints — tsconfig", () => {
     });
 
     const result = await scanConfigConstraints("/test", makeCtx());
-    expect(result.typescript!.otherStrict).toContain("exactOptionalPropertyTypes");
-    expect(result.typescript!.otherStrict).toContain("noUncheckedIndexedAccess");
+    expect(result.typescript?.otherStrict).toContain("exactOptionalPropertyTypes");
+    expect(result.typescript?.otherStrict).toContain("noUncheckedIndexedAccess");
   });
 
   it("follows extends chain (child wins)", async () => {
@@ -87,9 +87,9 @@ describe("scanConfigConstraints — tsconfig", () => {
 
     const result = await scanConfigConstraints("/test", makeCtx());
     // Child's target wins
-    expect(result.typescript!.target).toBe("ES2022");
+    expect(result.typescript?.target).toBe("ES2022");
     // Parent's strict is inherited
-    expect(result.typescript!.strict).toBe(true);
+    expect(result.typescript?.strict).toBe(true);
   });
 
   it("extracts path aliases", async () => {
@@ -105,7 +105,7 @@ describe("scanConfigConstraints — tsconfig", () => {
     });
 
     const result = await scanConfigConstraints("/test", makeCtx());
-    expect(result.typescript!.pathAliases).toEqual({
+    expect(result.typescript?.pathAliases).toEqual({
       "@/*": ["src/*"],
       "@utils/*": ["src/utils/*"],
     });
@@ -133,11 +133,11 @@ describe("scanConfigConstraints — ESLint", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.linter).toBeDefined();
-    expect(result.linter!.tool).toBe("ESLint");
-    expect(result.linter!.keyRules).toHaveLength(3);
-    expect(result.linter!.keyRules.map((r) => r.rule)).toContain("prefer-const");
-    expect(result.linter!.keyRules.map((r) => r.rule)).toContain("@typescript-eslint/consistent-type-imports");
-    expect(result.linter!.keyRules.map((r) => r.rule)).toContain("no-console");
+    expect(result.linter?.tool).toBe("ESLint");
+    expect(result.linter?.keyRules).toHaveLength(3);
+    expect(result.linter?.keyRules.map((r) => r.rule)).toContain("prefer-const");
+    expect(result.linter?.keyRules.map((r) => r.rule)).toContain("@typescript-eslint/consistent-type-imports");
+    expect(result.linter?.keyRules.map((r) => r.rule)).toContain("no-console");
   });
 
   it("falls back to eslintConfig in package.json", async () => {
@@ -158,7 +158,7 @@ describe("scanConfigConstraints — ESLint", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.linter).toBeDefined();
-    expect(result.linter!.keyRules.map((r) => r.rule)).toContain("eqeqeq");
+    expect(result.linter?.keyRules.map((r) => r.rule)).toContain("eqeqeq");
   });
 
   it("skips rules set to off", async () => {
@@ -179,8 +179,8 @@ describe("scanConfigConstraints — ESLint", () => {
     const ctx = makeCtx({ linter: "eslint", language: "typescript" });
     const result = await scanConfigConstraints("/test", ctx);
 
-    expect(result.linter!.keyRules).toHaveLength(1);
-    expect(result.linter!.keyRules[0].rule).toBe("eqeqeq");
+    expect(result.linter?.keyRules).toHaveLength(1);
+    expect(result.linter?.keyRules[0].rule).toBe("eqeqeq");
   });
 });
 
@@ -210,8 +210,8 @@ describe("scanConfigConstraints — Biome", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.linter).toBeDefined();
-    expect(result.linter!.tool).toBe("Biome");
-    expect(result.linter!.keyRules).toHaveLength(3);
+    expect(result.linter?.tool).toBe("Biome");
+    expect(result.linter?.keyRules).toHaveLength(3);
   });
 
   it("extracts formatter settings from biome.json", async () => {
@@ -238,10 +238,10 @@ describe("scanConfigConstraints — Biome", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.formatter).toBeDefined();
-    expect(result.formatter!.tool).toBe("Biome");
-    expect(result.formatter!.indent).toBe("2-space");
-    expect(result.formatter!.quotes).toBe("single");
-    expect(result.formatter!.semicolons).toBe(false);
+    expect(result.formatter?.tool).toBe("Biome");
+    expect(result.formatter?.indent).toBe("2-space");
+    expect(result.formatter?.quotes).toBe("single");
+    expect(result.formatter?.semicolons).toBe(false);
   });
 });
 
@@ -268,10 +268,10 @@ describe("scanConfigConstraints — Prettier", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.formatter).toBeDefined();
-    expect(result.formatter!.tool).toBe("Prettier");
-    expect(result.formatter!.indent).toBe("2-space");
-    expect(result.formatter!.quotes).toBe("single");
-    expect(result.formatter!.semicolons).toBe(false);
+    expect(result.formatter?.tool).toBe("Prettier");
+    expect(result.formatter?.indent).toBe("2-space");
+    expect(result.formatter?.quotes).toBe("single");
+    expect(result.formatter?.semicolons).toBe(false);
   });
 
   it("falls back to prettier field in package.json", async () => {
@@ -298,9 +298,9 @@ describe("scanConfigConstraints — Prettier", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.formatter).toBeDefined();
-    expect(result.formatter!.indent).toBe("tabs");
-    expect(result.formatter!.quotes).toBe("double");
-    expect(result.formatter!.semicolons).toBe(true);
+    expect(result.formatter?.indent).toBe("tabs");
+    expect(result.formatter?.quotes).toBe("double");
+    expect(result.formatter?.semicolons).toBe(true);
   });
 });
 
@@ -317,7 +317,7 @@ describe("scanConfigConstraints -- Go", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.go).toBeDefined();
-    expect(result.go!.version).toBe("1.21");
+    expect(result.go?.version).toBe("1.21");
   });
 
   it("extracts Go version with patch (e.g. 1.21.3)", async () => {
@@ -332,7 +332,7 @@ describe("scanConfigConstraints -- Go", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.go).toBeDefined();
-    expect(result.go!.version).toBe("1.21.3");
+    expect(result.go?.version).toBe("1.21.3");
   });
 
   it("returns undefined go when go.mod is missing", async () => {
@@ -357,8 +357,8 @@ describe("scanConfigConstraints -- Rust", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.rust).toBeDefined();
-    expect(result.rust!.edition).toBe("2021");
-    expect(result.rust!.clippy).toBeUndefined();
+    expect(result.rust?.edition).toBe("2021");
+    expect(result.rust?.clippy).toBeUndefined();
   });
 
   it("extracts clippy deny rules from Cargo.toml", async () => {
@@ -383,7 +383,7 @@ describe("scanConfigConstraints -- Rust", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.rust).toBeDefined();
-    expect(result.rust!.clippy).toEqual(["pedantic", "complexity"]);
+    expect(result.rust?.clippy).toEqual(["pedantic", "complexity"]);
   });
 
   it("returns undefined rust when Cargo.toml is missing", async () => {
@@ -408,7 +408,7 @@ describe("scanConfigConstraints -- Python", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.python).toBeDefined();
-    expect(result.python!.version).toBe(">=3.9");
+    expect(result.python?.version).toBe(">=3.9");
   });
 
   it("extracts ruff rule selections", async () => {
@@ -430,7 +430,7 @@ describe("scanConfigConstraints -- Python", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.python).toBeDefined();
-    expect(result.python!.ruff).toEqual(["E", "F", "W", "I"]);
+    expect(result.python?.ruff).toEqual(["E", "F", "W", "I"]);
   });
 
   it("extracts ruff rules from [tool.ruff] (without .lint suffix)", async () => {
@@ -445,7 +445,7 @@ describe("scanConfigConstraints -- Python", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.python).toBeDefined();
-    expect(result.python!.ruff).toEqual(["E", "F"]);
+    expect(result.python?.ruff).toEqual(["E", "F"]);
   });
 
   it("extracts mypy strict mode", async () => {
@@ -460,7 +460,7 @@ describe("scanConfigConstraints -- Python", () => {
     const result = await scanConfigConstraints("/test", ctx);
 
     expect(result.python).toBeDefined();
-    expect(result.python!.mypy).toEqual({ strict: true });
+    expect(result.python?.mypy).toEqual({ strict: true });
   });
 
   it("returns undefined python when pyproject.toml is missing", async () => {
