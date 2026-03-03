@@ -467,9 +467,9 @@ describe("findChokepoints", () => {
     const result = findChokepoints(graph);
     const bPoint = result.find((r) => r.file === "b");
     expect(bPoint).toBeDefined();
-    expect(bPoint!.importedBy).toBe(2);
-    expect(bPoint!.upstreamCount).toBe(2);
-    expect(bPoint!.downstreamCount).toBe(1);
+    expect(bPoint?.importedBy).toBe(2);
+    expect(bPoint?.upstreamCount).toBe(2);
+    expect(bPoint?.downstreamCount).toBe(1);
   });
 
   it("ignores external edges", () => {

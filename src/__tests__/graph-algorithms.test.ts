@@ -314,15 +314,15 @@ describe("findCircularDeps severity", () => {
     // Should find a 3-cycle with 2/3 runtime edges
     const threeCycle = deps.find((d) => d.chain.length === 4);
     expect(threeCycle).toBeDefined();
-    expect(threeCycle!.severity).toBeGreaterThan(0);
-    expect(threeCycle!.severity).toBeLessThan(1);
+    expect(threeCycle?.severity).toBeGreaterThan(0);
+    expect(threeCycle?.severity).toBeLessThan(1);
   });
 
   it("provides break hints", () => {
     const graph = makeGraph(["a", "b"], [edge("a", "b", ["foo"]), edge("b", "a", ["bar"])]);
     const deps = findCircularDeps(graph);
     expect(deps[0].breakHint).toBeDefined();
-    expect(deps[0].breakHint!.length).toBeGreaterThan(0);
+    expect(deps[0].breakHint?.length).toBeGreaterThan(0);
   });
 
   it("sorts type-only cycles after runtime cycles", () => {
@@ -560,7 +560,7 @@ describe("findCircularDeps with dynamic imports", () => {
     const threeCycle = deps.find((d) => d.chain.length === 4);
     expect(threeCycle).toBeDefined();
     // (1.0 + 0.5 + 1.0) / 3 = 0.833...
-    expect(threeCycle!.severity).toBeCloseTo(2.5 / 3, 5);
+    expect(threeCycle?.severity).toBeCloseTo(2.5 / 3, 5);
   });
 
   it("sorts dynamic-only cycles after static runtime cycles", () => {

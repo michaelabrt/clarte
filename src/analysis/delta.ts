@@ -110,7 +110,9 @@ export function computeDelta(previous: AnalysisSnapshot, current: AnalysisSnapsh
       : undefined;
 
   const modularityQDelta =
-    current.modularityQ != null && previous.modularityQ != null ? current.modularityQ - previous.modularityQ : undefined;
+    current.modularityQ != null && previous.modularityQ != null
+      ? current.modularityQ - previous.modularityQ
+      : undefined;
 
   return {
     newHubFiles,
@@ -218,7 +220,9 @@ export function renderDeltaSection(delta: ArchitectureDelta): string | null {
 
   if (delta.criticalChainDelta != null && delta.criticalChainDelta !== 0) {
     if (delta.criticalChainDelta > 0) {
-      lines.push(`- Critical chain grew by ${delta.criticalChainDelta} (deeper dependency layering). Consider breaking long import chains.`);
+      lines.push(
+        `- Critical chain grew by ${delta.criticalChainDelta} (deeper dependency layering). Consider breaking long import chains.`,
+      );
     } else {
       lines.push(`- Critical chain shortened by ${Math.abs(delta.criticalChainDelta)} (flatter dependency structure).`);
     }
@@ -226,9 +230,13 @@ export function renderDeltaSection(delta: ArchitectureDelta): string | null {
 
   if (delta.modularityQDelta != null && Math.abs(delta.modularityQDelta) >= 0.01) {
     if (delta.modularityQDelta < 0) {
-      lines.push(`- Modularity Q dropped by ${Math.abs(delta.modularityQDelta).toFixed(2)}. Cross-directory dependencies increased.`);
+      lines.push(
+        `- Modularity Q dropped by ${Math.abs(delta.modularityQDelta).toFixed(2)}. Cross-directory dependencies increased.`,
+      );
     } else {
-      lines.push(`- Modularity Q improved by ${delta.modularityQDelta.toFixed(2)}. Directory boundaries are better respected.`);
+      lines.push(
+        `- Modularity Q improved by ${delta.modularityQDelta.toFixed(2)}. Directory boundaries are better respected.`,
+      );
     }
   }
 
@@ -270,11 +278,15 @@ export function buildDeltaDirectives(delta: ArchitectureDelta): string[] {
   }
 
   if (delta.criticalChainDelta != null && delta.criticalChainDelta > 0) {
-    directives.push(`Critical chain grew by ${delta.criticalChainDelta}. Avoid adding more layers to long import chains.`);
+    directives.push(
+      `Critical chain grew by ${delta.criticalChainDelta}. Avoid adding more layers to long import chains.`,
+    );
   }
 
   if (delta.modularityQDelta != null && delta.modularityQDelta < -0.01) {
-    directives.push(`Modularity Q dropped by ${Math.abs(delta.modularityQDelta).toFixed(2)}. Avoid adding more cross-directory dependencies.`);
+    directives.push(
+      `Modularity Q dropped by ${Math.abs(delta.modularityQDelta).toFixed(2)}. Avoid adding more cross-directory dependencies.`,
+    );
   }
 
   return directives;

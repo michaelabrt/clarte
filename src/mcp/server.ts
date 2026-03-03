@@ -39,7 +39,7 @@ function buildEdgesByTarget(edges: EdgeRecord[]): Map<string, EdgeEntry[]> {
   const edgesByTarget = new Map<string, EdgeEntry[]>();
   for (const edge of edges) {
     if (!edgesByTarget.has(edge.to)) edgesByTarget.set(edge.to, []);
-    edgesByTarget.get(edge.to)!.push({ from: edge.from, to: edge.to, importedNames: edge.importedNames ?? [] });
+    edgesByTarget.get(edge.to)?.push({ from: edge.from, to: edge.to, importedNames: edge.importedNames ?? [] });
   }
   return edgesByTarget;
 }

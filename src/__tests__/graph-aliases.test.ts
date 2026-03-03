@@ -134,14 +134,14 @@ describe("buildImportGraph non-index barrel resolution", () => {
     // Button should route to Button.ts via barrel routing
     const toButton = internal.find((e) => e.to === "src/Button.ts" && e.from === "src/app.ts");
     expect(toButton).toBeDefined();
-    expect(toButton!.importedNames).toEqual(["Button"]);
-    expect(toButton!.isBarrelRouted).toBe(true);
+    expect(toButton?.importedNames).toEqual(["Button"]);
+    expect(toButton?.isBarrelRouted).toBe(true);
 
     // Card should route to Card.ts via barrel routing
     const toCard = internal.find((e) => e.to === "src/Card.ts" && e.from === "src/app.ts");
     expect(toCard).toBeDefined();
-    expect(toCard!.importedNames).toEqual(["Card"]);
-    expect(toCard!.isBarrelRouted).toBe(true);
+    expect(toCard?.importedNames).toEqual(["Card"]);
+    expect(toCard?.isBarrelRouted).toBe(true);
 
     // No direct edge from app.ts to the barrel components.ts (all names resolved)
     const toBarrel = internal.find((e) => e.to === "src/components.ts" && e.from === "src/app.ts");
@@ -177,10 +177,10 @@ describe("buildImportGraph barrel file resolution", () => {
     const toFormat = internal.find((e) => e.to === "src/utils/format.ts");
 
     expect(toHelpers).toBeDefined();
-    expect(toHelpers!.importedNames).toEqual(["helperA"]);
+    expect(toHelpers?.importedNames).toEqual(["helperA"]);
 
     expect(toFormat).toBeDefined();
-    expect(toFormat!.importedNames).toEqual(["formatDate"]);
+    expect(toFormat?.importedNames).toEqual(["formatDate"]);
 
     // No direct edge to the barrel index.ts itself (since all names were resolved)
     const toBarrel = internal.find((e) => e.to === "src/utils/index.ts" && e.from === "src/app.ts");
@@ -200,7 +200,7 @@ describe("buildImportGraph barrel file resolution", () => {
     // Foo can't be resolved by named exports, should fall back to star source
     const toTypes = internal.find((e) => e.to === "src/lib/types.ts");
     expect(toTypes).toBeDefined();
-    expect(toTypes!.importedNames).toEqual(["Foo"]);
+    expect(toTypes?.importedNames).toEqual(["Foo"]);
   });
 
   it("handles mixed named and star exports in a barrel", async () => {
@@ -217,12 +217,12 @@ describe("buildImportGraph barrel file resolution", () => {
     // 'a' should route to alpha.ts via named export
     const toAlpha = internal.find((e) => e.to === "src/mod/alpha.ts");
     expect(toAlpha).toBeDefined();
-    expect(toAlpha!.importedNames).toEqual(["a"]);
+    expect(toAlpha?.importedNames).toEqual(["a"]);
 
     // 'b' should route to beta.ts via star export fallback
     const toBeta = internal.find((e) => e.to === "src/mod/beta.ts");
     expect(toBeta).toBeDefined();
-    expect(toBeta!.importedNames).toEqual(["b"]);
+    expect(toBeta?.importedNames).toEqual(["b"]);
   });
 
   it("keeps edge to barrel for side-effect imports (no names)", async () => {
@@ -238,7 +238,7 @@ describe("buildImportGraph barrel file resolution", () => {
     // Side-effect import should keep edge to barrel itself
     const toBarrel = internal.find((e) => e.to === "src/setup/index.ts");
     expect(toBarrel).toBeDefined();
-    expect(toBarrel!.importedNames).toEqual([]);
+    expect(toBarrel?.importedNames).toEqual([]);
   });
 
   it("tracks directInDegree vs inDegree for barrel-routed imports", async () => {

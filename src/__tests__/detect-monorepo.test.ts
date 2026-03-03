@@ -26,9 +26,9 @@ describe("detectMonorepo", () => {
     const result = await detectMonorepo(tmpDir, ["pnpm-workspace.yaml", "packages"]);
 
     expect(result).not.toBeNull();
-    expect(result!.type).toBe("pnpm-workspaces");
-    expect(result!.packages).toHaveLength(1);
-    expect(result!.packages[0].name).toBe("@test/core");
+    expect(result?.type).toBe("pnpm-workspaces");
+    expect(result?.packages).toHaveLength(1);
+    expect(result?.packages[0].name).toBe("@test/core");
   });
 
   it("detects package.json workspaces as npm-workspaces", async () => {
@@ -43,9 +43,9 @@ describe("detectMonorepo", () => {
     const result = await detectMonorepo(tmpDir, ["package.json", "packages"]);
 
     expect(result).not.toBeNull();
-    expect(result!.type).toBe("npm-workspaces");
-    expect(result!.packages).toHaveLength(1);
-    expect(result!.packages[0].name).toBe("@test/ui");
+    expect(result?.type).toBe("npm-workspaces");
+    expect(result?.packages).toHaveLength(1);
+    expect(result?.packages[0].name).toBe("@test/ui");
   });
 
   it("detects turborepo.json as turborepo", async () => {
@@ -58,7 +58,7 @@ describe("detectMonorepo", () => {
     const result = await detectMonorepo(tmpDir, ["turbo.json", "pnpm-workspace.yaml", "apps"]);
 
     expect(result).not.toBeNull();
-    expect(result!.type).toBe("turborepo");
+    expect(result?.type).toBe("turborepo");
   });
 
   it("returns null when no monorepo markers are found", async () => {
@@ -84,7 +84,7 @@ describe("detectMonorepo", () => {
     const result = await detectMonorepo(tmpDir, ["package.json", "packages"]);
 
     expect(result).not.toBeNull();
-    const pkg = result!.packages[0];
+    const pkg = result?.packages[0];
     expect(pkg.frameworks.length).toBeGreaterThan(0);
     expect(pkg.frameworks.some((f) => f.name === "Next.js" || f.name === "React")).toBe(true);
   });

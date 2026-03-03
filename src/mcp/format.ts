@@ -181,7 +181,7 @@ export function formatImpact(
       visited.add(imp);
       const d = depth + 1;
       if (!byDepth.has(d)) byDepth.set(d, []);
-      byDepth.get(d)!.push(imp);
+      byDepth.get(d)?.push(imp);
       queue.push({ file: imp, depth: d });
     }
     if (capped) break;

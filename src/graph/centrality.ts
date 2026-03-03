@@ -77,8 +77,8 @@ export function computeHITS(
       weight *= HITS.BARREL_DISCOUNT;
     }
 
-    forward.get(edge.from)!.push({ to: edge.to, weight });
-    reverse.get(edge.to)!.push({ from: edge.from, weight });
+    forward.get(edge.from)?.push({ to: edge.to, weight });
+    reverse.get(edge.to)?.push({ from: edge.from, weight });
   }
 
   let auth = new Float64Array(n).fill(1);
@@ -308,7 +308,7 @@ export function computeBetweenness(
         // Shortest path to w via v?
         if (dist.get(w) === dv + 1) {
           sigma.set(w, sigma.get(w)! + sigma.get(v)!);
-          pred.get(w)!.push(v);
+          pred.get(w)?.push(v);
         }
       }
     }

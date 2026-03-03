@@ -164,7 +164,7 @@ export async function buildCallGraph(
   if (previous) {
     for (const site of previous.sites) {
       if (!prevSitesByFile.has(site.caller)) prevSitesByFile.set(site.caller, []);
-      prevSitesByFile.get(site.caller)!.push(site);
+      prevSitesByFile.get(site.caller)?.push(site);
     }
   }
 
@@ -173,7 +173,7 @@ export async function buildCallGraph(
   for (const edge of graph.edges) {
     if (edge.isExternal) continue;
     if (!edgesByFile.has(edge.from)) edgesByFile.set(edge.from, []);
-    edgesByFile.get(edge.from)!.push({ to: edge.to, importedNames: edge.importedNames });
+    edgesByFile.get(edge.from)?.push({ to: edge.to, importedNames: edge.importedNames });
   }
 
   const newFileHashes: Record<string, string> = {};
@@ -254,7 +254,7 @@ export function buildCallerIndex(sites: CallSite[]): Map<string, CallSite[]> {
     if (!site.calleeFile) continue;
     const key = `${site.calleeFile}::${site.callee}`;
     if (!index.has(key)) index.set(key, []);
-    index.get(key)!.push(site);
+    index.get(key)?.push(site);
   }
   return index;
 }
@@ -267,7 +267,7 @@ export function buildFileCallIndex(sites: CallSite[]): Map<string, CallSite[]> {
   const index = new Map<string, CallSite[]>();
   for (const site of sites) {
     if (!index.has(site.caller)) index.set(site.caller, []);
-    index.get(site.caller)!.push(site);
+    index.get(site.caller)?.push(site);
   }
   return index;
 }

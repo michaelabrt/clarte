@@ -114,9 +114,9 @@ describe("section ordering (sectionOrder)", () => {
     expect(keyFiles).toBeDefined();
 
     // tech-stack should be priority 0, architecture priority 1, key-files priority 2
-    expect(techStack!.priority).toBe(0);
-    expect(architecture!.priority).toBe(1);
-    expect(keyFiles!.priority).toBe(2);
+    expect(techStack?.priority).toBe(0);
+    expect(architecture?.priority).toBe(1);
+    expect(keyFiles?.priority).toBe(2);
   });
 
   it("excludes sections prefixed with '-'", async () => {
@@ -145,8 +145,8 @@ describe("section ordering (sectionOrder)", () => {
     // key-files gets priority 0, tech-stack gets priority 1
     const keyFiles = sections.find((s) => s.id === "key-files");
     const techStack = sections.find((s) => s.id === "tech-stack");
-    expect(keyFiles!.priority).toBe(0);
-    expect(techStack!.priority).toBe(1);
+    expect(keyFiles?.priority).toBe(0);
+    expect(techStack?.priority).toBe(1);
 
     // dead-files excluded
     expect(sections.find((s) => s.id === "dead-files")).toBeUndefined();
@@ -163,9 +163,9 @@ describe("section ordering (sectionOrder)", () => {
     const architecture = sections.find((s) => s.id === "architecture");
     const hotFiles = sections.find((s) => s.id === "hot-files");
 
-    expect(architecture!.priority).toBe(0);
+    expect(architecture?.priority).toBe(0);
     // hot-files default priority is 7, offset by 1 (one item in sectionOrder) = 8
-    expect(hotFiles!.priority).toBe(8);
+    expect(hotFiles?.priority).toBe(8);
   });
 
   it("does nothing when sectionOrder is empty or missing", async () => {
@@ -174,7 +174,7 @@ describe("section ordering (sectionOrder)", () => {
 
     // Default priorities should be used
     const techStack = sections.find((s) => s.id === "tech-stack");
-    expect(techStack!.priority).toBe(1);
+    expect(techStack?.priority).toBe(1);
   });
 });
 
@@ -198,10 +198,10 @@ describe("per-IDE section emphasis", () => {
     const guidelines = sections.find((s) => s.id === "working-guidelines");
     const constraints = sections.find((s) => s.id === "config-constraints");
     expect(guidelines).toBeDefined();
-    expect(guidelines!.priority).toBe(1);
+    expect(guidelines?.priority).toBe(1);
     // config-constraints default is 1, Claude boost also sets to 1 (no change or already at 1)
     expect(constraints).toBeDefined();
-    expect(constraints!.priority).toBe(1);
+    expect(constraints?.priority).toBe(1);
   });
 
   it("Cursor boosts architecture to priority 2", async () => {
@@ -209,7 +209,7 @@ describe("per-IDE section emphasis", () => {
 
     const architecture = sections.find((s) => s.id === "architecture");
     expect(architecture).toBeDefined();
-    expect(architecture!.priority).toBe(2);
+    expect(architecture?.priority).toBe(2);
   });
 
   it("Copilot boosts conventions to priority 2 and code-snapshot to priority 3", async () => {
@@ -229,9 +229,9 @@ describe("per-IDE section emphasis", () => {
     const conventions = sections.find((s) => s.id === "conventions");
     const codeSnapshot = sections.find((s) => s.id === "code-snapshot");
     expect(conventions).toBeDefined();
-    expect(conventions!.priority).toBe(2);
+    expect(conventions?.priority).toBe(2);
     expect(codeSnapshot).toBeDefined();
-    expect(codeSnapshot!.priority).toBe(3);
+    expect(codeSnapshot?.priority).toBe(3);
   });
 
   it("does not apply boosts when multiple IDEs are targeted", async () => {
@@ -240,8 +240,8 @@ describe("per-IDE section emphasis", () => {
     const guidelines = sections.find((s) => s.id === "working-guidelines");
     const architecture = sections.find((s) => s.id === "architecture");
     // Default priorities: working-guidelines=2, architecture=4
-    expect(guidelines!.priority).toBe(2);
-    expect(architecture!.priority).toBe(4);
+    expect(guidelines?.priority).toBe(2);
+    expect(architecture?.priority).toBe(4);
   });
 });
 
@@ -258,15 +258,15 @@ describe("getProjectName caching", () => {
     const sections1 = await buildSections(mockCtx(), mockAnswers({ ides: ["generic"] }), null);
     const sections2 = await buildSections(mockCtx(), mockAnswers({ ides: ["generic"] }), null);
 
-    const header1 = sections1.find((s) => s.id === "header")!.content;
-    const header2 = sections2.find((s) => s.id === "header")!.content;
+    const header1 = sections1.find((s) => s.id === "header")?.content;
+    const header2 = sections2.find((s) => s.id === "header")?.content;
     expect(header1).toBe(header2);
   });
 
   it("uses directory name as fallback project name", async () => {
     const ctx = mockCtx({ rootDir: "/tmp/my-awesome-project" });
     const sections = await buildSections(ctx, mockAnswers({ ides: ["generic"] }), null);
-    const header = sections.find((s) => s.id === "header")!.content;
+    const header = sections.find((s) => s.id === "header")?.content;
     // Should capitalize the directory name as project name
     expect(header).toContain("# My-awesome-project");
   });
@@ -327,13 +327,13 @@ describe("Key Files instability rendering", () => {
     expect(keyFiles).toBeDefined();
 
     // Orchestrator row: uses I= notation, no ⚠️ (no graph → no SDP detection)
-    expect(keyFiles!.content).toContain("I=95%");
-    const orchestratorRow = keyFiles!.content.split("\n").find((l) => l.includes("src/index.ts"));
+    expect(keyFiles?.content).toContain("I=95%");
+    const orchestratorRow = keyFiles?.content.split("\n").find((l) => l.includes("src/index.ts"));
     expect(orchestratorRow).toBeDefined();
     expect(orchestratorRow).not.toContain("⚠️");
 
     // Foundation row: not in instabilities array → shows "stable"
-    const foundationRow = keyFiles!.content.split("\n").find((l) => l.includes("src/types.ts"));
+    const foundationRow = keyFiles?.content.split("\n").find((l) => l.includes("src/types.ts"));
     expect(foundationRow).toBeDefined();
     expect(foundationRow).toContain("stable");
     expect(foundationRow).not.toContain("⚠️");
@@ -363,7 +363,7 @@ describe("Key Files instability rendering", () => {
     // Without a graph, SDP detection is skipped — no ⚠️ in table rows even for high-instability files.
     const sectionsNoGraph = await renderArchitectureSections(analysis, minimalCtx());
     const keyFilesNoGraph = sectionsNoGraph.find((s) => s.id === "key-files");
-    const typesRowNoGraph = keyFilesNoGraph!.content.split("\n").find((l) => l.includes("src/types.ts"));
+    const typesRowNoGraph = keyFilesNoGraph?.content.split("\n").find((l) => l.includes("src/types.ts"));
     expect(typesRowNoGraph).toBeDefined();
     expect(typesRowNoGraph).not.toContain("⚠️");
 
@@ -397,7 +397,7 @@ describe("Key Files instability rendering", () => {
     };
     const sectionsWithGraph = await renderArchitectureSections(analysis, minimalCtx(), graph);
     const keyFilesWithGraph = sectionsWithGraph.find((s) => s.id === "key-files");
-    const typesRow = keyFilesWithGraph!.content.split("\n").find((l) => l.includes("src/types.ts"));
+    const typesRow = keyFilesWithGraph?.content.split("\n").find((l) => l.includes("src/types.ts"));
     expect(typesRow).toBeDefined();
     expect(typesRow).toContain("- SDP ⚠️");
   });

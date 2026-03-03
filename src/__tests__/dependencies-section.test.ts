@@ -36,27 +36,27 @@ describe("renderDependencySections: circular-deps", () => {
   it("shows (type-only) annotation for severity=0", () => {
     const analysis = makeAnalysis({ circularDeps: [makeCycle(["a.ts", "b.ts", "a.ts"], 0)] });
     const section = renderDependencySections(analysis).find((s) => s.id === "circular-deps");
-    expect(section!.content).toContain("(type-only)");
+    expect(section?.content).toContain("(type-only)");
   });
 
   it("shows (mixed) annotation for severity between 0 and 1", () => {
     const analysis = makeAnalysis({ circularDeps: [makeCycle(["a.ts", "b.ts", "a.ts"], 0.5)] });
     const section = renderDependencySections(analysis).find((s) => s.id === "circular-deps");
-    expect(section!.content).toContain("(mixed)");
+    expect(section?.content).toContain("(mixed)");
   });
 
   it("shows no severity annotation for severity=1", () => {
     const analysis = makeAnalysis({ circularDeps: [makeCycle(["a.ts", "b.ts", "a.ts"], 1)] });
     const section = renderDependencySections(analysis).find((s) => s.id === "circular-deps");
-    expect(section!.content).not.toContain("(type-only)");
-    expect(section!.content).not.toContain("(mixed)");
+    expect(section?.content).not.toContain("(type-only)");
+    expect(section?.content).not.toContain("(mixed)");
   });
 
   it("shows no severity annotation when severity is undefined", () => {
     const analysis = makeAnalysis({ circularDeps: [makeCycle(["a.ts", "b.ts", "a.ts"])] });
     const section = renderDependencySections(analysis).find((s) => s.id === "circular-deps");
-    expect(section!.content).not.toContain("(type-only)");
-    expect(section!.content).not.toContain("(mixed)");
+    expect(section?.content).not.toContain("(type-only)");
+    expect(section?.content).not.toContain("(mixed)");
   });
 
   it("shows breakHint when provided", () => {
@@ -64,14 +64,14 @@ describe("renderDependencySections: circular-deps", () => {
       circularDeps: [makeCycle(["a.ts", "b.ts", "a.ts"], undefined, "Make import type-only")],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "circular-deps");
-    expect(section!.content).toContain("Make import type-only");
-    expect(section!.content).toContain(" -- ");
+    expect(section?.content).toContain("Make import type-only");
+    expect(section?.content).toContain(" -- ");
   });
 
   it("omits hint when breakHint is absent", () => {
     const analysis = makeAnalysis({ circularDeps: [makeCycle(["a.ts", "b.ts", "a.ts"])] });
     const section = renderDependencySections(analysis).find((s) => s.id === "circular-deps");
-    expect(section!.content).not.toContain(" -- ");
+    expect(section?.content).not.toContain(" -- ");
   });
 
   it("includes all cycle file paths in chain order", () => {
@@ -79,7 +79,7 @@ describe("renderDependencySections: circular-deps", () => {
       circularDeps: [makeCycle(["src/a.ts", "src/b.ts", "src/c.ts", "src/a.ts"])],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "circular-deps");
-    expect(section!.content).toContain("`src/a.ts` -> `src/b.ts` -> `src/c.ts` -> `src/a.ts`");
+    expect(section?.content).toContain("`src/a.ts` -> `src/b.ts` -> `src/c.ts` -> `src/a.ts`");
   });
 
   it("shows feedback edges when there are multiple cycles sharing an edge", () => {
@@ -91,15 +91,15 @@ describe("renderDependencySections: circular-deps", () => {
     ];
     const analysis = makeAnalysis({ circularDeps: cycles });
     const section = renderDependencySections(analysis).find((s) => s.id === "circular-deps");
-    expect(section!.content).toContain("Most impactful edges to break:");
-    expect(section!.content).toContain("would resolve");
-    expect(section!.content).toContain("of 3 cycles");
+    expect(section?.content).toContain("Most impactful edges to break:");
+    expect(section?.content).toContain("would resolve");
+    expect(section?.content).toContain("of 3 cycles");
   });
 
   it("omits feedback edges section when there is only 1 cycle", () => {
     const analysis = makeAnalysis({ circularDeps: [makeCycle(["a.ts", "b.ts", "a.ts"])] });
     const section = renderDependencySections(analysis).find((s) => s.id === "circular-deps");
-    expect(section!.content).not.toContain("Most impactful edges to break:");
+    expect(section?.content).not.toContain("Most impactful edges to break:");
   });
 });
 
@@ -122,7 +122,7 @@ describe("renderDependencySections: dead-files", () => {
     const section = renderDependencySections(analysis).find((s) => s.id === "dead-files");
     expect(section).toBeDefined();
     for (const f of files) {
-      expect(section!.content).toContain(`\`${f}\``);
+      expect(section?.content).toContain(`\`${f}\``);
     }
   });
 
@@ -130,10 +130,10 @@ describe("renderDependencySections: dead-files", () => {
     const files = Array.from({ length: 20 }, (_, i) => `src/dead${i}.ts`);
     const analysis = makeAnalysis({ deadFiles: files });
     const section = renderDependencySections(analysis).find((s) => s.id === "dead-files");
-    expect(section!.content).toContain("and 5 more");
+    expect(section?.content).toContain("and 5 more");
     // Only first 15 should appear
-    expect(section!.content).toContain("`src/dead14.ts`");
-    expect(section!.content).not.toContain("`src/dead15.ts`");
+    expect(section?.content).toContain("`src/dead14.ts`");
+    expect(section?.content).not.toContain("`src/dead15.ts`");
   });
 });
 
@@ -157,9 +157,9 @@ describe("renderDependencySections: cross-cutting", () => {
       ],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "cross-cutting");
-    expect(section!.content).toContain("| File | Imported By | Layers |");
-    expect(section!.content).toContain("`src/types.ts`");
-    expect(section!.content).toContain("types, utils, services");
+    expect(section?.content).toContain("| File | Imported By | Layers |");
+    expect(section?.content).toContain("`src/types.ts`");
+    expect(section?.content).toContain("types, utils, services");
   });
 
   it("uses singular 'file' when totalImporters is 1", () => {
@@ -167,8 +167,8 @@ describe("renderDependencySections: cross-cutting", () => {
       crossCuttingFiles: [{ file: "src/x.ts", totalImporters: 1, layerSpread: 2, layers: ["a", "b"] }],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "cross-cutting");
-    expect(section!.content).toContain("1 file");
-    expect(section!.content).not.toContain("1 files");
+    expect(section?.content).toContain("1 file");
+    expect(section?.content).not.toContain("1 files");
   });
 });
 
@@ -190,18 +190,18 @@ describe("renderDependencySections: chokepoints", () => {
       chokepoints: [makeChokepoint("src/core.ts", 15, 120, 8)],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "chokepoints");
-    expect(section!.content).toContain("`src/core.ts`");
-    expect(section!.content).toContain("120 files");
-    expect(section!.content).toContain("8 files");
+    expect(section?.content).toContain("`src/core.ts`");
+    expect(section?.content).toContain("120 files");
+    expect(section?.content).toContain("8 files");
   });
 
   it("caps at 5 and shows overflow count", () => {
     const cps = Array.from({ length: 8 }, (_, i) => makeChokepoint(`cp${i}.ts`, i + 1, 100 - i, 10));
     const analysis = makeAnalysis({ chokepoints: cps });
     const section = renderDependencySections(analysis).find((s) => s.id === "chokepoints");
-    expect(section!.content).toContain("and 3 more");
-    expect(section!.content).toContain("`cp4.ts`");
-    expect(section!.content).not.toContain("`cp5.ts`");
+    expect(section?.content).toContain("and 3 more");
+    expect(section?.content).toContain("`cp4.ts`");
+    expect(section?.content).not.toContain("`cp5.ts`");
   });
 });
 
@@ -223,7 +223,7 @@ describe("renderDependencySections: tight-coupling", () => {
       tightCouplings: [{ from: "a.ts", to: "b.ts", importedNames: 10, names: [], typeOnlyCount: 5 }],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "tight-coupling");
-    expect(section!.content).toContain("(5 type-only)");
+    expect(section?.content).toContain("(5 type-only)");
   });
 
   it("omits type-only annotation when typeOnlyCount is 0", () => {
@@ -231,7 +231,7 @@ describe("renderDependencySections: tight-coupling", () => {
       tightCouplings: [{ from: "a.ts", to: "b.ts", importedNames: 10, names: [], typeOnlyCount: 0 }],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "tight-coupling");
-    expect(section!.content).not.toContain("type-only");
+    expect(section?.content).not.toContain("type-only");
   });
 
   it("omits type-only annotation when typeOnlyCount is absent", () => {
@@ -239,7 +239,7 @@ describe("renderDependencySections: tight-coupling", () => {
       tightCouplings: [{ from: "a.ts", to: "b.ts", importedNames: 10, names: [] }],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "tight-coupling");
-    expect(section!.content).not.toContain("type-only");
+    expect(section?.content).not.toContain("type-only");
   });
 
   it("shows from/to file paths and import count", () => {
@@ -247,9 +247,9 @@ describe("renderDependencySections: tight-coupling", () => {
       tightCouplings: [{ from: "src/a.ts", to: "src/b.ts", importedNames: 12, names: [] }],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "tight-coupling");
-    expect(section!.content).toContain("`src/a.ts`");
-    expect(section!.content).toContain("`src/b.ts`");
-    expect(section!.content).toContain("12 names");
+    expect(section?.content).toContain("`src/a.ts`");
+    expect(section?.content).toContain("`src/b.ts`");
+    expect(section?.content).toContain("12 names");
   });
 });
 
@@ -273,7 +273,7 @@ describe("renderDependencySections: hidden-coupling", () => {
       ],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "hidden-coupling");
-    expect(section!.content).toContain("unreachable");
+    expect(section?.content).toContain("unreachable");
   });
 
   it("shows '3 hops' for graphDistance=3", () => {
@@ -283,7 +283,7 @@ describe("renderDependencySections: hidden-coupling", () => {
       ],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "hidden-coupling");
-    expect(section!.content).toContain("3 hops");
+    expect(section?.content).toContain("3 hops");
   });
 
   it("shows confidence as percentage", () => {
@@ -293,7 +293,7 @@ describe("renderDependencySections: hidden-coupling", () => {
       ],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "hidden-coupling");
-    expect(section!.content).toContain("73%");
+    expect(section?.content).toContain("73%");
   });
 
   it("renders table with file paths and co-change count", () => {
@@ -303,9 +303,9 @@ describe("renderDependencySections: hidden-coupling", () => {
       ],
     });
     const section = renderDependencySections(analysis).find((s) => s.id === "hidden-coupling");
-    expect(section!.content).toContain("| File A | File B |");
-    expect(section!.content).toContain("`src/a.ts`");
-    expect(section!.content).toContain("`src/b.ts`");
-    expect(section!.content).toContain("| 8 |");
+    expect(section?.content).toContain("| File A | File B |");
+    expect(section?.content).toContain("`src/a.ts`");
+    expect(section?.content).toContain("`src/b.ts`");
+    expect(section?.content).toContain("| 8 |");
   });
 });

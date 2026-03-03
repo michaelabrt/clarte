@@ -10,7 +10,7 @@ function makeEdgesByFile(edges: Array<{ from: string; to: string; importedNames?
   for (const edge of edges) {
     const e = { from: edge.from, to: edge.to, importedNames: edge.importedNames ?? [] };
     if (!edgesByTarget.has(edge.to)) edgesByTarget.set(edge.to, []);
-    edgesByTarget.get(edge.to)!.push(e);
+    edgesByTarget.get(edge.to)?.push(e);
   }
   return { edgesByTarget };
 }

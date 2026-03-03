@@ -152,11 +152,11 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
 
       it("should compute betweenness scores for all files", () => {
         expect(graph.betweennessScores).toBeDefined();
-        expect(graph.betweennessScores!.size).toBeGreaterThan(0);
+        expect(graph.betweennessScores?.size).toBeGreaterThan(0);
       });
 
       it("betweennessScores has non-zero entries (graph has structure)", () => {
-        const nonZero = [...graph.betweennessScores!.values()].filter((s) => s > 0);
+        const nonZero = [...graph.betweennessScores?.values()].filter((s) => s > 0);
         expect(nonZero.length).toBeGreaterThan(0);
       });
 
@@ -246,7 +246,7 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
 
     it("rendered section starts with '## Working Guidelines'", () => {
       expect(drizzleResult.renderedSection).toBeDefined();
-      expect(drizzleResult.renderedSection!.startsWith("## Working Guidelines")).toBe(true);
+      expect(drizzleResult.renderedSection?.startsWith("## Working Guidelines")).toBe(true);
     });
 
     it("no chokepoint file appears in a flow bottleneck directive", () => {

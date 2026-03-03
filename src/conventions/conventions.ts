@@ -174,7 +174,7 @@ function detectDirectoryOverrides(
     if (!dirIdentifiers.has(dir)) {
       dirIdentifiers.set(dir, { functions: [], types: [], constants: [], files: [] });
     }
-    dirIdentifiers.get(dir)!.files.push(...names);
+    dirIdentifiers.get(dir)?.files.push(...names);
   }
 
   const overrides: Array<{
@@ -337,7 +337,7 @@ export async function inferConventions(
     if (style) {
       fileCounts.set(style, (fileCounts.get(style) ?? 0) + 1);
       if (!fileNamesByFile.has(file)) fileNamesByFile.set(file, []);
-      fileNamesByFile.get(file)!.push(basename);
+      fileNamesByFile.get(file)?.push(basename);
     }
   }
 

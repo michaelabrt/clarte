@@ -163,8 +163,8 @@ public class UserController {
 
     const classSig = result.entries.find((e) => e.signature.includes("UserController"));
     expect(classSig).toBeDefined();
-    expect(classSig!.signature).toContain("@RestController");
-    expect(classSig!.signature).toContain("@RequestMapping");
+    expect(classSig?.signature).toContain("@RestController");
+    expect(classSig?.signature).toContain("@RequestMapping");
   });
 
   it("skips @Generated annotated items", async () => {

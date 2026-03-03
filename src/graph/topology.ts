@@ -17,12 +17,12 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
     // Undirected adjacency (for components, diameter, modularity)
     if (!adj.has(edge.from)) adj.set(edge.from, new Set());
     if (!adj.has(edge.to)) adj.set(edge.to, new Set());
-    adj.get(edge.from)!.add(edge.to);
-    adj.get(edge.to)!.add(edge.from);
+    adj.get(edge.from)?.add(edge.to);
+    adj.get(edge.to)?.add(edge.from);
 
     // Directed adjacency (for critical chain)
     if (!dirAdj.has(edge.from)) dirAdj.set(edge.from, new Set());
-    dirAdj.get(edge.from)!.add(edge.to);
+    dirAdj.get(edge.from)?.add(edge.to);
   }
 
   const totalFiles = allFiles.size;
@@ -215,8 +215,8 @@ function computeCriticalChain(allFiles: Set<string>, dirAdj: Map<string, Set<str
     for (const to of neighbors) {
       const toSCC = fileToSCC.get(to);
       if (toSCC === undefined || toSCC === fromSCC) continue;
-      if (!sccAdj.get(fromSCC)!.has(toSCC)) {
-        sccAdj.get(fromSCC)!.add(toSCC);
+      if (!sccAdj.get(fromSCC)?.has(toSCC)) {
+        sccAdj.get(fromSCC)?.add(toSCC);
         sccInDeg.set(toSCC, sccInDeg.get(toSCC)! + 1);
       }
     }

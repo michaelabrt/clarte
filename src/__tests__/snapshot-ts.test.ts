@@ -66,9 +66,9 @@ describe("JS/TS snapshot extraction", () => {
 
     const entry = result.entries.find((e) => e.signature.includes("interface User"));
     expect(entry).toBeDefined();
-    expect(entry!.category).toBe("interface");
-    expect(entry!.signature).toContain("id: string");
-    expect(entry!.signature).toContain("email: string");
+    expect(entry?.category).toBe("interface");
+    expect(entry?.signature).toContain("id: string");
+    expect(entry?.signature).toContain("email: string");
   });
 
   it("extracts exported type aliases", async () => {
@@ -82,8 +82,8 @@ describe("JS/TS snapshot extraction", () => {
 
     const entry = result.entries.find((e) => e.signature.includes("type Result"));
     expect(entry).toBeDefined();
-    expect(entry!.category).toBe("type");
-    expect(entry!.signature).toContain("Result<T>");
+    expect(entry?.category).toBe("type");
+    expect(entry?.signature).toContain("Result<T>");
   });
 
   it("extracts exported function signatures (not bodies)", async () => {
@@ -100,12 +100,12 @@ describe("JS/TS snapshot extraction", () => {
 
     const entry = result.entries.find((e) => e.signature.includes("fetchUser"));
     expect(entry).toBeDefined();
-    expect(entry!.category).toBe("function");
-    expect(entry!.signature).toContain("async function fetchUser");
-    expect(entry!.signature).toContain("Promise<User>");
+    expect(entry?.category).toBe("function");
+    expect(entry?.signature).toContain("async function fetchUser");
+    expect(entry?.signature).toContain("Promise<User>");
     // Should NOT contain the function body
-    expect(entry!.signature).not.toContain("fetch(");
-    expect(entry!.signature).not.toContain("resp.json");
+    expect(entry?.signature).not.toContain("fetch(");
+    expect(entry?.signature).not.toContain("resp.json");
   });
 
   it("extracts arrow function exports", async () => {
@@ -121,10 +121,10 @@ describe("JS/TS snapshot extraction", () => {
 
     const entry = result.entries.find((e) => e.signature.includes("greet"));
     expect(entry).toBeDefined();
-    expect(entry!.category).toBe("function");
-    expect(entry!.signature).toContain("export const greet");
+    expect(entry?.category).toBe("function");
+    expect(entry?.signature).toContain("export const greet");
     // Should NOT contain the function body
-    expect(entry!.signature).not.toContain("hello");
+    expect(entry?.signature).not.toContain("hello");
   });
 
   it("skips non-function const exports", async () => {
@@ -161,9 +161,9 @@ export const NAME = "test";
 
     const entry = result.entries.find((e) => e.signature.includes("enum Status"));
     expect(entry).toBeDefined();
-    expect(entry!.category).toBe("type");
-    expect(entry!.signature).toContain("Active");
-    expect(entry!.signature).toContain("Pending");
+    expect(entry?.category).toBe("type");
+    expect(entry?.signature).toContain("Active");
+    expect(entry?.signature).toContain("Pending");
   });
 
   it("extracts export default function", async () => {
@@ -179,10 +179,10 @@ export const NAME = "test";
 
     const entry = result.entries.find((e) => e.signature.includes("main"));
     expect(entry).toBeDefined();
-    expect(entry!.category).toBe("function");
-    expect(entry!.signature).toContain("export default function main");
+    expect(entry?.category).toBe("function");
+    expect(entry?.signature).toContain("export default function main");
     // Should NOT contain the body
-    expect(entry!.signature).not.toContain("console.log");
+    expect(entry?.signature).not.toContain("console.log");
   });
 
   it("extracts export default class", async () => {
@@ -202,8 +202,8 @@ export const NAME = "test";
 
     const entry = result.entries.find((e) => e.signature.includes("AppRouter"));
     expect(entry).toBeDefined();
-    expect(entry!.category).toBe("type");
-    expect(entry!.signature).toContain("class AppRouter");
+    expect(entry?.category).toBe("type");
+    expect(entry?.signature).toContain("class AppRouter");
   });
 
   it("skips re-exports (export { foo } from './other')", async () => {
@@ -246,13 +246,13 @@ export function localFunc(): void {
 
     const entry = result.entries.find((e) => e.signature.includes("merge"));
     expect(entry).toBeDefined();
-    expect(entry!.category).toBe("function");
+    expect(entry?.category).toBe("function");
     // The signature should include the full generic parameters
-    expect(entry!.signature).toContain("T extends Record<string, unknown>");
-    expect(entry!.signature).toContain("U extends Record<string, unknown>");
-    expect(entry!.signature).toContain("T & U");
+    expect(entry?.signature).toContain("T extends Record<string, unknown>");
+    expect(entry?.signature).toContain("U extends Record<string, unknown>");
+    expect(entry?.signature).toContain("T & U");
     // Should NOT contain body
-    expect(entry!.signature).not.toContain("...a");
+    expect(entry?.signature).not.toContain("...a");
   });
 
   it("handles overloaded function declarations", async () => {
@@ -289,7 +289,7 @@ export function process(input: string | number): string | number {
 
     const entry = result.entries.find((e) => e.signature.includes("useAuth"));
     expect(entry).toBeDefined();
-    expect(entry!.category).toBe("hook");
+    expect(entry?.category).toBe("hook");
   });
 
   it("categorizes store types correctly", async () => {
@@ -306,7 +306,7 @@ export function process(input: string | number): string | number {
 
     const entry = result.entries.find((e) => e.signature.includes("AuthSlice"));
     expect(entry).toBeDefined();
-    expect(entry!.category).toBe("store");
+    expect(entry?.category).toBe("store");
   });
 
   it("extracts function expression exports", async () => {
@@ -322,9 +322,9 @@ export function process(input: string | number): string | number {
 
     const entry = result.entries.find((e) => e.signature.includes("handler"));
     expect(entry).toBeDefined();
-    expect(entry!.category).toBe("function");
+    expect(entry?.category).toBe("function");
     // Should NOT contain body
-    expect(entry!.signature).not.toContain('Response("ok")');
+    expect(entry?.signature).not.toContain('Response("ok")');
   });
 
   it("handles JSX/TSX files", async () => {
@@ -346,7 +346,7 @@ export function Button({ label, onClick }: ButtonProps) {
 
     const interfaceEntry = result.entries.find((e) => e.signature.includes("interface ButtonProps"));
     expect(interfaceEntry).toBeDefined();
-    expect(interfaceEntry!.category).toBe("component");
+    expect(interfaceEntry?.category).toBe("component");
 
     const funcEntry = result.entries.find((e) => e.signature.includes("function Button"));
     expect(funcEntry).toBeDefined();
@@ -371,7 +371,7 @@ export default function Card({ title, body }: CardProps) {
     // Non-exported Props interface should be captured in component directories
     const propsEntry = result.entries.find((e) => e.signature.includes("interface CardProps"));
     expect(propsEntry).toBeDefined();
-    expect(propsEntry!.category).toBe("component");
+    expect(propsEntry?.category).toBe("component");
   });
 
   it("handles files that cannot be parsed (graceful fallback)", async () => {

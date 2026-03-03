@@ -87,7 +87,7 @@ describe("serializeAnalysis", () => {
     const output = serializeAnalysis(mockCtx(), mockAnalysis(), null, mockGraph(), []);
     expect(output.analysis.gitActivity).toBeDefined();
     // commitCounts should be a plain object, not a Map
-    const commitCounts = output.analysis.gitActivity!.commitCounts;
+    const commitCounts = output.analysis.gitActivity?.commitCounts;
     expect(commitCounts).toEqual({ "src/index.ts": 16, "src/types.ts": 12 });
     // Verify it's a plain object (not a Map)
     expect(commitCounts instanceof Map).toBe(false);
@@ -96,7 +96,7 @@ describe("serializeAnalysis", () => {
   it("converts Maps to plain objects for testMapping", () => {
     const output = serializeAnalysis(mockCtx(), mockAnalysis(), null, mockGraph(), []);
     expect(output.analysis.testMapping).toBeDefined();
-    const sourceToTests = output.analysis.testMapping!.sourceToTests;
+    const sourceToTests = output.analysis.testMapping?.sourceToTests;
     expect(sourceToTests).toEqual({ "src/graph.ts": ["src/__tests__/graph.test.ts"] });
     expect(sourceToTests instanceof Map).toBe(false);
   });
@@ -117,10 +117,10 @@ describe("serializeAnalysis", () => {
     };
     const output = serializeAnalysis(mockCtx(), mockAnalysis(), snapshot, mockGraph(), []);
     expect(output.snapshot).not.toBeNull();
-    expect(output.snapshot!.entries).toHaveLength(1);
-    expect(output.snapshot!.entries[0].file).toBe("src/types.ts");
-    expect(output.snapshot!.estimatedTokens).toBe(100);
-    expect(output.snapshot!.budgetExcluded).toBe(2);
+    expect(output.snapshot?.entries).toHaveLength(1);
+    expect(output.snapshot?.entries[0].file).toBe("src/types.ts");
+    expect(output.snapshot?.estimatedTokens).toBe(100);
+    expect(output.snapshot?.budgetExcluded).toBe(2);
   });
 
   it("includes directives", () => {
@@ -145,8 +145,8 @@ describe("serializeAnalysis", () => {
     });
     const output = serializeAnalysis(ctx, mockAnalysis(), null, mockGraph(), []);
     expect(output.project.monorepo).not.toBeNull();
-    expect(output.project.monorepo!.type).toBe("pnpm-workspaces");
-    expect(output.project.monorepo!.packages).toHaveLength(1);
+    expect(output.project.monorepo?.type).toBe("pnpm-workspaces");
+    expect(output.project.monorepo?.packages).toHaveLength(1);
   });
 
   it("roundtrips through JSON.parse", () => {

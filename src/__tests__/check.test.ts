@@ -116,8 +116,8 @@ describe("validateContextPaths", () => {
 
     const result = await validateContextPaths(tmpDir, baseConfig);
     expect(result).not.toBeNull();
-    expect(result!.broken).toEqual([]);
-    expect(result!.file).toBe(".claude/rules/clarte.md");
+    expect(result?.broken).toEqual([]);
+    expect(result?.file).toBe(".claude/rules/clarte.md");
   });
 
   it("reports missing files as broken references", async () => {
@@ -130,8 +130,8 @@ describe("validateContextPaths", () => {
 
     const result = await validateContextPaths(tmpDir, baseConfig);
     expect(result).not.toBeNull();
-    expect(result!.broken).toEqual(["src/old-file.ts", "src/removed.ts"]);
-    expect(result!.file).toBe(".claude/rules/clarte.md");
+    expect(result?.broken).toEqual(["src/old-file.ts", "src/removed.ts"]);
+    expect(result?.file).toBe(".claude/rules/clarte.md");
   });
 
   it("uses the correct context filename based on IDE target", async () => {
@@ -141,8 +141,8 @@ describe("validateContextPaths", () => {
 
     const result = await validateContextPaths(tmpDir, config);
     expect(result).not.toBeNull();
-    expect(result!.file).toBe("CONTEXT.md");
-    expect(result!.broken).toEqual(["src/missing.ts"]);
+    expect(result?.file).toBe("CONTEXT.md");
+    expect(result?.broken).toEqual(["src/missing.ts"]);
   });
 
   it("falls back to claude when ides array is empty", async () => {
@@ -153,6 +153,6 @@ describe("validateContextPaths", () => {
 
     const result = await validateContextPaths(tmpDir, config);
     expect(result).not.toBeNull();
-    expect(result!.file).toBe(".claude/rules/clarte.md");
+    expect(result?.file).toBe(".claude/rules/clarte.md");
   });
 });

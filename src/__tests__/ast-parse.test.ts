@@ -120,7 +120,7 @@ describe("parseImportsAst - Python", () => {
     );
     const typeOnlyImport = result.find((i) => i.specifier === ".models");
     expect(typeOnlyImport).toBeDefined();
-    expect(typeOnlyImport!.isTypeOnly).toBe(true);
+    expect(typeOnlyImport?.isTypeOnly).toBe(true);
   });
 
   it("detects typing.TYPE_CHECKING attribute access pattern as type-only", () => {
@@ -130,10 +130,10 @@ describe("parseImportsAst - Python", () => {
     );
     const userImport = result.find((i) => i.specifier === ".models");
     expect(userImport).toBeDefined();
-    expect(userImport!.isTypeOnly).toBe(true);
+    expect(userImport?.isTypeOnly).toBe(true);
     const authImport = result.find((i) => i.specifier === ".services");
     expect(authImport).toBeDefined();
-    expect(authImport!.isTypeOnly).toBe(true);
+    expect(authImport?.isTypeOnly).toBe(true);
   });
 });
 
@@ -198,8 +198,8 @@ describe("parseImportsAst - Rust", () => {
     expect(result.length).toBeGreaterThanOrEqual(1);
     const nested = result.find((i) => i.specifier.includes("utils"));
     expect(nested).toBeDefined();
-    expect(nested!.importedNames).toContain("self");
-    expect(nested!.importedNames).toContain("helpers");
+    expect(nested?.importedNames).toContain("self");
+    expect(nested?.importedNames).toContain("helpers");
   });
 
   it("handles top-level wildcard use", () => {

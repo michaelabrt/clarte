@@ -158,10 +158,10 @@ describe("getFileGraphData", () => {
     const rev = buildReverseAdjacency(graph);
     const data = getFileGraphData(graph, "src/utils.ts", rev);
     expect(data).not.toBeNull();
-    expect(data!.role).toBe("Foundation");
-    expect(data!.betweenness).toBe(0.5);
-    expect(data!.isChokepoint).toBe(true);
-    expect(data!.separatesComponents).toBe(3);
+    expect(data?.role).toBe("Foundation");
+    expect(data?.betweenness).toBe(0.5);
+    expect(data?.isChokepoint).toBe(true);
+    expect(data?.separatesComponents).toBe(3);
   });
 
   it("defaults role to Leaf when null", () => {
@@ -172,7 +172,7 @@ describe("getFileGraphData", () => {
     });
     const rev = buildReverseAdjacency(graph);
     const data = getFileGraphData(graph, "src/leaf.ts", rev);
-    expect(data!.role).toBe("Leaf");
+    expect(data?.role).toBe("Leaf");
   });
 
   it("includes co-change data sorted by confidence", () => {
@@ -186,11 +186,11 @@ describe("getFileGraphData", () => {
     });
     const rev = buildReverseAdjacency(graph);
     const data = getFileGraphData(graph, "src/a.ts", rev);
-    expect(data!.coChange).toHaveLength(3);
-    expect(data!.coChange[0].file).toBe("src/c.ts");
-    expect(data!.coChange[0].confidence).toBe(0.8);
-    expect(data!.coChange[1].confidence).toBe(0.5);
-    expect(data!.coChange[2].confidence).toBe(0.3);
+    expect(data?.coChange).toHaveLength(3);
+    expect(data?.coChange[0].file).toBe("src/c.ts");
+    expect(data?.coChange[0].confidence).toBe(0.8);
+    expect(data?.coChange[1].confidence).toBe(0.5);
+    expect(data?.coChange[2].confidence).toBe(0.3);
   });
 
   it("limits co-change to top 3", () => {
@@ -206,9 +206,9 @@ describe("getFileGraphData", () => {
     });
     const rev = buildReverseAdjacency(graph);
     const data = getFileGraphData(graph, "src/a.ts", rev);
-    expect(data!.coChange).toHaveLength(3);
+    expect(data?.coChange).toHaveLength(3);
     // Top 3 by confidence: 0.5, 0.4, 0.3
-    expect(data!.coChange[0].confidence).toBe(0.5);
+    expect(data?.coChange[0].confidence).toBe(0.5);
   });
 
   it("includes integration tests from transitive BFS", () => {
@@ -223,7 +223,7 @@ describe("getFileGraphData", () => {
     });
     const rev = buildReverseAdjacency(graph);
     const data = getFileGraphData(graph, "src/utils.ts", rev);
-    expect(data!.integrationTests).toContain("src/__tests__/integration.test.ts");
+    expect(data?.integrationTests).toContain("src/__tests__/integration.test.ts");
   });
 
   it("returns empty coChange when no coupling data", () => {
@@ -232,6 +232,6 @@ describe("getFileGraphData", () => {
     });
     const rev = buildReverseAdjacency(graph);
     const data = getFileGraphData(graph, "src/a.ts", rev);
-    expect(data!.coChange).toEqual([]);
+    expect(data?.coChange).toEqual([]);
   });
 });

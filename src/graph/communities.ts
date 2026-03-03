@@ -44,8 +44,8 @@ export function detectCommunities(graph: ImportGraph): Community[] {
 
     if (!adj.has(edge.from)) adj.set(edge.from, new Set());
     if (!adj.has(edge.to)) adj.set(edge.to, new Set());
-    adj.get(edge.from)!.add(edge.to);
-    adj.get(edge.to)!.add(edge.from);
+    adj.get(edge.from)?.add(edge.to);
+    adj.get(edge.to)?.add(edge.from);
   }
 
   const files = [...allFiles];
