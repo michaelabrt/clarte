@@ -135,10 +135,10 @@ export const HASH_CONCURRENCY = 32;
 export const INSTABILITY_THRESHOLD = 0.8;
 
 /**
- * Sample size for approximate betweenness centrality computation.
- * Rationale: 50 random sources provide a good approximation for typical codebases
- * (hundreds of files) with manageable computation time. The value is encoded in the
- * analysis cache key so changing it automatically invalidates stale cached results.
+ * Minimum sample size for approximate betweenness centrality computation.
+ * The actual k adapts to graph size: max(BETWEENNESS_K, 2*sqrt(V)).
+ * 50 is the floor for small graphs; larger graphs scale up automatically.
+ * Encoded in the analysis cache key so changes invalidate stale results.
  */
 export const BETWEENNESS_K = 50;
 

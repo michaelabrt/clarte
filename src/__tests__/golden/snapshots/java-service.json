@@ -35,12 +35,16 @@
   "layers": [
     {
       "name": "config",
-      "files": ["src/main/java/com/example/config/AppConfig.java"],
+      "files": [
+        "src/main/java/com/example/config/AppConfig.java"
+      ],
       "dependsOn": []
     },
     {
       "name": "services",
-      "files": ["src/main/java/com/example/service/UserService.java"],
+      "files": [
+        "src/main/java/com/example/service/UserService.java"
+      ],
       "dependsOn": []
     }
   ],
@@ -58,7 +62,10 @@
       "src/main/java/com/example/service/UserService.java"
     ]
   ],
-  "deadFiles": ["src/main/java/com/example/App.java", "src/main/java/com/example/model/Product.java"],
+  "deadFiles": [
+    "src/main/java/com/example/App.java",
+    "src/main/java/com/example/model/Product.java"
+  ],
   "crossCuttingFiles": [],
   "layerConsistency": {
     "consistency": 1,
@@ -96,7 +103,9 @@
   ],
   "graphTopology": {
     "componentCount": 1,
-    "componentSizes": [7],
+    "componentSizes": [
+      7
+    ],
     "approximateDiameter": 4,
     "reachability": 1,
     "isFragmented": false
