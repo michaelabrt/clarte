@@ -425,6 +425,66 @@ describe("BM25F scoring behavior", () => {
   });
 });
 
+// ── BM25F import field ────────────────────────────────────────────────
+
+describe("BM25F import field", () => {
+  it("finds a file whose own path/symbols do not match but whose imports do", () => {
+    // handler.ts has no path/symbol overlap with "form validation"
+    // but it imports from validators/form-validator.ts with importedNames ["validateForm"]
+    const graph = makeGraph({
+      files: {
+        "src/handler.ts": makeFileRecord(),
+        "src/validators/form-validator.ts": makeFileRecord({ symbolNames: ["validateForm"] }),
+        "src/unrelated.ts": makeFileRecord(),
+      },
+      edges: [
+        {
+          from: "src/handler.ts",
+          to: "src/validators/form-validator.ts",
+          importedNames: ["validateForm"],
+        },
+      ],
+    });
+    const targets = resolveEditTargets("form validation", graph);
+    expect(targets).toContain("src/handler.ts");
+  });
+
+  it("a file matching via path, symbols AND imports scores higher than one matching only path and symbols", () => {
+    // Both files match "form" via path. File A also has "form" in its imports via importedNames.
+    const graph = makeGraph({
+      files: {
+        "src/form-handler.ts": makeFileRecord({ symbolNames: ["handleForm"] }),
+        "src/form-render.ts": makeFileRecord({ symbolNames: ["renderForm"] }),
+        "src/validators/form-validator.ts": makeFileRecord({ symbolNames: ["validateForm"] }),
+      },
+      edges: [
+        {
+          from: "src/form-handler.ts",
+          to: "src/validators/form-validator.ts",
+          importedNames: ["validateForm"],
+        },
+      ],
+    });
+    const targets = resolveEditTargets("form", graph, 3);
+    // form-handler.ts matches path + symbols + imports; form-render.ts matches only path + symbols
+    expect(targets.indexOf("src/form-handler.ts")).toBeLessThan(targets.indexOf("src/form-render.ts"));
+  });
+
+  it("strong path match ranks above a file that matches only via imports", () => {
+    // auth.ts: "auth" appears in the path itself (strong signal)
+    // consumer.ts: no path/symbol overlap with "auth", but imports from auth.ts
+    const graph = makeGraph({
+      files: {
+        "src/auth.ts": makeFileRecord(),
+        "src/consumer.ts": makeFileRecord(),
+      },
+      edges: [{ from: "src/consumer.ts", to: "src/auth.ts", importedNames: ["authenticate"] }],
+    });
+    const targets = resolveEditTargets("auth", graph, 2);
+    expect(targets[0]).toBe("src/auth.ts");
+  });
+});
+
 // ── formatEditDirective ──────────────────────────────────────────────
 
 describe("formatEditDirective", () => {
