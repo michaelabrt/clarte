@@ -4,6 +4,7 @@ import { readJsonFile, writeFileSafe } from "../utils.js";
 import type { PersistedGraph } from "../types/persisted-graph.js";
 import { buildContextMap } from "./context-map.js";
 import { CLARTE_DIR } from "../config/config.js";
+import { PRE_FLIGHT_AGENT_CONTENT } from "../templates/pre-flight-agent.js";
 
 const HOOKS_DIR = `${CLARTE_DIR}/hooks`;
 const CONTEXT_MAP_FILE = "context-map.json";
@@ -231,13 +232,26 @@ if (existsSync(graphPath)) {
       "array","arrays","number","object","function","class","file","files","test","tests",
       "column","columns","options","config","index","generated","stored","against","individual",
       "quoted","numeric","serialized","deserialized","validated","validates","generation","three","bugs",
+      "comma-joined","comma-separated","commas",
     ]);
     const TEST_RE = /(?:^|\\/)(?:test|spec|__tests__|__mocks__)\\/|\\.(?:test|spec)\\.[jt]sx?$/;
-    const K1 = 1.2, B = 0.4, PW = 1.5, SW = 1.0, EF = 0.3, CF = 0.4, TP = 0.6, MC = 0.5;
+    const K1 = 1.2, B = 0.4, PW = 1.5, SW = 1.0, IE = 0.4, IM = 0.2, CF = 0.4, TP = 0.6, MC = 0.5;
 
     function splitCC(s) { return s.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ").filter(Boolean); }
     function tokId(id) {
-      return id.split(/[^a-zA-Z0-9]+/).flatMap(p => splitCC(p)).map(t => t.toLowerCase()).filter(t => t.length >= 2 && !STOP.has(t));
+      const result = [];
+      for (const part of id.split(/[^a-zA-Z0-9]+/)) {
+        const cp = splitCC(part);
+        const low = cp.map(t => t.toLowerCase());
+        const valid = low.filter(t => t.length >= 2);
+        const filt = valid.filter(t => !STOP.has(t));
+        result.push(...filt);
+        if (cp.length > 1 && filt.length < valid.length) {
+          const comp = part.toLowerCase();
+          if (comp.length >= 4 && !STOP.has(comp)) result.push(comp);
+        }
+      }
+      return result;
     }
     function tokQ(q) { return [...new Set(tokId(q))]; }
     function buildDoc(fp, syms) {
@@ -286,6 +300,7 @@ if (existsSync(graphPath)) {
       ["async","promise","await","concurrent"],
       ["stream","pipe","transform","readable","writable"],
       ["crypto","encrypt","decrypt","hash","hmac"],["cert","certificate","tls","ssl"],
+      ["verify","verification"],
     ];
     const SYN_MAP = new Map();
     for (const grp of SYN_GROUPS) for (const t of grp) {
@@ -358,19 +373,21 @@ if (existsSync(graphPath)) {
 
       if (!scores.size) return [];
 
-      // 1-hop import neighbor expansion
+      // 1-hop directional expansion: importers (consumers) > imports (providers)
       const direct = new Set(scores.keys());
-      const nbrs = new Map();
+      const importers = new Map(), imports = new Map();
       for (const e of (g.edges || [])) {
-        if (!nbrs.has(e.from)) nbrs.set(e.from, []);
-        if (!nbrs.has(e.to)) nbrs.set(e.to, []);
-        nbrs.get(e.from).push(e.to);
-        nbrs.get(e.to).push(e.from);
+        if (!importers.has(e.to)) importers.set(e.to, []);
+        importers.get(e.to).push(e.from);
+        if (!imports.has(e.from)) imports.set(e.from, []);
+        imports.get(e.from).push(e.to);
       }
-      for (const [f, sc] of scores) {
+      for (const [f, sc] of [...scores.entries()]) {
         if (!direct.has(f)) continue;
-        const ex = sc * EF;
-        for (const nb of (nbrs.get(f) || [])) if (ex > (scores.get(nb) || 0)) scores.set(nb, ex);
+        const ieSc = sc * IE;
+        for (const imp of (importers.get(f) || [])) if (ieSc > (scores.get(imp) || 0)) scores.set(imp, ieSc);
+        const imSc = sc * IM;
+        for (const dep of (imports.get(f) || [])) if (imSc > (scores.get(dep) || 0)) scores.set(dep, imSc);
       }
 
       // Co-change coupling
@@ -399,10 +416,28 @@ if (existsSync(graphPath)) {
 
     const targets = resolveTargets(prompt, graph);
     if (targets.length > 0) {
-      // Skip writing task-context.md when the prompt already names a target file.
-      // The agent can self-localize; the pre-flight subagent would add cost with no benefit.
-      if (targets.some(t => prompt.includes(t))) process.exit(0);
+      // Skip when the prompt already names a target file (agent can self-localize).
+      // Negation detection: "NOT in src/foo.ts" or "don't edit src/foo.ts" should not trigger bailout.
+      const negRe = /\\b(?:not|don't|do not|isn't|never|without|except|excluding|outside)\\b/i;
+      const mentioned = targets.filter(t => {
+        const idx = prompt.indexOf(t);
+        if (idx < 0) return false;
+        // Check 30 chars before the mention for negation
+        const before = prompt.slice(Math.max(0, idx - 30), idx).toLowerCase();
+        return !negRe.test(before);
+      });
+      if (mentioned.length > 0) process.exit(0);
 
+      // Build importer/import lookup for relationship hints
+      const fileImporters = new Map();
+      const fileImports = new Map();
+      for (const e of (graph.edges || [])) {
+        if (!fileImporters.has(e.to)) fileImporters.set(e.to, []);
+        fileImporters.get(e.to).push(e.from);
+        if (!fileImports.has(e.from)) fileImports.set(e.from, []);
+        fileImports.get(e.from).push(e.to);
+      }
+      const targetSet = new Set(targets);
       const lines = [
         "# Edit targets (clarte)", "",
         "Based on dependency graph analysis, these files are most likely to need editing.",
@@ -412,6 +447,14 @@ if (existsSync(graphPath)) {
         lines.push("## " + fp);
         const syms = ((graph.files[fp] && graph.files[fp].symbolNames) || []).slice(0, 8);
         if (syms.length) lines.push("Key symbols: " + syms.join(", "));
+        // Relationship hints: show connections to other target files
+        const relatedImporters = (fileImporters.get(fp) || []).filter(f => targetSet.has(f));
+        const relatedImports = (fileImports.get(fp) || []).filter(f => targetSet.has(f));
+        if (relatedImporters.length) lines.push("Imported by: " + relatedImporters.join(", "));
+        if (relatedImports.length) lines.push("Imports from: " + relatedImports.join(", "));
+        // Test file paths from testMapping (saves a Glob call)
+        const tests = (graph.testMapping && graph.testMapping[fp]) || [];
+        if (tests.length) lines.push("Tests: " + tests.slice(0, 3).join(", "));
         lines.push("");
       }
       try {
@@ -512,74 +555,6 @@ const HOOK_DEFS: HookDef[] = [
 
 // All events that may have had clarte hooks (including legacy PostToolUse) - always clean these up
 const ALL_HOOK_EVENTS = ["SessionStart", "PreToolUse", "PostToolUse", "SubagentStart", "UserPromptSubmit"];
-
-const PRE_FLIGHT_AGENT_CONTENT = `---
-name: clarte-pre-flight
-description: Pre-flight scan. Reads files listed in .clarte/task-context.md and returns findings with full code context.
-model: sonnet
----
-
-You are doing a quick preliminary scan before the main work begins. Read the target files, understand the code, report back. The main agent will do the actual fix.
-
-## Hard constraints
-
-- **10 tool calls maximum.** After 10, stop and return what you have. Partial findings are fine.
-- **Read and Glob only.** Never use Grep, Bash, Edit or Write. You have the file list already - just read them.
-- **Read each file exactly once.** Do not re-read any file. Do not read files not in the list, except one test template file when the task requires writing tests.
-
-## Task-type check
-
-After reading \`.clarte/task-context.md\`, classify the task:
-- **Bug fix or targeted code change**: proceed with the full scan below.
-- **Feature, refactor, or open-ended task**: output \`SKIP: <task type> - no pre-flight guidance needed.\` and stop immediately. These tasks require exploration that a pre-flight scan cannot reliably front-load.
-
-## Confidence rules
-
-- Only report a finding if the code at that location **directly and unambiguously** explains the described symptom.
-- If you have any doubt, write \`UNCERTAIN: <file> - <reason>\` instead.
-- A wrong finding is worse than no finding. It sends the main work down the wrong path and wastes more time than starting from scratch. When uncertain, say so.
-
-## Steps
-
-1. Read \`.clarte/task-context.md\`.
-2. Classify the task (see above). If not a fix, output SKIP and stop.
-3. Read each listed source file exactly once.
-4. For each symptom, report your finding or write UNCERTAIN.
-5. If the task requires writing tests, Glob for \`test/**/*{feature}*.ts\` to find the nearest existing test. Read that one file to capture imports, setup pattern and assertion style.
-
-## Output format
-
-Start with a one-line summary:
-\`I read the target files and found [N] edit location(s). Here are the changes:\`
-
-Then one block per finding. Include the code surrounding the bug so it is visible without re-reading the file. **Never abbreviate with \`...\` or omit lines.** If the function exceeds 30 lines, include the 20 lines centered on the bug location instead.
-
-\`\`\`
-FILE: <relative path>
-LINE: <line number>
-FUNCTION:
-<verbatim code, no ellipsis, no omissions>
-FIX:
-<exact replacement for the buggy lines only>
-REASON: <one sentence>
-\`\`\`
-
-Write \`UNCERTAIN: <file> - <reason>\` for anything you are not certain about.
-
-**If you cannot identify any edit locations**, output exactly:
-\`NO_TARGETS: Could not identify edit locations from the listed files.\`
-Do NOT return a TEST SCAFFOLD without edit locations. A test scaffold alone wastes the calling agent's time.
-
-If tests are needed AND you found edit locations, end with:
-
-\`\`\`
-TEST SCAFFOLD:
-TEMPLATE: <path to nearest existing test file>
-IMPORTS: <key imports the test file uses>
-SETUP: <DataSource/connection setup pattern, 2-4 lines>
-ASSERTION STYLE: <e.g. "chai should" or "expect()">
-\`\`\`
-`;
 
 /**
  * Generate hook files: context-map.json and all hook scripts.

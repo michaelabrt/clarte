@@ -4,6 +4,7 @@ import os from "node:os";
 import { describe, expect, it, afterEach } from "vitest";
 import { buildContextMap } from "../hooks/context-map.js";
 import { generateHookFiles, configureClaudeHooks } from "../hooks/generate-hooks.js";
+import { PRE_FLIGHT_AGENT_CONTENT, buildPreFlightAgent } from "../templates/pre-flight-agent.js";
 import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
 
 async function makeTmpDir(): Promise<string> {
@@ -434,5 +435,220 @@ describe("configureClaudeHooks", () => {
     const content = await fs.readFile(path.join(tmpDir, ".claude/settings.json"), "utf-8");
     const settings = JSON.parse(content);
     expect(settings.hooks.PreToolUse).toHaveLength(2);
+  });
+});
+
+// ── PROMPT_SCRIPT: BM25F sync ────────────────────────────────────────────────
+
+describe("PROMPT_SCRIPT BM25F sync", () => {
+  let script: string;
+
+  afterEach(async () => {
+    // no-op: script is read once, no tmp dirs needed
+  });
+
+  async function getScript(tmpDir: string): Promise<string> {
+    const graph = makePersistedGraph({ files: {} });
+    await generateHookFiles(tmpDir, graph);
+    return fs.readFile(path.join(tmpDir, ".clarte/hooks/on-prompt.mjs"), "utf-8");
+  }
+
+  it("uses directional expansion: IE=0.4 for importers", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-bm25-"));
+    try {
+      script = await getScript(tmp);
+      expect(script).toContain("IE = 0.4");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("uses directional expansion: IM=0.2 for providers", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-bm25-"));
+    try {
+      script = await getScript(tmp);
+      expect(script).toContain("IM = 0.2");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("does not use symmetric EF=0.3 expansion from before the directional change", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-bm25-"));
+    try {
+      script = await getScript(tmp);
+      expect(script).not.toContain("EF = 0.3");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("includes verify/verification synonym group", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-bm25-"));
+    try {
+      script = await getScript(tmp);
+      expect(script).toContain('"verify"');
+      expect(script).toContain('"verification"');
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("includes comma-related stop words", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-bm25-"));
+    try {
+      script = await getScript(tmp);
+      expect(script).toContain('"comma-joined"');
+      expect(script).toContain('"comma-separated"');
+      expect(script).toContain('"commas"');
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves compound tokens in tokId when a stop word filters a part", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-bm25-"));
+    try {
+      script = await getScript(tmp);
+      // The compound token preservation block: pushes the full lowercased part when
+      // a stop word filtered out one of the camelCase sub-parts.
+      expect(script).toContain("filt.length < valid.length");
+      expect(script).toContain("comp.length >= 4");
+      expect(script).toContain("result.push(comp)");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── PROMPT_SCRIPT: negation detection ───────────────────────────────────────
+
+describe("PROMPT_SCRIPT negation detection", () => {
+  async function getScript(tmpDir: string): Promise<string> {
+    const graph = makePersistedGraph({ files: {} });
+    await generateHookFiles(tmpDir, graph);
+    return fs.readFile(path.join(tmpDir, ".clarte/hooks/on-prompt.mjs"), "utf-8");
+  }
+
+  it("checks for negation words before a file mention", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-neg-"));
+    try {
+      const script = await getScript(tmp);
+      // The negation regex must be present
+      expect(script).toContain("negRe");
+      expect(script).toContain("not");
+      expect(script).toContain("don't");
+      expect(script).toContain("isn't");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("looks back 30 chars before the file mention", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-neg-"));
+    try {
+      const script = await getScript(tmp);
+      // Must slice up to 30 chars before the index
+      expect(script).toContain("idx - 30");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("only skips bailout when negation is absent (no false negatives)", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-neg-"));
+    try {
+      const script = await getScript(tmp);
+      // The filter returns false (suppresses bailout) when negRe matches
+      expect(script).toContain("!negRe.test(before)");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── PROMPT_SCRIPT: task-context.md relationship hints ───────────────────────
+
+describe("PROMPT_SCRIPT task-context relationship hints", () => {
+  async function getScript(tmpDir: string): Promise<string> {
+    const graph = makePersistedGraph({ files: {} });
+    await generateHookFiles(tmpDir, graph);
+    return fs.readFile(path.join(tmpDir, ".clarte/hooks/on-prompt.mjs"), "utf-8");
+  }
+
+  it("emits Imported by: line for files with importing targets", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-hints-"));
+    try {
+      const script = await getScript(tmp);
+      expect(script).toContain('"Imported by: "');
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("emits Imports from: line for files importing other targets", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-hints-"));
+    try {
+      const script = await getScript(tmp);
+      expect(script).toContain('"Imports from: "');
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("emits Tests: line from testMapping", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-hints-"));
+    try {
+      const script = await getScript(tmp);
+      expect(script).toContain('"Tests: "');
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("caps test paths at 3 entries", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-hints-"));
+    try {
+      const script = await getScript(tmp);
+      // slice(0, 3) prevents emitting more than 3 test paths
+      expect(script).toContain("slice(0, 3)");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("filters relationship hints to only other target files", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-hints-"));
+    try {
+      const script = await getScript(tmp);
+      // Must filter importers/imports by targetSet membership
+      expect(script).toContain("targetSet.has(f)");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── pre-flight agent consolidation ──────────────────────────────────────────
+
+describe("pre-flight agent consolidation", () => {
+  it("buildPreFlightAgent returns PRE_FLIGHT_AGENT_CONTENT exactly", () => {
+    expect(buildPreFlightAgent()).toBe(PRE_FLIGHT_AGENT_CONTENT);
+  });
+
+  it("PRE_FLIGHT_AGENT_CONTENT starts with YAML front matter", () => {
+    expect(PRE_FLIGHT_AGENT_CONTENT.startsWith("---\nname: clarte-pre-flight")).toBe(true);
+  });
+
+  it("generatePreFlightAgentFile writes PRE_FLIGHT_AGENT_CONTENT to disk", async () => {
+    const { generatePreFlightAgentFile } = await import("../hooks/generate-hooks.js");
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-agent-"));
+    try {
+      await generatePreFlightAgentFile(tmp);
+      const written = await fs.readFile(path.join(tmp, ".clarte/agents/clarte-pre-flight.md"), "utf-8");
+      expect(written).toBe(PRE_FLIGHT_AGENT_CONTENT);
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
   });
 });
