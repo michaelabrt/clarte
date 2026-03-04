@@ -233,7 +233,7 @@ if (existsSync(graphPath)) {
       "quoted","numeric","serialized","deserialized","validated","validates","generation","three","bugs",
     ]);
     const TEST_RE = /(?:^|\\/)(?:test|spec|__tests__|__mocks__)\\/|\\.(?:test|spec)\\.[jt]sx?$/;
-    const K1 = 1.2, B = 0.75, PW = 1.5, SW = 1.0, EF = 0.3, CF = 0.4, TP = 0.6, MC = 0.5;
+    const K1 = 1.2, B = 0.4, PW = 1.5, SW = 1.0, EF = 0.3, CF = 0.4, TP = 0.6, MC = 0.5;
 
     function splitCC(s) { return s.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ").filter(Boolean); }
     function tokId(id) {
@@ -254,13 +254,44 @@ if (existsSync(graphPath)) {
         const dfc = df.get(term) || 1;
         const idf = Math.log((N - dfc + 0.5) / (dfc + 0.5) + 1);
         const tfP = doc.ptf.get(term) || 0, tfS = doc.stf.get(term) || 0;
-        let fs = 0;
-        if (tfP > 0) { const n = tfP + K1 * (1 - B + B * doc.pt.length / aPL); fs += PW * tfP * (K1 + 1) / n; }
-        if (tfS > 0) { const n = tfS + K1 * (1 - B + B * doc.st.length / aSL); fs += SW * tfS * (K1 + 1) / n; }
-        sc += idf * fs;
+        let ptf = 0;
+        if (tfP > 0) ptf += PW * tfP / (1 - B + B * doc.pt.length / aPL);
+        if (tfS > 0) ptf += SW * tfS / (1 - B + B * doc.st.length / aSL);
+        if (ptf > 0) sc += idf * (ptf * (K1 + 1)) / (ptf + K1);
       }
       return sc;
     }
+
+    const SYN_GROUPS = [
+      ["auth","authentication","authorize","authorization"],["jwt","jsonwebtoken","token"],
+      ["session","cookie","credential"],["db","database","datastore"],
+      ["sql","sqlite","postgres","mysql","mariadb"],["orm","repository","entity","migration"],
+      ["api","endpoint","route","handler"],["http","request","response","fetch"],
+      ["ws","websocket","socket"],["msg","message","event","signal"],
+      ["err","error","exception","fault"],["log","logger","logging"],
+      ["cache","memoize","memo"],["queue","worker","job"],
+      ["pub","publish","subscribe","subscriber"],
+      ["env","environment","dotenv"],["cfg","config","configuration","settings"],
+      ["cmd","command","cli"],["fs","filesystem","directory"],
+      ["fmt","format","formatter","prettier","biome"],["lint","linter","eslint"],
+      ["pkg","package","module","bundle"],["dep","dependency","dependencies"],
+      ["tpl","template","render","renderer"],["jsx","tsx","component","react"],
+      ["css","style","stylesheet","tailwind"],["nav","navigation","router","routing"],
+      ["i18n","locale","translation","intl"],["tz","timezone","datetime"],
+      ["url","uri","href","link"],["regex","regexp","pattern"],
+      ["json","serialize","deserialize","marshal"],
+      ["schema","validate","validator","validation"],
+      ["middleware","interceptor","guard","filter"],
+      ["mock","stub","fake","spy"],
+      ["async","promise","await","concurrent"],
+      ["stream","pipe","transform","readable","writable"],
+      ["crypto","encrypt","decrypt","hash","hmac"],["cert","certificate","tls","ssl"],
+    ];
+    const SYN_MAP = new Map();
+    for (const grp of SYN_GROUPS) for (const t of grp) {
+      const o = SYN_MAP.get(t) || []; SYN_MAP.set(t, [...new Set([...o, ...grp.filter(x => x !== t)])]);
+    }
+    const SD = 0.3;
 
     function resolveTargets(q, g) {
       const terms = tokQ(q);
@@ -292,9 +323,13 @@ if (existsSync(graphPath)) {
       const df = new Map();
       for (const doc of docs.values()) for (const t of doc.all) df.set(t, (df.get(t) || 0) + 1);
 
+      const synTerms = [];
+      for (const t of terms) { for (const s of (SYN_MAP.get(t) || [])) if (!terms.includes(s) && !STOP.has(s)) synTerms.push(s); }
+      const uSyn = [...new Set(synTerms)];
       const scores = new Map();
       for (const [fp, doc] of docs) {
-        const sc = scoreBM25F(doc, terms, df, N, aPL, aSL);
+        let sc = scoreBM25F(doc, terms, df, N, aPL, aSL);
+        if (uSyn.length) sc += SD * scoreBM25F(doc, uSyn, df, N, aPL, aSL);
         if (sc > 0) scores.set(fp, sc);
       }
 
@@ -345,7 +380,21 @@ if (existsSync(graphPath)) {
         if (direct.has(c.fileB) && !scores.has(c.fileA) && g.files[c.fileA]) scores.set(c.fileA, (scores.get(c.fileB) || 1) * CF);
       }
 
-      return [...scores.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([fp]) => fp);
+      const iTargets = new Set((g.edges || []).map(e => e.to));
+      const iSources = new Set((g.edges || []).map(e => e.from));
+      return [...scores.entries()].sort((a, b) => {
+        const d = b[1] - a[1]; if (d !== 0) return d;
+        const aI = iSources.has(a[0]) && !iTargets.has(a[0]);
+        const bI = iSources.has(b[0]) && !iTargets.has(b[0]);
+        if (aI !== bI) return aI ? -1 : 1;
+        const aB = (g.files[a[0]] && g.files[a[0]].betweenness) || 0;
+        const bB = (g.files[b[0]] && g.files[b[0]].betweenness) || 0;
+        if (aB !== bB) return bB - aB;
+        const aIB = (g.files[a[0]] && g.files[a[0]].importedByCount) || 0;
+        const bIB = (g.files[b[0]] && g.files[b[0]].importedByCount) || 0;
+        if (aIB !== bIB) return bIB - aIB;
+        return a[0].localeCompare(b[0]);
+      }).slice(0, 5).map(([fp]) => fp);
     }
 
     const targets = resolveTargets(prompt, graph);

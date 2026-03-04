@@ -111,6 +111,83 @@ const STOP_WORDS = new Set([
 
 const TEST_FILE_RE = /(?:^|\/)(?:test|spec|__tests__|__mocks__)\/|\.(?:test|spec)\.[jt]sx?$/;
 
+/**
+ * Programming synonym groups. Each array is a bidirectional synonym cluster.
+ * When a query contains any term in a group, all other terms in that group
+ * are added as expansion terms with reduced weight (via IDF dilution).
+ */
+const SYNONYM_GROUPS: string[][] = [
+  ["auth", "authentication", "authorize", "authorization"],
+  ["jwt", "jsonwebtoken", "token"],
+  ["session", "cookie", "credential"],
+  ["db", "database", "datastore"],
+  ["sql", "sqlite", "postgres", "mysql", "mariadb"],
+  ["orm", "repository", "entity", "migration"],
+  ["api", "endpoint", "route", "handler"],
+  ["http", "request", "response", "fetch"],
+  ["ws", "websocket", "socket"],
+  ["msg", "message", "event", "signal"],
+  ["err", "error", "exception", "fault"],
+  ["log", "logger", "logging"],
+  ["cache", "memoize", "memo"],
+  ["queue", "worker", "job"],
+  ["pub", "publish", "subscribe", "subscriber"],
+  ["env", "environment", "dotenv"],
+  ["cfg", "config", "configuration", "settings"],
+  ["cmd", "command", "cli"],
+  ["fs", "filesystem", "directory"],
+  ["fmt", "format", "formatter", "prettier", "biome"],
+  ["lint", "linter", "eslint"],
+  ["pkg", "package", "module", "bundle"],
+  ["dep", "dependency", "dependencies"],
+  ["tpl", "template", "render", "renderer"],
+  ["jsx", "tsx", "component", "react"],
+  ["css", "style", "stylesheet", "tailwind"],
+  ["nav", "navigation", "router", "routing"],
+  ["i18n", "locale", "translation", "intl"],
+  ["tz", "timezone", "datetime"],
+  ["url", "uri", "href", "link"],
+  ["regex", "regexp", "pattern"],
+  ["json", "serialize", "deserialize", "marshal"],
+  ["schema", "validate", "validator", "validation"],
+  ["middleware", "interceptor", "guard", "filter"],
+  ["mock", "stub", "fake", "spy"],
+  ["async", "promise", "await", "concurrent"],
+  ["stream", "pipe", "transform", "readable", "writable"],
+  ["crypto", "encrypt", "decrypt", "hash", "hmac"],
+  ["cert", "certificate", "tls", "ssl"],
+];
+
+/** Build a lookup from term → expanded synonyms (excluding the term itself). */
+const SYNONYM_MAP: Map<string, string[]> = (() => {
+  const map = new Map<string, string[]>();
+  for (const group of SYNONYM_GROUPS) {
+    for (const term of group) {
+      const others = group.filter((t) => t !== term);
+      const existing = map.get(term) ?? [];
+      map.set(term, [...new Set([...existing, ...others])]);
+    }
+  }
+  return map;
+})();
+
+/**
+ * Expand query terms with programming synonyms.
+ * Returns original terms plus synonym expansions (deduplicated).
+ */
+function expandQuerySynonyms(terms: string[]): { original: string[]; expanded: string[] } {
+  const expanded = new Set<string>();
+  for (const term of terms) {
+    const synonyms = SYNONYM_MAP.get(term);
+    if (synonyms) {
+      for (const syn of synonyms) {
+        if (!terms.includes(syn) && !STOP_WORDS.has(syn)) expanded.add(syn);
+      }
+    }
+  }
+  return { original: terms, expanded: [...expanded] };
+}
+
 const BM25_K1 = 1.2;
 // b=0.4: lowered from TREC default (0.75) for short documents. File paths are
 // 3-5 tokens and symbol lists 5-50 tokens; b=0.75 over-penalizes naturally short
@@ -123,6 +200,7 @@ const SYMBOL_WEIGHT = 1.0;
 const EXPANSION_FACTOR = 0.3;
 const COUPLING_FACTOR = 0.4;
 const TEST_PROXY_FACTOR = 0.6;
+const SYNONYM_DISCOUNT = 0.3;
 const DEFAULT_MAX_TARGETS = 5;
 const MIN_COUPLING_CONFIDENCE = 0.5;
 
@@ -278,10 +356,16 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
 
   const debugBM25 = process.env.DEBUG_BM25 === "1";
 
-  // BM25F scoring
+  // Synonym expansion: expand query with programming synonyms, scored at reduced weight
+  const { expanded: synonymTerms } = expandQuerySynonyms(queryTerms);
+
+  // BM25F scoring: original terms at full weight + synonym terms at SYNONYM_DISCOUNT
   const scores = new Map<string, number>();
   for (const [fp, doc] of docs) {
-    const score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols);
+    let score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols);
+    if (synonymTerms.length > 0) {
+      score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols);
+    }
     if (score > 0) scores.set(fp, score);
   }
 
@@ -366,9 +450,36 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
     }
   }
 
-  // Sort by score descending, then path for stability
+  // Semantic tiebreaker for files with identical BM25 scores.
+  // When scores are tied: (1) prefer consumer over provider (import direction),
+  // (2) prefer higher betweenness centrality, (3) path for determinism.
+  // This disambiguates e.g. middleware/jwt/jwt.ts vs utils/jwt/jwt.ts.
+  const importTargets = new Set(graph.edges.map((e) => e.to));
+  const importSources = new Set(graph.edges.map((e) => e.from));
+
   return [...scores.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .sort((a, b) => {
+      const scoreDiff = b[1] - a[1];
+      if (scoreDiff !== 0) return scoreDiff;
+
+      // Tiebreaker 1: prefer consumers (files that import) over providers (files that are imported)
+      // A file that imports from other tied candidates is more likely the bug site.
+      const aImports = importSources.has(a[0]) && !importTargets.has(a[0]);
+      const bImports = importSources.has(b[0]) && !importTargets.has(b[0]);
+      if (aImports !== bImports) return aImports ? -1 : 1;
+
+      // Tiebreaker 2: prefer higher betweenness (more central in dependency paths)
+      const aBetween = graph.files[a[0]]?.betweenness ?? 0;
+      const bBetween = graph.files[b[0]]?.betweenness ?? 0;
+      if (aBetween !== bBetween) return bBetween - aBetween;
+
+      // Tiebreaker 3: prefer files imported by more other files
+      const aImportedBy = graph.files[a[0]]?.importedByCount ?? 0;
+      const bImportedBy = graph.files[b[0]]?.importedByCount ?? 0;
+      if (aImportedBy !== bImportedBy) return bImportedBy - aImportedBy;
+
+      return a[0].localeCompare(b[0]);
+    })
     .slice(0, maxTargets)
     .map(([fp]) => fp);
 }

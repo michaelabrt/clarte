@@ -137,18 +137,18 @@ describe("BM25F: pseudo-tf combination before saturation", () => {
 
   it("b=0.4 does not heavily penalize a short-path file with exact match", () => {
     // With b=0.4 (lowered from 0.75), short docs are less penalized.
-    // A 2-token path "src/auth.ts" should still beat a 6-token path
-    // "src/services/authentication/helpers/auth-utils.ts" when both have the same term.
+    // A 2-token path "src/cache.ts" should still beat a 6-token path
+    // "src/services/internal/helpers/cache-utils.ts" when both have the same term.
     // This is a regression guard: b=0.75 would over-penalize the short doc.
     const graph = makePGraph({
       files: {
-        "src/auth.ts": makeFileRec(),
-        "src/services/authentication/helpers/auth-utils.ts": makeFileRec(),
+        "src/cache.ts": makeFileRec(),
+        "src/services/internal/helpers/cache-utils.ts": makeFileRec(),
       },
     });
-    const targets = resolveEditTargets("auth", graph);
+    const targets = resolveEditTargets("cache", graph);
     // Short exact match should not be buried behind a long multi-segment match
-    expect(targets[0]).toBe("src/auth.ts");
+    expect(targets[0]).toBe("src/cache.ts");
   });
 
   it("df counts a term once per document even when it appears in both fields", () => {

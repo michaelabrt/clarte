@@ -326,12 +326,12 @@ describe("BM25F scoring behavior", () => {
   it("short document (3-token path) is not over-penalized relative to longer paths", () => {
     // With b=0.4 (vs default 0.75), short documents should score comparably
     // File A: short path "src/auth.ts" (3 tokens: src, auth, ts)
-    // File B: long path "src/services/authentication/auth-helper-utils.ts" (many tokens)
-    // Both have the query term "auth" in path
+    // File B: long path with "auth" in a deep directory (many tokens)
+    // Both have the query term "auth" in path, no synonym matches
     const graph = makeGraph({
       files: {
         "src/auth.ts": makeFileRecord(),
-        "src/services/authentication/auth-helper-utils.ts": makeFileRecord(),
+        "src/services/internal/auth-helper-utils.ts": makeFileRecord(),
       },
     });
 
