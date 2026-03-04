@@ -230,9 +230,10 @@ describe("directional expansion - exact 2:1 ratio between importer and provider"
     expect(consumerIdx).toBeLessThan(providerIdx);
   });
 
-  it("two-level importer chain: second-hop importer does not get expanded beyond direct match", () => {
-    // Expansion is only 1-hop. grandparent imports parent, parent imports matched-file.
-    // grandparent should NOT appear (it is 2 hops away from the seed).
+  it("two-level importer chain: controller is a direct match via import field, its consumer gets 1-hop expansion", () => {
+    // controller.ts imports "authenticate" from service.ts, so its import field
+    // contains the query term - making it a direct BM25 match. router.ts then
+    // gets legitimate 1-hop expansion from controller.ts.
     const graph = makeGraph({
       files: {
         "src/auth/service.ts": makeFile({ symbolNames: ["authenticate"] }),
@@ -245,10 +246,36 @@ describe("directional expansion - exact 2:1 ratio between importer and provider"
       ],
     });
     const targets = resolveEditTargets("authenticate", graph, 10);
-    // Service and controller appear; router (2-hop) must not appear via expansion
+    // All three appear: service (symbol match), controller (import field match),
+    // router (1-hop expansion from controller)
     expect(targets).toContain("src/auth/service.ts");
     expect(targets).toContain("src/app/controller.ts");
-    expect(targets).not.toContain("src/app/router.ts");
+    expect(targets).toContain("src/app/router.ts");
+  });
+
+  it("three-level chain: file 3 hops from seed does not appear when intermediate imports are unrelated", () => {
+    // router imports controller (with unrelated name "handle"), controller imports
+    // service (with "authenticate"). app.ts imports router with unrelated name "routes".
+    // app.ts has no query-relevant tokens in any field, so it stays out.
+    const graph = makeGraph({
+      files: {
+        "src/auth/service.ts": makeFile({ symbolNames: ["authenticate"] }),
+        "src/app/controller.ts": makeFile(),
+        "src/app/router.ts": makeFile(),
+        "src/app.ts": makeFile(),
+      },
+      edges: [
+        { from: "src/app/controller.ts", to: "src/auth/service.ts", importedNames: ["authenticate"] },
+        { from: "src/app/router.ts", to: "src/app/controller.ts", importedNames: ["handler"] },
+        { from: "src/app.ts", to: "src/app/router.ts", importedNames: ["routes"] },
+      ],
+    });
+    const targets = resolveEditTargets("authenticate", graph, 10);
+    // router.ts gets expansion from controller.ts (import field match), but router's
+    // import field only has "handler" - no "authenticate". So app.ts doesn't expand from router.
+    expect(targets).toContain("src/auth/service.ts");
+    expect(targets).toContain("src/app/controller.ts");
+    expect(targets).not.toContain("src/app.ts");
   });
 });
 
