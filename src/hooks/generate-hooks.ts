@@ -298,7 +298,7 @@ if (existsSync(graphPath)) {
       "comma-joined","comma-separated","commas",
     ]);
     const TEST_RE = /(?:^|\\/)(?:test|spec|__tests__|__mocks__)\\/|\\.(?:test|spec)\\.[jt]sx?$/;
-    const K1 = 1.2, B = 0.4, PW = 1.5, SW = 1.0, IW = 0.5, IE = 0.4, IM = 0.2, CF = 0.4, TP = 0.6, MC = 0.5;
+    const K1 = 1.2, B = 0.4, PW = 1.5, SW = 1.0, IW = 0.5, IE = 0.4, IM = 0.2, CF = 0.4, TP = 0.6, MC = 0.5, IC = 0.5;
 
     function splitCC(s) { return s.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ").filter(Boolean); }
     function tokId(id) {
@@ -416,14 +416,31 @@ if (existsSync(graphPath)) {
       for (const t of terms) { for (const s of (SYN_MAP.get(t) || [])) if (!terms.includes(s) && !STOP.has(s)) synTerms.push(s); }
       const uSyn = [...new Set(synTerms)];
       const scores = new Map();
+      const impOnly = new Set();
       for (const [fp, doc] of docs) {
         let sc = scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, false);
         if (uSyn.length) sc += SD * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL, false);
         if (sc === 0) {
           sc = scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, true);
           if (uSyn.length) sc += SD * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL, true);
+          if (sc > 0) impOnly.add(fp);
         }
         if (sc > 0) scores.set(fp, sc);
+      }
+      // Ceiling: scale import-only scores below all path/symbol matches
+      if (impOnly.size > 0) {
+        const psScores = [];
+        for (const [fp, s] of scores) if (!impOnly.has(fp)) psScores.push(s);
+        if (psScores.length > 0) {
+          const minD = Math.min(...psScores);
+          let maxI = 0;
+          for (const fp of impOnly) { const s = scores.get(fp) || 0; if (s > maxI) maxI = s; }
+          const ceil = IC * minD;
+          if (maxI > ceil) {
+            const sc2 = ceil / maxI;
+            for (const fp of impOnly) scores.set(fp, (scores.get(fp) || 0) * sc2);
+          }
+        }
       }
 
       // Test-file proxy: score test files, transfer to their source files
