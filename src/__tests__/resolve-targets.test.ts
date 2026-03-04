@@ -73,6 +73,51 @@ describe("tokenizeQuery", () => {
   it("still suppresses generic getter/setter verbs", () => {
     expect(tokenizeQuery("get user data")).toEqual(["user", "data"]);
   });
+
+  it("emits compound token when a stop word is stripped from a camelCase identifier", () => {
+    // "use" is a stop word; "context" survives. Compound "usecontext" added because signal was lost.
+    const result = tokenizeQuery("useContext");
+    expect(result).toContain("context");
+    expect(result).toContain("usecontext");
+  });
+
+  it("emits compound token for get-prefixed camelCase identifier", () => {
+    // "get" is a stop word; "buffer" survives. Compound "getbuffer" should be added.
+    const result = tokenizeQuery("getBuffer");
+    expect(result).toContain("buffer");
+    expect(result).toContain("getbuffer");
+  });
+
+  it("does not emit compound when no stop words are removed", () => {
+    // "AbstractSqlite": neither "abstract" nor "sqlite" are stop words - no compound added.
+    const result = tokenizeQuery("AbstractSqlite");
+    expect(result).toContain("abstract");
+    expect(result).toContain("sqlite");
+    expect(result).not.toContain("abstractsqlite");
+  });
+
+  it("does not emit compound when no stop words are removed from multi-part identifier", () => {
+    // "encodeJwtPart": "encode", "jwt", "part" - none are stop words.
+    const result = tokenizeQuery("encodeJwtPart");
+    expect(result).toContain("encode");
+    expect(result).toContain("jwt");
+    expect(result).toContain("part");
+    expect(result).not.toContain("encodejwtpart");
+  });
+
+  it("does not emit compound for single-word term", () => {
+    // "context" is a single word with no camelCase split - no compound generated.
+    const result = tokenizeQuery("context");
+    expect(result).toEqual(["context"]);
+  });
+
+  it("does not emit compound when the whole lowercased part is shorter than 4 chars", () => {
+    // "isA" splits to ["is", "A"], lowered ["is", "a"]. validParts filters length >= 2:
+    // "a" is only 1 char so validParts = ["is"], filtered removes stop word "is" leaving [].
+    // The compound would be "isa" (3 chars) which is < 4, so it is not emitted.
+    const result = tokenizeQuery("isA");
+    expect(result).toEqual([]);
+  });
 });
 
 // ── resolveEditTargets ───────────────────────────────────────────────
