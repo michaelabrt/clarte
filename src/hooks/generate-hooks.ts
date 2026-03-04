@@ -325,18 +325,18 @@ if (existsSync(graphPath)) {
       for (const t of pt) ptf.set(t, (ptf.get(t) || 0) + 1);
       for (const t of st) stf.set(t, (stf.get(t) || 0) + 1);
       for (const t of it) itf.set(t, (itf.get(t) || 0) + 1);
-      return { pt, st, it, ptf, stf, itf, all: new Set([...ptf.keys(), ...stf.keys(), ...itf.keys()]) };
+      return { pt, st, it, ptf, stf, itf, all: new Set([...ptf.keys(), ...stf.keys()]) };
     }
-    function scoreBM25F(doc, terms, df, N, aPL, aSL, aIL) {
+    function scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, useImports) {
       let sc = 0;
       for (const term of terms) {
         const dfc = df.get(term) || 1;
         const idf = Math.log((N - dfc + 0.5) / (dfc + 0.5) + 1);
-        const tfP = doc.ptf.get(term) || 0, tfS = doc.stf.get(term) || 0, tfI = doc.itf.get(term) || 0;
+        const tfP = doc.ptf.get(term) || 0, tfS = doc.stf.get(term) || 0;
         let ptf = 0;
         if (tfP > 0) ptf += PW * tfP / (1 - B + B * doc.pt.length / aPL);
         if (tfS > 0) ptf += SW * tfS / (1 - B + B * doc.st.length / aSL);
-        if (tfI > 0) ptf += IW * tfI / (1 - B + B * doc.it.length / aIL);
+        if (useImports) { const tfI = doc.itf.get(term) || 0; if (tfI > 0) ptf += IW * tfI / (1 - B + B * doc.it.length / aIL); }
         if (ptf > 0) sc += idf * (ptf * (K1 + 1)) / (ptf + K1);
       }
       return sc;
@@ -417,8 +417,12 @@ if (existsSync(graphPath)) {
       const uSyn = [...new Set(synTerms)];
       const scores = new Map();
       for (const [fp, doc] of docs) {
-        let sc = scoreBM25F(doc, terms, df, N, aPL, aSL, aIL);
-        if (uSyn.length) sc += SD * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL);
+        let sc = scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, false);
+        if (uSyn.length) sc += SD * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL, false);
+        if (sc === 0) {
+          sc = scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, true);
+          if (uSyn.length) sc += SD * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL, true);
+        }
         if (sc > 0) scores.set(fp, sc);
       }
 
@@ -437,7 +441,8 @@ if (existsSync(graphPath)) {
           if (!g.files[tfp]) continue;
           const syms = [...new Set([...(exported.get(tfp) || []), ...((g.files[tfp] && g.files[tfp].symbolNames) || [])])];
           const tDoc = buildDoc(tfp, syms, fImportPaths.get(tfp) || [], fImportNames.get(tfp) || []);
-          const tSc = scoreBM25F(tDoc, terms, df, N, aPL, aSL, aIL);
+          let tSc = scoreBM25F(tDoc, terms, df, N, aPL, aSL, aIL, false);
+          if (tSc === 0) tSc = scoreBM25F(tDoc, terms, df, N, aPL, aSL, aIL, true);
           if (tSc > 0) {
             const proxy = tSc * TP;
             for (const src of srcs) if (proxy > (scores.get(src) || 0)) scores.set(src, proxy);

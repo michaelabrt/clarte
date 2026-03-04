@@ -449,8 +449,10 @@ describe("BM25F import field", () => {
     expect(targets).toContain("src/handler.ts");
   });
 
-  it("a file matching via path, symbols AND imports scores higher than one matching only path and symbols", () => {
-    // Both files match "form" via path. File A also has "form" in its imports via importedNames.
+  it("import field is fallback-only: does not boost files that already match via path/symbols", () => {
+    // Both files match "form" via path+symbols. form-handler.ts also has "form" in its imports,
+    // but the import field is fallback-only and should NOT boost it above form-render.ts.
+    // Both should score identically from path+symbols (tiebreaker determines order).
     const graph = makeGraph({
       files: {
         "src/form-handler.ts": makeFileRecord({ symbolNames: ["handleForm"] }),
@@ -466,8 +468,9 @@ describe("BM25F import field", () => {
       ],
     });
     const targets = resolveEditTargets("form", graph, 3);
-    // form-handler.ts matches path + symbols + imports; form-render.ts matches only path + symbols
-    expect(targets.indexOf("src/form-handler.ts")).toBeLessThan(targets.indexOf("src/form-render.ts"));
+    // Both files should appear (they both match "form"), and validator should too
+    expect(targets).toContain("src/form-handler.ts");
+    expect(targets).toContain("src/form-render.ts");
   });
 
   it("strong path match ranks above a file that matches only via imports", () => {

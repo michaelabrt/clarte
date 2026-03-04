@@ -280,6 +280,11 @@ type FileDoc = {
  * before applying saturation, rather than applying BM25 saturation independently per field.
  * This avoids double saturation credit when a term appears in multiple fields.
  */
+/**
+ * @param includeImports When true, includes the imports field in scoring.
+ *   Used as a fallback for files with zero path/symbol overlap (audit 3.2, 3.3).
+ *   Disabled by default to prevent import-field boost from outranking direct matches.
+ */
 function scoreBM25F(
   doc: FileDoc,
   queryTerms: string[],
@@ -288,6 +293,7 @@ function scoreBM25F(
   avgdlPath: number,
   avgdlSymbols: number,
   avgdlImports: number,
+  includeImports = false,
 ): number {
   let score = 0;
   for (const term of queryTerms) {
@@ -296,7 +302,6 @@ function scoreBM25F(
 
     const tfPath = doc.path.termFreq.get(term) ?? 0;
     const tfSymbol = doc.symbols.termFreq.get(term) ?? 0;
-    const tfImport = doc.imports.termFreq.get(term) ?? 0;
 
     // True BM25F: compute weighted pseudo-tf across fields, then apply saturation once
     let pseudoTf = 0;
@@ -306,8 +311,11 @@ function scoreBM25F(
     if (tfSymbol > 0) {
       pseudoTf += (SYMBOL_WEIGHT * tfSymbol) / (1 - BM25_B + BM25_B * (doc.symbols.tokens.length / avgdlSymbols));
     }
-    if (tfImport > 0) {
-      pseudoTf += (IMPORT_WEIGHT * tfImport) / (1 - BM25_B + BM25_B * (doc.imports.tokens.length / avgdlImports));
+    if (includeImports) {
+      const tfImport = doc.imports.termFreq.get(term) ?? 0;
+      if (tfImport > 0) {
+        pseudoTf += (IMPORT_WEIGHT * tfImport) / (1 - BM25_B + BM25_B * (doc.imports.tokens.length / avgdlImports));
+      }
     }
 
     if (pseudoTf > 0) {
@@ -335,7 +343,10 @@ function buildDocument(filePath: string, symbols: string[], importPaths: string[
   const importTermFreq = new Map<string, number>();
   for (const t of importTokens) importTermFreq.set(t, (importTermFreq.get(t) ?? 0) + 1);
 
-  const allTerms = new Set<string>([...pathTermFreq.keys(), ...symbolTermFreq.keys(), ...importTermFreq.keys()]);
+  // allTerms drives df (document frequency) calculation. Import field terms are excluded
+  // to prevent df inflation: when many files import from the same module, they'd all
+  // increment df for that module's path tokens, deflating IDF and hurting direct matches.
+  const allTerms = new Set<string>([...pathTermFreq.keys(), ...symbolTermFreq.keys()]);
 
   return {
     path: { tokens: pathTokens, termFreq: pathTermFreq },
@@ -415,12 +426,21 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
   // Synonym expansion: expand query with programming synonyms, scored at reduced weight
   const { expanded: synonymTerms } = expandQuerySynonyms(queryTerms);
 
-  // BM25F scoring: original terms at full weight + synonym terms at SYNONYM_DISCOUNT
+  // BM25F scoring: path + symbols first, import field as fallback for zero-overlap files.
+  // The import field only fires when path/symbols produce zero score, preventing
+  // import-boosted files from outranking direct matches (Hono JSX context regression).
   const scores = new Map<string, number>();
   for (const [fp, doc] of docs) {
     let score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
     if (synonymTerms.length > 0) {
       score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
+    }
+    // Fallback: import field for files with zero path/symbol overlap (audit 3.2, 3.3)
+    if (score === 0) {
+      score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
+      if (synonymTerms.length > 0) {
+        score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
+      }
     }
     if (score > 0) scores.set(fp, score);
   }
@@ -449,7 +469,9 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
         fileImportPaths.get(testFp) ?? [],
         fileImportedNames.get(testFp) ?? [],
       );
-      const testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
+      let testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
+      if (testScore === 0)
+        testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
       if (testScore > 0) {
         const proxyScore = testScore * TEST_PROXY_FACTOR;
         for (const source of sources) {
