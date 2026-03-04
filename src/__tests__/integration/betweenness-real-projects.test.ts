@@ -156,7 +156,7 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
       });
 
       it("betweennessScores has non-zero entries (graph has structure)", () => {
-        const nonZero = [...graph.betweennessScores?.values()].filter((s) => s > 0);
+        const nonZero = [...(graph.betweennessScores?.values() ?? [])].filter((s) => s > 0);
         expect(nonZero.length).toBeGreaterThan(0);
       });
 
