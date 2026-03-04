@@ -156,6 +156,7 @@ const SYNONYM_GROUPS: string[][] = [
   ["stream", "pipe", "transform", "readable", "writable"],
   ["crypto", "encrypt", "decrypt", "hash", "hmac"],
   ["cert", "certificate", "tls", "ssl"],
+  ["verify", "verification"],
 ];
 
 /** Build a lookup from term → expanded synonyms (excluding the term itself). */
@@ -197,7 +198,11 @@ const BM25_B = 0.4;
 // file identity vs 50+ symbol tokens each less unique).
 const PATH_WEIGHT = 1.5;
 const SYMBOL_WEIGHT = 1.0;
-const EXPANSION_FACTOR = 0.3;
+// Directional expansion: consumers (importers) of a BM25 match get a larger boost
+// than providers (imports). Bug reports describe symptoms at call sites, so files
+// that USE a matched function are more likely edit targets than files that DEFINE it.
+const IMPORTER_EXPANSION = 0.4;
+const IMPORT_EXPANSION = 0.2;
 const COUPLING_FACTOR = 0.4;
 const TEST_PROXY_FACTOR = 0.6;
 const SYNONYM_DISCOUNT = 0.3;
@@ -219,13 +224,32 @@ function splitCamelCase(s: string): string[] {
  * Tokenize an identifier into lowercase terms, splitting on non-alphanumeric
  * characters and camelCase/PascalCase boundaries.
  * "AbstractSqliteQueryRunner" → ["abstract", "sqlite", "query", "runner"]
+ *
+ * Compound preservation: when camelCase splitting removes signal via stop words
+ * (e.g. "useContext" → "use" stopped, only "context" survives), the joined
+ * compound "usecontext" is emitted as an additional high-IDF token. This lets
+ * queries like "useContext" match files that export that exact symbol.
  */
 function tokenizeIdentifier(id: string): string[] {
-  return id
-    .split(/[^a-zA-Z0-9]+/)
-    .flatMap((part) => splitCamelCase(part))
-    .map((t) => t.toLowerCase())
-    .filter((t) => t.length >= 2 && !STOP_WORDS.has(t));
+  const result: string[] = [];
+  for (const part of id.split(/[^a-zA-Z0-9]+/)) {
+    const camelParts = splitCamelCase(part);
+    const lowered = camelParts.map((t) => t.toLowerCase());
+    const validParts = lowered.filter((t) => t.length >= 2);
+    const filtered = validParts.filter((t) => !STOP_WORDS.has(t));
+    result.push(...filtered);
+
+    // Preserve compound when stop words remove part of a camelCase term.
+    // "useContext" → "use" stopped → emit "usecontext" alongside "context".
+    // Requires >= 4 chars to avoid trivial compounds.
+    if (camelParts.length > 1 && filtered.length < validParts.length) {
+      const compound = part.toLowerCase();
+      if (compound.length >= 4 && !STOP_WORDS.has(compound)) {
+        result.push(compound);
+      }
+    }
+  }
+  return result;
 }
 
 /**
@@ -404,7 +428,8 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
 
   if (debugBM25) {
     for (const [fp, score] of [...scores.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)) {
-      const doc = docs.get(fp)!;
+      const doc = docs.get(fp);
+      if (!doc) continue;
       const matched = queryTerms.filter((t) => doc.allTerms.has(t));
       console.error(
         JSON.stringify({
@@ -420,21 +445,31 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
 
   const directMatches = new Set(scores.keys());
 
-  // Import graph expansion: 1-hop neighbors (both importers and imports).
-  // Uses max so neighbors that already have a BM25 score can still be boosted.
-  const neighbors = new Map<string, string[]>();
+  // Import graph expansion: 1-hop neighbors with directional asymmetry.
+  // Importers (consumers) get a larger boost than imports (providers) because
+  // bug reports describe symptoms at call sites.
+  const importers = new Map<string, string[]>(); // file -> files that import it
+  const imports = new Map<string, string[]>(); // file -> files it imports from
   for (const edge of graph.edges) {
-    if (!neighbors.has(edge.from)) neighbors.set(edge.from, []);
-    if (!neighbors.has(edge.to)) neighbors.set(edge.to, []);
-    neighbors.get(edge.from)?.push(edge.to);
-    neighbors.get(edge.to)?.push(edge.from);
+    if (!importers.has(edge.to)) importers.set(edge.to, []);
+    importers.get(edge.to)?.push(edge.from);
+    if (!imports.has(edge.from)) imports.set(edge.from, []);
+    imports.get(edge.from)?.push(edge.to);
   }
   for (const [file, score] of [...scores.entries()]) {
     if (!directMatches.has(file)) continue;
-    const expandedScore = score * EXPANSION_FACTOR;
-    for (const neighbor of neighbors.get(file) ?? []) {
-      if (expandedScore > (scores.get(neighbor) ?? 0)) {
-        scores.set(neighbor, expandedScore);
+    // Files that import this match (consumers) get higher boost
+    const importerScore = score * IMPORTER_EXPANSION;
+    for (const importer of importers.get(file) ?? []) {
+      if (importerScore > (scores.get(importer) ?? 0)) {
+        scores.set(importer, importerScore);
+      }
+    }
+    // Files this match imports from (providers) get lower boost
+    const importScore = score * IMPORT_EXPANSION;
+    for (const imp of imports.get(file) ?? []) {
+      if (importScore > (scores.get(imp) ?? 0)) {
+        scores.set(imp, importScore);
       }
     }
   }

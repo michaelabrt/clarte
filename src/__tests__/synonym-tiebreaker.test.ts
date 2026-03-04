@@ -430,4 +430,152 @@ describe("synonym expansion edge cases", () => {
     const targets = resolveEditTargets("mock http client", graph);
     expect(targets).toContain("src/testing/fake-http-client.ts");
   });
+
+  it("query 'verify' expands to 'verification'", () => {
+    // "verify" → synonyms include "verification"
+    const graph = makeGraph({
+      files: {
+        "src/auth/verification-service.ts": makeFile({ symbolNames: ["sendVerification", "checkCode"] }),
+        "src/utils/random.ts": makeFile({ symbolNames: ["randomBytes"] }),
+      },
+    });
+    const targets = resolveEditTargets("verify email broken", graph);
+    expect(targets).toContain("src/auth/verification-service.ts");
+  });
+
+  it("query 'verification' expands to 'verify'", () => {
+    // "verification" → synonyms include "verify"
+    const graph = makeGraph({
+      files: {
+        "src/auth/verify-token.ts": makeFile({ symbolNames: ["verifySignature", "verifyExpiry"] }),
+        "src/utils/random.ts": makeFile({ symbolNames: ["randomBytes"] }),
+      },
+    });
+    const targets = resolveEditTargets("verification flow failing", graph);
+    expect(targets).toContain("src/auth/verify-token.ts");
+  });
+
+  it("verify/verification synonym does not expand to unrelated terms", () => {
+    // Confirm the synonym group is ["verify", "verification"] only - no leakage into cert/tls.
+    // A file with only "cert" path tokens should NOT appear when querying "verify".
+    const graph = makeGraph({
+      files: {
+        "src/auth/verification-service.ts": makeFile({ symbolNames: ["sendVerificationEmail"] }),
+        "src/security/cert-loader.ts": makeFile({ symbolNames: ["loadCert"] }),
+      },
+    });
+    const targets = resolveEditTargets("verify email", graph);
+    expect(targets).toContain("src/auth/verification-service.ts");
+    // cert-loader has no verify/verification tokens; should not appear via verify synonym alone
+    expect(targets).not.toContain("src/security/cert-loader.ts");
+  });
+});
+
+// ── Directional import graph expansion ───────────────────────────────────────
+
+describe("directional import expansion", () => {
+  it("consumer (importer) of a BM25 match gets a higher boost than a provider (import)", () => {
+    // Setup: matched-file is the BM25 hit.
+    // consumer imports matched-file (importer, gets IMPORTER_EXPANSION = 0.4x).
+    // provider is imported by matched-file (import, gets IMPORT_EXPANSION = 0.2x).
+    // consumer must rank above provider in the results.
+    const graph = makeGraph({
+      files: {
+        "src/auth/matched-file.ts": makeFile({ symbolNames: ["authenticate"] }),
+        "src/app/consumer.ts": makeFile(),
+        "src/core/provider.ts": makeFile(),
+      },
+      edges: [
+        // consumer imports matched-file → consumer is an importer of the match
+        { from: "src/app/consumer.ts", to: "src/auth/matched-file.ts", importedNames: ["authenticate"] },
+        // matched-file imports provider → provider is an import of the match
+        { from: "src/auth/matched-file.ts", to: "src/core/provider.ts", importedNames: ["helper"] },
+      ],
+    });
+    const targets = resolveEditTargets("authenticate", graph, 10);
+    const matchIdx = targets.indexOf("src/auth/matched-file.ts");
+    const consumerIdx = targets.indexOf("src/app/consumer.ts");
+    const providerIdx = targets.indexOf("src/core/provider.ts");
+
+    // Both expanded files should appear
+    expect(consumerIdx).toBeGreaterThanOrEqual(0);
+    expect(providerIdx).toBeGreaterThanOrEqual(0);
+
+    // Consumer must rank above provider (higher expansion factor = higher score)
+    expect(consumerIdx).toBeLessThan(providerIdx);
+
+    // Match itself must be first
+    expect(matchIdx).toBe(0);
+  });
+
+  it("consumer expanded score is 0.4x of BM25 seed, provider is 0.2x", () => {
+    // With only one file in the corpus the BM25 score is computable, but the
+    // ratio between consumer and provider can be verified indirectly: consumer
+    // gets 2x the boost of provider, so in a three-file graph (match, consumer,
+    // provider) the consumer MUST rank between match and provider.
+    const graph = makeGraph({
+      files: {
+        "src/cache/store.ts": makeFile({ symbolNames: ["CacheStore", "invalidate"] }),
+        "src/api/handler.ts": makeFile(),
+        "src/core/backend.ts": makeFile(),
+      },
+      edges: [
+        { from: "src/api/handler.ts", to: "src/cache/store.ts", importedNames: ["invalidate"] },
+        { from: "src/cache/store.ts", to: "src/core/backend.ts", importedNames: ["persist"] },
+      ],
+    });
+    const targets = resolveEditTargets("cache invalidate", graph, 10);
+    const storeIdx = targets.indexOf("src/cache/store.ts");
+    const handlerIdx = targets.indexOf("src/api/handler.ts");
+    const backendIdx = targets.indexOf("src/core/backend.ts");
+
+    expect(storeIdx).toBe(0);
+    expect(handlerIdx).toBeGreaterThan(storeIdx);
+    expect(backendIdx).toBeGreaterThan(handlerIdx);
+  });
+
+  it("expansion does not override a higher direct BM25 score on the neighbor", () => {
+    // consumer has both "auth" in its own path AND is an importer of the match.
+    // Its direct BM25 score should win over the expansion-derived score.
+    const graph = makeGraph({
+      files: {
+        "src/auth/service.ts": makeFile({ symbolNames: ["authenticate"] }),
+        "src/auth/middleware.ts": makeFile({ symbolNames: ["authMiddleware"] }),
+        "src/core/provider.ts": makeFile(),
+      },
+      edges: [
+        { from: "src/auth/middleware.ts", to: "src/auth/service.ts", importedNames: ["authenticate"] },
+        { from: "src/auth/service.ts", to: "src/core/provider.ts", importedNames: ["helper"] },
+      ],
+    });
+    const targets = resolveEditTargets("authenticate auth", graph, 10);
+    // Both service and middleware score directly on BM25; provider only via expansion.
+    // Provider must rank last among these three.
+    const providerIdx = targets.indexOf("src/core/provider.ts");
+    const serviceIdx = targets.indexOf("src/auth/service.ts");
+    const middlewareIdx = targets.indexOf("src/auth/middleware.ts");
+
+    expect(serviceIdx).toBeGreaterThanOrEqual(0);
+    expect(middlewareIdx).toBeGreaterThanOrEqual(0);
+    expect(providerIdx).toBeGreaterThan(Math.max(serviceIdx, middlewareIdx));
+  });
+
+  it("importer of a non-matching file is not expanded", () => {
+    // Only direct BM25 matches seed expansion. A file that imports a non-matching file
+    // should not appear in results through expansion.
+    const graph = makeGraph({
+      files: {
+        "src/auth/service.ts": makeFile({ symbolNames: ["authenticate"] }),
+        "src/unrelated/helper.ts": makeFile({ symbolNames: ["doSomething"] }),
+        "src/app/main.ts": makeFile(),
+      },
+      edges: [
+        // main imports helper (not a BM25 match), so main should not be expanded
+        { from: "src/app/main.ts", to: "src/unrelated/helper.ts", importedNames: ["doSomething"] },
+      ],
+    });
+    const targets = resolveEditTargets("authenticate", graph, 10);
+    expect(targets).toContain("src/auth/service.ts");
+    expect(targets).not.toContain("src/app/main.ts");
+  });
 });
