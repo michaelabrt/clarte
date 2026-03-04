@@ -260,19 +260,25 @@ export function tokenizeQuery(query: string): string[] {
   return [...new Set(tokenizeIdentifier(query))];
 }
 
+// IMPORT_WEIGHT < SYMBOL_WEIGHT: import paths/names are indirect signal (what this
+// file consumes, not what it defines). Helps zero-overlap cases where a file's
+// own path/symbols don't match the query but its imports reveal domain membership.
+const IMPORT_WEIGHT = 0.5;
+
 type FieldData = { tokens: string[]; termFreq: Map<string, number> };
 type FileDoc = {
   path: FieldData;
   symbols: FieldData;
-  allTerms: Set<string>; // union of both fields; prevents double-counting in df
+  imports: FieldData;
+  allTerms: Set<string>; // union of all fields; prevents double-counting in df
 };
 
 /**
  * Score a single document against query terms using true BM25F (Robertson et al. 2004).
  *
- * Combines weighted pseudo-term-frequencies across fields before applying saturation,
- * rather than applying BM25 saturation independently per field. This avoids double
- * saturation credit when a term appears in multiple fields.
+ * Combines weighted pseudo-term-frequencies across three fields (path, symbols, imports)
+ * before applying saturation, rather than applying BM25 saturation independently per field.
+ * This avoids double saturation credit when a term appears in multiple fields.
  */
 function scoreBM25F(
   doc: FileDoc,
@@ -281,6 +287,7 @@ function scoreBM25F(
   N: number,
   avgdlPath: number,
   avgdlSymbols: number,
+  avgdlImports: number,
 ): number {
   let score = 0;
   for (const term of queryTerms) {
@@ -289,6 +296,7 @@ function scoreBM25F(
 
     const tfPath = doc.path.termFreq.get(term) ?? 0;
     const tfSymbol = doc.symbols.termFreq.get(term) ?? 0;
+    const tfImport = doc.imports.termFreq.get(term) ?? 0;
 
     // True BM25F: compute weighted pseudo-tf across fields, then apply saturation once
     let pseudoTf = 0;
@@ -298,6 +306,9 @@ function scoreBM25F(
     if (tfSymbol > 0) {
       pseudoTf += (SYMBOL_WEIGHT * tfSymbol) / (1 - BM25_B + BM25_B * (doc.symbols.tokens.length / avgdlSymbols));
     }
+    if (tfImport > 0) {
+      pseudoTf += (IMPORT_WEIGHT * tfImport) / (1 - BM25_B + BM25_B * (doc.imports.tokens.length / avgdlImports));
+    }
 
     if (pseudoTf > 0) {
       score += idf * ((pseudoTf * (BM25_K1 + 1)) / (pseudoTf + BM25_K1));
@@ -306,10 +317,14 @@ function scoreBM25F(
   return score;
 }
 
-/** Build a BM25F document from a file path and its merged symbol list. */
-function buildDocument(filePath: string, symbols: string[]): FileDoc {
+/** Build a BM25F document from a file path, its merged symbol list and its import edges. */
+function buildDocument(filePath: string, symbols: string[], importPaths: string[], importedNames: string[]): FileDoc {
   const pathTokens = filePath.split(/[/\\.]/).flatMap((seg) => tokenizeIdentifier(seg));
   const symbolTokens = symbols.flatMap((name) => tokenizeIdentifier(name));
+  const importTokens = [
+    ...importPaths.flatMap((p) => p.split(/[/\\.]/).flatMap((seg) => tokenizeIdentifier(seg))),
+    ...importedNames.flatMap((name) => tokenizeIdentifier(name)),
+  ];
 
   const pathTermFreq = new Map<string, number>();
   for (const t of pathTokens) pathTermFreq.set(t, (pathTermFreq.get(t) ?? 0) + 1);
@@ -317,11 +332,15 @@ function buildDocument(filePath: string, symbols: string[]): FileDoc {
   const symbolTermFreq = new Map<string, number>();
   for (const t of symbolTokens) symbolTermFreq.set(t, (symbolTermFreq.get(t) ?? 0) + 1);
 
-  const allTerms = new Set<string>([...pathTermFreq.keys(), ...symbolTermFreq.keys()]);
+  const importTermFreq = new Map<string, number>();
+  for (const t of importTokens) importTermFreq.set(t, (importTermFreq.get(t) ?? 0) + 1);
+
+  const allTerms = new Set<string>([...pathTermFreq.keys(), ...symbolTermFreq.keys(), ...importTermFreq.keys()]);
 
   return {
     path: { tokens: pathTokens, termFreq: pathTermFreq },
     symbols: { tokens: symbolTokens, termFreq: symbolTermFreq },
+    imports: { tokens: importTokens, termFreq: importTermFreq },
     allTerms,
   };
 }
@@ -331,7 +350,7 @@ function buildDocument(filePath: string, symbols: string[]): FileDoc {
  *
  * Algorithm:
  * 1. Tokenize query (camelCase-aware, stop-word filtered)
- * 2. Build BM25F documents: path field + symbols field (exported names from edges, deduped with AST-defined symbolNames)
+ * 2. Build BM25F documents: path + symbols + imports fields (exported names, import edges)
  * 3. Score each file with BM25F (per-field avgdl normalization, unified IDF)
  * 4. Expand: add 1-hop import neighbors at EXPANSION_FACTOR of the seed's score
  * 5. Add co-change partners above confidence threshold at COUPLING_FACTOR of seed score
@@ -346,28 +365,41 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
 
   // Collect exported symbol names per file: symbols other files import from it
   const exportedNames = new Map<string, string[]>();
+  // Collect import edges per file: what each file imports (paths + names)
+  const fileImportPaths = new Map<string, string[]>();
+  const fileImportedNames = new Map<string, string[]>();
   for (const edge of graph.edges) {
     if (!exportedNames.has(edge.to)) exportedNames.set(edge.to, []);
     exportedNames.get(edge.to)?.push(...edge.importedNames);
+    if (!fileImportPaths.has(edge.from)) fileImportPaths.set(edge.from, []);
+    fileImportPaths.get(edge.from)?.push(edge.to);
+    if (!fileImportedNames.has(edge.from)) fileImportedNames.set(edge.from, []);
+    fileImportedNames.get(edge.from)?.push(...edge.importedNames);
   }
 
   // Build BM25F documents (dedup exported + defined symbols to avoid double-counting)
   const docs = new Map<string, FileDoc>(
     filePaths.map((fp) => {
       const allSymbols = [...new Set([...(exportedNames.get(fp) ?? []), ...(graph.files[fp]?.symbolNames ?? [])])];
-      return [fp, buildDocument(fp, allSymbols)];
+      return [fp, buildDocument(fp, allSymbols, fileImportPaths.get(fp) ?? [], fileImportedNames.get(fp) ?? [])];
     }),
   );
 
   // Per-field avgdl for BM25F normalization
   const N = docs.size;
-  const avgdlPath = Math.max(1, [...docs.values()].reduce((s, d) => s + d.path.tokens.length, 0) / N);
-  // Exclude zero-symbol docs (config files, .d.ts) to avoid deflating the average.
+  const docValues = [...docs.values()];
+  const avgdlPath = Math.max(1, docValues.reduce((s, d) => s + d.path.tokens.length, 0) / N);
+  // Exclude zero-token docs (config files, .d.ts) to avoid deflating the average.
   // Floor at 5 (typical minimum for a non-trivial source file).
-  const symbolDocs = [...docs.values()].filter((d) => d.symbols.tokens.length > 0);
+  const symbolDocs = docValues.filter((d) => d.symbols.tokens.length > 0);
   const avgdlSymbols =
     symbolDocs.length > 0
       ? Math.max(5, symbolDocs.reduce((s, d) => s + d.symbols.tokens.length, 0) / symbolDocs.length)
+      : 5;
+  const importDocs = docValues.filter((d) => d.imports.tokens.length > 0);
+  const avgdlImports =
+    importDocs.length > 0
+      ? Math.max(5, importDocs.reduce((s, d) => s + d.imports.tokens.length, 0) / importDocs.length)
       : 5;
 
   // df increments once per document regardless of which field(s) the term appears in.
@@ -386,9 +418,9 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
   // BM25F scoring: original terms at full weight + synonym terms at SYNONYM_DISCOUNT
   const scores = new Map<string, number>();
   for (const [fp, doc] of docs) {
-    let score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols);
+    let score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
     if (synonymTerms.length > 0) {
-      score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols);
+      score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
     }
     if (score > 0) scores.set(fp, score);
   }
@@ -411,8 +443,13 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
       const allSymbols = [
         ...new Set([...(exportedNames.get(testFp) ?? []), ...(graph.files[testFp]?.symbolNames ?? [])]),
       ];
-      const testDoc = buildDocument(testFp, allSymbols);
-      const testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols);
+      const testDoc = buildDocument(
+        testFp,
+        allSymbols,
+        fileImportPaths.get(testFp) ?? [],
+        fileImportedNames.get(testFp) ?? [],
+      );
+      const testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
       if (testScore > 0) {
         const proxyScore = testScore * TEST_PROXY_FACTOR;
         for (const source of sources) {
