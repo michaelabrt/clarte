@@ -486,6 +486,92 @@ describe("BM25F import field", () => {
     const targets = resolveEditTargets("auth", graph, 2);
     expect(targets[0]).toBe("src/auth.ts");
   });
+
+  it("ceiling clamp: weak path match still ranks above import-only file with many matching imports", () => {
+    // widget-wrapper.ts: "widget" in path (weak, one token among many)
+    // aggregator.ts: no path/symbol overlap with "widget" but imports 5 widget-named modules
+    // Without the ceiling, aggregator's import BM25F score could exceed the weak path match.
+    // IMPORT_CEILING * minDirect guarantees aggregator stays below widget-wrapper.ts.
+    const graph = makeGraph({
+      files: {
+        "src/internal/adapters/widget-wrapper.ts": makeFileRecord(),
+        "src/aggregator.ts": makeFileRecord(),
+        "src/unrelated.ts": makeFileRecord(),
+      },
+      edges: [
+        {
+          from: "src/aggregator.ts",
+          to: "src/widgets/widget-core.ts",
+          importedNames: ["widgetFactory", "widgetInit", "widgetRender", "widgetDestroy", "widgetMount"],
+        },
+      ],
+    });
+    const targets = resolveEditTargets("widget", graph, 3);
+    const pathMatchIdx = targets.indexOf("src/internal/adapters/widget-wrapper.ts");
+    const importOnlyIdx = targets.indexOf("src/aggregator.ts");
+    expect(pathMatchIdx).not.toBe(-1);
+    expect(pathMatchIdx).toBeLessThan(importOnlyIdx === -1 ? Infinity : importOnlyIdx);
+  });
+
+  it("relative ordering preserved: import-only file with 3 matching imports ranks above one with 1", () => {
+    // Neither file has path/symbol overlap with "ledger".
+    // heavy-importer.ts imports 3 ledger-named modules; light-importer.ts imports 1.
+    // After ceiling scaling (uniform factor), heavy should still rank above light.
+    const graph = makeGraph({
+      files: {
+        "src/core/processor.ts": makeFileRecord({ symbolNames: ["ledgerEntry"] }),
+        "src/heavy-importer.ts": makeFileRecord(),
+        "src/light-importer.ts": makeFileRecord(),
+      },
+      edges: [
+        {
+          from: "src/heavy-importer.ts",
+          to: "src/ledger/main.ts",
+          importedNames: ["ledgerPost", "ledgerBalance", "ledgerAudit"],
+        },
+        { from: "src/light-importer.ts", to: "src/ledger/main.ts", importedNames: ["ledgerPost"] },
+      ],
+    });
+    const targets = resolveEditTargets("ledger", graph, 5);
+    const heavyIdx = targets.indexOf("src/heavy-importer.ts");
+    const lightIdx = targets.indexOf("src/light-importer.ts");
+    // Both import-only files appear in results
+    expect(heavyIdx).not.toBe(-1);
+    expect(lightIdx).not.toBe(-1);
+    // Both rank below the path/symbol match (processor.ts with symbolNames)
+    const directIdx = targets.indexOf("src/core/processor.ts");
+    expect(directIdx).toBeLessThan(heavyIdx);
+    expect(directIdx).toBeLessThan(lightIdx);
+    // heavy ranks above light (relative ordering preserved under ceiling scaling)
+    expect(heavyIdx).toBeLessThan(lightIdx);
+  });
+
+  it("no ceiling applied when all matching files are import-only", () => {
+    // Neither file has path/symbol overlap with "invoice".
+    // With no direct matches, pathSymbolScores is empty and the ceiling branch is skipped.
+    // Both files should appear and the one with more matching imports ranks first.
+    const graph = makeGraph({
+      files: {
+        "src/dispatcher.ts": makeFileRecord(),
+        "src/notifier.ts": makeFileRecord(),
+        "src/unrelated.ts": makeFileRecord(),
+      },
+      edges: [
+        {
+          from: "src/dispatcher.ts",
+          to: "src/billing/invoice-processor.ts",
+          importedNames: ["invoiceGenerate", "invoiceVoid"],
+        },
+        { from: "src/notifier.ts", to: "src/billing/invoice-processor.ts", importedNames: ["invoiceGenerate"] },
+      ],
+    });
+    const targets = resolveEditTargets("invoice", graph, 3);
+    // Both import-only files are found (no ceiling suppresses them since there's nothing to rank below)
+    expect(targets).toContain("src/dispatcher.ts");
+    expect(targets).toContain("src/notifier.ts");
+    // dispatcher has more matching import tokens so it ranks first
+    expect(targets[0]).toBe("src/dispatcher.ts");
+  });
 });
 
 // ── formatEditDirective ──────────────────────────────────────────────

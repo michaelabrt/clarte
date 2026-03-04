@@ -264,6 +264,11 @@ export function tokenizeQuery(query: string): string[] {
 // file consumes, not what it defines). Helps zero-overlap cases where a file's
 // own path/symbols don't match the query but its imports reveal domain membership.
 const IMPORT_WEIGHT = 0.5;
+// Ceiling for import-only scores: best import-only file gets at most this fraction
+// of the lowest path/symbol score. Fixes the score cliff where inflated import-only
+// BM25F scores could exceed weak path/symbol matches. BM25F relative ordering among
+// import-only files is preserved (uniform scaling), so IDF discrimination still works.
+const IMPORT_CEILING = 0.5;
 
 type FieldData = { tokens: string[]; termFreq: Map<string, number> };
 type FileDoc = {
@@ -430,6 +435,7 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
   // The import field only fires when path/symbols produce zero score, preventing
   // import-boosted files from outranking direct matches (Hono JSX context regression).
   const scores = new Map<string, number>();
+  const importOnlyFiles = new Set<string>();
   for (const [fp, doc] of docs) {
     let score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
     if (synonymTerms.length > 0) {
@@ -441,8 +447,34 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
       if (synonymTerms.length > 0) {
         score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
       }
+      if (score > 0) importOnlyFiles.add(fp);
     }
     if (score > 0) scores.set(fp, score);
+  }
+
+  // Ceiling: scale import-only scores so the highest sits at IMPORT_CEILING * min
+  // path/symbol score. Preserves BM25F relative ordering (IDF discrimination) among
+  // import-only files while guaranteeing they rank below every path/symbol match.
+  if (importOnlyFiles.size > 0) {
+    const pathSymbolScores: number[] = [];
+    for (const [fp, s] of scores) {
+      if (!importOnlyFiles.has(fp)) pathSymbolScores.push(s);
+    }
+    if (pathSymbolScores.length > 0) {
+      const minDirect = Math.min(...pathSymbolScores);
+      let maxImport = 0;
+      for (const fp of importOnlyFiles) {
+        const s = scores.get(fp) ?? 0;
+        if (s > maxImport) maxImport = s;
+      }
+      const ceiling = IMPORT_CEILING * minDirect;
+      if (maxImport > ceiling) {
+        const scale = ceiling / maxImport;
+        for (const fp of importOnlyFiles) {
+          scores.set(fp, (scores.get(fp) ?? 0) * scale);
+        }
+      }
+    }
   }
 
   // Test-file proxy: score test files using source-file IDF, transfer to source files.
