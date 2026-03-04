@@ -884,12 +884,7 @@ describe("findFeedbackEdges", () => {
 
   it("with independent cycles returns more edges than with shared-edge cycles at same topN", () => {
     // Independent: each cycle needs its own edge
-    const independent = [
-      makeCycle(["a", "b"]),
-      makeCycle(["c", "d"]),
-      makeCycle(["e", "f"]),
-      makeCycle(["g", "h"]),
-    ];
+    const independent = [makeCycle(["a", "b"]), makeCycle(["c", "d"]), makeCycle(["e", "f"]), makeCycle(["g", "h"])];
     const independentResult = findFeedbackEdges(independent, 10);
 
     // Shared: all cycles share edge a->b

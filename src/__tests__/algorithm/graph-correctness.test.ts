@@ -190,7 +190,7 @@ describe("eval: hub-and-spoke", () => {
 
     it("api-client.ts should rank in top-3 betweenness (bridge to config)", () => {
       expect(graph.betweennessScores).toBeDefined();
-      const ranked = [...graph.betweennessScores?.entries()].sort((a, b) => b[1] - a[1]).map(([file]) => file);
+      const ranked = [...(graph.betweennessScores?.entries() ?? [])].sort((a, b) => b[1] - a[1]).map(([file]) => file);
 
       const missing = missingFromTopN(ranked, fixture.expectations.topBetweennessFiles!, 3);
       expect(missing).toEqual([]);

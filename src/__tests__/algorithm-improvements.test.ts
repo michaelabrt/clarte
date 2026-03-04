@@ -12,7 +12,7 @@ import { findChokepoints } from "../graph/chokepoints.js";
 import { computeLayerConsistency } from "../graph/layers.js";
 import { findFeedbackEdges } from "../graph/cycles.js";
 import { detectCommunities } from "../graph/communities.js";
-import type { ArchitecturalLayer, CircularDependency, ImportEdge, LayerEdge } from "../types.js";
+import type { ArchitecturalLayer, CircularDependency, LayerEdge } from "../types.js";
 import type { PersistedGraph } from "../types/persisted-graph.js";
 import { PERSISTED_GRAPH_VERSION } from "../types/persisted-graph.js";
 import { makeGraph, edge } from "./algorithm/helpers.js";
@@ -226,13 +226,10 @@ describe("computeBetweenness: adaptive k formula", () => {
     // This is full enumeration regardless of the formula.
     // The important thing: passing k=undefined and k=4 produce identical results.
     const files = ["a", "b", "c", "d"];
-    const graph = makeGraph(
-      files,
-      [edge("a", "b"), edge("b", "c"), edge("c", "d"), edge("d", "a")],
-    );
+    const graph = makeGraph(files, [edge("a", "b"), edge("b", "c"), edge("c", "d"), edge("d", "a")]);
 
-    const adaptive = computeBetweenness(graph);       // k undefined
-    const explicit = computeBetweenness(graph, 4);    // k=n (full)
+    const adaptive = computeBetweenness(graph); // k undefined
+    const explicit = computeBetweenness(graph, 4); // k=n (full)
 
     for (const [f, score] of explicit) {
       expect(adaptive.get(f)).toBeCloseTo(score, 10);
@@ -269,7 +266,7 @@ describe("findChokepoints: two-phase BFS boundary conditions", () => {
     const result = findChokepoints(graph);
     const dEntry = result.find((r) => r.file === "d");
     expect(dEntry).toBeDefined();
-    expect(dEntry!.upstreamCount).toBe(3);
+    expect(dEntry?.upstreamCount).toBe(3);
   });
 
   it("node with threshold-1 upstream is excluded", () => {
@@ -303,8 +300,8 @@ describe("findChokepoints: two-phase BFS boundary conditions", () => {
     const cp = result.find((r) => r.file === "center");
     expect(cp).toBeDefined();
     // Phase 1 terminates early at threshold=3, phase 2 must count the full 5
-    expect(cp!.upstreamCount).toBe(5);
-    expect(cp!.downstreamCount).toBe(2);
+    expect(cp?.upstreamCount).toBe(5);
+    expect(cp?.downstreamCount).toBe(2);
   });
 
   it("non-candidate (upstream below threshold) does not appear in results even with downstream", () => {
@@ -341,7 +338,7 @@ describe("computeLayerConsistency: skip-distance weighting", () => {
       ["src/types.ts", "src/utils.ts", "src/services.ts", "src/components.ts"],
       [
         edge("src/components.ts", "src/services.ts"), // correct, distance=1
-        edge("src/types.ts", "src/utils.ts"),         // violation, distance=1
+        edge("src/types.ts", "src/utils.ts"), // violation, distance=1
       ],
     );
 
@@ -350,7 +347,7 @@ describe("computeLayerConsistency: skip-distance weighting", () => {
       ["src/types.ts", "src/utils.ts", "src/services.ts", "src/components.ts"],
       [
         edge("src/components.ts", "src/services.ts"), // correct, distance=1
-        edge("src/types.ts", "src/components.ts"),    // violation, distance=3
+        edge("src/types.ts", "src/components.ts"), // violation, distance=3
       ],
     );
 
@@ -381,7 +378,7 @@ describe("computeLayerConsistency: skip-distance weighting", () => {
       ["src/types.ts", "src/utils.ts", "src/services.ts", "src/components.ts"],
       [
         edge("src/components.ts", "src/services.ts"), // correct, distance=1
-        edge("src/types.ts", "src/utils.ts"),         // violation, distance=1
+        edge("src/types.ts", "src/utils.ts"), // violation, distance=1
       ],
     );
 
@@ -389,8 +386,8 @@ describe("computeLayerConsistency: skip-distance weighting", () => {
     const graphCorrectSkip3 = makeGraph(
       ["src/types.ts", "src/utils.ts", "src/services.ts", "src/components.ts"],
       [
-        edge("src/components.ts", "src/types.ts"),    // correct, distance=3
-        edge("src/types.ts", "src/utils.ts"),         // violation, distance=1
+        edge("src/components.ts", "src/types.ts"), // correct, distance=3
+        edge("src/types.ts", "src/utils.ts"), // violation, distance=1
       ],
     );
 
@@ -419,7 +416,7 @@ describe("computeLayerConsistency: skip-distance weighting", () => {
       ["src/types.ts", "src/utils.ts", "src/services.ts", "src/components.ts"],
       [
         edge("src/types.ts", "src/components.ts"), // violation distance=3 (types rank=0, components rank=3)
-        edge("src/utils.ts", "src/services.ts"),   // violation distance=1 (utils rank=1, services rank=2)
+        edge("src/utils.ts", "src/services.ts"), // violation distance=1 (utils rank=1, services rank=2)
       ],
     );
 
@@ -448,8 +445,8 @@ describe("computeLayerConsistency: skip-distance weighting", () => {
     const graph = makeGraph(
       ["src/types.ts", "src/utils.ts", "src/services.ts", "src/components.ts"],
       [
-        edge("src/components.ts", "src/types.ts"),    // skip-3 correct
-        edge("src/services.ts", "src/types.ts"),      // skip-2 correct
+        edge("src/components.ts", "src/types.ts"), // skip-3 correct
+        edge("src/services.ts", "src/types.ts"), // skip-2 correct
         edge("src/components.ts", "src/services.ts"), // skip-1 correct
       ],
     );
@@ -610,11 +607,7 @@ describe("detectCommunities: Louvain refinement (Phase 3.5)", () => {
 
   it("Louvain handles graphs with zero internal edges gracefully", () => {
     // No edges means totalEdges=0, so Phase 3.5 is skipped
-    const files = [
-      "dir-a/a.ts",
-      "dir-a/b.ts",
-      "dir-a/c.ts",
-    ];
+    const files = ["dir-a/a.ts", "dir-a/b.ts", "dir-a/c.ts"];
     // No edges between files
     const graph = makeGraph(files, []);
     // Should not throw; returns empty or valid communities

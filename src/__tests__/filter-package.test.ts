@@ -219,7 +219,7 @@ describe("filterAnalysisForPackage", () => {
     const result = filterAnalysisForPackage(analysis, "packages/api");
     expect(result.changeImpact).toBeDefined();
     expect(result.changeImpact?.size).toBe(1);
-    const impacts = result.changeImpact?.get("src/a.ts")!;
+    const impacts = result.changeImpact?.get("src/a.ts");
     expect(impacts).toHaveLength(1);
     expect(impacts[0].file).toBe("src/b.ts");
   });
