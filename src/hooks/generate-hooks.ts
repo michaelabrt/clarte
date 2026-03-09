@@ -298,7 +298,7 @@ if (existsSync(graphPath)) {
       "comma-joined","comma-separated","commas",
     ]);
     const TEST_RE = /(?:^|\\/)(?:test|spec|__tests__|__mocks__)\\/|\\.(?:test|spec)\\.[jt]sx?$/;
-    const K1 = 1.2, B = 0.4, PW = 1.5, SW = 1.0, IW = 0.5, IE = 0.4, IM = 0.2, CF = 0.4, TP = 0.6, MC = 0.5, IC = 0.5;
+    const K1 = 1.2, B = 0.4, PW = 2.0, SW = 1.0, IW = 0.5, IE = 0.4, IM = 0.2, CF = 0.4, TP = 0.6, MC = 0.5, IC = 0.5;
 
     function splitCC(s) { return s.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ").filter(Boolean); }
     function tokId(id) {
@@ -497,9 +497,9 @@ if (existsSync(graphPath)) {
       const iSources = new Set((g.edges || []).map(e => e.from));
       return [...scores.entries()].sort((a, b) => {
         const d = b[1] - a[1]; if (d !== 0) return d;
-        const aI = iSources.has(a[0]) && !iTargets.has(a[0]);
-        const bI = iSources.has(b[0]) && !iTargets.has(b[0]);
-        if (aI !== bI) return aI ? -1 : 1;
+        const aD = (iSources.has(a[0]) ? 1 : 0) - (iTargets.has(a[0]) ? 1 : 0);
+        const bD = (iSources.has(b[0]) ? 1 : 0) - (iTargets.has(b[0]) ? 1 : 0);
+        if (aD !== bD) return bD - aD;
         const aB = (g.files[a[0]] && g.files[a[0]].betweenness) || 0;
         const bB = (g.files[b[0]] && g.files[b[0]].betweenness) || 0;
         if (aB !== bB) return bB - aB;
