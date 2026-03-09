@@ -367,6 +367,13 @@ if (existsSync(graphPath)) {
       ["stream","pipe","transform","readable","writable"],
       ["crypto","encrypt","decrypt","hash","hmac"],["cert","certificate","tls","ssl"],
       ["verify","verification"],
+      ["param","parameter","arg","argument"],["init","initialize","bootstrap"],
+      ["delete","remove","destroy"],["send","emit","dispatch"],
+      ["retry","backoff"],["timeout","deadline"],
+      ["throttle","debounce","ratelimit"],["hook","callback","listener"],
+      ["plugin","extension","addon"],["permission","access","acl"],
+      ["parse","parser"],["upload","download","transfer"],
+      ["cron","schedule","timer"],
     ];
     const SYN_MAP = new Map();
     for (const grp of SYN_GROUPS) for (const t of grp) {
