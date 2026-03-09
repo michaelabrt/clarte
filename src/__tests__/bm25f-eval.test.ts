@@ -219,6 +219,107 @@ function buildBenchmarkQueries(): BenchmarkQuery[] {
     }),
   });
 
+  // Q9: Path-dominant — correct file has descriptive path, generic symbols;
+  // decoy has generic path but matching symbols. Tests that PATH_WEIGHT > SYMBOL_WEIGHT
+  // is beneficial when path tokens are highly specific.
+  queries.push({
+    name: "path-dominant-over-symbol",
+    query: "websocket reconnection logic",
+    expected: ["src/transport/websocket/reconnect.ts"],
+    graph: makeGraph({
+      files: {
+        // Path: "transport/websocket/reconnect" matches 2 query terms. Symbols: generic.
+        "src/transport/websocket/reconnect.ts": file({
+          symbolNames: ["open", "close", "send", "onMessage"],
+        }),
+        // Path: "core/connection" matches 0 query terms. Symbols: "reconnect" matches 1.
+        "src/core/connection-pool.ts": file({
+          symbolNames: ["reconnect", "getConnection", "releaseConnection"],
+        }),
+        "src/utils/timer.ts": file({ symbolNames: ["setTimeout", "clearTimeout"] }),
+      },
+    }),
+  });
+
+  // Q10: Symbol-dominant — correct file has a generic path but unique matching
+  // symbols; decoy has matching path but wrong symbols. Tests that SYMBOL_WEIGHT
+  // contributes enough when path tokens are ambiguous.
+  queries.push({
+    name: "symbol-dominant-over-path",
+    query: "rate limiter sliding window algorithm",
+    expected: ["src/core/throttle.ts"],
+    graph: makeGraph({
+      files: {
+        // Path: "core/throttle" — no query term overlap. Symbols: "rateLimiter", "slidingWindow" match.
+        "src/core/throttle.ts": file({
+          symbolNames: ["rateLimiter", "slidingWindow", "tokenBucket", "checkQuota"],
+        }),
+        // Path: "middleware/rate-limiter" — matches "rate" + "limiter". Symbols: generic.
+        "src/middleware/rate-limiter.ts": file({
+          symbolNames: ["applyMiddleware", "createHandler"],
+        }),
+        "src/config/limits.ts": file({ symbolNames: ["maxRequests", "windowSize"] }),
+      },
+    }),
+  });
+
+  // Q11: Consumer/provider tie — two files with near-identical BM25 scores
+  // (same path token "payment", same symbol overlap). The consumer (checkout)
+  // imports from the provider (gateway). Consumer should rank higher because
+  // bug reports describe symptoms at call sites.
+  queries.push({
+    name: "consumer-beats-provider-tie",
+    query: "payment charge fails with invalid currency",
+    expected: ["src/checkout/payment-flow.ts"],
+    graph: makeGraph({
+      files: {
+        // Consumer: imports chargeCard from gateway. Path has "payment" via edge.
+        "src/checkout/payment-flow.ts": file({
+          symbolNames: ["processPayment", "handleCharge", "validateCurrency"],
+          betweenness: 0.2,
+          importedByCount: 3,
+        }),
+        // Provider: defines chargeCard. Also has "payment" in symbols.
+        "src/payments/gateway.ts": file({
+          symbolNames: ["chargeCard", "refundPayment", "createPaymentIntent"],
+          betweenness: 0.3,
+          importedByCount: 6,
+        }),
+        "src/utils/currency.ts": file({ symbolNames: ["formatCurrency", "parseCurrency"] }),
+      },
+      edges: [
+        {
+          from: "src/checkout/payment-flow.ts",
+          to: "src/payments/gateway.ts",
+          importedNames: ["chargeCard", "createPaymentIntent"],
+        },
+      ],
+    }),
+  });
+
+  // Q12: Weight-sensitivity canary — designed so flipping PATH_WEIGHT < SYMBOL_WEIGHT
+  // would change the winner. The correct file has 2 path token matches and 0 symbol
+  // matches. The decoy has 0 path matches and 2 symbol matches. If path weight is
+  // properly higher, the path-matched file wins.
+  queries.push({
+    name: "weight-sensitivity-canary",
+    query: "email notification delivery",
+    expected: ["src/notifications/email-sender.ts"],
+    graph: makeGraph({
+      files: {
+        // Path: "notifications/email" matches "notification" (via synonym) + "email". Symbols: generic.
+        "src/notifications/email-sender.ts": file({
+          symbolNames: ["dispatch", "enqueue", "retry"],
+        }),
+        // Path: "services/outbox" — 0 overlap. Symbols: "emailNotification", "deliveryStatus" match.
+        "src/services/outbox.ts": file({
+          symbolNames: ["emailNotification", "deliveryStatus", "markSent"],
+        }),
+        "src/templates/welcome.ts": file({ symbolNames: ["renderWelcome"] }),
+      },
+    }),
+  });
+
   return queries;
 }
 
