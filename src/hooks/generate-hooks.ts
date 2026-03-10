@@ -514,10 +514,12 @@ if (existsSync(graphPath)) {
         const bIB = (g.files[b[0]] && g.files[b[0]].importedByCount) || 0;
         if (aIB !== bIB) return bIB - aIB;
         return a[0].localeCompare(b[0]);
-      }).slice(0, 5).map(([fp]) => fp);
+      }).slice(0, 10).map(([fp]) => fp);
     }
 
-    const targets = resolveTargets(prompt, graph);
+    const allCandidates = resolveTargets(prompt, graph);
+    const targets = allCandidates.slice(0, 5);
+    const runnersUp = allCandidates.slice(5);
     if (targets.length > 0) {
       // Skip when the prompt already names a target file (agent can self-localize).
       // Negation detection: "NOT in src/foo.ts" or "don't edit src/foo.ts" should not trigger bailout.
@@ -559,6 +561,17 @@ if (existsSync(graphPath)) {
         const tests = (graph.testMapping && graph.testMapping[fp]) || [];
         if (tests.length) lines.push("Tests: " + tests.slice(0, 3).join(", "));
         lines.push("");
+      }
+      // Negative guidance: warn about runners-up with same basename as a target (decoys)
+      if (runnersUp.length > 0) {
+        const targetBasenames = new Set(targets.map(t => t.split("/").pop()));
+        const decoys = runnersUp.filter(r => targetBasenames.has(r.split("/").pop()));
+        if (decoys.length > 0) {
+          lines.push("## Do NOT edit these files");
+          lines.push("These scored similarly but are in different paths. They are likely not the right target:");
+          for (const d of decoys) lines.push("- " + d);
+          lines.push("");
+        }
       }
       try {
         mkdirSync(resolve(root, ".clarte"), { recursive: true });

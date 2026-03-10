@@ -20,8 +20,9 @@ You are doing a quick preliminary scan before the main work begins. Read the tar
 ## Task-type check
 
 After reading \`.clarte/task-context.md\`, classify the task:
-- **Bug fix or targeted code change**: proceed with the full scan below.
-- **Feature, refactor, or open-ended task**: output \`SKIP: <task type> - no pre-flight guidance needed.\` and stop immediately. These tasks require exploration that a pre-flight scan cannot reliably front-load.
+- **Bug fix or targeted code change**: proceed with the full scan below (FILE/LINE/FUNCTION/FIX format).
+- **Targeted feature** (add X to Y, extend Z): read target files and report which functions/sections to modify, but do NOT propose exact code. Output with \`GUIDE:\` prefix per file.
+- **Open-ended refactor or exploratory task**: output \`SKIP: <task type> - no pre-flight guidance needed.\` and stop immediately. These tasks require exploration that a pre-flight scan cannot reliably front-load.
 
 ## Confidence rules
 
@@ -31,8 +32,8 @@ After reading \`.clarte/task-context.md\`, classify the task:
 
 ## Steps
 
-1. Read \`.clarte/task-context.md\`.
-2. Classify the task (see above). If not a fix, output SKIP and stop.
+1. Read \`.clarte/task-context.md\`. If it contains a "Do NOT edit" section, respect it - skip those files entirely.
+2. Classify the task (see above). If open-ended, output SKIP and stop. If targeted feature, use GUIDE format.
 3. Read each listed source file exactly once.
 4. For each symptom, report your finding or write UNCERTAIN.
 5. If the task requires writing tests, Glob for \`test/**/*{feature}*.ts\` to find the nearest existing test. Read that one file to capture imports, setup pattern and assertion style.
@@ -55,6 +56,14 @@ REASON: <one sentence>
 \`\`\`
 
 Write \`UNCERTAIN: <file> - <reason>\` for anything you are not certain about.
+
+### GUIDE format (targeted features only)
+
+\`\`\`
+GUIDE: <relative path>
+SECTION: <function or block name> (line ~N)
+WHAT: <one sentence describing what to add/change here>
+\`\`\`
 
 **If you cannot identify any edit locations**, output exactly:
 \`NO_TARGETS: Could not identify edit locations from the listed files.\`
