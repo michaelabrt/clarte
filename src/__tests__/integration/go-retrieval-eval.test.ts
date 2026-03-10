@@ -89,7 +89,8 @@ function toPersistedGraph(graph: ImportGraph): PersistedGraph {
 
 function reciprocalRank(results: string[], expected: string[]): number {
   for (let i = 0; i < results.length; i++) {
-    if (expected.includes(results[i]!)) return 1 / (i + 1);
+    const r = results[i];
+    if (r && expected.includes(r)) return 1 / (i + 1);
   }
   return 0;
 }
@@ -119,7 +120,7 @@ describe.skipIf(SKIP)("Go (Gin) BM25F retrieval evaluation", () => {
       console.log(`\n=== ${task.name} ===`);
       console.log(`  Top 10:`);
       for (let i = 0; i < results.length; i++) {
-        const isGT = task.groundTruth.includes(results[i]!) ? " <<<" : "";
+        const isGT = task.groundTruth.includes(results[i] ?? "") ? " <<<" : "";
         console.log(`    ${i + 1}. ${results[i]}${isGT}`);
       }
       const rr = reciprocalRank(results, task.groundTruth);
