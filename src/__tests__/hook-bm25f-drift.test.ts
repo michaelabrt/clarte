@@ -110,4 +110,26 @@ describe("Hook BM25F drift detection", () => {
 
     expect(hookCount).toBe(srcCount);
   });
+
+  // ── Negative guidance pipeline ─────────────────────────────────────
+
+  it("resolveTargets returns up to 10 candidates (needed to populate runnersUp)", () => {
+    // The decoy detection pipeline splits allCandidates into targets (0..4)
+    // and runnersUp (5..9). If resolveTargets only returned 5, runnersUp
+    // would always be empty and no decoy warning would ever be emitted.
+    expect(GENERATE_HOOKS).toMatch(/\.slice\(0,\s*10\)\.map/);
+  });
+
+  it("runnersUp split preserves correct boundary", () => {
+    // Top 5 are the primary targets; positions 6-10 are the candidate decoys.
+    expect(GENERATE_HOOKS).toContain("allCandidates.slice(0, 5)");
+    expect(GENERATE_HOOKS).toContain("allCandidates.slice(5)");
+  });
+
+  it("decoy detection emits Do NOT edit section when basename matches", () => {
+    // The negative guidance block must exist so the agent skips same-named
+    // files in different directories.
+    expect(GENERATE_HOOKS).toContain("Do NOT edit these files");
+    expect(GENERATE_HOOKS).toMatch(/targetBasenames\.has\(r\.split.*pop/);
+  });
 });
