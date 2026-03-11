@@ -1,5 +1,6 @@
 import type { Node } from "web-tree-sitter";
 import type { SnapshotEntry } from "../types.js";
+import { extractNodeBlock, extractSignatureBeforeBody, stripAnnotationName } from "./snapshot-utils.js";
 
 /** JPA/Spring annotations that indicate a field is structurally significant */
 const JAVA_SIGNIFICANT_FIELD_ANNOTATIONS = new Set([
@@ -28,23 +29,23 @@ export function extractJavaSnapshot(root: Node, content: string, relPath: string
 
     switch (node.type) {
       case "interface_declaration": {
-        const block = extractJavaBlock(node);
+        const block = extractNodeBlock(node);
         entries.push({ file: relPath, category: "interface", signature: block });
         break;
       }
       case "enum_declaration": {
-        const block = extractJavaBlock(node);
+        const block = extractNodeBlock(node);
         entries.push({ file: relPath, category: "type", signature: block });
         break;
       }
       case "record_declaration": {
-        const sig = extractJavaRecordSig(node, content);
+        const sig = extractSignatureBeforeBody(node, content);
         entries.push({ file: relPath, category: "type", signature: sig });
         break;
       }
       case "class_declaration": {
         // Extract class header
-        const header = extractJavaClassHeader(node, content);
+        const header = extractSignatureBeforeBody(node, content);
         entries.push({ file: relPath, category: "type", signature: header });
 
         // Extract public methods
@@ -71,32 +72,8 @@ function hasJavaAnnotation(node: Node, name: string): boolean {
   if (!modifiers) return false;
   return modifiers.namedChildren.some((c) => {
     if (c.type !== "marker_annotation" && c.type !== "annotation") return false;
-    const annName = c.text.replace(/^@/, "").split("(")[0].trim();
-    return annName === name;
+    return stripAnnotationName(c.text) === name;
   });
-}
-
-function extractJavaBlock(node: Node): string {
-  // Include annotations from modifiers
-  const text = node.text.split("\n").map((l) => l.trimStart());
-  if (text.length > 30) return text.slice(0, 30).join("\n").trim();
-  return text.join("\n").trim();
-}
-
-function extractJavaClassHeader(node: Node, content: string): string {
-  const body = node.childForFieldName("body");
-  if (body) {
-    return content.slice(node.startIndex, body.startIndex).trim();
-  }
-  return node.text.split("{")[0].trim();
-}
-
-function extractJavaRecordSig(node: Node, content: string): string {
-  const body = node.childForFieldName("body");
-  if (body) {
-    return content.slice(node.startIndex, body.startIndex).trim();
-  }
-  return node.text.split("{")[0].trim();
 }
 
 function extractJavaClassMethods(body: Node, relPath: string, entries: SnapshotEntry[]): void {
@@ -113,8 +90,7 @@ function extractJavaClassMethods(body: Node, relPath: string, entries: SnapshotE
       if (!modifiers) continue;
       const hasSignificant = modifiers.namedChildren.some((c) => {
         if (c.type !== "marker_annotation" && c.type !== "annotation") return false;
-        const annName = c.text.replace(/^@/, "").split("(")[0];
-        return JAVA_SIGNIFICANT_FIELD_ANNOTATIONS.has(annName);
+        return JAVA_SIGNIFICANT_FIELD_ANNOTATIONS.has(stripAnnotationName(c.text));
       });
       if (hasSignificant) {
         entries.push({ file: relPath, category: "type", signature: child.text.trimStart() });

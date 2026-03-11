@@ -1,6 +1,6 @@
 import type { Node } from "web-tree-sitter";
 import type { SnapshotEntry } from "../types.js";
-import { extractNodeBlock } from "./snapshot-utils.js";
+import { extractNodeBlock, extractSignatureBeforeBody } from "./snapshot-utils.js";
 
 export function extractRustSnapshot(root: Node, content: string, relPath: string): SnapshotEntry[] {
   const entries: SnapshotEntry[] = [];
@@ -44,7 +44,7 @@ export function extractRustSnapshot(root: Node, content: string, relPath: string
         break;
       }
       case "function_item": {
-        const sig = extractRustFuncSig(node, content);
+        const sig = extractSignatureBeforeBody(node, content);
         entries.push({ file: relPath, category: "function", signature: sig });
         break;
       }
@@ -56,7 +56,7 @@ export function extractRustSnapshot(root: Node, content: string, relPath: string
             if (child.type === "function_item") {
               const hasPubFn = child.namedChildren.some((c) => c.type === "visibility_modifier");
               if (hasPubFn) {
-                const sig = extractRustFuncSig(child, content);
+                const sig = extractSignatureBeforeBody(child, content);
                 entries.push({ file: relPath, category: "function", signature: sig });
               }
             }
@@ -68,15 +68,4 @@ export function extractRustSnapshot(root: Node, content: string, relPath: string
   }
 
   return entries;
-}
-
-function extractRustFuncSig(node: Node, content: string): string {
-  const body = node.childForFieldName("body");
-  if (body) {
-    return content.slice(node.startIndex, body.startIndex).trim();
-  }
-  const text = node.text;
-  const braceIdx = text.indexOf("{");
-  if (braceIdx >= 0) return text.slice(0, braceIdx).trim();
-  return text.trim();
 }

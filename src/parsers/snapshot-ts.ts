@@ -1,5 +1,6 @@
 import type { Node } from "web-tree-sitter";
 import type { SnapshotEntry } from "../types.js";
+import { extractSignatureBeforeBody } from "./snapshot-utils.js";
 
 export function extractJsSnapshot(root: Node, content: string, relPath: string): SnapshotEntry[] {
   const entries: SnapshotEntry[] = [];
@@ -56,7 +57,7 @@ export function extractJsSnapshot(root: Node, content: string, relPath: string):
           if (isHook || name.startsWith("use")) category = "hook";
           else if (isComponent && name[0] === name[0].toUpperCase()) category = "component";
           else if (isStore) category = "store";
-          const sig = extractFunctionSignature(declaration, content, node);
+          const sig = extractSignatureBeforeBody(declaration, content, node);
           entries.push({ file: relPath, category, signature: sig });
         } else {
           // Skip component function exports
@@ -65,7 +66,7 @@ export function extractJsSnapshot(root: Node, content: string, relPath: string):
           let category: SnapshotEntry["category"] = "function";
           if (isHook || name.startsWith("use")) category = "hook";
           else if (isStore) category = "store";
-          const sig = extractFunctionSignature(declaration, content, node);
+          const sig = extractSignatureBeforeBody(declaration, content, node);
           entries.push({ file: relPath, category, signature: sig });
         }
         break;
@@ -148,27 +149,6 @@ function extractNodeBlock(declaration: Node, content: string, exportNode?: Node)
     return lines.slice(0, 30).join("\n").trim();
   }
   return text.trim();
-}
-
-/**
- * Extract a function signature (everything up to the opening brace).
- * Uses AST to find the statement_block child instead of brace-counting.
- */
-function extractFunctionSignature(funcDecl: Node, content: string, exportNode?: Node): string {
-  const startNode = exportNode ?? funcDecl;
-  const body = funcDecl.childForFieldName("body");
-
-  if (body && body.type === "statement_block") {
-    // Slice from export/function start to just before the body
-    const sig = content.slice(startNode.startIndex, body.startIndex).trim();
-    return sig;
-  }
-
-  // Fallback: use full text up to first {
-  const fullText = content.slice(startNode.startIndex, funcDecl.endIndex);
-  const braceIdx = fullText.indexOf("{");
-  if (braceIdx >= 0) return fullText.slice(0, braceIdx).trim();
-  return fullText.trim();
 }
 
 /**
