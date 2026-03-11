@@ -160,6 +160,31 @@ export const LAYER_CONSISTENCY = {
 } as const;
 
 /**
+ * Display limits for template section tables.
+ * Controls how many items are shown before "... and N more" truncation.
+ */
+export const SECTION_LIMITS = {
+  HOT_FILES: 10,
+  DEAD_FILES: 15,
+  CHOKEPOINTS: 5,
+  LAYER_VIOLATIONS: 5,
+  ENCAPSULATION_VIOLATIONS: 10,
+  UNTESTED_FILES: 15,
+} as const;
+
+/**
+ * Learn-mode analysis thresholds.
+ */
+export const LEARN = {
+  /** Minimum co-change confidence to include a file as a co-change partner */
+  COCHANGE_THRESHOLD: 0.4,
+  /** Minimum co-change confidence for structural mismatch partners */
+  MISMATCH_THRESHOLD: 0.3,
+  /** Maximum number of direct dependents to include per file in context set */
+  MAX_DEPENDENTS: 10,
+} as const;
+
+/**
  * Languages that support code snapshot extraction.
  */
 export const SNAPSHOT_LANGUAGES = new Set(["typescript", "javascript", "python", "go", "rust", "java"]);

@@ -1,6 +1,7 @@
 import type { ContextAnalysis, ContextSection } from "../../types.js";
 import { estimateTokens } from "../../utils.js";
 import { findFeedbackEdges } from "../../graph/cycles.js";
+import { SECTION_LIMITS } from "../../config/thresholds.js";
 
 export function renderDependencySections(analysis: ContextAnalysis): ContextSection[] {
   const sections: ContextSection[] = [];
@@ -88,11 +89,11 @@ export function renderDeadFilesContent(analysis: ContextAnalysis): string | null
   lines.push("");
   lines.push("Files not imported by any other source file. Candidates for removal or missing entry points.");
   lines.push("");
-  for (const file of analysis.deadFiles.slice(0, 15)) {
+  for (const file of analysis.deadFiles.slice(0, SECTION_LIMITS.DEAD_FILES)) {
     lines.push(`- \`${file}\``);
   }
-  if (analysis.deadFiles.length > 15) {
-    lines.push(`- ... and ${analysis.deadFiles.length - 15} more`);
+  if (analysis.deadFiles.length > SECTION_LIMITS.DEAD_FILES) {
+    lines.push(`- ... and ${analysis.deadFiles.length - SECTION_LIMITS.DEAD_FILES} more`);
   }
   return lines.join("\n");
 }
@@ -129,13 +130,13 @@ export function renderChokepointsContent(analysis: ContextAnalysis): string | nu
   lines.push("");
   lines.push("| File | Upstream (dependents) | Downstream (deps) |");
   lines.push("|------|-----------------------|-------------------|");
-  for (const cp of analysis.chokepoints.slice(0, 5)) {
+  for (const cp of analysis.chokepoints.slice(0, SECTION_LIMITS.CHOKEPOINTS)) {
     const upstream = cp.upstreamCount;
     const downstream = cp.downstreamCount ?? 0;
     lines.push(`| \`${cp.file}\` | ${upstream} files | ${downstream} files |`);
   }
-  if (analysis.chokepoints.length > 5) {
-    lines.push(`_...and ${analysis.chokepoints.length - 5} more_`);
+  if (analysis.chokepoints.length > SECTION_LIMITS.CHOKEPOINTS) {
+    lines.push(`_...and ${analysis.chokepoints.length - SECTION_LIMITS.CHOKEPOINTS} more_`);
   }
   return lines.join("\n");
 }

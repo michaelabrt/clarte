@@ -6,10 +6,12 @@ import { ListToolsRequestSchema, CallToolRequestSchema, type Tool } from "@model
 import { CLARTE_DIR } from "../config/config.js";
 import { loadPersistedGraph } from "../graph/persist.js";
 import { loadCallGraph, buildCallerIndex, buildFileCallIndex } from "../graph/build-call-graph.js";
-import type { PersistedGraph, EdgeRecord } from "../types/persisted-graph.js";
-import type { PersistedCallGraph, CallerIndex, FileCallIndex } from "../types/call-graph.js";
+import type { EdgeRecord } from "../types/persisted-graph.js";
 import { VERSION } from "../cli/args.js";
 import { handleScope, handleFunction, handleImpact, handleRoute } from "./tools.js";
+import type { EdgeEntry, ServerState } from "./types.js";
+
+export type { EdgeEntry, ServerState };
 
 const GRAPH_PATH = path.join(CLARTE_DIR, "graph.json");
 const CALL_GRAPH_PATH = path.join(CLARTE_DIR, "call-graph.json");
@@ -17,23 +19,6 @@ const CALL_GRAPH_PATH = path.join(CLARTE_DIR, "call-graph.json");
 const MCP_INSTRUCTIONS =
   "clarte provides code graph tools for this project. See CLAUDE.md for usage instructions.\n" +
   "Tools: clarte_route, clarte_scope, clarte_calls, clarte_impact.";
-
-export interface EdgeEntry {
-  from: string;
-  to: string;
-  importedNames: string[];
-}
-
-export interface ServerState {
-  rootDir: string;
-  graph: PersistedGraph | null;
-  callGraph: PersistedCallGraph | null;
-  callerIndex: CallerIndex;
-  fileCallIndex: FileCallIndex;
-  edgesByTarget: Map<string, EdgeEntry[]>;
-  graphMtime: number;
-  callGraphMtime: number;
-}
 
 function buildEdgesByTarget(edges: EdgeRecord[]): Map<string, EdgeEntry[]> {
   const edgesByTarget = new Map<string, EdgeEntry[]>();

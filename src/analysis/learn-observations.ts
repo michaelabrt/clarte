@@ -1,6 +1,7 @@
 import type { PersistedGraph } from "../types/persisted-graph.js";
 import type { IdealFile, Observation, ParsedSession, ToolEvent } from "../types/learn.js";
 import type { ContextSetOptions } from "./learn-context.js";
+import { LEARN } from "../config/thresholds.js";
 
 // Test runner commands we recognize in Bash events
 const TEST_COMMANDS = new Set(["vitest", "jest", "pytest"]);
@@ -170,7 +171,7 @@ export function detectObservations(
   graph: PersistedGraph,
   options?: ContextSetOptions,
 ): Observation[] {
-  const coChangeThreshold = options?.coChangeThreshold ?? 0.4;
+  const coChangeThreshold = options?.coChangeThreshold ?? LEARN.COCHANGE_THRESHOLD;
   const observations: Observation[] = [];
   const events = session.events;
   const modifiedFiles = extractModifiedFiles(events);

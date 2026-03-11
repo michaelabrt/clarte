@@ -1,6 +1,6 @@
 import type { PersistedGraph, FileRecord } from "../types/persisted-graph.js";
 import type { CallSite, CallerIndex, FileCallIndex } from "../types/call-graph.js";
-import type { EdgeEntry } from "./server.js";
+import type { EdgeEntry } from "./types.js";
 
 const ROLE_LABELS: Record<string, string> = {
   Orchestrator: "Orchestrator",

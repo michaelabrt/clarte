@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { formatScope, formatFunction, formatImpact } from "./format.js";
-import type { ServerState } from "./server.js";
+import type { ServerState } from "./types.js";
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;

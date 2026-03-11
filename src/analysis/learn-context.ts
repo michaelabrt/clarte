@@ -1,5 +1,6 @@
 import type { PersistedGraph } from "../types/persisted-graph.js";
 import type { IdealFile } from "../types/learn.js";
+import { LEARN } from "../config/thresholds.js";
 
 export const ROLE_PRIORITY: IdealFile["role"][] = [
   "dependency",
@@ -15,10 +16,6 @@ export interface ContextSetOptions {
   coChangeThreshold?: number;
   mismatchThreshold?: number;
 }
-
-const DEFAULT_MAX_DEPENDENTS = 10;
-const DEFAULT_COCHANGE_THRESHOLD = 0.4;
-const DEFAULT_MISMATCH_THRESHOLD = 0.3;
 
 function shouldReplace(existing: IdealFile["role"], candidate: IdealFile["role"]): boolean {
   return ROLE_PRIORITY.indexOf(candidate) > ROLE_PRIORITY.indexOf(existing);
@@ -36,9 +33,9 @@ export function buildIdealContextSet(
   graph: PersistedGraph,
   options?: ContextSetOptions,
 ): Map<string, IdealFile> {
-  const maxDependents = options?.maxDependentsPerFile ?? DEFAULT_MAX_DEPENDENTS;
-  const coChangeThreshold = options?.coChangeThreshold ?? DEFAULT_COCHANGE_THRESHOLD;
-  const mismatchThreshold = options?.mismatchThreshold ?? DEFAULT_MISMATCH_THRESHOLD;
+  const maxDependents = options?.maxDependentsPerFile ?? LEARN.MAX_DEPENDENTS;
+  const coChangeThreshold = options?.coChangeThreshold ?? LEARN.COCHANGE_THRESHOLD;
+  const mismatchThreshold = options?.mismatchThreshold ?? LEARN.MISMATCH_THRESHOLD;
 
   const idealSet = new Map<string, IdealFile>();
 
