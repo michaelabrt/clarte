@@ -1,5 +1,4 @@
-import path from "node:path";
-import { fileExists } from "../utils.js";
+import { filterAliveGitActivity } from "../git/filter-alive.js";
 import {
   computeAnalysisCacheKey,
   loadAnalysisCache,
@@ -206,27 +205,7 @@ async function runGitPhase(
   const gitActivity = detected.isGitRepo ? await analyzeGitActivity(rootDir, onProgress, analysisDays) : null;
 
   if (gitActivity) {
-    const filesToCheck = new Set<string>();
-    for (const h of gitActivity.hotFiles) filesToCheck.add(h.path);
-    for (const c of gitActivity.changeCoupling) {
-      filesToCheck.add(c.fileA);
-      filesToCheck.add(c.fileB);
-    }
-    if (gitActivity.lagCouplings) {
-      for (const c of gitActivity.lagCouplings) {
-        filesToCheck.add(c.fileA);
-        filesToCheck.add(c.fileB);
-      }
-    }
-    const checks = await Promise.all(
-      [...filesToCheck].map(async (f) => [f, await fileExists(path.join(rootDir, f))] as const),
-    );
-    const alive = new Set(checks.filter(([, ok]) => ok).map(([f]) => f));
-    gitActivity.hotFiles = gitActivity.hotFiles.filter((h) => alive.has(h.path));
-    gitActivity.changeCoupling = gitActivity.changeCoupling.filter((c) => alive.has(c.fileA) && alive.has(c.fileB));
-    if (gitActivity.lagCouplings) {
-      gitActivity.lagCouplings = gitActivity.lagCouplings.filter((c) => alive.has(c.fileA) && alive.has(c.fileB));
-    }
+    await filterAliveGitActivity(rootDir, gitActivity);
   }
 
   logGitActivity(gitActivity, analysisDays, log);

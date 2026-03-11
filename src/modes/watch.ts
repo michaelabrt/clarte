@@ -18,7 +18,8 @@ import { findStructuralTemporalMismatches } from "../graph/mismatches.js";
 import { findTightCouplings } from "../graph/tight-coupling.js";
 import { buildGraphWithCache } from "../graph/cache.js";
 import { analyzeGitActivityAsync } from "../git/analysis.js";
-import { fileExists, NOOP_PROGRESS } from "../utils.js";
+import { filterAliveGitActivity } from "../git/filter-alive.js";
+import { NOOP_PROGRESS } from "../utils.js";
 import { scanConfigConstraints } from "../config/scan.js";
 import { inferConventions } from "../conventions/conventions.js";
 import { buildTestMapping } from "../analysis/test-map.js";
@@ -161,9 +162,9 @@ export async function runWatchMode(rootDir: string, verbose: boolean): Promise<v
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[clarte] ${timeStamp()} - error during analysis: ${msg}`);
+    } finally {
+      isRunning = false;
     }
-
-    isRunning = false;
 
     // Re-trigger for any files that arrived during the rebuild
     if (pendingFiles.length > 0) {
@@ -241,27 +242,7 @@ async function runAnalysis(
   const communities = detectCommunities(graph);
   const gitActivity = detected.isGitRepo ? await analyzeGitActivityAsync(rootDir, NOOP_PROGRESS, analysisDays) : null;
   if (gitActivity) {
-    const filesToCheck = new Set<string>();
-    for (const h of gitActivity.hotFiles) filesToCheck.add(h.path);
-    for (const c of gitActivity.changeCoupling) {
-      filesToCheck.add(c.fileA);
-      filesToCheck.add(c.fileB);
-    }
-    if (gitActivity.lagCouplings) {
-      for (const c of gitActivity.lagCouplings) {
-        filesToCheck.add(c.fileA);
-        filesToCheck.add(c.fileB);
-      }
-    }
-    const checks = await Promise.all(
-      [...filesToCheck].map(async (f) => [f, await fileExists(path.join(rootDir, f))] as const),
-    );
-    const alive = new Set(checks.filter(([, ok]) => ok).map(([f]) => f));
-    gitActivity.hotFiles = gitActivity.hotFiles.filter((h) => alive.has(h.path));
-    gitActivity.changeCoupling = gitActivity.changeCoupling.filter((c) => alive.has(c.fileA) && alive.has(c.fileB));
-    if (gitActivity.lagCouplings) {
-      gitActivity.lagCouplings = gitActivity.lagCouplings.filter((c) => alive.has(c.fileA) && alive.has(c.fileB));
-    }
+    await filterAliveGitActivity(rootDir, gitActivity);
   }
   const deadFiles = findDeadFiles(graph, readPackageEntryPoints(rootDir));
   const crossCuttingFiles = findCrossCuttingFiles(graph, layers);
