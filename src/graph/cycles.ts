@@ -1,5 +1,6 @@
 import type { CircularDependency, ImportEdge, ImportGraph } from "../types.js";
 import { getOrSet } from "../utils.js";
+import { findSCCsFromAdj } from "./scc.js";
 
 /**
  * Find all strongly connected components using Tarjan's algorithm.
@@ -17,72 +18,7 @@ export function findSCCs(graph: ImportGraph): string[][] {
     adj.set(edge.from, list);
   }
 
-  let index = 0;
-  const indices = new Map<string, number>();
-  const lowlinks = new Map<string, number>();
-  const onStack = new Set<string>();
-  const stack: string[] = [];
-  const sccs: string[][] = [];
-
-  // Iterative Tarjan's using an explicit call stack.
-  // Each frame stores the current node and the index into its neighbor list.
-  const callStack: Array<{ v: string; neighborIdx: number }> = [];
-
-  for (const file of [...allFiles].sort()) {
-    if (indices.has(file)) continue;
-
-    callStack.push({ v: file, neighborIdx: 0 });
-    indices.set(file, index);
-    lowlinks.set(file, index);
-    index++;
-    stack.push(file);
-    onStack.add(file);
-
-    while (callStack.length > 0) {
-      const frame = callStack[callStack.length - 1]!;
-      const neighbors = adj.get(frame.v) ?? [];
-
-      if (frame.neighborIdx < neighbors.length) {
-        const w = neighbors[frame.neighborIdx]!;
-        frame.neighborIdx++;
-
-        if (!indices.has(w)) {
-          // "Recurse" into w: push a new frame
-          callStack.push({ v: w, neighborIdx: 0 });
-          indices.set(w, index);
-          lowlinks.set(w, index);
-          index++;
-          stack.push(w);
-          onStack.add(w);
-        } else if (onStack.has(w)) {
-          lowlinks.set(frame.v, Math.min(lowlinks.get(frame.v)!, indices.get(w)!));
-        }
-      } else {
-        // All neighbors processed: check for SCC root
-        if (lowlinks.get(frame.v) === indices.get(frame.v)) {
-          const scc: string[] = [];
-          let w: string;
-          do {
-            w = stack.pop()!;
-            onStack.delete(w);
-            scc.push(w);
-          } while (w !== frame.v);
-          if (scc.length > 1) {
-            sccs.push(scc);
-          }
-        }
-
-        // Pop this frame and update parent's lowlink
-        callStack.pop();
-        if (callStack.length > 0) {
-          const parentFrame = callStack[callStack.length - 1]!;
-          lowlinks.set(parentFrame.v, Math.min(lowlinks.get(parentFrame.v)!, lowlinks.get(frame.v)!));
-        }
-      }
-    }
-  }
-
-  return sccs;
+  return findSCCsFromAdj(allFiles, adj).filter((scc) => scc.length > 1);
 }
 
 /**

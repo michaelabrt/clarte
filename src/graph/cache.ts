@@ -21,6 +21,7 @@ import {
   type ResolveContext,
   type BarrelExportMap,
 } from "./import-resolution.js";
+import { routeBarrelImport } from "./barrel-routing.js";
 import { initForLanguage } from "../parsers/init.js";
 import { readFileOr } from "../utils.js";
 import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "../types.js";
@@ -335,52 +336,9 @@ export async function buildGraphWithCache(
           continue;
         }
 
-        const barrelNamed = barrelMap.namedExports.get(edge.to);
-        const barrelStars = barrelMap.starExports.get(edge.to);
-
-        if (barrelNamed || barrelStars) {
-          // Route each imported name to its actual source file
-          const routedNames = new Map<string, string[]>();
-          const unresolved: string[] = [];
-
-          for (const name of edge.importedNames) {
-            const source = barrelNamed?.get(name);
-            if (source) {
-              const existing = routedNames.get(source) ?? [];
-              existing.push(name);
-              routedNames.set(source, existing);
-            } else {
-              unresolved.push(name);
-            }
-          }
-
-          for (const [source, names] of routedNames) {
-            newEdges.push({
-              ...edge,
-              to: source,
-              importedNames: names,
-              isBarrelRouted: true,
-            });
-          }
-
-          // Unresolved names route to star export sources that actually export them
-          if (unresolved.length > 0 && barrelStars) {
-            for (const [starSource, exportedNames] of barrelStars) {
-              const matching = exportedNames.size > 0 ? unresolved.filter((n) => exportedNames.has(n)) : unresolved;
-              if (matching.length === 0) continue;
-              newEdges.push({
-                ...edge,
-                to: starSource,
-                importedNames: matching,
-                isBarrelRouted: true,
-              });
-            }
-          }
-
-          // Side-effect import (no names): keep edge to barrel itself
-          if (edge.importedNames.length === 0) {
-            newEdges.push(edge);
-          }
+        const routed = routeBarrelImport(edge, barrelMap);
+        if (routed.length > 0) {
+          newEdges.push(...routed);
         } else {
           newEdges.push(edge);
         }

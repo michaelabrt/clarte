@@ -40,14 +40,14 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
   const candidates: string[] = [];
   for (const file of allFiles) {
     if ((graph.inDegree.get(file) ?? 0) < 1) continue;
-    if (bfsReaches(file, reverse, minUpstream)) candidates.push(file);
+    if (bfsReachability(file, reverse, minUpstream) >= minUpstream) candidates.push(file);
   }
 
   // Phase 2: exact counts only for candidates
   const results: Chokepoint[] = [];
   for (const file of candidates) {
-    const upstreamCount = bfsCount(file, reverse);
-    const downstreamCount = bfsCount(file, forward);
+    const upstreamCount = bfsReachability(file, reverse);
+    const downstreamCount = bfsReachability(file, forward);
     if (downstreamCount < 1) continue;
 
     const directDeps = [...(reverse.get(file) ?? [])].sort();
@@ -69,8 +69,8 @@ export function findChokepoints(graph: ImportGraph): Chokepoint[] {
   return results;
 }
 
-/** Check if BFS from start reaches at least `threshold` nodes. Terminates early. */
-function bfsReaches(start: string, adj: Map<string, Set<string>>, threshold: number): boolean {
+/** BFS reachability count. When earlyTerminate is set, stops as soon as the count is reached. */
+function bfsReachability(start: string, adj: Map<string, Set<string>>, earlyTerminate?: number): number {
   const visited = new Set<string>([start]);
   const queue = [start];
   let qHead = 0;
@@ -78,23 +78,7 @@ function bfsReaches(start: string, adj: Map<string, Set<string>>, threshold: num
     for (const neighbor of adj.get(queue[qHead++]!) ?? []) {
       if (!visited.has(neighbor)) {
         visited.add(neighbor);
-        if (visited.size - 1 >= threshold) return true;
-        queue.push(neighbor);
-      }
-    }
-  }
-  return visited.size - 1 >= threshold;
-}
-
-/** Full BFS reachability count (exact). */
-function bfsCount(start: string, adj: Map<string, Set<string>>): number {
-  const visited = new Set<string>([start]);
-  const queue = [start];
-  let qHead = 0;
-  while (qHead < queue.length) {
-    for (const neighbor of adj.get(queue[qHead++]!) ?? []) {
-      if (!visited.has(neighbor)) {
-        visited.add(neighbor);
+        if (earlyTerminate !== undefined && visited.size - 1 >= earlyTerminate) return visited.size - 1;
         queue.push(neighbor);
       }
     }
