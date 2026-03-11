@@ -35,6 +35,13 @@ const PROJECT_MARKERS = [
   "composer.json",
 ];
 
+function resolveColorScheme(savedConfig: { colorScheme?: "dark" | "light" } | null): "dark" | "light" {
+  const envTheme = process.env.CLARTE_THEME;
+  if (envTheme === "dark" || envTheme === "light") return envTheme;
+  if (savedConfig?.colorScheme) return savedConfig.colorScheme;
+  return detectTerminalBackground() ?? "dark";
+}
+
 async function main() {
   const rawArgs = process.argv.slice(2);
 
@@ -136,25 +143,9 @@ async function main() {
 
   const savedConfig = await loadConfig(rootDir);
 
-  let colorScheme: "dark" | "light" = "dark";
-  if (jsonMode) {
-    initTheme("dark");
-    patchPicocolors();
-  } else {
-    const envTheme = process.env.CLARTE_THEME;
-    if (envTheme === "dark" || envTheme === "light") {
-      colorScheme = envTheme;
-    } else {
-      if (savedConfig?.colorScheme) {
-        colorScheme = savedConfig.colorScheme;
-      } else {
-        const detected = detectTerminalBackground();
-        if (detected) colorScheme = detected;
-      }
-    }
-    initTheme(colorScheme);
-    patchPicocolors();
-  }
+  const colorScheme = jsonMode ? "dark" : resolveColorScheme(savedConfig);
+  initTheme(colorScheme);
+  patchPicocolors();
 
   if (!jsonMode) {
     console.log("");
