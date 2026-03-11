@@ -1,5 +1,6 @@
 import type { Node } from "web-tree-sitter";
 import type { SnapshotEntry } from "../types.js";
+import { stripAnnotationName } from "./snapshot-utils.js";
 
 /** Bases that indicate a "type" category */
 const PY_TYPE_BASES = new Set(["BaseModel", "TypedDict", "NamedTuple", "Protocol"]);
@@ -18,11 +19,7 @@ export function extractPythonSnapshot(root: Node, content: string, relPath: stri
       );
       if (!definition) continue;
 
-      const decoNames = decorators.map((d) => {
-        // @decorator or @module.decorator
-        const text = d.text.replace(/^@/, "").split("(")[0].trim();
-        return text;
-      });
+      const decoNames = decorators.map((d) => stripAnnotationName(d.text));
 
       if (definition.type === "class_definition") {
         extractPythonClassEntry(definition, content, relPath, entries, decoNames);
@@ -107,7 +104,7 @@ function extractPythonClassEntry(
         } else if (child.type === "decorated_definition") {
           methodDecos = child.namedChildren
             .filter((c) => c.type === "decorator")
-            .map((d) => d.text.replace(/^@/, "").split("(")[0].trim());
+            .map((d) => stripAnnotationName(d.text));
           funcNode = child.namedChildren.find((c) => c.type === "function_definition") ?? null;
         }
 

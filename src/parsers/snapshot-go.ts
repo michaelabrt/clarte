@@ -1,6 +1,6 @@
 import type { Node } from "web-tree-sitter";
 import type { SnapshotEntry } from "../types.js";
-import { extractNodeBlock } from "./snapshot-utils.js";
+import { extractNodeBlock, extractSignatureBeforeBody } from "./snapshot-utils.js";
 
 export function extractGoSnapshot(root: Node, content: string, relPath: string): SnapshotEntry[] {
   const entries: SnapshotEntry[] = [];
@@ -33,7 +33,7 @@ export function extractGoSnapshot(root: Node, content: string, relPath: string):
       const name = node.childForFieldName("name")?.text ?? "";
       if (!name || name[0] !== name[0].toUpperCase()) continue;
 
-      const sig = extractGoFuncSig(node, content);
+      const sig = extractSignatureBeforeBody(node, content);
       entries.push({ file: relPath, category: "function", signature: sig });
     } else if (node.type === "method_declaration") {
       const name = node.childForFieldName("name")?.text ?? "";
@@ -57,16 +57,8 @@ export function extractGoSnapshot(root: Node, content: string, relPath: string):
   return entries;
 }
 
-function extractGoFuncSig(node: Node, content: string): string {
-  const body = node.childForFieldName("body");
-  if (body) {
-    return content.slice(node.startIndex, body.startIndex).trim();
-  }
-  return node.text.split("{")[0].trim();
-}
-
 function extractGoMethodSig(node: Node, content: string): string {
-  const sig = extractGoFuncSig(node, content);
+  const sig = extractSignatureBeforeBody(node, content);
 
   // Rewrite method receivers: func (r *Type) Method(... -> (Type).Method(...
   const receiverMatch = sig.match(/^func\s*\(\w+\s+\*?(\w+(?:\[[^\]]+\])?)\)\s*(\w+)\((.*)$/);
