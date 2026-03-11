@@ -1,31 +1,15 @@
 import type { ArchitecturalLayer, ArchViolation, ImportGraph, LayerEdge } from "../types.js";
 import { LAYER_CONSISTENCY } from "../config/thresholds.js";
+import { buildLayerDAG } from "./layers.js";
 
 /**
  * Derive a topological ordering of layers from layer dependency edges.
  * Returns a map of layer name to its depth (0 = lowest/most foundational).
- * Uses Kahn's algorithm; layers in cycles get the same depth.
+ * Uses Kahn's algorithm (BFS-by-level); layers in cycles get the same depth.
  */
 function computeLayerOrdering(layers: ArchitecturalLayer[], layerEdges: LayerEdge[]): Map<string, number> {
-  const layerNames = new Set(layers.map((l) => l.name));
-  const inDegree = new Map<string, number>();
-  const adj = new Map<string, string[]>();
+  const { layerNames, adj, inDegree } = buildLayerDAG(layers, layerEdges);
 
-  for (const name of layerNames) {
-    inDegree.set(name, 0);
-    adj.set(name, []);
-  }
-
-  // layerEdges: {from: "components", to: "types"} means components depends on types.
-  // For topological ordering: types is more foundational (lower).
-  // Build graph: to -> from (foundational -> consumer) for topo sort.
-  for (const e of layerEdges) {
-    if (!layerNames.has(e.from) || !layerNames.has(e.to)) continue;
-    adj.get(e.to)?.push(e.from);
-    inDegree.set(e.from, (inDegree.get(e.from) ?? 0) + 1);
-  }
-
-  // Kahn's algorithm
   const queue: string[] = [];
   for (const [name, deg] of inDegree) {
     if (deg === 0) queue.push(name);

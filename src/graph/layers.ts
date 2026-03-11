@@ -91,28 +91,39 @@ export function detectArchitecturalLayers(
 }
 
 /**
+ * Build a layer dependency DAG from layer edges.
+ * Edge direction: to -> from (foundational -> consumer).
+ * Shared by topologicalSortLayers and fitness.ts:computeLayerOrdering.
+ */
+export function buildLayerDAG(
+  layers: ArchitecturalLayer[],
+  layerEdges: LayerEdge[],
+): { layerNames: Set<string>; adj: Map<string, string[]>; inDegree: Map<string, number> } {
+  const layerNames = new Set(layers.map((l) => l.name));
+  const inDegree = new Map<string, number>();
+  const adj = new Map<string, string[]>();
+
+  for (const name of layerNames) {
+    inDegree.set(name, 0);
+    adj.set(name, []);
+  }
+
+  for (const edge of layerEdges) {
+    if (!layerNames.has(edge.from) || !layerNames.has(edge.to)) continue;
+    adj.get(edge.to)?.push(edge.from);
+    inDegree.set(edge.from, (inDegree.get(edge.from) ?? 0) + 1);
+  }
+
+  return { layerNames, adj, inDegree };
+}
+
+/**
  * Topological sort of layers using Kahn's algorithm.
  * Returns layers ordered from most foundational to most consumer.
  * Falls back to input order for cycles.
  */
 function topologicalSortLayers(layers: ArchitecturalLayer[], layerEdges: LayerEdge[]): string[] {
-  const layerNames = new Set(layers.map((l) => l.name));
-  const inDeg = new Map<string, number>();
-  const adj = new Map<string, string[]>();
-
-  for (const name of layerNames) {
-    inDeg.set(name, 0);
-    adj.set(name, []);
-  }
-
-  // layerEdges: from depends on to (from imports to)
-  // For topological order: to is more foundational, from is more consumer
-  // Edge direction for topo sort: to -> from (foundational -> consumer)
-  for (const edge of layerEdges) {
-    if (!layerNames.has(edge.from) || !layerNames.has(edge.to)) continue;
-    adj.get(edge.to)?.push(edge.from);
-    inDeg.set(edge.from, (inDeg.get(edge.from) ?? 0) + 1);
-  }
+  const { layerNames, adj, inDegree: inDeg } = buildLayerDAG(layers, layerEdges);
 
   const queue: string[] = [];
   for (const [name, deg] of inDeg) {

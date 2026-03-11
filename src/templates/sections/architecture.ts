@@ -8,6 +8,7 @@ import type {
 } from "../../types.js";
 import { estimateTokens } from "../../utils.js";
 import { computeAllInstabilities } from "../../graph/instability.js";
+import { SECTION_LIMITS } from "../../config/thresholds.js";
 import { renderDirectivesSection } from "../directives.js";
 import { renderConstraintsSection } from "../../config/scan.js";
 
@@ -126,13 +127,15 @@ export async function renderArchitectureSections(
       pkgLines.push("");
       pkgLines.push("### Encapsulation Violations");
       pkgLines.push("");
-      for (const v of mono.encapsulationViolations.slice(0, 10)) {
+      for (const v of mono.encapsulationViolations.slice(0, SECTION_LIMITS.ENCAPSULATION_VIOLATIONS)) {
         pkgLines.push(
           `- Import \`${v.toPackage}\` through its public API instead of importing internal file \`${v.to}\` directly (from \`${v.from}\`).`,
         );
       }
-      if (mono.encapsulationViolations.length > 10) {
-        pkgLines.push(`- ... and ${mono.encapsulationViolations.length - 10} more`);
+      if (mono.encapsulationViolations.length > SECTION_LIMITS.ENCAPSULATION_VIOLATIONS) {
+        pkgLines.push(
+          `- ... and ${mono.encapsulationViolations.length - SECTION_LIMITS.ENCAPSULATION_VIOLATIONS} more`,
+        );
       }
     }
 
@@ -172,11 +175,11 @@ export function renderLayerConsistencySection(analysis: ContextAnalysis): Contex
   lcLines.push("");
   lcLines.push("Violations (imports flowing upward):");
   lcLines.push("");
-  for (const v of lc.violations.slice(0, 5)) {
+  for (const v of lc.violations.slice(0, SECTION_LIMITS.LAYER_VIOLATIONS)) {
     lcLines.push(`- \`${v.from}\` imports from \`${v.to}\` (${v.fromLayer} -> ${v.toLayer})`);
   }
-  if (lc.violations.length > 5) {
-    lcLines.push(`- ... and ${lc.violations.length - 5} more`);
+  if (lc.violations.length > SECTION_LIMITS.LAYER_VIOLATIONS) {
+    lcLines.push(`- ... and ${lc.violations.length - SECTION_LIMITS.LAYER_VIOLATIONS} more`);
   }
   const lcContent = lcLines.join("\n");
   return { id: "layer-consistency", priority: 10, content: lcContent, tokens: estimateTokens(lcContent) };

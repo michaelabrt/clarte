@@ -1,5 +1,6 @@
 import type { ContextAnalysis, ContextSection } from "../../types.js";
 import { estimateTokens } from "../../utils.js";
+import { SECTION_LIMITS } from "../../config/thresholds.js";
 
 export function renderGitActivitySections(analysis: ContextAnalysis): ContextSection[] {
   const sections: ContextSection[] = [];
@@ -11,7 +12,7 @@ export function renderGitActivitySections(analysis: ContextAnalysis): ContextSec
     const days = analysis.analysisDays ?? 90;
     hotLines.push(`| File | Commits (${days}d) | Last Changed |`);
     hotLines.push("|------|--------------|--------------|");
-    for (const hot of analysis.gitActivity.hotFiles.slice(0, 10)) {
+    for (const hot of analysis.gitActivity.hotFiles.slice(0, SECTION_LIMITS.HOT_FILES)) {
       hotLines.push(`| \`${hot.path}\` | ${hot.commits} | ${hot.lastChanged} |`);
     }
     const hotContent = hotLines.join("\n");
