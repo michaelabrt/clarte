@@ -1,4 +1,5 @@
 import type { GraphTopology, ImportGraph } from "../types.js";
+import { findSCCsFromAdj } from "./scc.js";
 
 /**
  * Compute graph topology metrics: connected components, approximate diameter,
@@ -133,68 +134,13 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
 function computeCriticalChain(allFiles: Set<string>, dirAdj: Map<string, Set<string>>): number {
   if (allFiles.size === 0) return 0;
 
-  // Pre-compute neighbor arrays to avoid repeated Set-to-Array conversion
+  // Pre-compute neighbor arrays for the shared SCC algorithm
   const neighborArrays = new Map<string, string[]>();
   for (const file of allFiles) {
     neighborArrays.set(file, [...(dirAdj.get(file) ?? [])]);
   }
 
-  // Tarjan's SCC (iterative, returns ALL components including singletons)
-  let index = 0;
-  const indices = new Map<string, number>();
-  const lowlinks = new Map<string, number>();
-  const onStack = new Set<string>();
-  const stack: string[] = [];
-  const sccs: string[][] = [];
-  const callStack: Array<{ v: string; neighborIdx: number }> = [];
-
-  for (const file of [...allFiles].sort()) {
-    if (indices.has(file)) continue;
-
-    callStack.push({ v: file, neighborIdx: 0 });
-    indices.set(file, index);
-    lowlinks.set(file, index);
-    index++;
-    stack.push(file);
-    onStack.add(file);
-
-    while (callStack.length > 0) {
-      const frame = callStack[callStack.length - 1]!;
-      const neighbors = neighborArrays.get(frame.v)!;
-
-      if (frame.neighborIdx < neighbors.length) {
-        const w = neighbors[frame.neighborIdx]!;
-        frame.neighborIdx++;
-        if (!allFiles.has(w)) continue;
-        if (!indices.has(w)) {
-          callStack.push({ v: w, neighborIdx: 0 });
-          indices.set(w, index);
-          lowlinks.set(w, index);
-          index++;
-          stack.push(w);
-          onStack.add(w);
-        } else if (onStack.has(w)) {
-          lowlinks.set(frame.v, Math.min(lowlinks.get(frame.v)!, indices.get(w)!));
-        }
-      } else {
-        if (lowlinks.get(frame.v) === indices.get(frame.v)) {
-          const scc: string[] = [];
-          let w: string;
-          do {
-            w = stack.pop()!;
-            onStack.delete(w);
-            scc.push(w);
-          } while (w !== frame.v);
-          sccs.push(scc);
-        }
-        callStack.pop();
-        if (callStack.length > 0) {
-          const parent = callStack[callStack.length - 1]!;
-          lowlinks.set(parent.v, Math.min(lowlinks.get(parent.v)!, lowlinks.get(frame.v)!));
-        }
-      }
-    }
-  }
+  const sccs = findSCCsFromAdj(allFiles, neighborArrays);
 
   // Build condensation DAG
   const fileToSCC = new Map<string, number>();

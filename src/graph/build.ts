@@ -20,6 +20,7 @@ import {
   type BarrelExportMap,
   type ResolveContext,
 } from "./import-resolution.js";
+import { routeBarrelImport } from "./barrel-routing.js";
 import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "../types.js";
 
 /**
@@ -168,75 +169,23 @@ export async function buildImportGraph(
           const barrelStars = barrelMap.starExports.get(resolved);
 
           if (barrelNamed || barrelStars) {
-            // Barrel import: route each name to its actual source file
-            const routedNames = new Map<string, string[]>();
-            const unresolved: string[] = [];
-
-            for (const name of raw.importedNames) {
-              const source = barrelNamed?.get(name);
-              if (source) {
-                const existing = routedNames.get(source) ?? [];
-                existing.push(name);
-                routedNames.set(source, existing);
-              } else {
-                unresolved.push(name);
-              }
-            }
-
-            for (const [source, names] of routedNames) {
-              edges.push({
-                from: file,
-                to: source,
-                isExternal: false,
-                specifier: raw.specifier,
-                importedNames: names,
-                isTypeOnly: raw.isTypeOnly,
-                isDynamic: raw.isDynamic,
-                isBarrelRouted: true,
-              });
-              inDegree.set(source, (inDegree.get(source) ?? 0) + 1);
-              // Barrel-routed imports from non-barrel consumers are genuine usage
-              if (!barrelFilePaths.has(file)) {
-                directInDegree.set(source, (directInDegree.get(source) ?? 0) + 1);
-              }
-            }
-
-            // Unresolved names (could be from star exports): create edges only to
-            // star sources that actually export those names
-            if (unresolved.length > 0 && barrelStars) {
-              for (const [starSource, exportedNames] of barrelStars) {
-                // Filter to names actually exported by this source (empty set = unknown, allow all)
-                const matching = exportedNames.size > 0 ? unresolved.filter((n) => exportedNames.has(n)) : unresolved;
-                if (matching.length === 0) continue;
-                edges.push({
-                  from: file,
-                  to: starSource,
-                  isExternal: false,
-                  specifier: raw.specifier,
-                  importedNames: matching,
-                  isTypeOnly: raw.isTypeOnly,
-                  isDynamic: raw.isDynamic,
-                  isBarrelRouted: true,
-                });
-                inDegree.set(starSource, (inDegree.get(starSource) ?? 0) + 1);
-                if (!barrelFilePaths.has(file)) {
-                  directInDegree.set(starSource, (directInDegree.get(starSource) ?? 0) + 1);
-                }
-              }
-            }
-
-            // Side-effect import to barrel (no names): keep edge to barrel itself
-            if (raw.importedNames.length === 0) {
-              edges.push({
+            const routedEdges = routeBarrelImport(
+              {
                 from: file,
                 to: resolved,
-                isExternal: false,
                 specifier: raw.specifier,
-                importedNames: [],
+                importedNames: raw.importedNames,
                 isTypeOnly: raw.isTypeOnly,
                 isDynamic: raw.isDynamic,
-              });
-              inDegree.set(resolved, (inDegree.get(resolved) ?? 0) + 1);
+              },
+              barrelMap,
+            );
+            for (const re of routedEdges) {
+              edges.push(re);
+              inDegree.set(re.to, (inDegree.get(re.to) ?? 0) + 1);
+              if (re.isBarrelRouted && !barrelFilePaths.has(file)) {
+                directInDegree.set(re.to, (directInDegree.get(re.to) ?? 0) + 1);
+              }
             }
           } else {
             edges.push({
