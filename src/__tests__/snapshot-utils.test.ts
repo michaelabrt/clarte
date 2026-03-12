@@ -9,10 +9,7 @@ function makeNode(overrides: {
   text?: string;
   bodyStartIndex?: number | null;
 }): Node {
-  const body =
-    overrides.bodyStartIndex != null
-      ? ({ startIndex: overrides.bodyStartIndex } as unknown as Node)
-      : null;
+  const body = overrides.bodyStartIndex != null ? ({ startIndex: overrides.bodyStartIndex } as unknown as Node) : null;
   return {
     startIndex: overrides.startIndex,
     endIndex: overrides.endIndex,

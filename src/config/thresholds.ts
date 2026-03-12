@@ -190,6 +190,31 @@ export const LEARN = {
 export const SNAPSHOT_LANGUAGES = new Set(["typescript", "javascript", "python", "go", "rust", "java"]);
 
 /**
+ * Minimum component size (files) to report a graph as fragmented.
+ * Only the second-largest component is checked; a lone tiny orphan cluster
+ * is not worth surfacing.
+ */
+export const FRAGMENT_MIN_SIZE = 5;
+
+/**
+ * MCP tool display limits and thresholds.
+ */
+export const MCP = {
+  /** BFS traversal cap for impact analysis (keeps responses bounded) */
+  IMPACT_CAP: 50,
+  /** Minimum co-change confidence for scope display (stricter than diff/learn) */
+  CO_CHANGE_THRESHOLD: 0.7,
+  /** Max files shown per depth level in impact output */
+  DISPLAY_PER_DEPTH: 10,
+  /** Max callers/callees shown in function view */
+  DISPLAY_CALLERS: 20,
+  /** Risk level boundaries by transitive dependent count */
+  RISK_LOW: 5,
+  RISK_MEDIUM: 20,
+  RISK_HIGH: 50,
+} as const;
+
+/**
  * Graph data computation limits.
  */
 export const GRAPH_DATA = {

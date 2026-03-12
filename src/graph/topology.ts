@@ -1,5 +1,6 @@
 import type { GraphTopology, ImportGraph } from "../types.js";
 import { findSCCsFromAdj } from "./scc.js";
+import { FRAGMENT_MIN_SIZE } from "../config/thresholds.js";
 
 /**
  * Compute graph topology metrics: connected components, approximate diameter,
@@ -107,7 +108,7 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
   }
 
   const reachability = totalFiles > 0 ? largest.length / totalFiles : 0;
-  const isFragmented = components.length > 1 && components[1].length >= 5;
+  const isFragmented = components.length > 1 && components[1].length >= FRAGMENT_MIN_SIZE;
 
   // 3. Critical chain length: longest directed path after SCC condensation
   const criticalChainLength = computeCriticalChain(allFiles, dirAdj);

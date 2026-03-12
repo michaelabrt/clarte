@@ -1,6 +1,7 @@
 import type { PersistedGraph, FileRecord } from "../types/persisted-graph.js";
 import type { CallSite, CallerIndex, FileCallIndex } from "../types/call-graph.js";
 import type { EdgeEntry } from "./types.js";
+import { MCP } from "../config/thresholds.js";
 
 const ROLE_LABELS: Record<string, string> = {
   Orchestrator: "Orchestrator",
@@ -40,7 +41,7 @@ export function formatScope(filePath: string, graph: PersistedGraph, edgesByTarg
   lines.push(`IMPORTERS: ${importers.length === 0 ? "none" : `${importers.length} (use clarte_impact for full list)`}`);
 
   const coChanges = graph.changeCoupling
-    .filter((c) => (c.fileA === filePath || c.fileB === filePath) && c.confidence >= CO_CHANGE_THRESHOLD)
+    .filter((c) => (c.fileA === filePath || c.fileB === filePath) && c.confidence >= MCP.CO_CHANGE_THRESHOLD)
     .sort((a, b) => b.coChangeCount - a.coChangeCount)
     .slice(0, 3);
   if (coChanges.length > 0) {
@@ -97,11 +98,11 @@ export function formatFunction(
     lines.push("CALLED BY: none (note: interface dispatch and higher-order calls may not be captured)");
   } else {
     lines.push(`CALLED BY (${allCallers.length}):`);
-    for (const site of allCallers.slice(0, 20)) {
+    for (const site of allCallers.slice(0, MCP.DISPLAY_CALLERS)) {
       lines.push(`  ${site.caller}:${site.line}`);
     }
-    if (allCallers.length > 20) {
-      lines.push(`  ... (${allCallers.length - 20} more)`);
+    if (allCallers.length > MCP.DISPLAY_CALLERS) {
+      lines.push(`  ... (${allCallers.length - MCP.DISPLAY_CALLERS} more)`);
     }
   }
 
@@ -129,18 +130,16 @@ export function formatFunction(
       }
     }
     lines.push(`CALLS (${unique.length}):`);
-    for (const site of unique.slice(0, 20)) {
+    for (const site of unique.slice(0, MCP.DISPLAY_CALLERS)) {
       lines.push(`  ${site.callee} (${site.calleeFile}:${site.line})`);
     }
-    if (unique.length > 20) {
-      lines.push(`  ... (${unique.length - 20} more)`);
+    if (unique.length > MCP.DISPLAY_CALLERS) {
+      lines.push(`  ... (${unique.length - MCP.DISPLAY_CALLERS} more)`);
     }
   }
 
   return lines.join("\n");
 }
-
-const CO_CHANGE_THRESHOLD = 0.7;
 
 /**
  * Format a clarte_impact response for a file.
@@ -156,25 +155,24 @@ export function formatImpact(
     return `${filePath}: not in graph (run clarte generate to update)`;
   }
 
-  // BFS with hard cap of 50 nodes
-  const HARD_CAP = 50;
+  // BFS with hard cap
   const visited = new Set<string>();
   const byDepth = new Map<number, string[]>();
   const queue: Array<{ file: string; depth: number }> = [{ file: filePath, depth: 0 }];
+  let qHead = 0;
 
   visited.add(filePath);
   let capped = false;
 
-  while (queue.length > 0 && visited.size - 1 < HARD_CAP) {
-    const item = queue.shift()!;
-    const { file, depth } = item;
+  while (qHead < queue.length && visited.size - 1 < MCP.IMPACT_CAP) {
+    const { file, depth } = queue[qHead++];
 
     if (maxDepth !== undefined && depth >= maxDepth) continue;
 
     const importers = (edgesByTarget.get(file) ?? []).map((e) => e.from);
     for (const imp of importers) {
       if (visited.has(imp)) continue;
-      if (visited.size - 1 >= HARD_CAP) {
+      if (visited.size - 1 >= MCP.IMPACT_CAP) {
         capped = true;
         break;
       }
@@ -192,15 +190,15 @@ export function formatImpact(
   const lines: string[] = [];
 
   let riskLevel: string;
-  if (totalDependents <= 5) riskLevel = "LOW";
-  else if (totalDependents <= 20) riskLevel = "MEDIUM";
-  else if (totalDependents <= 50) riskLevel = "HIGH";
+  if (totalDependents <= MCP.RISK_LOW) riskLevel = "LOW";
+  else if (totalDependents <= MCP.RISK_MEDIUM) riskLevel = "MEDIUM";
+  else if (totalDependents <= MCP.RISK_HIGH) riskLevel = "HIGH";
   else riskLevel = "CRITICAL";
 
   if (capped) {
     // Use importedByCount as a conservative lower-bound (comes from full graph, not capped BFS)
     const lowerBound = Math.max(record.importedByCount, totalDependents);
-    lines.push(`RISK: CRITICAL - ${lowerBound}+ transitive dependents (showing first ${HARD_CAP})`);
+    lines.push(`RISK: CRITICAL - ${lowerBound}+ transitive dependents (showing first ${MCP.IMPACT_CAP})`);
   } else {
     lines.push(`RISK: ${riskLevel} - ${totalDependents} transitive dependent${totalDependents === 1 ? "" : "s"}`);
   }
@@ -209,7 +207,7 @@ export function formatImpact(
   for (const d of depths) {
     const files = byDepth.get(d) ?? [];
     const label = d === 1 ? "DIRECT" : `DEPTH ${d}`;
-    const displayed = files.slice(0, 10);
+    const displayed = files.slice(0, MCP.DISPLAY_PER_DEPTH);
     const rest = files.length - displayed.length;
 
     if (files.length > 0) {
