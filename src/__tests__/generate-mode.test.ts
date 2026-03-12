@@ -7,6 +7,7 @@ vi.mock("../cli/animations.js", () => ({
     message: vi.fn(),
     stop: vi.fn(),
   }),
+  NOOP_SHIMMER: { stop() {}, message() {} },
 }));
 
 const clackMock = vi.hoisted(() => ({
@@ -280,9 +281,8 @@ describe("runGenerateMode", () => {
   it("passes dryRun through to generateFiles", async () => {
     await runGenerateMode(makeOpts({ dryRun: true }));
 
-    const callArgs = mockGenerateFiles.mock.calls[0];
-    // dryRun is the 5th positional argument (index 4)
-    expect(callArgs[4]).toBe(true);
+    const callArgs = mockGenerateFiles.mock.calls[0][0];
+    expect(callArgs.dryRun).toBe(true);
   });
 
   it("uses saved config when present (skips prompts)", async () => {
@@ -378,9 +378,8 @@ describe("runGenerateMode", () => {
 
     await runGenerateMode(makeOpts({ savedConfig }));
 
-    // delivery is the last positional argument (index 13)
-    const callArgs = mockGenerateFiles.mock.calls[0];
-    expect(callArgs[13]).toEqual({
+    const callArgs = mockGenerateFiles.mock.calls[0][0];
+    expect(callArgs.delivery).toEqual({
       scopedRules: true,
       enrichedHooks: true,
       onDemandSkills: true,

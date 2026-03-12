@@ -100,15 +100,15 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
     p.log.warn(t.text("No types found. Snapshot section will be empty."));
   }
 
-  // 4. Replace the snapshot section
-  const startMatch = content.match(MD_START);
-  const endMatch = content.match(MD_END);
+  // 4. Replace the snapshot section (use exec for index-aware matching)
+  const startMatch = MD_START.exec(content);
+  const endMatch = MD_END.exec(content);
   if (!startMatch || !endMatch) {
     throw new ClarteError("Failed to parse snapshot markers.", ExitCode.PARSE_ERROR);
   }
 
-  const startIdx = content.indexOf(startMatch[0]);
-  const endIdx = content.indexOf(endMatch[0]) + endMatch[0].length;
+  const startIdx = startMatch.index;
+  const endIdx = endMatch.index + endMatch[0].length;
 
   let newBlock = "<!-- CODE SNAPSHOT (auto-generated, update when types/stores/services change) -->";
   if (snapshot.markdown) {

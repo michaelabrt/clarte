@@ -19,28 +19,46 @@ import { detectContext } from "../detect/detect.js";
 import { generateSnapshot } from "../snapshot/snapshot.js";
 import type { ProjectConfig } from "../types/config.js";
 
+export interface GenerateFilesOptions {
+  ctx: DetectedContext;
+  answers: UserAnswers;
+  snapshot: CodeSnapshot | null;
+  yes?: boolean;
+  dryRun?: boolean;
+  analysis?: ContextAnalysis;
+  generateSkills?: boolean;
+  onVerbose?: ProgressCallback;
+  budget?: number;
+  sectionFilter?: SectionFilterOptions;
+  maxChars?: number;
+  graph?: ImportGraph;
+  persistedGraph?: PersistedGraph | null;
+  delivery?: ProjectConfig["delivery"];
+  mcpEnabled?: boolean;
+}
+
 /**
  * Generate all context files based on detection, user answers, and snapshot.
  * Returns the list of files that were generated.
  * When dryRun is true, no files are written to disk.
  */
-export async function generateFiles(
-  ctx: DetectedContext,
-  answers: UserAnswers,
-  snapshot: CodeSnapshot | null,
-  yes: boolean = false,
-  dryRun: boolean = false,
-  analysis?: ContextAnalysis,
-  generateSkills: boolean = false,
-  onVerbose?: ProgressCallback,
-  budget?: number,
-  sectionFilter?: SectionFilterOptions,
-  maxChars?: number,
-  graph?: ImportGraph,
-  _persistedGraph?: PersistedGraph | null,
-  delivery?: ProjectConfig["delivery"],
-  mcpEnabled?: boolean,
-): Promise<GeneratedFile[]> {
+export async function generateFiles(opts: GenerateFilesOptions): Promise<GeneratedFile[]> {
+  const {
+    ctx,
+    answers,
+    snapshot,
+    yes = false,
+    dryRun = false,
+    analysis,
+    generateSkills = false,
+    onVerbose,
+    budget,
+    sectionFilter,
+    maxChars,
+    graph,
+    delivery,
+    mcpEnabled,
+  } = opts;
   // Deduplicate files by path (e.g. multiple targets that share the same output path)
   const fileMap = new Map<string, GeneratedFile>();
 

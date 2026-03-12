@@ -10,6 +10,7 @@ import { generateFiles } from "../core/generate.js";
 import { printSummary } from "../cli/summary.js";
 import { ExitCode } from "../errors.js";
 import type {
+  ContextAnalysis,
   UserAnswers,
   DetectedContext,
   GeneratedFile,
@@ -25,7 +26,7 @@ import { buildGraphWithCache } from "../graph/cache.js";
 import { buildImportGraph, mergeGraph } from "../graph/build.js";
 import { computeHITS, computeBetweenness } from "../graph/centrality.js";
 import { getHubFiles } from "../graph/hub-files.js";
-import { startShimmer } from "../cli/animations.js";
+import { startShimmer, NOOP_SHIMMER } from "../cli/animations.js";
 import { serializeAnalysis } from "../analysis/serialize.js";
 import { buildDirectives } from "../templates/directives.js";
 import { runAnalysis } from "../core/run-analysis.js";
@@ -99,8 +100,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
 
   if (!jsonMode) p.log.info(t.text(`Analyzing ${t.accent(rootDir)}`));
 
-  const noopShimmer = { message: (_: string) => {}, stop: () => {} };
-  let shimmer = jsonMode ? noopShimmer : startShimmer("Detecting stack...");
+  let shimmer = jsonMode ? NOOP_SHIMMER : startShimmer("Detecting stack...");
   let detected: DetectedContext;
   try {
     detected = await detectContext(rootDir, verbose ? verboseLog : (msg) => shimmer.message(msg));
@@ -109,7 +109,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
   }
   if (!jsonMode) p.log.step(t.text("Detection complete."));
 
-  shimmer = jsonMode ? noopShimmer : startShimmer(`Building import graph (${detected.sourceFileCount} files)...`);
+  shimmer = jsonMode ? NOOP_SHIMMER : startShimmer(`Building import graph (${detected.sourceFileCount} files)...`);
   let graph: ImportGraph;
   let topHub: HubFile | undefined;
   try {
@@ -149,43 +149,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
 
   detected.frameworks = enrichFrameworksWithUsage(detected.frameworks, graph.externalImportCounts);
 
-  if (!jsonMode) {
-    const lines: string[] = [];
-    const lang = detected.hasTypeScript
-      ? "TypeScript"
-      : detected.language !== "other"
-        ? detected.language.charAt(0).toUpperCase() + detected.language.slice(1)
-        : "";
-    if (lang) lines.push(`  ${"Language"}   ${t.text(lang)}`);
-    if (detected.frameworks.length > 0) {
-      lines.push(`  ${"Frameworks"} ${t.text(detected.frameworks.map((f) => f.name).join(", "))}`);
-    }
-    if (detected.linter !== "none") {
-      lines.push(`  ${"Linter"}     ${t.text(detected.linter.charAt(0).toUpperCase() + detected.linter.slice(1))}`);
-    }
-    if (detected.packageManager !== "none") {
-      lines.push(`  ${"Pkg mgr"}    ${t.text(detected.packageManager)}`);
-    }
-    if (detected.testFramework) {
-      lines.push(`  ${"Testing"}    ${t.text(detected.testFramework)}`);
-    }
-    if (detected.ciProvider) {
-      lines.push(`  ${"CI"}         ${t.text(detected.ciProvider)}`);
-    }
-    if (detected.monorepo) {
-      lines.push(
-        `  ${"Monorepo"}   ${t.text(`${detected.monorepo.type} (${detected.monorepo.packages.length} package${detected.monorepo.packages.length === 1 ? "" : "s"})`)}`,
-      );
-    }
-    if (detected.sourceFileCount > 0) {
-      lines.push(
-        `  ${"Files"}      ${t.textBold(`${detected.sourceFileCount}`)} ${t.muted(`(${formatBytes(detected.totalSourceBytes)})`)}`,
-      );
-    }
-    if (lines.length > 0) {
-      p.note(lines.join("\n"), "Detected Stack");
-    }
-  }
+  if (!jsonMode) printDetectedStack(detected);
 
   const { analysis } = await runAnalysis(
     rootDir,
@@ -246,38 +210,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     process.exit(ExitCode.SUCCESS);
   }
 
-  {
-    const fileCount = graph.centrality.size;
-    const reportLines: string[] = [];
-    reportLines.push(`  ${"Files analyzed"}  ${t.textBold(String(fileCount))}`);
-    reportLines.push(`  ${"Import edges"}    ${t.textBold(String(graph.edges.length))}`);
-    reportLines.push(`  ${"External pkgs"}   ${t.textBold(String(graph.externalImportCounts.size))}`);
-    if (analysis.hubFiles.length > 0) {
-      reportLines.push(
-        `  ${"Hub files"}       ${t.textBold(String(analysis.hubFiles.length))}` +
-          (analysis.hubFiles[0] ? ` ${t.text(`(most connected: ${analysis.hubFiles[0].path})`)}` : ""),
-      );
-    }
-    if (analysis.layers.length > 0) {
-      reportLines.push(`  ${"Architecture"}    ${t.textBold(analysis.layers.map((l) => l.name).join(" \u2192 "))}`);
-    }
-    reportLines.push(
-      `  ${"Circular deps"}   ${analysis.circularDeps.length === 0 ? t.textBold("none") : t.text(`${analysis.circularDeps.length} chain${analysis.circularDeps.length === 1 ? "" : "s"}`)}`,
-    );
-    if (analysis.gitActivity) {
-      reportLines.push(
-        `  ${"Hot files (" + analysis.analysisDays + "d)"} ${t.textBold(String(analysis.gitActivity.hotFiles.length))}`,
-      );
-    }
-    p.note(reportLines.join("\n"), "Analysis Report");
-
-    if (analysis.circularDeps.length > 0) {
-      for (const c of analysis.circularDeps.slice(0, 2)) {
-        const shortChain = c.chain.map((f) => f.split("/").pop() ?? f);
-        p.log.warn(t.warn(`Cycle: ${shortChain.join(" \u2192 ")}`));
-      }
-    }
-  }
+  printAnalysisReport(graph, analysis);
 
   if (savedConfig?.snapshotHash) {
     const currentHash = await computeSnapshotHash(rootDir, detected.language);
@@ -383,23 +316,23 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
   const generateSkills = answers.ides.includes("claude");
   let files: GeneratedFile[];
   try {
-    files = await generateFiles(
-      detected,
+    files = await generateFiles({
+      ctx: detected,
       answers,
       snapshot,
       yes,
       dryRun,
       analysis,
       generateSkills,
-      verbose ? verboseLog : undefined,
-      effectiveBudget,
+      onVerbose: verbose ? verboseLog : undefined,
+      budget: effectiveBudget,
       sectionFilter,
       maxChars,
       graph,
       persistedGraph,
-      savedConfig?.delivery,
-      mcpMode,
-    );
+      delivery: savedConfig?.delivery,
+      mcpEnabled: mcpMode,
+    });
   } finally {
     shimmer.stop();
   }
@@ -416,80 +349,17 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
 
   printSummary(files, snapshot, analysis, !savedConfig);
 
-  // Generate Claude Code hooks for graph context delivery (non-critical)
-  if (!dryRun && persistedGraph && answers.ides.includes("claude") && savedConfig?.hooks !== false) {
-    try {
-      const { generateHookFiles, configureClaudeHooks, generatePreFlightAgentFile } = await import(
-        "../hooks/generate-hooks.js"
-      );
-      let hookDirectives: string[] | undefined;
-      if (savedConfig?.delivery?.enrichedHooks) {
-        hookDirectives = buildDirectives(analysis, detected);
-      }
-      await generateHookFiles(rootDir, persistedGraph, savedConfig?.delivery?.enrichedHooks, hookDirectives);
-      await configureClaudeHooks(rootDir);
-      await generatePreFlightAgentFile(rootDir);
-    } catch (err) {
-      verboseLog(`Hook generation failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  // Generate .mcp.json for clarte serve (non-critical, only when MCP is enabled)
-  if (!dryRun && mcpMode) {
-    try {
-      await generateMcpConfig(rootDir);
-    } catch (err) {
-      verboseLog(`MCP config generation failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  // Generate check-tests.sh and run-tests.sh skill scripts (non-critical)
-  if (!dryRun && answers.ides.includes("claude")) {
-    try {
-      const { generateCheckTestsScript, generateRunTestScript } = await import("../hooks/generate-scripts.js");
-      await generateCheckTestsScript(rootDir, detected);
-      await generateRunTestScript(rootDir, detected);
-    } catch (err) {
-      verboseLog(`Script generation failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  // Generate clarte-grep script with baked-in graph data (non-critical)
-  if (!dryRun && answers.ides.includes("claude") && persistedGraph) {
-    try {
-      const { generateClarteGrepScript } = await import("../hooks/generate-scripts.js");
-      await generateClarteGrepScript(rootDir, persistedGraph);
-    } catch (err) {
-      verboseLog(`clarte-grep generation failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  // Copy sample/example/template config files if their counterpart is missing (non-critical).
-  // Handles .env.example → .env, ormconfig.sample.json → ormconfig.json, etc.
   if (!dryRun) {
-    try {
-      const entries = await fs.readdir(rootDir);
-      const copied: string[] = [];
-      for (const entry of entries) {
-        const dest = entry
-          .replace(/\.sample(\.[^.]+)$/, "$1")
-          .replace(/\.example(\.[^.]+)$/, "$1")
-          .replace(/\.template(\.[^.]+)$/, "$1")
-          .replace(/\.sample$/, "")
-          .replace(/\.example$/, "")
-          .replace(/\.template$/, "");
-        if (dest === entry) continue; // no pattern matched
-        if (await fileExists(path.join(rootDir, dest))) continue; // already exists
-        await fs.copyFile(path.join(rootDir, entry), path.join(rootDir, dest));
-        copied.push(`${entry} → ${dest}`);
-        verboseLog(`Copied sample config: ${entry} → ${dest}`);
-      }
-      if (copied.length > 0) {
-        p.log.info(`Copied ${copied.length} sample config file${copied.length > 1 ? "s" : ""}: ${copied.join(", ")}`);
-      }
-    } catch (err) {
-      verboseLog(`Sample config copy failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    await runPostGenerationTasks({
+      rootDir,
+      detected,
+      analysis,
+      answers,
+      persistedGraph,
+      savedConfig,
+      mcpMode,
+      verboseLog,
+    });
   }
 
   if (!savedConfig && !dryRun) {
@@ -527,4 +397,159 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       "\n\n" +
       t.muted("Your context files are ready. They are living documents: keep them up to date as your project evolves."),
   );
+}
+
+function printDetectedStack(detected: DetectedContext): void {
+  const lines: string[] = [];
+  const lang = detected.hasTypeScript
+    ? "TypeScript"
+    : detected.language !== "other"
+      ? detected.language.charAt(0).toUpperCase() + detected.language.slice(1)
+      : "";
+  if (lang) lines.push(`  ${"Language"}   ${t.text(lang)}`);
+  if (detected.frameworks.length > 0) {
+    lines.push(`  ${"Frameworks"} ${t.text(detected.frameworks.map((f) => f.name).join(", "))}`);
+  }
+  if (detected.linter !== "none") {
+    lines.push(`  ${"Linter"}     ${t.text(detected.linter.charAt(0).toUpperCase() + detected.linter.slice(1))}`);
+  }
+  if (detected.packageManager !== "none") {
+    lines.push(`  ${"Pkg mgr"}    ${t.text(detected.packageManager)}`);
+  }
+  if (detected.testFramework) {
+    lines.push(`  ${"Testing"}    ${t.text(detected.testFramework)}`);
+  }
+  if (detected.ciProvider) {
+    lines.push(`  ${"CI"}         ${t.text(detected.ciProvider)}`);
+  }
+  if (detected.monorepo) {
+    lines.push(
+      `  ${"Monorepo"}   ${t.text(`${detected.monorepo.type} (${detected.monorepo.packages.length} package${detected.monorepo.packages.length === 1 ? "" : "s"})`)}`,
+    );
+  }
+  if (detected.sourceFileCount > 0) {
+    lines.push(
+      `  ${"Files"}      ${t.textBold(`${detected.sourceFileCount}`)} ${t.muted(`(${formatBytes(detected.totalSourceBytes)})`)}`,
+    );
+  }
+  if (lines.length > 0) {
+    p.note(lines.join("\n"), "Detected Stack");
+  }
+}
+
+function printAnalysisReport(graph: ImportGraph, analysis: ContextAnalysis): void {
+  const lines: string[] = [];
+  lines.push(`  ${"Files analyzed"}  ${t.textBold(String(graph.centrality.size))}`);
+  lines.push(`  ${"Import edges"}    ${t.textBold(String(graph.edges.length))}`);
+  lines.push(`  ${"External pkgs"}   ${t.textBold(String(graph.externalImportCounts.size))}`);
+  if (analysis.hubFiles.length > 0) {
+    lines.push(
+      `  ${"Hub files"}       ${t.textBold(String(analysis.hubFiles.length))}` +
+        (analysis.hubFiles[0] ? ` ${t.text(`(most connected: ${analysis.hubFiles[0].path})`)}` : ""),
+    );
+  }
+  if (analysis.layers.length > 0) {
+    lines.push(`  ${"Architecture"}    ${t.textBold(analysis.layers.map((l) => l.name).join(" \u2192 "))}`);
+  }
+  lines.push(
+    `  ${"Circular deps"}   ${analysis.circularDeps.length === 0 ? t.textBold("none") : t.text(`${analysis.circularDeps.length} chain${analysis.circularDeps.length === 1 ? "" : "s"}`)}`,
+  );
+  if (analysis.gitActivity) {
+    lines.push(
+      `  ${"Hot files (" + analysis.analysisDays + "d)"} ${t.textBold(String(analysis.gitActivity.hotFiles.length))}`,
+    );
+  }
+  p.note(lines.join("\n"), "Analysis Report");
+
+  for (const c of analysis.circularDeps.slice(0, 2)) {
+    const shortChain = c.chain.map((f) => f.split("/").pop() ?? f);
+    p.log.warn(t.warn(`Cycle: ${shortChain.join(" \u2192 ")}`));
+  }
+}
+
+interface PostGenerationOptions {
+  rootDir: string;
+  detected: DetectedContext;
+  analysis: ContextAnalysis;
+  answers: UserAnswers;
+  persistedGraph: PersistedGraph | null;
+  savedConfig: ProjectConfig | null;
+  mcpMode?: boolean;
+  verboseLog: ProgressCallback;
+}
+
+async function runPostGenerationTasks(opts: PostGenerationOptions): Promise<void> {
+  const { rootDir, detected, analysis, answers, persistedGraph, savedConfig, mcpMode, verboseLog } = opts;
+
+  // Generate Claude Code hooks for graph context delivery
+  if (persistedGraph && answers.ides.includes("claude") && savedConfig?.hooks !== false) {
+    try {
+      const { generateHookFiles, configureClaudeHooks, generatePreFlightAgentFile } = await import(
+        "../hooks/generate-hooks.js"
+      );
+      let hookDirectives: string[] | undefined;
+      if (savedConfig?.delivery?.enrichedHooks) {
+        hookDirectives = buildDirectives(analysis, detected);
+      }
+      await generateHookFiles(rootDir, persistedGraph, savedConfig?.delivery?.enrichedHooks, hookDirectives);
+      await configureClaudeHooks(rootDir);
+      await generatePreFlightAgentFile(rootDir);
+    } catch (err) {
+      verboseLog(`Hook generation failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Generate .mcp.json for clarte serve
+  if (mcpMode) {
+    try {
+      await generateMcpConfig(rootDir);
+    } catch (err) {
+      verboseLog(`MCP config generation failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Generate skill scripts (check-tests.sh, run-tests.sh, clarte-grep)
+  if (answers.ides.includes("claude")) {
+    try {
+      const { generateCheckTestsScript, generateRunTestScript } = await import("../hooks/generate-scripts.js");
+      await generateCheckTestsScript(rootDir, detected);
+      await generateRunTestScript(rootDir, detected);
+    } catch (err) {
+      verboseLog(`Script generation failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    if (persistedGraph) {
+      try {
+        const { generateClarteGrepScript } = await import("../hooks/generate-scripts.js");
+        await generateClarteGrepScript(rootDir, persistedGraph);
+      } catch (err) {
+        verboseLog(`clarte-grep generation failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
+  // Copy sample/example/template config files if their counterpart is missing
+  try {
+    const entries = await fs.readdir(rootDir);
+    const copied: string[] = [];
+    for (const entry of entries) {
+      const dest = entry
+        .replace(/\.sample(\.[^.]+)$/, "$1")
+        .replace(/\.example(\.[^.]+)$/, "$1")
+        .replace(/\.template(\.[^.]+)$/, "$1")
+        .replace(/\.sample$/, "")
+        .replace(/\.example$/, "")
+        .replace(/\.template$/, "");
+      if (dest === entry) continue;
+      if (await fileExists(path.join(rootDir, dest))) continue;
+      await fs.copyFile(path.join(rootDir, entry), path.join(rootDir, dest));
+      copied.push(`${entry} → ${dest}`);
+      verboseLog(`Copied sample config: ${entry} → ${dest}`);
+    }
+    if (copied.length > 0) {
+      p.log.info(`Copied ${copied.length} sample config file${copied.length > 1 ? "s" : ""}: ${copied.join(", ")}`);
+    }
+  } catch (err) {
+    verboseLog(`Sample config copy failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }

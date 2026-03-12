@@ -75,6 +75,9 @@ export interface ShimmerHandle {
   message: (text: string) => void;
 }
 
+/** No-op shimmer for non-interactive (JSON) mode. */
+export const NOOP_SHIMMER: ShimmerHandle = { stop() {}, message() {} };
+
 /**
  * Start a shimmer animation on a line of text.
  * The highlight sweeps left->right->left continuously.

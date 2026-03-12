@@ -119,13 +119,13 @@ afterEach(async () => {
 
 describe("generateFiles", () => {
   it("produces .claude/rules/clarte.md for claude target", async () => {
-    const files = await generateFiles(
-      makeCtx(),
-      makeAnswers({ ides: ["claude"] }),
-      null,
-      true, // yes
-      true, // dryRun
-    );
+    const files = await generateFiles({
+      ctx: makeCtx(),
+      answers: makeAnswers({ ides: ["claude"] }),
+      snapshot: null,
+      yes: true,
+      dryRun: true,
+    });
 
     expect(files.length).toBeGreaterThanOrEqual(1);
     const claudeFile = files.find((f) => f.path === ".claude/rules/clarte.md");
@@ -134,7 +134,13 @@ describe("generateFiles", () => {
   });
 
   it("produces MCP config and pre-flight agent for cursor target", async () => {
-    const files = await generateFiles(makeCtx(), makeAnswers({ ides: ["cursor"] }), null, true, true);
+    const files = await generateFiles({
+      ctx: makeCtx(),
+      answers: makeAnswers({ ides: ["cursor"] }),
+      snapshot: null,
+      yes: true,
+      dryRun: true,
+    });
 
     const mainFile = files.find((f) => f.path === ".cursor/rules/clarte.md");
     expect(mainFile).toBeDefined();
@@ -152,13 +158,13 @@ describe("generateFiles", () => {
   });
 
   it("dry run returns files without writing to disk", async () => {
-    const files = await generateFiles(
-      makeCtx(),
-      makeAnswers(),
-      null,
-      true,
-      true, // dryRun
-    );
+    const files = await generateFiles({
+      ctx: makeCtx(),
+      answers: makeAnswers(),
+      snapshot: null,
+      yes: true,
+      dryRun: true,
+    });
 
     expect(files.length).toBeGreaterThan(0);
 
@@ -168,13 +174,13 @@ describe("generateFiles", () => {
   });
 
   it("writes files to disk when not dry run", async () => {
-    const files = await generateFiles(
-      makeCtx(),
-      makeAnswers(),
-      null,
-      true, // yes
-      false, // not dryRun
-    );
+    const files = await generateFiles({
+      ctx: makeCtx(),
+      answers: makeAnswers(),
+      snapshot: null,
+      yes: true,
+      dryRun: false,
+    });
 
     expect(files.length).toBeGreaterThan(0);
 
@@ -185,7 +191,13 @@ describe("generateFiles", () => {
   });
 
   it("produces separate files for claude and cursor targets", async () => {
-    const files = await generateFiles(makeCtx(), makeAnswers({ ides: ["claude", "cursor"] }), null, true, true);
+    const files = await generateFiles({
+      ctx: makeCtx(),
+      answers: makeAnswers({ ides: ["claude", "cursor"] }),
+      snapshot: null,
+      yes: true,
+      dryRun: true,
+    });
 
     const claudeFile = files.find((f) => f.path === ".claude/rules/clarte.md");
     const cursorFile = files.find((f) => f.path === ".cursor/rules/clarte.md");
