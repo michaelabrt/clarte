@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { writeFileSafe } from "../utils.js";
 import { CLARTE_DIR } from "../config/config.js";
+import { LEARN } from "../config/thresholds.js";
 import type { DetectedContext } from "../types/detection.js";
 import type { PersistedGraph } from "../types/persisted-graph.js";
 
@@ -476,8 +477,6 @@ interface GrepGraphEntry {
   testFile: string | null;
 }
 
-const CO_CHANGE_THRESHOLD = 0.4;
-
 /**
  * Build the per-file lookup table from a persisted graph.
  * Only includes files that have at least one piece of graph data.
@@ -501,7 +500,7 @@ function buildGrepGraphData(graph: PersistedGraph): Record<string, GrepGraphEntr
     const importers = importersByTarget.get(filePath) ?? [];
 
     const coChanges: Array<[string, number]> = graph.changeCoupling
-      .filter((c) => (c.fileA === filePath || c.fileB === filePath) && c.confidence >= CO_CHANGE_THRESHOLD)
+      .filter((c) => (c.fileA === filePath || c.fileB === filePath) && c.confidence >= LEARN.COCHANGE_THRESHOLD)
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 3)
       .map((c) => {

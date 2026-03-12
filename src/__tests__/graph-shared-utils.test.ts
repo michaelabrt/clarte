@@ -139,10 +139,9 @@ describe("findSCCsFromAdj", () => {
 // routeBarrelImport
 // ---------------------------------------------------------------------------
 
-function baseEdge(overrides: Partial<ImportEdge> = {}): Pick<
-  ImportEdge,
-  "from" | "to" | "specifier" | "importedNames" | "isTypeOnly" | "isDynamic"
-> {
+function baseEdge(
+  overrides: Partial<ImportEdge> = {},
+): Pick<ImportEdge, "from" | "to" | "specifier" | "importedNames" | "isTypeOnly" | "isDynamic"> {
   return {
     from: "src/consumer.ts",
     to: "src/index.ts",
@@ -223,10 +222,7 @@ describe("routeBarrelImport", () => {
 
   it("routes unresolved names to star export source when exportedNames set is empty (wildcard)", () => {
     // Empty set means "re-exports everything" - all unresolved names match
-    const barrelMap = makeBarrelMap(
-      {},
-      { "src/index.ts": { "src/all.ts": [] } },
-    );
+    const barrelMap = makeBarrelMap({}, { "src/index.ts": { "src/all.ts": [] } });
     const result = routeBarrelImport(baseEdge(), barrelMap);
     expect(result).toHaveLength(1);
     expect(result[0].to).toBe("src/all.ts");
@@ -247,17 +243,12 @@ describe("routeBarrelImport", () => {
     const barrelMap = makeBarrelMap({
       "src/index.ts": { foo: "src/foo.ts" },
     });
-    const result = routeBarrelImport(
-      baseEdge({ importedNames: ["foo"], isDynamic: true }),
-      barrelMap,
-    );
+    const result = routeBarrelImport(baseEdge({ importedNames: ["foo"], isDynamic: true }), barrelMap);
     expect(result[0].isDynamic).toBe(true);
   });
 
   it("keeps edge pointing to barrel itself for side-effect imports (no names)", () => {
-    const barrelMap = makeBarrelMap(
-      { "src/index.ts": { foo: "src/foo.ts" } },
-    );
+    const barrelMap = makeBarrelMap({ "src/index.ts": { foo: "src/foo.ts" } });
     const result = routeBarrelImport(baseEdge({ importedNames: [] }), barrelMap);
     expect(result).toHaveLength(1);
     expect(result[0].to).toBe("src/index.ts");
@@ -269,10 +260,7 @@ describe("routeBarrelImport", () => {
     const barrelMap = makeBarrelMap({
       "src/index.ts": { foo: "src/foo.ts" },
     });
-    const result = routeBarrelImport(
-      baseEdge({ importedNames: ["foo"] }),
-      barrelMap,
-    );
+    const result = routeBarrelImport(baseEdge({ importedNames: ["foo"] }), barrelMap);
     for (const e of result) {
       expect(e.isExternal).toBe(false);
     }
@@ -290,10 +278,7 @@ describe("routeBarrelImport", () => {
   });
 
   it("handles a barrel with only star exports and no named exports", () => {
-    const barrelMap = makeBarrelMap(
-      {},
-      { "src/index.ts": { "src/stuff.ts": ["foo", "bar"] } },
-    );
+    const barrelMap = makeBarrelMap({}, { "src/index.ts": { "src/stuff.ts": ["foo", "bar"] } });
     const result = routeBarrelImport(baseEdge(), barrelMap);
     expect(result).toHaveLength(1);
     expect(result[0].to).toBe("src/stuff.ts");
