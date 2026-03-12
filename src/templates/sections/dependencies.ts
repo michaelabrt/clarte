@@ -136,7 +136,7 @@ export function renderChokepointsContent(analysis: ContextAnalysis): string | nu
     lines.push(`| \`${cp.file}\` | ${upstream} files | ${downstream} files |`);
   }
   if (analysis.chokepoints.length > SECTION_LIMITS.CHOKEPOINTS) {
-    lines.push(`_...and ${analysis.chokepoints.length - SECTION_LIMITS.CHOKEPOINTS} more_`);
+    lines.push(`- ... and ${analysis.chokepoints.length - SECTION_LIMITS.CHOKEPOINTS} more`);
   }
   return lines.join("\n");
 }

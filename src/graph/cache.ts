@@ -238,6 +238,29 @@ function serializeEdges(edges: ImportEdge[]): SerializedEdge[] {
   }));
 }
 
+async function persistCacheData(
+  rootDir: string,
+  language: Language,
+  currentHashes: Map<string, string>,
+  graph: ImportGraph,
+  onProgress?: ProgressCallback,
+): Promise<void> {
+  try {
+    const hashRecord: Record<string, string> = {};
+    for (const [k, v] of currentHashes) hashRecord[k] = v;
+    await saveCache(rootDir, {
+      version: CACHE_VERSION,
+      createdAt: new Date().toISOString(),
+      language,
+      fileHashes: hashRecord,
+      edges: serializeEdges(graph.edges),
+      barrelFiles: [...(graph.barrelFiles ?? [])],
+    });
+  } catch (err) {
+    onProgress?.(`Warning: cache save failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 export async function buildGraphWithCache(
   rootDir: string,
   language: Language,
@@ -348,22 +371,7 @@ export async function buildGraphWithCache(
       const allFiles = [...currentHashes.keys()];
 
       const graph = rebuildGraph(mergedEdges, allFiles, detectedBarrels);
-
-      try {
-        const hashRecord: Record<string, string> = {};
-        for (const [k, v] of currentHashes) hashRecord[k] = v;
-        await saveCache(rootDir, {
-          version: CACHE_VERSION,
-          createdAt: new Date().toISOString(),
-          language,
-          fileHashes: hashRecord,
-          edges: serializeEdges(graph.edges),
-          barrelFiles: [...(graph.barrelFiles ?? [])],
-        });
-      } catch (err) {
-        onProgress?.(`Warning: cache save failed: ${err instanceof Error ? err.message : String(err)}`);
-      }
-
+      await persistCacheData(rootDir, language, currentHashes, graph, onProgress);
       return graph;
     }
   }
@@ -371,21 +379,6 @@ export async function buildGraphWithCache(
   // 4. Full rebuild (no cache, language changed, >10% changed, or barrel changed)
   onProgress?.("Full graph rebuild...");
   const graph = await buildImportGraph(rootDir, language, onProgress);
-
-  try {
-    const hashRecord: Record<string, string> = {};
-    for (const [k, v] of currentHashes) hashRecord[k] = v;
-    await saveCache(rootDir, {
-      version: CACHE_VERSION,
-      createdAt: new Date().toISOString(),
-      language,
-      fileHashes: hashRecord,
-      edges: serializeEdges(graph.edges),
-      barrelFiles: [...(graph.barrelFiles ?? [])],
-    });
-  } catch (err) {
-    onProgress?.(`Warning: cache save failed: ${err instanceof Error ? err.message : String(err)}`);
-  }
-
+  await persistCacheData(rootDir, language, currentHashes, graph, onProgress);
   return graph;
 }
