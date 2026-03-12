@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ChangeCoupling, GitAnalysis, LagCoupling, ProgressCallback } from "../types.js";
+import { errorMessage } from "../utils.js";
 import { gitExec } from "./git.js";
 
 const execFileAsync = promisify(execFile);
@@ -164,7 +165,7 @@ export function analyzeGitActivity(
     const fileChurn = computeFileChurn(rootDir, window);
     return { ...result, fileChurn: fileChurn && fileChurn.size > 0 ? fileChurn : undefined };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errorMessage(err);
     onProgress?.(`Warning: git analysis failed: ${msg}`);
     return null;
   }
@@ -685,7 +686,7 @@ export async function analyzeGitActivityAsync(
     const fileChurn = await computeFileChurnAsync(rootDir, window);
     return { ...result, fileChurn: fileChurn && fileChurn.size > 0 ? fileChurn : undefined };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errorMessage(err);
     onProgress?.(`Warning: git analysis failed: ${msg}`);
     return null;
   }

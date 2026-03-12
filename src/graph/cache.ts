@@ -23,7 +23,7 @@ import {
 } from "./import-resolution.js";
 import { routeBarrelImport } from "./barrel-routing.js";
 import { initForLanguage } from "../parsers/init.js";
-import { readFileOr } from "../utils.js";
+import { errorMessage, readFileOr } from "../utils.js";
 import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "../types.js";
 import { HASH_CONCURRENCY } from "../config/thresholds.js";
 import { CLARTE_DIR } from "../config/config.js";
@@ -257,7 +257,7 @@ async function persistCacheData(
       barrelFiles: [...(graph.barrelFiles ?? [])],
     });
   } catch (err) {
-    onProgress?.(`Warning: cache save failed: ${err instanceof Error ? err.message : String(err)}`);
+    onProgress?.(`Warning: cache save failed: ${errorMessage(err)}`);
   }
 }
 

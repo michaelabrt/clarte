@@ -19,7 +19,7 @@ import { findTightCouplings } from "../graph/tight-coupling.js";
 import { buildGraphWithCache } from "../graph/cache.js";
 import { analyzeGitActivityAsync } from "../git/analysis.js";
 import { filterAliveGitActivity } from "../git/filter-alive.js";
-import { NOOP_PROGRESS } from "../utils.js";
+import { errorMessage, NOOP_PROGRESS } from "../utils.js";
 import { scanConfigConstraints } from "../config/scan.js";
 import { inferConventions } from "../conventions/conventions.js";
 import { buildTestMapping } from "../analysis/test-map.js";
@@ -160,7 +160,7 @@ export async function runWatchMode(rootDir: string, verbose: boolean): Promise<v
       await runAnalysis(rootDir, answers, verbose, verboseLog, previousSnapshot, analysisDays);
       previousSnapshot = await loadPreviousSnapshot(rootDir);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = errorMessage(err);
       console.error(`[clarte] ${timeStamp()} - error during analysis: ${msg}`);
     } finally {
       isRunning = false;
@@ -186,7 +186,7 @@ export async function runWatchMode(rootDir: string, verbose: boolean): Promise<v
       }
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errorMessage(err);
     throw new ClarteError(`Failed to start file watcher: ${msg}`);
   }
 

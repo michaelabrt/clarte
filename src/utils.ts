@@ -21,6 +21,11 @@ const TEST_FILE_PATTERNS = [
 /** No-op progress callback for use when progress reporting is not needed. */
 export const NOOP_PROGRESS: ProgressCallback = () => {};
 
+/** Extract a message string from an unknown error value. */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export function isTestFile(filePath: string): boolean {
   return TEST_FILE_PATTERNS.some((p) => p.test(filePath));
 }
@@ -133,6 +138,16 @@ export async function ensureDir(dirPath: string): Promise<void> {
 export async function writeFileSafe(filePath: string, content: string): Promise<void> {
   await ensureDir(path.dirname(filePath));
   await fs.writeFile(filePath, content, "utf-8");
+}
+
+/**
+ * Write a JSON value to stdout with a trailing newline.
+ * Returns a promise that resolves when the write completes.
+ */
+export function writeJsonStdout(value: unknown): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    process.stdout.write(JSON.stringify(value, null, 2) + "\n", (err) => (err ? reject(err) : resolve()));
+  });
 }
 
 /**

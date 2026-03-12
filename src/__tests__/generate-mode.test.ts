@@ -199,6 +199,8 @@ vi.mock("../utils.js", () => ({
   NOOP_PROGRESS: () => {},
   fileExists: (...args: unknown[]) => mockFileExists(...args),
   formatBytes: (n: number) => `${(n / 1024).toFixed(0)} KB`,
+  errorMessage: (err: unknown) => (err instanceof Error ? err.message : String(err)),
+  writeJsonStdout: vi.fn().mockResolvedValue(undefined),
 }));
 
 // ── Import under test (after mocks) ────────────────────────────────

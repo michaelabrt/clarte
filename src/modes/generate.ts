@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import * as p from "@clack/prompts";
 import { theme as t, unpatchPicocolors, resetTerminalColors } from "../theme.js";
-import { fileExists, formatBytes, NOOP_PROGRESS } from "../utils.js";
+import { errorMessage, fileExists, formatBytes, NOOP_PROGRESS, writeJsonStdout } from "../utils.js";
 import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "../detect/detect.js";
 import { runPrompts } from "../cli/prompts.js";
 import { generateSnapshot } from "../snapshot/snapshot.js";
@@ -167,12 +167,12 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
   try {
     await persistGraph(rootDir, graph, analysis);
   } catch (err) {
-    verboseLog(`Graph persistence failed: ${err instanceof Error ? err.message : String(err)}`);
+    verboseLog(`Graph persistence failed: ${errorMessage(err)}`);
   }
   try {
     persistedGraph = await loadPersistedGraph(rootDir);
   } catch (err) {
-    verboseLog(`Graph load failed: ${err instanceof Error ? err.message : String(err)}`);
+    verboseLog(`Graph load failed: ${errorMessage(err)}`);
   }
 
   // Build call graph for MCP function-level queries (non-critical, only when MCP is enabled)
@@ -184,7 +184,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       verboseLog(`Call graph: ${callGraph.sites.length} resolved call sites`);
     } catch (err) {
       if (!jsonMode) {
-        p.log.warn(t.warn(`Call graph extraction failed: ${err instanceof Error ? err.message : String(err)}`));
+        p.log.warn(t.warn(`Call graph extraction failed: ${errorMessage(err)}`));
       }
     }
   }
@@ -204,9 +204,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     }
     const directives = buildDirectives(analysis, detected, undefined, graph);
     const output = serializeAnalysis(detected, analysis, snapshot, graph, directives);
-    await new Promise<void>((resolve, reject) => {
-      process.stdout.write(JSON.stringify(output, null, 2) + "\n", (err) => (err ? reject(err) : resolve()));
-    });
+    await writeJsonStdout(output);
     process.exit(ExitCode.SUCCESS);
   }
 
@@ -495,7 +493,7 @@ async function runPostGenerationTasks(opts: PostGenerationOptions): Promise<void
       await configureClaudeHooks(rootDir);
       await generatePreFlightAgentFile(rootDir);
     } catch (err) {
-      verboseLog(`Hook generation failed: ${err instanceof Error ? err.message : String(err)}`);
+      verboseLog(`Hook generation failed: ${errorMessage(err)}`);
     }
   }
 
@@ -504,7 +502,7 @@ async function runPostGenerationTasks(opts: PostGenerationOptions): Promise<void
     try {
       await generateMcpConfig(rootDir);
     } catch (err) {
-      verboseLog(`MCP config generation failed: ${err instanceof Error ? err.message : String(err)}`);
+      verboseLog(`MCP config generation failed: ${errorMessage(err)}`);
     }
   }
 
@@ -515,7 +513,7 @@ async function runPostGenerationTasks(opts: PostGenerationOptions): Promise<void
       await generateCheckTestsScript(rootDir, detected);
       await generateRunTestScript(rootDir, detected);
     } catch (err) {
-      verboseLog(`Script generation failed: ${err instanceof Error ? err.message : String(err)}`);
+      verboseLog(`Script generation failed: ${errorMessage(err)}`);
     }
 
     if (persistedGraph) {
@@ -523,7 +521,7 @@ async function runPostGenerationTasks(opts: PostGenerationOptions): Promise<void
         const { generateClarteGrepScript } = await import("../hooks/generate-scripts.js");
         await generateClarteGrepScript(rootDir, persistedGraph);
       } catch (err) {
-        verboseLog(`clarte-grep generation failed: ${err instanceof Error ? err.message : String(err)}`);
+        verboseLog(`clarte-grep generation failed: ${errorMessage(err)}`);
       }
     }
   }
@@ -550,6 +548,6 @@ async function runPostGenerationTasks(opts: PostGenerationOptions): Promise<void
       p.log.info(`Copied ${copied.length} sample config file${copied.length > 1 ? "s" : ""}: ${copied.join(", ")}`);
     }
   } catch (err) {
-    verboseLog(`Sample config copy failed: ${err instanceof Error ? err.message : String(err)}`);
+    verboseLog(`Sample config copy failed: ${errorMessage(err)}`);
   }
 }

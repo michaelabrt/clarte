@@ -1,7 +1,7 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
 import type { DetectedFramework, MonorepoInfo, MonorepoPackage } from "../types.js";
-import { readFileOr, readJsonFile } from "../utils.js";
+import { errorMessage, readFileOr, readJsonFile } from "../utils.js";
 import { FRAMEWORK_MAP } from "./frameworks.js";
 
 /**
@@ -188,7 +188,7 @@ export async function parsePyprojectDeps(filePath: string, warnings?: string[]):
 
     return deps;
   } catch (err: unknown) {
-    warnings?.push(`Failed to parse ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
+    warnings?.push(`Failed to parse ${filePath}: ${errorMessage(err)}`);
     return [];
   }
 }

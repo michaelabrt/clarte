@@ -11,7 +11,22 @@ vi.mock("../theme.js", () => ({
   }),
 }));
 
-import { startShimmer } from "../cli/animations.js";
+import { startShimmer, NOOP_SHIMMER } from "../cli/animations.js";
+
+describe("NOOP_SHIMMER", () => {
+  it("has a stop method that does not throw", () => {
+    expect(() => NOOP_SHIMMER.stop()).not.toThrow();
+  });
+
+  it("has a message method that does not throw", () => {
+    expect(() => NOOP_SHIMMER.message("any text")).not.toThrow();
+  });
+
+  it("conforms to the ShimmerHandle interface", () => {
+    expect(typeof NOOP_SHIMMER.stop).toBe("function");
+    expect(typeof NOOP_SHIMMER.message).toBe("function");
+  });
+});
 
 describe("startShimmer", () => {
   let writeSpy: ReturnType<typeof vi.spyOn>;

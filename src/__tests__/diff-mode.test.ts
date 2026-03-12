@@ -130,6 +130,7 @@ vi.mock("../templates/directives.js", () => ({
 
 vi.mock("../utils.js", () => ({
   writeFileSafe: vi.fn().mockResolvedValue(undefined),
+  errorMessage: (err: unknown) => (err instanceof Error ? err.message : String(err)),
 }));
 
 // ── Import under test (after mocks) ────────────────────────────────
