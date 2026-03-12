@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { parse as parseToml } from "smol-toml";
 import type { DetectedContext, IDETarget, ProgressCallback } from "../types.js";
-import { fileExists, readFileOr, readJsonFile, readDirSafe } from "../utils.js";
+import { errorMessage, fileExists, readFileOr, readJsonFile, readDirSafe } from "../utils.js";
 import { FRAMEWORK_MAP, PYTHON_FRAMEWORK_MAP, extractMavenVersion } from "./frameworks.js";
 import { detectMonorepo, parsePyprojectDeps } from "./monorepo.js";
 import { getExtensionsForLanguage, detectLanguageBreakdown } from "./languages.js";
@@ -286,7 +286,7 @@ export async function detectContext(rootDir: string, onProgress?: ProgressCallba
       ctx.totalSourceBytes = sizes.reduce((sum, s) => sum + s, 0);
     }
   } catch (err: unknown) {
-    warnings.push(`Source file counting failed: ${err instanceof Error ? err.message : String(err)}`);
+    warnings.push(`Source file counting failed: ${errorMessage(err)}`);
   }
 
   ctx.testFramework = detectTestFramework(ctx.dependencies);

@@ -3,7 +3,7 @@ import * as p from "@clack/prompts";
 import { ClarteError } from "../errors.js";
 import { gitExec, gitExecSafe } from "../git/git.js";
 import { theme as t, unpatchPicocolors } from "../theme.js";
-import { writeFileSafe, isTestFile } from "../utils.js";
+import { errorMessage, writeFileSafe, isTestFile } from "../utils.js";
 import { detectContext, enrichFrameworksWithUsage } from "../detect/detect.js";
 import { buildGraphWithCache } from "../graph/cache.js";
 import { buildImportGraph, mergeGraph } from "../graph/build.js";
@@ -72,7 +72,7 @@ export async function runDiffMode(
       }
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errorMessage(err);
     if (ref && (msg.includes("unknown revision") || msg.includes("bad revision"))) {
       throw new ClarteError(`Failed to resolve ref '${ref}'. Verify the branch or commit exists.`);
     } else {

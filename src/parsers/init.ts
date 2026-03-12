@@ -2,6 +2,7 @@ import { Parser, Language } from "web-tree-sitter";
 import type { Node } from "web-tree-sitter";
 import path from "node:path";
 import type { Language as ClarteLanguage } from "../types.js";
+import { errorMessage } from "../utils.js";
 
 const languages = new Map<string, Language>();
 let parser: Parser | null = null;
@@ -38,7 +39,7 @@ async function ensureLanguage(name: string): Promise<void> {
           languages.set(name, lang);
         } catch (err) {
           langPromises.delete(name);
-          const msg = err instanceof Error ? err.message : String(err);
+          const msg = errorMessage(err);
           throw new Error(
             `Failed to load tree-sitter WASM grammar '${name}' from ${wasmDir}: ${msg}. ` +
               "Run 'npm install' or 'npm run build' to restore missing files.",

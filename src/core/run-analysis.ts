@@ -1,3 +1,4 @@
+import { errorMessage } from "../utils.js";
 import { filterAliveGitActivity } from "../git/filter-alive.js";
 import {
   computeAnalysisCacheKey,
@@ -114,8 +115,7 @@ export async function runAnalysis(
         graphTopology: graphResults.graphTopology,
       });
     } catch (err) {
-      if (!jsonMode)
-        verboseLog(`Warning: analysis cache save failed: ${err instanceof Error ? err.message : String(err)}`);
+      if (!jsonMode) verboseLog(`Warning: analysis cache save failed: ${errorMessage(err)}`);
     }
   }
 
@@ -304,8 +304,7 @@ async function runDeltaPhase(rootDir: string, analysis: ContextAnalysis, log: Lo
   try {
     await saveSnapshot(rootDir, currentAnalysisSnapshot);
   } catch (err) {
-    if (!log.jsonMode && log.verbose)
-      console.error(`[clarte] snapshot save failed: ${err instanceof Error ? err.message : String(err)}`);
+    if (!log.jsonMode && log.verbose) console.error(`[clarte] snapshot save failed: ${errorMessage(err)}`);
   }
 
   return deltaSection;

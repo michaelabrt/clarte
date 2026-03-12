@@ -4,6 +4,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ListToolsRequestSchema, CallToolRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import { CLARTE_DIR } from "../config/config.js";
+import { errorMessage } from "../utils.js";
 import { loadPersistedGraph } from "../graph/persist.js";
 import { loadCallGraph, buildCallerIndex, buildFileCallIndex } from "../graph/build-call-graph.js";
 import type { EdgeRecord } from "../types/persisted-graph.js";
@@ -84,14 +85,14 @@ function watchGraphFiles(rootDir: string, state: ServerState): void {
   fs.watchFile(graphAbsPath, { interval: 2000 }, (curr, prev) => {
     if (curr.mtimeMs !== prev.mtimeMs) {
       reloadAll().catch((err) => {
-        process.stderr.write(`[clarte] hot-reload failed: ${err instanceof Error ? err.message : String(err)}\n`);
+        process.stderr.write(`[clarte] hot-reload failed: ${errorMessage(err)}\n`);
       });
     }
   });
   fs.watchFile(callGraphAbsPath, { interval: 2000 }, (curr, prev) => {
     if (curr.mtimeMs !== prev.mtimeMs) {
       reloadAll().catch((err) => {
-        process.stderr.write(`[clarte] hot-reload failed: ${err instanceof Error ? err.message : String(err)}\n`);
+        process.stderr.write(`[clarte] hot-reload failed: ${errorMessage(err)}\n`);
       });
     }
   });

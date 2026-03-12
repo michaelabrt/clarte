@@ -1,6 +1,7 @@
 import { loadConfig, computeSnapshotHash } from "../config/config.js";
 import { validateContextPaths } from "../analysis/check.js";
 import { ExitCode } from "../errors.js";
+import { errorMessage } from "../utils.js";
 
 /**
  * Handle --check mode: fast path for shell integration.
@@ -91,7 +92,7 @@ export async function runCheckMode(rootDir: string, checkTimestamp: boolean, ciM
     process.exit(ExitCode.SUCCESS);
   } catch (err: unknown) {
     if (ciMode) {
-      console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`error: ${errorMessage(err)}`);
       process.exit(ExitCode.MISSING);
     }
     throw err;

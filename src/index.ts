@@ -9,7 +9,7 @@ import {
   resetTerminalColors,
   detectTerminalBackground,
 } from "./theme.js";
-import { fileExists } from "./utils.js";
+import { errorMessage, fileExists, writeJsonStdout } from "./utils.js";
 import { loadConfig } from "./config/config.js";
 import { refreshSnapshot } from "./modes/refresh.js";
 import { initPreCommitHook } from "./cli/hooks.js";
@@ -87,9 +87,7 @@ async function main() {
 
   if (ciSubcommand) {
     const result = await runCiMode(rootDir, ciChangedFiles.length > 0 ? ciChangedFiles : null, ciBase, verbose);
-    await new Promise<void>((resolve, reject) => {
-      process.stdout.write(JSON.stringify(result, null, 2) + "\n", (err) => (err ? reject(err) : resolve()));
-    });
+    await writeJsonStdout(result);
     process.exit(ExitCode.SUCCESS);
   }
 
@@ -100,9 +98,7 @@ async function main() {
     const { runLearnMode } = await import("./cli/learn.js");
     const result = await runLearnMode(rootDir, learnSessionPath, verbose, jsonMode);
     if (jsonMode) {
-      await new Promise<void>((resolve, reject) => {
-        process.stdout.write(JSON.stringify(result, null, 2) + "\n", (err) => (err ? reject(err) : resolve()));
-      });
+      await writeJsonStdout(result);
     }
     process.exit(ExitCode.SUCCESS);
   }
@@ -196,7 +192,7 @@ main().catch((err) => {
   }
 
   // Unexpected errors: provide context-specific messages
-  const msg = err instanceof Error ? err.message : String(err);
+  const msg = errorMessage(err);
 
   if (msg.includes("ENOENT")) {
     console.error(t.error("File not found:"), msg);

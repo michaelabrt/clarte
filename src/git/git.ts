@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { ClarteError } from "../errors.js";
+import { errorMessage } from "../utils.js";
 
 export interface GitExecOptions {
   cwd: string;
@@ -38,7 +39,7 @@ export function gitExec(args: string[], opts: GitExecOptions): string {
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     throw new GitError(message, command, err);
   }
 }
