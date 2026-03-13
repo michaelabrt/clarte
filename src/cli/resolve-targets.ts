@@ -110,7 +110,6 @@ const STOP_WORDS = new Set([
   "commas",
 ]);
 
-
 /**
  * Programming synonym groups. Each array is a bidirectional synonym cluster.
  * When a query contains any term in a group, all other terms in that group
