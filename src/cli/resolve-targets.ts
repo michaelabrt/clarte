@@ -1,4 +1,5 @@
 import type { PersistedGraph } from "../types/persisted-graph.js";
+import { isTestFile } from "../utils.js";
 
 const STOP_WORDS = new Set([
   // Articles, prepositions, conjunctions
@@ -109,7 +110,6 @@ const STOP_WORDS = new Set([
   "commas",
 ]);
 
-const TEST_FILE_RE = /(?:^|\/)(?:test|spec|__tests__|__mocks__)\/|\.(?:test|spec)\.[jt]sx?$/;
 
 /**
  * Programming synonym groups. Each array is a bidirectional synonym cluster.
@@ -390,7 +390,7 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
   const queryTerms = tokenizeQuery(query);
   if (queryTerms.length === 0) return [];
 
-  const filePaths = Object.keys(graph.files).filter((fp) => !TEST_FILE_RE.test(fp));
+  const filePaths = Object.keys(graph.files).filter((fp) => !isTestFile(fp));
   if (filePaths.length === 0) return [];
 
   // Collect exported symbol names per file: symbols other files import from it
