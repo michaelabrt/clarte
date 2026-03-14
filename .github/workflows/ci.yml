@@ -20,23 +20,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
 
-      - run: npm ci
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
 
       - name: Cache WASM grammars
         uses: actions/cache@v4
         with:
           path: dist/wasm
-          key: wasm-${{ hashFiles('package-lock.json') }}
+          key: wasm-${{ hashFiles('bun.lock') }}
 
-      - run: npm run build
+      - run: bun run build
 
-      - run: npm test
+      - run: bun run test
 
-      - run: npm run typecheck
+      - run: bun run typecheck
 
-      - run: npm run lint
+      - run: bun run lint
 
       - name: Self-test diff (Node 22 only)
         if: matrix.node-version == 22
