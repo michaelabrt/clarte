@@ -133,11 +133,21 @@ Tested on 4 real-world bug fixes (3 Hono single-package, 1 TypeORM monorepo), op
 |---|---|---|---|---|
 | Hono: URL fragment (opaque) | $0.34 | $0.28 | -17% cost | 8+8 |
 | Hono: URL fragment (detailed) | $0.16 | $0.15 | parity | 10+1 |
-| Hono: JSX async context | did not finish | 17t / $0.48 | pre-flight only | 1+1 |
+| Hono: JSX async context | 2 did not finish | $0.64 avg | pre-flight only | 2+2 |
 | Hono: form validator | did not finish | 18t / $0.41 | pre-flight only | 1+1 |
 | TypeORM: SQLite simple-enum array | 47.7t / $1.47 | 16.3t / $0.43 | -66% turns, -71% cost | 3+3 |
 
-Pre-flight finished all 4 opaque tasks. Placebo finished 2 of 4 (and was slower on both). On hono-url (n=8), pre-flight variance was 3x tighter ($0.25-$0.31 vs $0.26-$0.42). On TypeORM (n=3), the gap was even larger: -66% turns and -71% cost. This is the first approach to beat placebo on single-package repos.
+Pre-flight finished all 4 opaque tasks. Placebo finished 2 of 4 (and was slower on both). The JSX context loss task was re-run as a controlled AB ($1.50 budget): placebo hit the cap again ($1.54), pre-flight completed at $0.80. On hono-url (n=8), pre-flight variance was 3x tighter ($0.25-$0.31 vs $0.26-$0.42). On TypeORM (n=3), the gap was even larger: -66% turns and -71% cost. This is the first approach to beat placebo on single-package repos.
+
+**First-edit timing** (JSX async context AB, $1.50 budget, n=1+1):
+
+| Metric | Placebo | Pre-flight |
+|---|---|---|
+| First edit | ~14 min | ~2 min |
+| File edited | `src/jsx/base.ts` (wrong) | `src/jsx/context.ts` (correct) |
+| Outcome | hit budget cap ($1.54) | completed ($0.80) |
+
+Pre-flight's target prediction (`task-context.md`) listed `src/jsx/context.ts` as the top edit target. The agent applied the pre-flight findings and edited the correct file within 2 minutes, skipping exploration entirely. Placebo spent 14 minutes in extended thinking before editing a different file, then ran out of budget. This is consistent with R.18: each delayed first-edit turn adds ~1.3 total turns, and here the 12-minute gap translated directly into a DNF.
 
 ## Phase 5: On-demand delivery
 
