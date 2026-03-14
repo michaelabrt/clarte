@@ -15,5 +15,6 @@ coverage/
 ROADMAP.md
 RESEARCH.md
 TEST-ROADMAP.md
+docs/prompts/
 .mcp.json
 memory/
