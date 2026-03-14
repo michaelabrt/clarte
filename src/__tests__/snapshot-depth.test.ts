@@ -84,14 +84,14 @@ def process_order(order: Order) -> Receipt:
     return Receipt()
 `;
 
-    mockGlob.mockResolvedValue(["services/orders.py"] as any);
+    mockGlob.mockResolvedValue(["services/orders.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makeCtx("python"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("process_order"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toContain('# "Process an order and return a receipt."');
+    if (!entry) throw new Error("expected process_order entry");
+    expect(entry.signature).toContain('# "Process an order and return a receipt."');
   });
 
   it("appends single-line docstring to class header", async () => {
@@ -103,14 +103,14 @@ class OrderService:
         pass
 `;
 
-    mockGlob.mockResolvedValue(["services/orders.py"] as any);
+    mockGlob.mockResolvedValue(["services/orders.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makeCtx("python"), []);
 
     const classEntry = result.entries.find((e) => e.signature.includes("class OrderService"));
-    expect(classEntry).toBeDefined();
-    expect(classEntry?.signature).toContain('# "Service for managing customer orders."');
+    if (!classEntry) throw new Error("expected class OrderService entry");
+    expect(classEntry.signature).toContain('# "Service for managing customer orders."');
   });
 
   it("extracts first line of multi-line docstring", async () => {
@@ -128,16 +128,16 @@ def complex_function(x: int, y: str) -> bool:
     pass
 `;
 
-    mockGlob.mockResolvedValue(["utils/matching.py"] as any);
+    mockGlob.mockResolvedValue(["utils/matching.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makeCtx("python"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("complex_function"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toContain('# "Check if x matches the pattern in y."');
+    if (!entry) throw new Error("expected complex_function entry");
+    expect(entry.signature).toContain('# "Check if x matches the pattern in y."');
     // Should not include the full docstring body
-    expect(entry?.signature).not.toContain("Args:");
+    expect(entry.signature).not.toContain("Args:");
   });
 
   it("truncates long docstrings to 80 chars with ellipsis", async () => {
@@ -147,17 +147,17 @@ def long_documented(items: list[Item]) -> Result:
     pass
 `;
 
-    mockGlob.mockResolvedValue(["services/items.py"] as any);
+    mockGlob.mockResolvedValue(["services/items.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makeCtx("python"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("long_documented"));
-    expect(entry).toBeDefined();
+    if (!entry) throw new Error("expected long_documented entry");
     // The docstring comment should be present
-    expect(entry?.signature).toContain('# "');
+    expect(entry.signature).toContain('# "');
     // Extract the docstring part
-    const docPart = entry?.signature.split('# "')[1];
+    const docPart = entry.signature.split('# "')[1];
     // Should end with ..." (including the closing quote)
     expect(docPart).toContain("...");
     // The docstring portion (between the quotes) should not exceed 80 chars
@@ -172,14 +172,14 @@ def single_quoted(data: bytes) -> str:
     return data.decode('utf-8')
 `;
 
-    mockGlob.mockResolvedValue(["utils/encoding.py"] as any);
+    mockGlob.mockResolvedValue(["utils/encoding.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makeCtx("python"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("single_quoted"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toContain('# "Decode bytes to a UTF-8 string."');
+    if (!entry) throw new Error("expected single_quoted entry");
+    expect(entry.signature).toContain('# "Decode bytes to a UTF-8 string."');
   });
 
   it("does not append docstring when none present", async () => {
@@ -188,14 +188,14 @@ def no_docstring(x: int) -> int:
     return x + 1
 `;
 
-    mockGlob.mockResolvedValue(["utils/math.py"] as any);
+    mockGlob.mockResolvedValue(["utils/math.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makeCtx("python"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("no_docstring"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).not.toContain("#");
+    if (!entry) throw new Error("expected no_docstring entry");
+    expect(entry.signature).not.toContain("#");
   });
 
   it("handles multi-line docstring where summary is on the next line", async () => {
@@ -207,14 +207,14 @@ def delayed_summary(x: int) -> int:
     return x
 `;
 
-    mockGlob.mockResolvedValue(["utils/compute.py"] as any);
+    mockGlob.mockResolvedValue(["utils/compute.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makeCtx("python"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("delayed_summary"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toContain('# "Compute the delayed value of x."');
+    if (!entry) throw new Error("expected delayed_summary entry");
+    expect(entry.signature).toContain('# "Compute the delayed value of x."');
   });
 
   it("appends docstring to async function", async () => {
@@ -224,14 +224,14 @@ async def fetch_user(user_id: int) -> User:
     pass
 `;
 
-    mockGlob.mockResolvedValue(["services/users.py"] as any);
+    mockGlob.mockResolvedValue(["services/users.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makeCtx("python"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("fetch_user"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toContain('# "Fetch a user by their unique ID."');
+    if (!entry) throw new Error("expected fetch_user entry");
+    expect(entry.signature).toContain('# "Fetch a user by their unique ID."');
   });
 
   it("appends docstring to class method", async () => {
@@ -242,14 +242,14 @@ class UserManager:
         pass
 `;
 
-    mockGlob.mockResolvedValue(["services/users.py"] as any);
+    mockGlob.mockResolvedValue(["services/users.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makeCtx("python"), []);
 
     const methodEntry = result.entries.find((e) => e.signature.includes("create_user"));
-    expect(methodEntry).toBeDefined();
-    expect(methodEntry?.signature).toContain('# "Create a new user with the given name."');
+    if (!methodEntry) throw new Error("expected create_user entry");
+    expect(methodEntry.signature).toContain('# "Create a new user with the given name."');
   });
 });
 
@@ -264,15 +264,15 @@ func (s *Server) Handle(ctx context.Context) error {
 }
 `;
 
-    mockGlob.mockResolvedValue(["internal/server.go"] as any);
+    mockGlob.mockResolvedValue(["internal/server.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeCtx("go"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("Handle"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toBe("(Server).Handle(ctx context.Context) error");
-    expect(entry?.category).toBe("function");
+    if (!entry) throw new Error("expected Handle entry");
+    expect(entry.signature).toBe("(Server).Handle(ctx context.Context) error");
+    expect(entry.category).toBe("function");
   });
 
   it("rewrites value receiver methods", async () => {
@@ -283,14 +283,14 @@ func (u User) String() string {
 }
 `;
 
-    mockGlob.mockResolvedValue(["models/user.go"] as any);
+    mockGlob.mockResolvedValue(["models/user.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeCtx("go"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("String"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toBe("(User).String() string");
+    if (!entry) throw new Error("expected String entry");
+    expect(entry.signature).toBe("(User).String() string");
   });
 
   it("extracts struct, methods, and standalone functions from same file", async () => {
@@ -314,7 +314,7 @@ func NewServer(addr string) *Server {
 }
 `;
 
-    mockGlob.mockResolvedValue(["models/server.go"] as any);
+    mockGlob.mockResolvedValue(["models/server.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeCtx("go"), []);
@@ -345,15 +345,15 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 }
 `;
 
-    mockGlob.mockResolvedValue(["handlers/main.go"] as any);
+    mockGlob.mockResolvedValue(["handlers/main.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeCtx("go"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("HandleRequest"));
-    expect(entry).toBeDefined();
+    if (!entry) throw new Error("expected HandleRequest entry");
     // Standalone functions should retain the "func" prefix
-    expect(entry?.signature).toContain("func HandleRequest");
+    expect(entry.signature).toContain("func HandleRequest");
   });
 
   it("handles methods for receiver type not defined in same file", async () => {
@@ -366,14 +366,14 @@ func (u *User) FullName() string {
 }
 `;
 
-    mockGlob.mockResolvedValue(["models/user_methods.go"] as any);
+    mockGlob.mockResolvedValue(["models/user_methods.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeCtx("go"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("FullName"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toBe("(User).FullName() string");
+    if (!entry) throw new Error("expected FullName entry");
+    expect(entry.signature).toBe("(User).FullName() string");
   });
 
   it("handles multiple struct types with their respective methods", async () => {
@@ -396,7 +396,7 @@ func (w *Writer) Write(data []byte) (int, error) {
 }
 `;
 
-    mockGlob.mockResolvedValue(["models/io.go"] as any);
+    mockGlob.mockResolvedValue(["models/io.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeCtx("go"), []);
@@ -411,12 +411,12 @@ func (w *Writer) Write(data []byte) (int, error) {
 
     // Methods should use the (ReceiverType).Method format
     const readerMethod = result.entries.find((e) => e.signature.includes("(Reader).Read"));
-    expect(readerMethod).toBeDefined();
-    expect(readerMethod?.signature).toContain("(Reader).Read(buf []byte) (int, error)");
+    if (!readerMethod) throw new Error("expected (Reader).Read entry");
+    expect(readerMethod.signature).toContain("(Reader).Read(buf []byte) (int, error)");
 
     const writerMethod = result.entries.find((e) => e.signature.includes("(Writer).Write"));
-    expect(writerMethod).toBeDefined();
-    expect(writerMethod?.signature).toContain("(Writer).Write(data []byte) (int, error)");
+    if (!writerMethod) throw new Error("expected (Writer).Write entry");
+    expect(writerMethod.signature).toContain("(Writer).Write(data []byte) (int, error)");
   });
 });
 
@@ -432,17 +432,17 @@ where
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/handlers.rs"] as any);
+    mockGlob.mockResolvedValue(["src/handlers.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeCtx("rust"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("process"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toContain("where");
-    expect(entry?.signature).toContain("T: Serialize + Send");
+    if (!entry) throw new Error("expected process entry");
+    expect(entry.signature).toContain("where");
+    expect(entry.signature).toContain("T: Serialize + Send");
     // Should not include the opening brace
-    expect(entry?.signature).not.toContain("{");
+    expect(entry.signature).not.toContain("{");
   });
 
   it("preserves multi-bound where clause", async () => {
@@ -455,16 +455,16 @@ where
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/transform.rs"] as any);
+    mockGlob.mockResolvedValue(["src/transform.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeCtx("rust"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("transform"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toContain("T: Serialize + Clone");
-    expect(entry?.signature).toContain("U: DeserializeOwned + Default");
-    expect(entry?.signature).not.toContain("{");
+    if (!entry) throw new Error("expected transform entry");
+    expect(entry.signature).toContain("T: Serialize + Clone");
+    expect(entry.signature).toContain("U: DeserializeOwned + Default");
+    expect(entry.signature).not.toContain("{");
   });
 
   it("preserves async fn with where clause", async () => {
@@ -476,16 +476,16 @@ where
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/client.rs"] as any);
+    mockGlob.mockResolvedValue(["src/client.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeCtx("rust"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("fetch"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toContain("pub async fn fetch");
-    expect(entry?.signature).toContain("where");
-    expect(entry?.signature).toContain("T: DeserializeOwned");
+    if (!entry) throw new Error("expected fetch entry");
+    expect(entry.signature).toContain("pub async fn fetch");
+    expect(entry.signature).toContain("where");
+    expect(entry.signature).toContain("T: DeserializeOwned");
   });
 
   it("still handles functions without where clauses", async () => {
@@ -494,15 +494,15 @@ where
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/math.rs"] as any);
+    mockGlob.mockResolvedValue(["src/math.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeCtx("rust"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("simple_function"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toBe("pub fn simple_function(x: i32) -> i32");
-    expect(entry?.signature).not.toContain("{");
+    if (!entry) throw new Error("expected simple_function entry");
+    expect(entry.signature).toBe("pub fn simple_function(x: i32) -> i32");
+    expect(entry.signature).not.toContain("{");
   });
 
   it("handles where clause with lifetime bounds", async () => {
@@ -514,15 +514,15 @@ where
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/parser.rs"] as any);
+    mockGlob.mockResolvedValue(["src/parser.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeCtx("rust"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("parse"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toContain("where");
-    expect(entry?.signature).toContain("T: Deserialize<'a>");
+    if (!entry) throw new Error("expected parse entry");
+    expect(entry.signature).toContain("where");
+    expect(entry.signature).toContain("T: Deserialize<'a>");
   });
 });
 
@@ -548,18 +548,18 @@ public class UserController {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/controllers/UserController.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/controllers/UserController.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeCtx("java"), []);
 
     const getMethod = result.entries.find((e) => e.signature.includes("getUser"));
-    expect(getMethod).toBeDefined();
-    expect(getMethod?.signature).toContain('@GetMapping("/{id}")');
+    if (!getMethod) throw new Error("expected getUser entry");
+    expect(getMethod.signature).toContain('@GetMapping("/{id}")');
 
     const postMethod = result.entries.find((e) => e.signature.includes("createUser"));
-    expect(postMethod).toBeDefined();
-    expect(postMethod?.signature).toContain("@PostMapping");
+    if (!postMethod) throw new Error("expected createUser entry");
+    expect(postMethod.signature).toContain("@PostMapping");
   });
 
   it("captures @Transactional on methods", async () => {
@@ -575,18 +575,18 @@ public class OrderService {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/services/OrderService.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/services/OrderService.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeCtx("java"), []);
 
     const classEntry = result.entries.find((e) => e.signature.includes("OrderService"));
-    expect(classEntry).toBeDefined();
-    expect(classEntry?.signature).toContain("@Service");
+    if (!classEntry) throw new Error("expected OrderService entry");
+    expect(classEntry.signature).toContain("@Service");
 
     const methodEntry = result.entries.find((e) => e.signature.includes("processOrder"));
-    expect(methodEntry).toBeDefined();
-    expect(methodEntry?.signature).toContain("@Transactional");
+    if (!methodEntry) throw new Error("expected processOrder entry");
+    expect(methodEntry.signature).toContain("@Transactional");
   });
 
   it("captures @Service, @Repository, @Controller annotations on classes", async () => {
@@ -601,14 +601,14 @@ public class UserRepository {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/UserRepository.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/UserRepository.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeCtx("java"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("UserRepository"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toContain("@Repository");
+    if (!entry) throw new Error("expected UserRepository entry");
+    expect(entry.signature).toContain("@Repository");
   });
 
   it("captures @Entity and @Table annotations", async () => {
@@ -624,15 +624,15 @@ public class User {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/entities/User.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/entities/User.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeCtx("java"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("public class User"));
-    expect(entry).toBeDefined();
-    expect(entry?.signature).toContain("@Entity");
-    expect(entry?.signature).toContain("@Table");
+    if (!entry) throw new Error("expected public class User entry");
+    expect(entry.signature).toContain("@Entity");
+    expect(entry.signature).toContain("@Table");
   });
 
   it("captures JPA field annotations on public fields", async () => {
@@ -654,19 +654,19 @@ public class Order {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/entities/Order.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/entities/Order.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeCtx("java"), []);
 
     // Public fields with significant JPA annotations should be captured
     const customerField = result.entries.find((e) => e.signature.includes("public User customer"));
-    expect(customerField).toBeDefined();
-    expect(customerField?.signature).toContain("@ManyToOne");
+    if (!customerField) throw new Error("expected public User customer entry");
+    expect(customerField.signature).toContain("@ManyToOne");
 
     const statusField = result.entries.find((e) => e.signature.includes("public String status"));
-    expect(statusField).toBeDefined();
-    expect(statusField?.signature).toContain("@Column");
+    if (!statusField) throw new Error("expected public String status entry");
+    expect(statusField.signature).toContain("@Column");
   });
 
   it("preserves annotation parameters with spaces", async () => {
@@ -682,16 +682,16 @@ public class ApiController {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/ApiController.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/ApiController.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeCtx("java"), []);
 
     const entry = result.entries.find((e) => e.signature.includes("listUsers"));
-    expect(entry).toBeDefined();
+    if (!entry) throw new Error("expected listUsers entry");
     // The full @GetMapping annotation with parameters should be preserved
-    expect(entry?.signature).toContain("@GetMapping");
-    expect(entry?.signature).toContain("/users");
+    expect(entry.signature).toContain("@GetMapping");
+    expect(entry.signature).toContain("/users");
   });
 
   it("does not capture public fields without significant annotations", async () => {
@@ -707,7 +707,7 @@ public class SimpleClass {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/SimpleClass.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/SimpleClass.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeCtx("java"), []);
@@ -736,18 +736,18 @@ public class V2Controller {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/V2Controller.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/V2Controller.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeCtx("java"), []);
 
     const classEntry = result.entries.find((e) => e.signature.includes("V2Controller"));
-    expect(classEntry).toBeDefined();
-    expect(classEntry?.signature).toContain("@RestController");
-    expect(classEntry?.signature).toContain('@RequestMapping("/api/v2")');
+    if (!classEntry) throw new Error("expected V2Controller entry");
+    expect(classEntry.signature).toContain("@RestController");
+    expect(classEntry.signature).toContain('@RequestMapping("/api/v2")');
 
     const deleteMethod = result.entries.find((e) => e.signature.includes("delete"));
-    expect(deleteMethod).toBeDefined();
-    expect(deleteMethod?.signature).toContain('@DeleteMapping("/{id}")');
+    if (!deleteMethod) throw new Error("expected delete entry");
+    expect(deleteMethod.signature).toContain('@DeleteMapping("/{id}")');
   });
 });

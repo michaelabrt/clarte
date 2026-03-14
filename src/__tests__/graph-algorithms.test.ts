@@ -93,12 +93,12 @@ describe("computeHITS", () => {
     const { authority, hub } = computeHITS(files, edges);
 
     // Center has highest authority (many files depend on it)
-    expect(authority.get("center")).toBeGreaterThan(authority.get("a")!);
-    expect(authority.get("center")).toBeGreaterThan(authority.get("b")!);
-    expect(authority.get("center")).toBeGreaterThan(authority.get("c")!);
+    expect(authority.get("center")).toBeGreaterThan(authority.get("a") ?? 0);
+    expect(authority.get("center")).toBeGreaterThan(authority.get("b") ?? 0);
+    expect(authority.get("center")).toBeGreaterThan(authority.get("c") ?? 0);
 
     // Spokes have higher hub scores (they import from center)
-    expect(hub.get("a")).toBeGreaterThan(hub.get("center")!);
+    expect(hub.get("a")).toBeGreaterThan(hub.get("center") ?? 0);
   });
 
   it("handles chain graph — intermediate nodes as bridges", () => {
@@ -110,8 +110,8 @@ describe("computeHITS", () => {
     // d is most depended upon (end of chain)
     // a is least depended upon (start)
     // Both b and c are in the middle
-    expect(authority.get("d")!).toBeGreaterThanOrEqual(authority.get("a")!);
-    expect(hub.get("a")!).toBeGreaterThanOrEqual(hub.get("d")!);
+    expect(authority.get("d") ?? 0).toBeGreaterThanOrEqual(authority.get("a") ?? 0);
+    expect(hub.get("a") ?? 0).toBeGreaterThanOrEqual(hub.get("d") ?? 0);
   });
 
   it("assigns ~0 scores to isolated nodes", () => {
@@ -135,7 +135,7 @@ describe("computeHITS", () => {
     const { authority } = computeHITS(files, edges);
 
     // Value target should have higher authority than type-only target
-    expect(authority.get("valueTarget")!).toBeGreaterThan(authority.get("typeTarget")!);
+    expect(authority.get("valueTarget") ?? 0).toBeGreaterThan(authority.get("typeTarget") ?? 0);
   });
 
   it("converges within 30 iterations", () => {
@@ -429,7 +429,7 @@ describe("computeHITS with dynamic imports", () => {
     const { authority } = computeHITS(files, edges);
 
     // Static target should have higher authority than dynamic target
-    expect(authority.get("staticTarget")!).toBeGreaterThan(authority.get("dynamicTarget")!);
+    expect(authority.get("staticTarget") ?? 0).toBeGreaterThan(authority.get("dynamicTarget") ?? 0);
   });
 
   it("dynamic edges weigh between type-only and value imports", () => {
@@ -442,8 +442,8 @@ describe("computeHITS with dynamic imports", () => {
 
     const { authority } = computeHITS(files, edges);
 
-    expect(authority.get("valueTarget")!).toBeGreaterThan(authority.get("dynamicTarget")!);
-    expect(authority.get("dynamicTarget")!).toBeGreaterThan(authority.get("typeTarget")!);
+    expect(authority.get("valueTarget") ?? 0).toBeGreaterThan(authority.get("dynamicTarget") ?? 0);
+    expect(authority.get("dynamicTarget") ?? 0).toBeGreaterThan(authority.get("typeTarget") ?? 0);
   });
 });
 
@@ -461,7 +461,7 @@ describe("computeHITS with barrel files", () => {
     const { authority } = computeHITS(files, edges, 30, 1e-6, barrelFiles);
 
     // Source (non-barrel) should have higher authority than barrel
-    expect(authority.get("source")!).toBeGreaterThan(authority.get("barrel")!);
+    expect(authority.get("source") ?? 0).toBeGreaterThan(authority.get("barrel") ?? 0);
   });
 
   it("non-barrel files are not affected by barrel discount", () => {
@@ -577,7 +577,7 @@ describe("findCircularDeps with dynamic imports", () => {
     const deps = findCircularDeps(graph);
     expect(deps.length).toBeGreaterThanOrEqual(2);
     // Runtime cycle (severity 1.0) should come before dynamic cycle (severity 0.5)
-    expect(deps[0].severity!).toBeGreaterThan(deps[deps.length - 1].severity!);
+    expect(deps[0].severity ?? 0).toBeGreaterThan(deps[deps.length - 1].severity ?? 0);
   });
 });
 
@@ -631,11 +631,11 @@ describe("computeBetweenness", () => {
     const scores = computeBetweenness(graph);
 
     // Middle nodes (b, c, d) should have higher betweenness than endpoints
-    expect(scores.get("c")!).toBeGreaterThan(scores.get("a")!);
-    expect(scores.get("c")!).toBeGreaterThan(scores.get("e")!);
+    expect(scores.get("c") ?? 0).toBeGreaterThan(scores.get("a") ?? 0);
+    expect(scores.get("c") ?? 0).toBeGreaterThan(scores.get("e") ?? 0);
     // Center of chain (c) should have highest score
-    expect(scores.get("c")!).toBeGreaterThanOrEqual(scores.get("b")!);
-    expect(scores.get("c")!).toBeGreaterThanOrEqual(scores.get("d")!);
+    expect(scores.get("c") ?? 0).toBeGreaterThanOrEqual(scores.get("b") ?? 0);
+    expect(scores.get("c") ?? 0).toBeGreaterThanOrEqual(scores.get("d") ?? 0);
     // Endpoints should have zero
     expect(scores.get("a")).toBe(0);
     expect(scores.get("e")).toBe(0);
@@ -703,7 +703,7 @@ describe("computeBetweenness", () => {
     const graph = makeGraph(["a", "b", "c"], [edge("a", "a"), edge("a", "b"), edge("b", "c")]);
     const scores = computeBetweenness(graph);
     // b is the only bridge node; self-loop on a should not affect this
-    expect(scores.get("b")!).toBeGreaterThan(scores.get("a")!);
+    expect(scores.get("b") ?? 0).toBeGreaterThan(scores.get("a") ?? 0);
     for (const [, score] of scores) {
       expect(Number.isNaN(score)).toBe(false);
     }

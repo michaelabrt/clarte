@@ -162,12 +162,12 @@ export function findFeedbackEdges(
 
   for (const node of allNodes) {
     let out = 0;
-    for (const nb of adj.get(node)!) {
+    for (const nb of adj.get(node) ?? []) {
       if (allNodes.has(nb)) out++;
     }
     outDeg.set(node, out);
     let inp = 0;
-    for (const nb of revAdj.get(node)!) {
+    for (const nb of revAdj.get(node) ?? []) {
       if (allNodes.has(nb)) inp++;
     }
     inDeg.set(node, inp);
@@ -178,11 +178,11 @@ export function findFeedbackEdges(
 
   const removeNode = (node: string) => {
     remaining.delete(node);
-    for (const succ of adj.get(node)!) {
-      if (remaining.has(succ)) inDeg.set(succ, inDeg.get(succ)! - 1);
+    for (const succ of adj.get(node) ?? []) {
+      if (remaining.has(succ)) inDeg.set(succ, (inDeg.get(succ) ?? 1) - 1);
     }
-    for (const pred of revAdj.get(node)!) {
-      if (remaining.has(pred)) outDeg.set(pred, outDeg.get(pred)! - 1);
+    for (const pred of revAdj.get(node) ?? []) {
+      if (remaining.has(pred)) outDeg.set(pred, (outDeg.get(pred) ?? 1) - 1);
     }
   };
 
@@ -192,7 +192,7 @@ export function findFeedbackEdges(
     while (changed) {
       changed = false;
       for (const node of remaining) {
-        if (outDeg.get(node)! === 0) {
+        if ((outDeg.get(node) ?? 0) === 0) {
           rightSeq.push(node);
           removeNode(node);
           changed = true;
@@ -204,7 +204,7 @@ export function findFeedbackEdges(
     while (changed) {
       changed = false;
       for (const node of remaining) {
-        if (inDeg.get(node)! === 0) {
+        if ((inDeg.get(node) ?? 0) === 0) {
           leftSeq.push(node);
           removeNode(node);
           changed = true;
@@ -216,7 +216,7 @@ export function findFeedbackEdges(
       let bestNode = "";
       let bestDelta = -Infinity;
       for (const node of [...remaining].sort()) {
-        const delta = outDeg.get(node)! - inDeg.get(node)!;
+        const delta = (outDeg.get(node) ?? 0) - (inDeg.get(node) ?? 0);
         if (delta > bestDelta) {
           bestDelta = delta;
           bestNode = node;
@@ -240,7 +240,7 @@ export function findFeedbackEdges(
     for (let i = 0; i < cycle.chain.length - 1; i++) {
       const from = cycle.chain[i];
       const to = cycle.chain[i + 1];
-      if (position.get(from)! >= position.get(to)!) {
+      if ((position.get(from) ?? 0) >= (position.get(to) ?? 0)) {
         backEdges.add(`${from}||${to}`);
       }
     }
@@ -276,7 +276,7 @@ export function findFeedbackEdges(
     for (let i = 0; i < cycles[ci].chain.length - 1; i++) {
       const key = `${cycles[ci].chain[i]}||${cycles[ci].chain[i + 1]}`;
       if (!edgeToCycles.has(key)) edgeToCycles.set(key, new Set());
-      edgeToCycles.get(key)!.add(ci);
+      edgeToCycles.get(key)?.add(ci);
     }
   }
 
@@ -381,7 +381,7 @@ function findActualCycles(scc: string[], adj: Map<string, Set<string>>, maxCycle
       if (cycles.length >= maxCycles) break;
 
       const node = queue[qi++];
-      const nodeDepth = depth.get(node)!;
+      const nodeDepth = depth.get(node) ?? 0;
 
       // Cap depth at SCC size to avoid explosion
       if (nodeDepth >= scc.length) continue;

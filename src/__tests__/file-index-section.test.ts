@@ -58,8 +58,10 @@ describe("renderFileIndexSection", () => {
       makeEdge("src/b.ts", "src/utils.ts", ["common"]),
       makeEdge("src/c.ts", "src/utils.ts", ["common"]),
     ]);
-    const section = renderFileIndexSection(graph)!;
-    const line = section.content.split("\n").find((l) => l.includes("src/utils.ts"))!;
+    const section = renderFileIndexSection(graph);
+    if (!section) throw new Error("expected section");
+    const line = section.content.split("\n").find((l) => l.includes("src/utils.ts"));
+    if (!line) throw new Error("expected line containing src/utils.ts");
     const exportsCell = line.split("|")[2].trim();
     expect(exportsCell).toBe("common, rare");
   });
@@ -67,8 +69,10 @@ describe("renderFileIndexSection", () => {
   it("truncates to 5 exports with ellipsis", () => {
     const names = ["a", "b", "c", "d", "e", "f", "g"];
     const graph = makeGraph([makeEdge("src/app.ts", "src/big.ts", names)]);
-    const section = renderFileIndexSection(graph)!;
-    const line = section.content.split("\n").find((l) => l.includes("src/big.ts"))!;
+    const section = renderFileIndexSection(graph);
+    if (!section) throw new Error("expected section");
+    const line = section.content.split("\n").find((l) => l.includes("src/big.ts"));
+    if (!line) throw new Error("expected line containing src/big.ts");
     expect(line).toContain("...");
     // Should show exactly 5 names before "..."
     const exportsCell = line.split("|")[2].trim();
@@ -79,8 +83,10 @@ describe("renderFileIndexSection", () => {
   it("does not add ellipsis for exactly 5 exports", () => {
     const names = ["a", "b", "c", "d", "e"];
     const graph = makeGraph([makeEdge("src/app.ts", "src/exact.ts", names)]);
-    const section = renderFileIndexSection(graph)!;
-    const line = section.content.split("\n").find((l) => l.includes("src/exact.ts"))!;
+    const section = renderFileIndexSection(graph);
+    if (!section) throw new Error("expected section");
+    const line = section.content.split("\n").find((l) => l.includes("src/exact.ts"));
+    if (!line) throw new Error("expected line containing src/exact.ts");
     expect(line).not.toContain("...");
   });
 
@@ -89,7 +95,8 @@ describe("renderFileIndexSection", () => {
       makeEdge("src/app.ts", "src/utils.ts", ["foo"]),
       makeEdge("src/app.ts", "src/utils.test.ts", ["mockFoo"]),
     ]);
-    const section = renderFileIndexSection(graph)!;
+    const section = renderFileIndexSection(graph);
+    if (!section) throw new Error("expected section");
     expect(section.content).toContain("`src/utils.ts`");
     expect(section.content).not.toContain("utils.test.ts");
   });
@@ -99,7 +106,8 @@ describe("renderFileIndexSection", () => {
       [makeEdge("src/app.ts", "src/types/index.ts", ["Foo"]), makeEdge("src/app.ts", "src/types/graph.ts", ["Bar"])],
       ["src/types/index.ts"],
     );
-    const section = renderFileIndexSection(graph)!;
+    const section = renderFileIndexSection(graph);
+    if (!section) throw new Error("expected section");
     expect(section.content).not.toContain("src/types/index.ts");
     expect(section.content).toContain("`src/types/graph.ts`");
   });
@@ -109,7 +117,8 @@ describe("renderFileIndexSection", () => {
       makeEdge("src/app.ts", "src/utils.ts", ["foo"]),
       makeEdge("src/test.ts", "src/fixtures/data.ts", ["testData"]),
     ]);
-    const section = renderFileIndexSection(graph)!;
+    const section = renderFileIndexSection(graph);
+    if (!section) throw new Error("expected section");
     expect(section.content).not.toContain("fixtures/data.ts");
   });
 
@@ -118,7 +127,8 @@ describe("renderFileIndexSection", () => {
       { from: "src/app.ts", to: "react", isExternal: true, specifier: "react", importedNames: ["useState"] },
       makeEdge("src/app.ts", "src/utils.ts", ["foo"]),
     ]);
-    const section = renderFileIndexSection(graph)!;
+    const section = renderFileIndexSection(graph);
+    if (!section) throw new Error("expected section");
     expect(section.content).not.toContain("react");
     expect(section.content).toContain("`src/utils.ts`");
   });
@@ -128,7 +138,8 @@ describe("renderFileIndexSection", () => {
       makeEdge("src/app.ts", "src/side-effect.ts", []),
       makeEdge("src/app.ts", "src/utils.ts", ["foo"]),
     ]);
-    const section = renderFileIndexSection(graph)!;
+    const section = renderFileIndexSection(graph);
+    if (!section) throw new Error("expected section");
     expect(section.content).not.toContain("side-effect.ts");
   });
 
@@ -138,7 +149,8 @@ describe("renderFileIndexSection", () => {
       makeEdge("src/x.ts", "src/a.ts", ["a"]),
       makeEdge("src/x.ts", "src/m.ts", ["m"]),
     ]);
-    const section = renderFileIndexSection(graph)!;
+    const section = renderFileIndexSection(graph);
+    if (!section) throw new Error("expected section");
     const lines = section.content.split("\n").filter((l) => l.startsWith("| `"));
     expect(lines[0]).toContain("src/a.ts");
     expect(lines[1]).toContain("src/m.ts");
@@ -150,8 +162,10 @@ describe("renderFileIndexSection", () => {
       makeEdge("src/a.ts", "src/utils.ts", ["foo", "bar"]),
       makeEdge("src/b.ts", "src/utils.ts", ["foo", "baz"]),
     ]);
-    const section = renderFileIndexSection(graph)!;
-    const line = section.content.split("\n").find((l) => l.includes("src/utils.ts"))!;
+    const section = renderFileIndexSection(graph);
+    if (!section) throw new Error("expected section");
+    const line = section.content.split("\n").find((l) => l.includes("src/utils.ts"));
+    if (!line) throw new Error("expected line containing src/utils.ts");
     const exportsCell = line.split("|")[2].trim();
     // "foo" should appear once, sorted first (frequency 2)
     const names = exportsCell.split(", ");
@@ -161,7 +175,8 @@ describe("renderFileIndexSection", () => {
 
   it("has valid token estimate", () => {
     const graph = makeGraph([makeEdge("src/a.ts", "src/b.ts", ["x"])]);
-    const section = renderFileIndexSection(graph)!;
+    const section = renderFileIndexSection(graph);
+    if (!section) throw new Error("expected section");
     expect(section.tokens).toBeGreaterThan(0);
   });
 });

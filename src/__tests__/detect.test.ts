@@ -305,8 +305,8 @@ describe("detectContext", () => {
     const ctx = await detectContext(tmpDir);
     expect(ctx.language).toBe("java");
     const maven = ctx.frameworks.find((f) => f.name === "Maven");
-    expect(maven).toBeDefined();
-    expect(maven?.version).toBe("1.2.3");
+    if (!maven) throw new Error("expected Maven framework");
+    expect(maven.version).toBe("1.2.3");
   });
 
   it("detects Gradle from build.gradle", async () => {
@@ -407,9 +407,9 @@ describe("detectContext", () => {
       "tsconfig.json": "{}",
     });
     const ctx = await detectContext(tmpDir);
-    expect(ctx.monorepo).not.toBeNull();
-    expect(ctx.monorepo?.type).toBe("npm-workspaces");
-    expect(ctx.monorepo?.packages.length).toBe(2);
+    if (!ctx.monorepo) throw new Error("expected monorepo detection");
+    expect(ctx.monorepo.type).toBe("npm-workspaces");
+    expect(ctx.monorepo.packages.length).toBe(2);
   });
 
   it("detects npm workspaces with packages object format", async () => {
@@ -424,9 +424,9 @@ describe("detectContext", () => {
       "tsconfig.json": "{}",
     });
     const ctx = await detectContext(tmpDir);
-    expect(ctx.monorepo).not.toBeNull();
-    expect(ctx.monorepo?.type).toBe("npm-workspaces");
-    expect(ctx.monorepo?.packages.length).toBe(1);
+    if (!ctx.monorepo) throw new Error("expected monorepo detection");
+    expect(ctx.monorepo.type).toBe("npm-workspaces");
+    expect(ctx.monorepo.packages.length).toBe(1);
   });
 
   // ── Maven parent version extraction ───────────────────────────────────
@@ -447,8 +447,8 @@ describe("detectContext", () => {
     });
     const ctx = await detectContext(tmpDir);
     const maven = ctx.frameworks.find((f) => f.name === "Maven");
-    expect(maven).toBeDefined();
-    expect(maven?.version).toBe("3.2.1");
+    if (!maven) throw new Error("expected Maven framework");
+    expect(maven.version).toBe("3.2.1");
   });
 
   it("prefers project version over parent version in Maven", async () => {
@@ -468,8 +468,8 @@ describe("detectContext", () => {
     });
     const ctx = await detectContext(tmpDir);
     const maven = ctx.frameworks.find((f) => f.name === "Maven");
-    expect(maven).toBeDefined();
-    expect(maven?.version).toBe("1.0.0");
+    if (!maven) throw new Error("expected Maven framework");
+    expect(maven.version).toBe("1.0.0");
   });
 });
 

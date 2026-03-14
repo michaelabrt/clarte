@@ -262,7 +262,7 @@ export function renderTestMappingSection(mapping: TestMapping, hubFiles?: Array<
 
   const directives: string[] = [];
   for (const sourceFile of testedFiles) {
-    const tests = mapping.sourceToTests.get(sourceFile)!;
+    const tests = mapping.sourceToTests.get(sourceFile) ?? [];
     const testList = tests
       .map((t) => {
         const typeLabel = mapping.testTypes?.get(t);

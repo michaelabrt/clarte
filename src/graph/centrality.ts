@@ -95,8 +95,8 @@ export function computeHITS(
     for (let vi = 0; vi < n; vi++) {
       const file = files[vi];
       let sum = 0;
-      for (const { from, weight } of reverse.get(file)!) {
-        sum += hub[fileIndex.get(from)!] * weight;
+      for (const { from, weight } of reverse.get(file) ?? []) {
+        sum += hub[fileIndex.get(from) ?? 0] * weight;
       }
       newAuth[vi] = alpha * baseScore + (1 - alpha) * sum;
     }
@@ -106,8 +106,8 @@ export function computeHITS(
     for (let vi = 0; vi < n; vi++) {
       const file = files[vi];
       let sum = 0;
-      for (const { to, weight } of forward.get(file)!) {
-        sum += auth[fileIndex.get(to)!] * weight;
+      for (const { to, weight } of forward.get(file) ?? []) {
+        sum += auth[fileIndex.get(to) ?? 0] * weight;
       }
       newHub[vi] = alpha * baseScore + (1 - alpha) * sum;
     }
@@ -302,16 +302,16 @@ export function computeBetweenness(
       const v = queue[qHead++];
       stack.push(v);
 
-      const dv = dist.get(v)!;
+      const dv = dist.get(v) ?? 0;
       for (const w of adj.get(v) ?? []) {
         // w found for the first time?
-        if (dist.get(w)! < 0) {
+        if ((dist.get(w) ?? -1) < 0) {
           dist.set(w, dv + 1);
           queue.push(w);
         }
         // Shortest path to w via v?
         if (dist.get(w) === dv + 1) {
-          sigma.set(w, sigma.get(w)! + sigma.get(v)!);
+          sigma.set(w, (sigma.get(w) ?? 0) + (sigma.get(v) ?? 0));
           pred.get(w)?.push(v);
         }
       }
@@ -319,13 +319,13 @@ export function computeBetweenness(
 
     // Accumulate dependencies (back-propagation)
     while (stack.length > 0) {
-      const w = stack.pop()!;
-      for (const v of pred.get(w)!) {
-        const contribution = (sigma.get(v)! / sigma.get(w)!) * (1 + delta.get(w)!);
-        delta.set(v, delta.get(v)! + contribution);
+      const w = stack.pop() as string;
+      for (const v of pred.get(w) ?? []) {
+        const contribution = ((sigma.get(v) ?? 0) / (sigma.get(w) ?? 1)) * (1 + (delta.get(w) ?? 0));
+        delta.set(v, (delta.get(v) ?? 0) + contribution);
       }
       if (w !== s) {
-        betweenness.set(w, betweenness.get(w)! + delta.get(w)!);
+        betweenness.set(w, (betweenness.get(w) ?? 0) + (delta.get(w) ?? 0));
       }
     }
   }

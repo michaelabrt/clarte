@@ -54,8 +54,8 @@ if TYPE_CHECKING:
 `;
     const result = parseImportsAst(code, "python");
     const typeImport = result.find((r) => r.specifier === ".models");
-    expect(typeImport).toBeDefined();
-    expect(typeImport?.isTypeOnly).toBe(true);
+    if (!typeImport) throw new Error("expected .models import");
+    expect(typeImport.isTypeOnly).toBe(true);
   });
 
   it("marks typing.TYPE_CHECKING imports as type-only", () => {
@@ -67,8 +67,8 @@ if typing.TYPE_CHECKING:
 `;
     const result = parseImportsAst(code, "python");
     const typeImport = result.find((r) => r.specifier === ".models");
-    expect(typeImport).toBeDefined();
-    expect(typeImport?.isTypeOnly).toBe(true);
+    if (!typeImport) throw new Error("expected .models import");
+    expect(typeImport.isTypeOnly).toBe(true);
   });
 
   it("handles wildcard import", () => {

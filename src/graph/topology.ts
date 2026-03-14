@@ -71,8 +71,8 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
       let h = 0;
       let maxDist = 0;
       while (h < q.length) {
-        const cur = q[h++]!;
-        const d = dist.get(cur)!;
+        const cur = q[h++] as string;
+        const d = dist.get(cur) ?? 0;
         for (const nb of adj.get(cur) ?? []) {
           if (!dist.has(nb)) {
             const nd = d + 1;
@@ -93,8 +93,8 @@ export function computeGraphTopology(graph: ImportGraph): GraphTopology {
       const q = [peripheral];
       let h = 0;
       while (h < q.length) {
-        const cur = q[h++]!;
-        const d = dist.get(cur)!;
+        const cur = q[h++] as string;
+        const d = dist.get(cur) ?? 0;
         for (const nb of adj.get(cur) ?? []) {
           if (!dist.has(nb)) {
             const nd = d + 1;
@@ -164,7 +164,7 @@ function computeCriticalChain(allFiles: Set<string>, dirAdj: Map<string, Set<str
       if (toSCC === undefined || toSCC === fromSCC) continue;
       if (!sccAdj.get(fromSCC)?.has(toSCC)) {
         sccAdj.get(fromSCC)?.add(toSCC);
-        sccInDeg.set(toSCC, sccInDeg.get(toSCC)! + 1);
+        sccInDeg.set(toSCC, (sccInDeg.get(toSCC) ?? 0) + 1);
       }
     }
   }
@@ -174,19 +174,19 @@ function computeCriticalChain(allFiles: Set<string>, dirAdj: Map<string, Set<str
   const queue: number[] = [];
   for (let i = 0; i < sccs.length; i++) {
     dist.set(i, 0);
-    if (sccInDeg.get(i)! === 0) queue.push(i);
+    if ((sccInDeg.get(i) ?? 0) === 0) queue.push(i);
   }
 
   let qHead = 0;
   let maxDist = 0;
   while (qHead < queue.length) {
     const u = queue[qHead++];
-    const du = dist.get(u)!;
-    for (const v of sccAdj.get(u)!) {
+    const du = dist.get(u) ?? 0;
+    for (const v of sccAdj.get(u) ?? []) {
       const newDist = du + 1;
-      if (newDist > dist.get(v)!) dist.set(v, newDist);
-      sccInDeg.set(v, sccInDeg.get(v)! - 1);
-      if (sccInDeg.get(v)! === 0) queue.push(v);
+      if (newDist > (dist.get(v) ?? 0)) dist.set(v, newDist);
+      sccInDeg.set(v, (sccInDeg.get(v) ?? 1) - 1);
+      if ((sccInDeg.get(v) ?? 0) === 0) queue.push(v);
     }
     if (du > maxDist) maxDist = du;
   }
@@ -221,7 +221,7 @@ function computeModularityQ(allFiles: Set<string>, adj: Map<string, Set<string>>
   // Group files by community
   const groups = new Map<string, string[]>();
   for (const file of allFiles) {
-    const c = community.get(file)!;
+    const c = community.get(file) ?? "";
     const group = groups.get(c) ?? [];
     group.push(file);
     groups.set(c, group);

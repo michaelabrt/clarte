@@ -90,9 +90,9 @@ describe("renderArchitectureSections: key-files", () => {
     const analysis = makeAnalysis({ hubFiles: [makeHubFile("src/utils.ts")], instabilities: [] });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const kf = sections.find((s) => s.id === "key-files");
-    expect(kf).toBeDefined();
-    expect(kf?.content).toContain("stable");
-    expect(kf?.content).not.toContain("SDP");
+    if (!kf) throw new Error("expected key-files section");
+    expect(kf.content).toContain("stable");
+    expect(kf.content).not.toContain("SDP");
   });
 
   it("shows I% when instability exists but no stable file imports it (no SDP violation)", async () => {
@@ -112,8 +112,9 @@ describe("renderArchitectureSections: key-files", () => {
     ]);
     const sections = await renderArchitectureSections(analysis, DETECTED, graph);
     const kf = sections.find((s) => s.id === "key-files");
-    expect(kf?.content).toContain("I=80%");
-    expect(kf?.content).not.toContain("SDP");
+    if (!kf) throw new Error("expected key-files section");
+    expect(kf.content).toContain("I=80%");
+    expect(kf.content).not.toContain("SDP");
   });
 
   it("shows SDP warning when stable file imports unstable hub", async () => {
@@ -137,8 +138,9 @@ describe("renderArchitectureSections: key-files", () => {
     ]);
     const sections = await renderArchitectureSections(analysis, DETECTED, graph);
     const kf = sections.find((s) => s.id === "key-files");
-    expect(kf?.content).toContain("SDP");
-    expect(kf?.content).toContain("I=80%");
+    if (!kf) throw new Error("expected key-files section");
+    expect(kf.content).toContain("SDP");
+    expect(kf.content).toContain("I=80%");
   });
 
   it("suppresses SDP warning when the imported hub is an Orchestrator", async () => {
@@ -161,8 +163,9 @@ describe("renderArchitectureSections: key-files", () => {
     ]);
     const sections = await renderArchitectureSections(analysis, DETECTED, graph);
     const kf = sections.find((s) => s.id === "key-files");
-    expect(kf?.content).not.toContain("SDP");
-    expect(kf?.content).toContain("I=80%");
+    if (!kf) throw new Error("expected key-files section");
+    expect(kf.content).not.toContain("SDP");
+    expect(kf.content).toContain("I=80%");
   });
 
   it("shows no SDP warnings when no graph is provided", async () => {
@@ -172,37 +175,42 @@ describe("renderArchitectureSections: key-files", () => {
     });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const kf = sections.find((s) => s.id === "key-files");
-    expect(kf?.content).not.toContain("SDP");
-    expect(kf?.content).toContain("I=80%");
+    if (!kf) throw new Error("expected key-files section");
+    expect(kf.content).not.toContain("SDP");
+    expect(kf.content).toContain("I=80%");
   });
 
   it("shows role tag for non-Leaf roles", async () => {
     const analysis = makeAnalysis({ hubFiles: [makeHubFile("src/utils.ts", { role: "Foundation" })] });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const kf = sections.find((s) => s.id === "key-files");
-    expect(kf?.content).toContain("(Foundation)");
+    if (!kf) throw new Error("expected key-files section");
+    expect(kf.content).toContain("(Foundation)");
   });
 
   it("omits role tag for Leaf files", async () => {
     const analysis = makeAnalysis({ hubFiles: [makeHubFile("src/leaf.ts", { role: "Leaf" })] });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const kf = sections.find((s) => s.id === "key-files");
-    expect(kf?.content).not.toContain("(Leaf)");
+    if (!kf) throw new Error("expected key-files section");
+    expect(kf.content).not.toContain("(Leaf)");
   });
 
   it("uses singular 'file' when importedBy is 1", async () => {
     const analysis = makeAnalysis({ hubFiles: [makeHubFile("src/utils.ts", { importedBy: 1 })] });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const kf = sections.find((s) => s.id === "key-files");
-    expect(kf?.content).toContain("1 file");
-    expect(kf?.content).not.toContain("1 files");
+    if (!kf) throw new Error("expected key-files section");
+    expect(kf.content).toContain("1 file");
+    expect(kf.content).not.toContain("1 files");
   });
 
   it("uses plural 'files' when importedBy > 1", async () => {
     const analysis = makeAnalysis({ hubFiles: [makeHubFile("src/utils.ts", { importedBy: 10 })] });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const kf = sections.find((s) => s.id === "key-files");
-    expect(kf?.content).toContain("10 files");
+    if (!kf) throw new Error("expected key-files section");
+    expect(kf.content).toContain("10 files");
   });
 });
 
@@ -227,11 +235,11 @@ describe("renderArchitectureSections: architecture", () => {
     });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const arch = sections.find((s) => s.id === "architecture");
-    expect(arch).toBeDefined();
-    expect(arch?.content).toContain("Dependency flow");
-    expect(arch?.content).toContain("`types`");
-    expect(arch?.content).toContain("`services`");
-    expect(arch?.content).toContain("`types` -> `services`");
+    if (!arch) throw new Error("expected architecture section");
+    expect(arch.content).toContain("Dependency flow");
+    expect(arch.content).toContain("`types`");
+    expect(arch.content).toContain("`services`");
+    expect(arch.content).toContain("`types` -> `services`");
   });
 
   it("includes cross-layer edges when they fall outside the main flow", async () => {
@@ -243,8 +251,9 @@ describe("renderArchitectureSections: architecture", () => {
     });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const arch = sections.find((s) => s.id === "architecture");
-    expect(arch?.content).toContain("Cross-layer edges:");
-    expect(arch?.content).toContain("services -> types");
+    if (!arch) throw new Error("expected architecture section");
+    expect(arch.content).toContain("Cross-layer edges:");
+    expect(arch.content).toContain("services -> types");
   });
 
   it("omits cross-layer section when all layerEdges are in the main flow", async () => {
@@ -254,7 +263,8 @@ describe("renderArchitectureSections: architecture", () => {
     });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const arch = sections.find((s) => s.id === "architecture");
-    expect(arch?.content).not.toContain("Cross-layer edges:");
+    if (!arch) throw new Error("expected architecture section");
+    expect(arch.content).not.toContain("Cross-layer edges:");
   });
 });
 
@@ -296,10 +306,10 @@ describe("renderArchitectureSections: monorepo", () => {
     });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const mono = sections.find((s) => s.id === "package-dependencies");
-    expect(mono).toBeDefined();
-    expect(mono?.content).toContain("`pkg-a`");
-    expect(mono?.content).toContain("`pkg-b`");
-    expect(mono?.content).toContain("| 1 |");
+    if (!mono) throw new Error("expected package-dependencies section");
+    expect(mono.content).toContain("`pkg-a`");
+    expect(mono.content).toContain("`pkg-b`");
+    expect(mono.content).toContain("| 1 |");
   });
 
   it("shows encapsulation violations subsection when violations exist", async () => {
@@ -319,8 +329,9 @@ describe("renderArchitectureSections: monorepo", () => {
     });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const mono = sections.find((s) => s.id === "package-dependencies");
-    expect(mono?.content).toContain("### Encapsulation Violations");
-    expect(mono?.content).toContain("pkg-b/internal/x.ts");
+    if (!mono) throw new Error("expected package-dependencies section");
+    expect(mono.content).toContain("### Encapsulation Violations");
+    expect(mono.content).toContain("pkg-b/internal/x.ts");
   });
 
   it("caps encapsulation violations at 10 and shows overflow count", async () => {
@@ -340,7 +351,8 @@ describe("renderArchitectureSections: monorepo", () => {
     });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const mono = sections.find((s) => s.id === "package-dependencies");
-    expect(mono?.content).toContain("and 2 more");
+    if (!mono) throw new Error("expected package-dependencies section");
+    expect(mono.content).toContain("and 2 more");
   });
 
   it("shows key files by package subsection when packageHubFiles exist", async () => {
@@ -362,9 +374,10 @@ describe("renderArchitectureSections: monorepo", () => {
     });
     const sections = await renderArchitectureSections(analysis, DETECTED);
     const mono = sections.find((s) => s.id === "package-dependencies");
-    expect(mono?.content).toContain("### Key Files by Package");
-    expect(mono?.content).toContain("**pkg-a**");
-    expect(mono?.content).toContain("`pkg-a/src/index.ts`");
+    if (!mono) throw new Error("expected package-dependencies section");
+    expect(mono.content).toContain("### Key Files by Package");
+    expect(mono.content).toContain("**pkg-a**");
+    expect(mono.content).toContain("`pkg-a/src/index.ts`");
   });
 });
 
@@ -415,13 +428,13 @@ describe("renderLayerConsistencySection", () => {
       },
     });
     const section = renderLayerConsistencySection(analysis);
-    expect(section).not.toBeNull();
-    expect(section?.id).toBe("layer-consistency");
-    expect(section?.content).toContain("## Layer Consistency");
-    expect(section?.content).toContain("85%");
-    expect(section?.content).toContain("`utils/a.ts`");
-    expect(section?.content).toContain("`services/b.ts`");
-    expect(section?.content).toContain("utils -> services");
+    if (!section) throw new Error("expected layer-consistency section");
+    expect(section.id).toBe("layer-consistency");
+    expect(section.content).toContain("## Layer Consistency");
+    expect(section.content).toContain("85%");
+    expect(section.content).toContain("`utils/a.ts`");
+    expect(section.content).toContain("`services/b.ts`");
+    expect(section.content).toContain("utils -> services");
   });
 
   it("shows up to 5 violations and overflow count for larger sets", () => {
@@ -436,7 +449,8 @@ describe("renderLayerConsistencySection", () => {
       layerConsistency: { consistency: 0.5, violations },
     });
     const section = renderLayerConsistencySection(analysis);
-    expect(section?.content).toContain("and 2 more");
+    if (!section) throw new Error("expected layer-consistency section");
+    expect(section.content).toContain("and 2 more");
     const violationLineCount = (section?.content.match(/`a\d\.ts`/g) ?? []).length;
     expect(violationLineCount).toBe(5);
   });

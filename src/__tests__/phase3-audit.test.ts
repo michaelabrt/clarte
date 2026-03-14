@@ -11,43 +11,7 @@
 
 import { describe, it, expect } from "vitest";
 import { resolveEditTargets, tokenizeQuery } from "../cli/resolve-targets.js";
-import type { PersistedGraph } from "../types/persisted-graph.js";
-import { PERSISTED_GRAPH_VERSION } from "../types/persisted-graph.js";
-
-function makeGraph(overrides?: Partial<PersistedGraph>): PersistedGraph {
-  return {
-    version: PERSISTED_GRAPH_VERSION,
-    timestamp: "2026-01-01T00:00:00Z",
-    files: {},
-    edges: [],
-    communities: [],
-    changeCoupling: [],
-    structuralMismatches: [],
-    testMapping: {},
-    lagCouplings: [],
-    ...overrides,
-  };
-}
-
-function makeFile(overrides?: Record<string, unknown>) {
-  return {
-    role: null,
-    authority: 0,
-    hubScore: 0,
-    betweenness: 0,
-    instability: null,
-    importedByCount: 0,
-    isChokepoint: false,
-    separatesComponents: 0,
-    isCrossCutting: false,
-    layerSpread: 0,
-    layers: [],
-    hasTests: false,
-    testFiles: [],
-    communityId: null,
-    ...overrides,
-  };
-}
+import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
 
 // ── Compound token preservation: edge cases ──────────────────────────────────
 
@@ -128,10 +92,10 @@ describe("compound token preservation - edge cases", () => {
     // A file that exports "getBase64" will have "getbase64" in its tokenized symbol list
     // (from the compound preservation logic running on the symbol name too).
     // That file must appear in results.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/encoding/base64.ts": makeFile({ symbolNames: ["getBase64", "encodeBase64"] }),
-        "src/utils/string.ts": makeFile({ symbolNames: ["trim", "pad"] }),
+        "src/encoding/base64.ts": makeFileRecord({ role: null, symbolNames: ["getBase64", "encodeBase64"] }),
+        "src/utils/string.ts": makeFileRecord({ role: null, symbolNames: ["trim", "pad"] }),
       },
     });
     const targets = resolveEditTargets("getBase64 broken", graph);
@@ -142,10 +106,10 @@ describe("compound token preservation - edge cases", () => {
     // "getCache" emits compound "getcache". A file with just "cache" in its path
     // should not match on "getcache"; it should only match on "cache".
     // We verify the compound discriminates: files lacking the compound don't get it.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/storage/getCacheManager.ts": makeFile({ symbolNames: ["getCache"] }),
-        "src/storage/cache-utils.ts": makeFile({ symbolNames: ["clearCache", "warmCache"] }),
+        "src/storage/getCacheManager.ts": makeFileRecord({ role: null, symbolNames: ["getCache"] }),
+        "src/storage/cache-utils.ts": makeFileRecord({ role: null, symbolNames: ["clearCache", "warmCache"] }),
       },
     });
     const targets = resolveEditTargets("getCache call broken", graph, 10);
@@ -170,13 +134,13 @@ describe("directional expansion - exact 2:1 ratio between importer and provider"
     // to confirm neither order can be explained by small floating-point noise.
     // Specifically, give a third file (decoy) a score that is 0.3x the seed.
     // If importer were 0.2x it would rank behind decoy; at 0.4x it ranks above.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth/service.ts": makeFile({ symbolNames: ["authenticate"] }),
-        "src/app/consumer.ts": makeFile(),
-        "src/core/provider.ts": makeFile(),
+        "src/auth/service.ts": makeFileRecord({ role: null, symbolNames: ["authenticate"] }),
+        "src/app/consumer.ts": makeFileRecord({ role: null }),
+        "src/core/provider.ts": makeFileRecord({ role: null }),
         // decoy: scores 0.3x of seed via a weaker direct BM25 hit
-        "src/auth/helper.ts": makeFile({ symbolNames: ["authHelper"] }),
+        "src/auth/helper.ts": makeFileRecord({ role: null, symbolNames: ["authHelper"] }),
       },
       edges: [
         { from: "src/app/consumer.ts", to: "src/auth/service.ts", importedNames: ["authenticate"] },
@@ -202,11 +166,11 @@ describe("directional expansion - exact 2:1 ratio between importer and provider"
     // However, path length difference alone cannot overcome the 2:1 factor difference
     // in expansion scores when both files have zero direct BM25 hit.
     // Consumer score = seed * 0.4; provider score = seed * 0.2. Consumer must still win.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth-core/authenticate-service.ts": makeFile({ symbolNames: ["authenticate"] }),
-        "src/app-consumer/consumer.ts": makeFile(),
-        "src/auth-core/provider.ts": makeFile(),
+        "src/auth-core/authenticate-service.ts": makeFileRecord({ role: null, symbolNames: ["authenticate"] }),
+        "src/app-consumer/consumer.ts": makeFileRecord({ role: null }),
+        "src/auth-core/provider.ts": makeFileRecord({ role: null }),
       },
       edges: [
         {
@@ -234,11 +198,11 @@ describe("directional expansion - exact 2:1 ratio between importer and provider"
     // controller.ts imports "authenticate" from service.ts, so its import field
     // contains the query term - making it a direct BM25 match. router.ts then
     // gets legitimate 1-hop expansion from controller.ts.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth/service.ts": makeFile({ symbolNames: ["authenticate"] }),
-        "src/app/controller.ts": makeFile(),
-        "src/app/router.ts": makeFile(),
+        "src/auth/service.ts": makeFileRecord({ role: null, symbolNames: ["authenticate"] }),
+        "src/app/controller.ts": makeFileRecord({ role: null }),
+        "src/app/router.ts": makeFileRecord({ role: null }),
       },
       edges: [
         { from: "src/app/controller.ts", to: "src/auth/service.ts", importedNames: ["authenticate"] },
@@ -257,12 +221,12 @@ describe("directional expansion - exact 2:1 ratio between importer and provider"
     // router imports controller (with unrelated name "handle"), controller imports
     // service (with "authenticate"). app.ts imports router with unrelated name "routes".
     // app.ts has no query-relevant tokens in any field, so it stays out.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth/service.ts": makeFile({ symbolNames: ["authenticate"] }),
-        "src/app/controller.ts": makeFile(),
-        "src/app/router.ts": makeFile(),
-        "src/app.ts": makeFile(),
+        "src/auth/service.ts": makeFileRecord({ role: null, symbolNames: ["authenticate"] }),
+        "src/app/controller.ts": makeFileRecord({ role: null }),
+        "src/app/router.ts": makeFileRecord({ role: null }),
+        "src/app.ts": makeFileRecord({ role: null }),
       },
       edges: [
         { from: "src/app/controller.ts", to: "src/auth/service.ts", importedNames: ["authenticate"] },
@@ -285,10 +249,10 @@ describe("verify/verification synonym - reverse direction", () => {
   it("query 'verification' finds file with 'verify' in symbols (reverse expansion)", () => {
     // "verification" → synonym group also contains "verify"
     // A file that only has "verify" tokens must be found when querying "verification".
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth/verify-signature.ts": makeFile({ symbolNames: ["verifySignature", "verifyJwt"] }),
-        "src/utils/random.ts": makeFile({ symbolNames: ["randomBytes"] }),
+        "src/auth/verify-signature.ts": makeFileRecord({ role: null, symbolNames: ["verifySignature", "verifyJwt"] }),
+        "src/utils/random.ts": makeFileRecord({ role: null, symbolNames: ["randomBytes"] }),
       },
     });
     const targets = resolveEditTargets("verification flow broken", graph);
@@ -299,10 +263,10 @@ describe("verify/verification synonym - reverse direction", () => {
   it("query 'verify' finds file with 'verification' in path (forward expansion)", () => {
     // "verify" → synonym group also contains "verification"
     // A file whose path only contains "verification" must be found when querying "verify".
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth/verification-code.ts": makeFile({ symbolNames: ["sendCode", "checkCode"] }),
-        "src/utils/format.ts": makeFile({ symbolNames: ["formatDate"] }),
+        "src/auth/verification-code.ts": makeFileRecord({ role: null, symbolNames: ["sendCode", "checkCode"] }),
+        "src/utils/format.ts": makeFileRecord({ role: null, symbolNames: ["formatDate"] }),
       },
     });
     const targets = resolveEditTargets("verify code expired", graph);
@@ -313,10 +277,10 @@ describe("verify/verification synonym - reverse direction", () => {
   it("verify/verification group does not bleed into cert/tls synonyms", () => {
     // ["cert", "certificate", "tls", "ssl"] is a separate group from ["verify", "verification"].
     // Querying "verify" should NOT expand to "cert" or "ssl".
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/security/ssl-cert.ts": makeFile({ symbolNames: ["loadCertificate", "checkTls"] }),
-        "src/auth/verify-token.ts": makeFile({ symbolNames: ["verifyToken"] }),
+        "src/security/ssl-cert.ts": makeFileRecord({ role: null, symbolNames: ["loadCertificate", "checkTls"] }),
+        "src/auth/verify-token.ts": makeFileRecord({ role: null, symbolNames: ["verifyToken"] }),
       },
     });
     const targets = resolveEditTargets("verify", graph);
@@ -329,10 +293,10 @@ describe("verify/verification synonym - reverse direction", () => {
     // verify-token.ts has "verify" directly in path → full weight
     // verification-service.ts matches via synonym expansion → SYNONYM_DISCOUNT (0.3x) weight
     // Direct match must rank first.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth/verify-token.ts": makeFile({ symbolNames: ["verifyToken"] }),
-        "src/auth/verification-service.ts": makeFile({ symbolNames: ["sendVerification"] }),
+        "src/auth/verify-token.ts": makeFileRecord({ role: null, symbolNames: ["verifyToken"] }),
+        "src/auth/verification-service.ts": makeFileRecord({ role: null, symbolNames: ["sendVerification"] }),
       },
     });
     const targets = resolveEditTargets("verify token", graph);
@@ -349,11 +313,11 @@ describe("compound token and synonym expansion interaction", () => {
     // File A: matched via compound "usecache" in symbol (exact symbol "useCache")
     // File B: matched via synonym "memoize" in path
     // Both must appear.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/hooks/useCache.ts": makeFile({ symbolNames: ["useCache"] }),
-        "src/utils/memoize.ts": makeFile({ symbolNames: ["memoizeResult"] }),
-        "src/utils/random.ts": makeFile({ symbolNames: ["randomBytes"] }),
+        "src/hooks/useCache.ts": makeFileRecord({ role: null, symbolNames: ["useCache"] }),
+        "src/utils/memoize.ts": makeFileRecord({ role: null, symbolNames: ["memoizeResult"] }),
+        "src/utils/random.ts": makeFileRecord({ role: null, symbolNames: ["randomBytes"] }),
       },
     });
     const targets = resolveEditTargets("useCache broken", graph, 10);
@@ -365,12 +329,12 @@ describe("compound token and synonym expansion interaction", () => {
   it("compound token match ranks above synonym-only match", () => {
     // File with direct compound token match (strong signal) must rank above file with
     // only a synonym expansion match (SYNONYM_DISCOUNT = 0.3x weight).
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
         // matched via compound "usecontext" in symbols - higher precision
-        "src/hooks/useContext.ts": makeFile({ symbolNames: ["useContext"] }),
+        "src/hooks/useContext.ts": makeFileRecord({ role: null, symbolNames: ["useContext"] }),
         // matched only via synonym: "cache" → "memo" expansion
-        "src/utils/memo.ts": makeFile({ symbolNames: ["memoize"] }),
+        "src/utils/memo.ts": makeFileRecord({ role: null, symbolNames: ["memoize"] }),
       },
     });
     // "useContext" → tokens: ["context", "usecontext"]
@@ -388,10 +352,10 @@ describe("compound token and synonym expansion interaction", () => {
     // The query produces only "getset". If the synonym system is given "getset" as input,
     // it will find no synonym group for "getset" and produce no expansions.
     // Result: only files matching "getset" token should appear; no phantom matches.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/store/getset-manager.ts": makeFile({ symbolNames: ["getSet", "setGet"] }),
-        "src/auth/service.ts": makeFile({ symbolNames: ["authenticate"] }),
+        "src/store/getset-manager.ts": makeFileRecord({ role: null, symbolNames: ["getSet", "setGet"] }),
+        "src/auth/service.ts": makeFileRecord({ role: null, symbolNames: ["authenticate"] }),
       },
     });
     const targets = resolveEditTargets("getSet problem", graph, 10);

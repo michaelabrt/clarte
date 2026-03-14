@@ -158,18 +158,18 @@ describe("analyzeMonorepoGraph", () => {
 
     // @app/web depends on @app/shared and @app/api
     const webDeps = result.packageDependencies.get("@app/web");
-    expect(webDeps).toBeDefined();
-    expect([...webDeps!].sort()).toEqual(["@app/api", "@app/shared"]);
+    if (!webDeps) throw new Error("expected @app/web deps");
+    expect([...webDeps].sort()).toEqual(["@app/api", "@app/shared"]);
 
     // @app/api depends on @app/shared
     const apiDeps = result.packageDependencies.get("@app/api");
-    expect(apiDeps).toBeDefined();
-    expect([...apiDeps!]).toEqual(["@app/shared"]);
+    if (!apiDeps) throw new Error("expected @app/api deps");
+    expect([...apiDeps]).toEqual(["@app/shared"]);
 
     // @app/shared depends on nothing
     const sharedDeps = result.packageDependencies.get("@app/shared");
-    expect(sharedDeps).toBeDefined();
-    expect([...sharedDeps!]).toEqual([]);
+    if (!sharedDeps) throw new Error("expected @app/shared deps");
+    expect([...sharedDeps]).toEqual([]);
   });
 
   it("handles empty monorepo (no cross-package edges)", async () => {

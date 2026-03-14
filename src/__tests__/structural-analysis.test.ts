@@ -36,8 +36,9 @@ describe("detectArchitecturalLayers with custom patterns", () => {
     expect(names).toContain("infra");
     expect(names).toContain("app");
 
-    const domain = layers.find((l) => l.name === "domain")!;
-    expect(domain.files).toEqual(["src/domain/user.ts"]);
+    const domain = layers.find((l) => l.name === "domain");
+    expect(domain).toBeDefined();
+    expect(domain?.files).toEqual(["src/domain/user.ts"]);
     expect(domain.importedByLayers).toBe(2); // app and infra import domain
   });
 

@@ -70,7 +70,7 @@ public class UserService {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/models/UserService.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/models/UserService.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeJavaCtx(), []);
@@ -95,7 +95,7 @@ public interface UserRepository {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/repos/UserRepository.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/repos/UserRepository.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeJavaCtx(), []);
@@ -115,7 +115,7 @@ public enum Status {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/types/Status.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/types/Status.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeJavaCtx(), []);
@@ -132,7 +132,7 @@ public record UserDTO(String name, String email, int age) {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/dto/UserDTO.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/dto/UserDTO.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeJavaCtx(), []);
@@ -156,7 +156,7 @@ public class UserController {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/controllers/UserController.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/controllers/UserController.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeJavaCtx(), []);
@@ -181,7 +181,7 @@ public class RealService {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/App.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/App.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeJavaCtx(), []);
@@ -206,7 +206,7 @@ public class DataService {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/DataService.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/DataService.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeJavaCtx(), []);
@@ -226,7 +226,7 @@ public class App {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/main/java/com/example/App.java"] as any);
+    mockGlob.mockResolvedValue(["src/main/java/com/example/App.java"] as string[]);
     mockReadFileOr.mockResolvedValue(javaContent);
 
     const result = await generateSnapshot(makeJavaCtx(), []);

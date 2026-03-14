@@ -63,10 +63,10 @@ describe("renderStructureSections: framework-hints", () => {
     vi.mocked(getFrameworkHintsSection).mockReturnValueOnce("## Framework Conventions\n\n- hint");
     const sections = renderStructureSections(makeCtx(), null);
     const fw = sections.find((s) => s.id === "framework-hints");
-    expect(fw).toBeDefined();
-    expect(fw?.content).toContain("Framework Conventions");
-    expect(fw?.priority).toBe(5);
-    expect(fw?.tokens).toBeGreaterThan(0);
+    if (!fw) throw new Error("expected framework-hints section");
+    expect(fw.content).toContain("Framework Conventions");
+    expect(fw.priority).toBe(5);
+    expect(fw.tokens).toBeGreaterThan(0);
   });
 
   it("omits framework-hints section when delegate returns empty string", () => {
@@ -84,9 +84,9 @@ describe("renderStructureSections: conventions", () => {
     const analysis = makeAnalysis({ conventions: {} as ContextAnalysis["conventions"] });
     const sections = renderStructureSections(makeCtx(), null, analysis);
     const conv = sections.find((s) => s.id === "conventions");
-    expect(conv).toBeDefined();
-    expect(conv?.content).toContain("Conventions");
-    expect(conv?.priority).toBe(5);
+    if (!conv) throw new Error("expected conventions section");
+    expect(conv.content).toContain("Conventions");
+    expect(conv.priority).toBe(5);
   });
 
   it("omits conventions section when analysis.conventions is absent", () => {
@@ -108,13 +108,13 @@ describe("renderStructureSections: code-snapshot", () => {
   it("renders snapshot with header and comment markers", () => {
     const sections = renderStructureSections(makeCtx(), makeSnapshot("export type Foo = string;"));
     const snap = sections.find((s) => s.id === "code-snapshot");
-    expect(snap).toBeDefined();
-    expect(snap?.content).toContain("## Code Snapshot");
-    expect(snap?.content).toContain("<!-- CODE SNAPSHOT (auto-generated");
-    expect(snap?.content).toContain("export type Foo = string;");
-    expect(snap?.content).toContain("<!-- /CODE SNAPSHOT -->");
-    expect(snap?.priority).toBe(6);
-    expect(snap?.tokens).toBeGreaterThan(0);
+    if (!snap) throw new Error("expected code-snapshot section");
+    expect(snap.content).toContain("## Code Snapshot");
+    expect(snap.content).toContain("<!-- CODE SNAPSHOT (auto-generated");
+    expect(snap.content).toContain("export type Foo = string;");
+    expect(snap.content).toContain("<!-- /CODE SNAPSHOT -->");
+    expect(snap.priority).toBe(6);
+    expect(snap.tokens).toBeGreaterThan(0);
   });
 
   it("omits snapshot section when snapshot is null", () => {
@@ -136,8 +136,8 @@ describe("renderStructureSections: test-mapping", () => {
     const analysis = makeAnalysis({ testMapping: {} as ContextAnalysis["testMapping"] });
     const sections = renderStructureSections(makeCtx(), null, analysis);
     const tm = sections.find((s) => s.id === "test-mapping");
-    expect(tm).toBeDefined();
-    expect(tm?.priority).toBe(8);
+    if (!tm) throw new Error("expected test-mapping section");
+    expect(tm.priority).toBe(8);
   });
 
   it("omits test-mapping section when analysis.testMapping is absent", () => {
@@ -160,12 +160,12 @@ describe("renderStructureSections: structure", () => {
     const ctx = makeCtx({ directories: ["src", "docs"] });
     const sections = renderStructureSections(ctx, null);
     const struct = sections.find((s) => s.id === "structure");
-    expect(struct).toBeDefined();
-    expect(struct?.content).toContain("## Project Structure");
-    expect(struct?.content).toContain("```");
-    expect(struct?.content).toContain("src/");
-    expect(struct?.content).toContain("docs/");
-    expect(struct?.priority).toBe(8);
+    if (!struct) throw new Error("expected structure section");
+    expect(struct.content).toContain("## Project Structure");
+    expect(struct.content).toContain("```");
+    expect(struct.content).toContain("src/");
+    expect(struct.content).toContain("docs/");
+    expect(struct.priority).toBe(8);
   });
 
   it("omits structure section when directories is empty", () => {
@@ -177,10 +177,11 @@ describe("renderStructureSections: structure", () => {
     const ctx = makeCtx({ directories: ["src", "src/utils", "src/types", "docs"] });
     const sections = renderStructureSections(ctx, null);
     const struct = sections.find((s) => s.id === "structure");
-    expect(struct?.content).toContain("src/");
-    expect(struct?.content).toContain("  utils/");
-    expect(struct?.content).toContain("  types/");
-    expect(struct?.content).toContain("docs/");
+    if (!struct) throw new Error("expected structure section");
+    expect(struct.content).toContain("src/");
+    expect(struct.content).toContain("  utils/");
+    expect(struct.content).toContain("  types/");
+    expect(struct.content).toContain("docs/");
   });
 
   it("sorts top-level directories alphabetically", () => {
@@ -231,14 +232,14 @@ describe("renderStructureSections: monorepo-structure", () => {
     });
     const sections = renderStructureSections(ctx, null);
     const mono = sections.find((s) => s.id === "monorepo-structure");
-    expect(mono).toBeDefined();
-    expect(mono?.content).toContain("## Monorepo Structure");
-    expect(mono?.content).toContain("pnpm-workspaces workspace with 2 packages:");
-    expect(mono?.content).toContain("**@app/web**");
-    expect(mono?.content).toContain("`packages/web`");
-    expect(mono?.content).toContain("**@app/api**");
-    expect(mono?.content).toContain("`packages/api`");
-    expect(mono?.priority).toBe(8);
+    if (!mono) throw new Error("expected monorepo-structure section");
+    expect(mono.content).toContain("## Monorepo Structure");
+    expect(mono.content).toContain("pnpm-workspaces workspace with 2 packages:");
+    expect(mono.content).toContain("**@app/web**");
+    expect(mono.content).toContain("`packages/web`");
+    expect(mono.content).toContain("**@app/api**");
+    expect(mono.content).toContain("`packages/api`");
+    expect(mono.priority).toBe(8);
   });
 
   it("shows framework names in parentheses when present", () => {
@@ -257,7 +258,8 @@ describe("renderStructureSections: monorepo-structure", () => {
     });
     const sections = renderStructureSections(ctx, null);
     const mono = sections.find((s) => s.id === "monorepo-structure");
-    expect(mono?.content).toContain("(Next.js, React)");
+    if (!mono) throw new Error("expected monorepo-structure section");
+    expect(mono.content).toContain("(Next.js, React)");
   });
 
   it("omits framework parentheses when frameworks array is empty", () => {
@@ -269,9 +271,10 @@ describe("renderStructureSections: monorepo-structure", () => {
     });
     const sections = renderStructureSections(ctx, null);
     const mono = sections.find((s) => s.id === "monorepo-structure");
+    if (!mono) throw new Error("expected monorepo-structure section");
     // Should have the package name but no trailing parentheses
-    expect(mono?.content).toContain("**@app/lib** (`packages/lib`)");
-    expect(mono?.content).not.toMatch(/\(`packages\/lib`\)\s*\(/);
+    expect(mono.content).toContain("**@app/lib** (`packages/lib`)");
+    expect(mono.content).not.toMatch(/\(`packages\/lib`\)\s*\(/);
   });
 
   it("omits monorepo section when monorepo is null", () => {

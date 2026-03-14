@@ -111,9 +111,9 @@ export async function initForLanguage(lang: ClarteLanguage): Promise<void> {
 export function getLanguage(lang: ClarteLanguage, filePath?: string): Language {
   if (lang === "typescript" || lang === "javascript") {
     const ext = filePath?.split(".").pop()?.toLowerCase();
-    if (ext === "tsx" || ext === "jsx") return languages.get("tsx")!;
-    if (ext === "js" || ext === "mjs" || ext === "cjs") return languages.get("javascript")!;
-    return languages.get("typescript")!;
+    if (ext === "tsx" || ext === "jsx") return languages.get("tsx") as Language;
+    if (ext === "js" || ext === "mjs" || ext === "cjs") return languages.get("javascript") as Language;
+    return languages.get("typescript") as Language;
   }
   const tsLang = languages.get(lang);
   if (!tsLang) throw new Error(`No tree-sitter grammar loaded for language: ${lang}. Call initForLanguage() first.`);

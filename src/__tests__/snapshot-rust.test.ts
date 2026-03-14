@@ -59,7 +59,7 @@ describe("Rust snapshot extraction", () => {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/models.rs"] as any);
+    mockGlob.mockResolvedValue(["src/models.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeRustCtx(), []);
@@ -78,7 +78,7 @@ describe("Rust snapshot extraction", () => {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/types.rs"] as any);
+    mockGlob.mockResolvedValue(["src/types.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeRustCtx(), []);
@@ -95,7 +95,7 @@ describe("Rust snapshot extraction", () => {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/traits.rs"] as any);
+    mockGlob.mockResolvedValue(["src/traits.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeRustCtx(), []);
@@ -115,7 +115,7 @@ pub async fn fetch_data(url: &str) -> Result<Data, Error> {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/handlers.rs"] as any);
+    mockGlob.mockResolvedValue(["src/handlers.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeRustCtx(), []);
@@ -142,7 +142,7 @@ pub fn public_func() -> bool {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/lib.rs"] as any);
+    mockGlob.mockResolvedValue(["src/lib.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeRustCtx(), []);
@@ -169,7 +169,7 @@ mod tests {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/lib.rs"] as any);
+    mockGlob.mockResolvedValue(["src/lib.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeRustCtx(), []);
@@ -182,7 +182,7 @@ mod tests {
     const rsContent = `pub type Result<T> = std::result::Result<T, AppError>;
 `;
 
-    mockGlob.mockResolvedValue(["src/types.rs"] as any);
+    mockGlob.mockResolvedValue(["src/types.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeRustCtx(), []);
@@ -198,7 +198,7 @@ mod tests {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/config.rs"] as any);
+    mockGlob.mockResolvedValue(["src/config.rs"] as string[]);
     mockReadFileOr.mockResolvedValue(rsContent);
 
     const result = await generateSnapshot(makeRustCtx(), []);

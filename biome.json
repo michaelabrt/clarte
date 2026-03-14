@@ -32,7 +32,7 @@
         "useLiteralKeys": "off"
       },
       "style": {
-        "noNonNullAssertion": "warn",
+        "noNonNullAssertion": "error",
         "useNodejsImportProtocol": "error",
         "noParameterAssign": "off",
         "useDefaultParameterLast": "off",
@@ -40,11 +40,11 @@
       },
       "suspicious": {
         "noAssignInExpressions": "off",
-        "noExplicitAny": "warn"
+        "noExplicitAny": "error"
       },
       "correctness": {
-        "noUnusedVariables": "warn",
-        "noUnusedImports": "warn",
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
         "noUnusedFunctionParameters": "off"
       },
       "performance": {

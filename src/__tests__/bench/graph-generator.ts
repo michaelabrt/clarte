@@ -38,6 +38,49 @@ const DIRS = [
 
 const EXTERNAL_PACKAGES = ["react", "lodash", "axios", "zod", "date-fns", "uuid", "chalk", "express", "path", "fs"];
 
+const SYMBOL_POOL = [
+  "fetchUser",
+  "handleRequest",
+  "validateInput",
+  "formatResponse",
+  "parseConfig",
+  "createRouter",
+  "useAuth",
+  "getSession",
+  "renderPage",
+  "loadModule",
+  "buildQuery",
+  "mapResults",
+  "filterItems",
+  "sortEntries",
+  "mergeDefaults",
+  "initDatabase",
+  "closeConnection",
+  "runMigration",
+  "seedData",
+  "resetState",
+  "encryptPayload",
+  "decryptToken",
+  "hashPassword",
+  "verifySignature",
+  "generateKey",
+  "logError",
+  "warnDeprecated",
+  "trackEvent",
+  "measureLatency",
+  "reportMetric",
+  "readConfig",
+  "writeCache",
+  "deleteRecord",
+  "updateProfile",
+  "patchSettings",
+  "transformData",
+  "normalizeInput",
+  "sanitizeHtml",
+  "escapeRegex",
+  "debounceCall",
+];
+
 function generateFilePaths(count: number, rng: () => number): string[] {
   const files: string[] = [];
   for (let i = 0; i < count; i++) {
@@ -61,7 +104,7 @@ function generateEdges(files: string[], density: number, rng: () => number): Imp
   const seen = new Set<string>();
 
   // Pre-compute power-law weights for targets (incoming popularity)
-  const targetWeights = files.map((_, i) => 1 / (i + 1) ** 0.8);
+  const targetWeights = files.map((_, i) => 1 / (i + 1) ** 1.2);
   const totalTargetWeight = targetWeights.reduce((a, b) => a + b, 0);
   const cumulativeTarget: number[] = [];
   let cumSum = 0;
@@ -84,7 +127,7 @@ function generateEdges(files: string[], density: number, rng: () => number): Imp
   while (edges.length < internalCount && attempts < internalCount * 5) {
     attempts++;
     // Source: power-law biased toward hub files (low indices)
-    const srcIdx = Math.floor(rng() ** 1.5 * n);
+    const srcIdx = Math.floor(rng() ** 1.2 * n);
     const tgtIdx = pickTarget();
     if (srcIdx === tgtIdx) continue;
 
@@ -125,7 +168,7 @@ function generateImportNames(rng: () => number): string[] {
   const count = Math.floor(rng() * 4) + 1;
   const names: string[] = [];
   for (let i = 0; i < count; i++) {
-    names.push(`import${Math.floor(rng() * 1000)}`);
+    names.push(SYMBOL_POOL[Math.floor(rng() * SYMBOL_POOL.length)]);
   }
   return names;
 }

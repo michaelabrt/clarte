@@ -182,9 +182,9 @@ describe("loadPersistedGraph", () => {
     };
     await fs.writeFile(path.join(claireDir, "graph.json"), JSON.stringify(data));
     const result = await loadPersistedGraph(tmpDir);
-    expect(result).not.toBeNull();
-    expect(result?.version).toBe(PERSISTED_GRAPH_VERSION);
-    expect(result?.files["src/a.ts"]).toBeDefined();
+    if (!result) throw new Error("expected parsed graph");
+    expect(result.version).toBe(PERSISTED_GRAPH_VERSION);
+    expect(result.files["src/a.ts"]).toBeDefined();
   });
 });
 
@@ -203,15 +203,15 @@ describe("persistGraph + loadPersistedGraph round-trip", () => {
     await persistGraph(tmpDir, graph, analysis);
     const loaded = await loadPersistedGraph(tmpDir);
 
-    expect(loaded).not.toBeNull();
-    expect(loaded?.files["src/a.ts"]).toBeDefined();
-    expect(loaded?.files["src/b.ts"]).toBeDefined();
-    expect(loaded?.edges).toHaveLength(1);
-    expect(loaded?.edges[0].from).toBe("src/a.ts");
-    expect(loaded?.edges[0].to).toBe("src/b.ts");
-    expect(loaded?.edges[0].importedNames).toEqual(["Foo"]);
-    expect(loaded?.communities).toHaveLength(1);
-    expect(loaded?.communities[0].id).toBe(1);
+    if (!loaded) throw new Error("expected loaded graph");
+    expect(loaded.files["src/a.ts"]).toBeDefined();
+    expect(loaded.files["src/b.ts"]).toBeDefined();
+    expect(loaded.edges).toHaveLength(1);
+    expect(loaded.edges[0].from).toBe("src/a.ts");
+    expect(loaded.edges[0].to).toBe("src/b.ts");
+    expect(loaded.edges[0].importedNames).toEqual(["Foo"]);
+    expect(loaded.communities).toHaveLength(1);
+    expect(loaded.communities[0].id).toBe(1);
   });
 
   it("headCommit is included when git returns a value", async () => {
@@ -219,6 +219,7 @@ describe("persistGraph + loadPersistedGraph round-trip", () => {
     const analysis = makeContextAnalysis();
     await persistGraph(tmpDir, graph, analysis);
     const loaded = await loadPersistedGraph(tmpDir);
-    expect(loaded?.headCommit).toBe("abc123def456");
+    if (!loaded) throw new Error("expected loaded graph");
+    expect(loaded.headCommit).toBe("abc123def456");
   });
 });

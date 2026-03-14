@@ -72,9 +72,7 @@ describe("getFrameworkHints", () => {
   it("returns Express hints", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "Express" }]));
     expect(hints).toContain("### Express");
-    expect(hints).toContain(
-      "- Middleware chain: `app.use()` for global, router-level for scoped. Order matters.",
-    );
+    expect(hints).toContain("- Middleware chain: `app.use()` for global, router-level for scoped. Order matters.");
     expect(hints).toContain(
       "- Organize routes with `express.Router()` in separate files, mount with `app.use('/prefix', router)`",
     );
@@ -85,9 +83,7 @@ describe("getFrameworkHints", () => {
   it("returns Fastify hints", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "Fastify" }]));
     expect(hints).toContain("### Fastify");
-    expect(hints).toContain(
-      "- Plugin architecture: register plugins with `fastify.register()` for encapsulation",
-    );
+    expect(hints).toContain("- Plugin architecture: register plugins with `fastify.register()` for encapsulation");
   });
 
   // --- Hono ---
@@ -115,17 +111,13 @@ describe("getFrameworkHints", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "Expo" }, { name: "React Native" }]));
     expect(hints).toContain("### Expo / React Native");
     expect(hints).toContain("- **expo-router** for file-based routing (if using); Stack, Tabs, Drawer navigators");
-    expect(hints).toContain(
-      '- **Reanimated**: worklet functions need the `"worklet"` directive on the first line',
-    );
+    expect(hints).toContain('- **Reanimated**: worklet functions need the `"worklet"` directive on the first line');
   });
 
   it("returns Expo hints without Reanimated when RN is not present", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "Expo" }]));
     expect(hints).toContain("- **expo-router** for file-based routing (if using); Stack, Tabs, Drawer navigators");
-    expect(hints).not.toContain(
-      '- **Reanimated**: worklet functions need the `"worklet"` directive on the first line',
-    );
+    expect(hints).not.toContain('- **Reanimated**: worklet functions need the `"worklet"` directive on the first line');
   });
 
   it("returns React Native hints when Expo is not present", () => {
@@ -184,17 +176,13 @@ describe("getFrameworkHints", () => {
   it("skips Svelte hints when SvelteKit is present", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "Svelte" }, { name: "SvelteKit" }]));
     expect(hints).not.toContain("- Reactive declarations with `$:` for derived state");
-    expect(hints).toContain(
-      "- File-based routing in `src/routes/`: `+page.svelte`, `+layout.svelte`, `+server.ts`",
-    );
+    expect(hints).toContain("- File-based routing in `src/routes/`: `+page.svelte`, `+layout.svelte`, `+server.ts`");
   });
 
   it("returns SvelteKit hints", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "SvelteKit" }]));
     expect(hints).toContain("### SvelteKit");
-    expect(hints).toContain(
-      "- File-based routing in `src/routes/`: `+page.svelte`, `+layout.svelte`, `+server.ts`",
-    );
+    expect(hints).toContain("- File-based routing in `src/routes/`: `+page.svelte`, `+layout.svelte`, `+server.ts`");
   });
 
   // --- Angular ---
@@ -220,9 +208,7 @@ describe("getFrameworkHints", () => {
   it("returns Flask hints", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "Flask" }]));
     expect(hints).toContain("### Flask");
-    expect(hints).toContain(
-      "- Blueprints for modular route organization. Register with `app.register_blueprint()`",
-    );
+    expect(hints).toContain("- Blueprints for modular route organization. Register with `app.register_blueprint()`");
   });
 
   it("returns FastAPI hints", () => {
@@ -238,9 +224,7 @@ describe("getFrameworkHints", () => {
   it("returns Prisma hints", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "Prisma" }]));
     expect(hints).toContain("### Prisma");
-    expect(hints).toContain(
-      "- Schema in `prisma/schema.prisma`. Run `npx prisma generate` after changes",
-    );
+    expect(hints).toContain("- Schema in `prisma/schema.prisma`. Run `npx prisma generate` after changes");
   });
 
   it("returns Drizzle hints", () => {
@@ -254,9 +238,7 @@ describe("getFrameworkHints", () => {
   it("returns Tailwind CSS hints", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "Tailwind CSS" }]));
     expect(hints).toContain("### Tailwind CSS");
-    expect(hints).toContain(
-      "- Utility-first: compose styles with `className`. Avoid custom CSS unless truly needed",
-    );
+    expect(hints).toContain("- Utility-first: compose styles with `className`. Avoid custom CSS unless truly needed");
   });
 
   it("skips Tailwind CSS hints when NativeWind is present", () => {
@@ -271,9 +253,7 @@ describe("getFrameworkHints", () => {
   it("returns Electron hints", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "Electron" }]));
     expect(hints).toContain("### Electron");
-    expect(hints).toContain(
-      "- **Main process** (Node.js) and **renderer process** (Chromium). Communicate via IPC",
-    );
+    expect(hints).toContain("- **Main process** (Node.js) and **renderer process** (Chromium). Communicate via IPC");
   });
 
   it("returns Remix hints", () => {
@@ -292,17 +272,13 @@ describe("getFrameworkHints", () => {
 
   it("returns Astro hints with framework integration info", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "Astro" }, { name: "React" }]));
-    expect(hints).toContain(
-      "- Framework integrations detected: React. Use `client:load` to hydrate these components",
-    );
+    expect(hints).toContain("- Framework integrations detected: React. Use `client:load` to hydrate these components");
   });
 
   it("returns tRPC hints", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "tRPC" }]));
     expect(hints).toContain("### tRPC");
-    expect(hints).toContain(
-      "- Define procedures on `appRouter` using `router()` and `procedure` builders",
-    );
+    expect(hints).toContain("- Define procedures on `appRouter` using `router()` and `procedure` builders");
   });
 
   it("returns Supabase hints", () => {
@@ -317,12 +293,8 @@ describe("getFrameworkHints", () => {
 
   it("combines hints from multiple frameworks", () => {
     const hints = getFrameworkHints(makeCtx([{ name: "Express" }, { name: "Prisma" }]));
-    expect(hints).toContain(
-      "- Middleware chain: `app.use()` for global, router-level for scoped. Order matters.",
-    );
-    expect(hints).toContain(
-      "- Schema in `prisma/schema.prisma`. Run `npx prisma generate` after changes",
-    );
+    expect(hints).toContain("- Middleware chain: `app.use()` for global, router-level for scoped. Order matters.");
+    expect(hints).toContain("- Schema in `prisma/schema.prisma`. Run `npx prisma generate` after changes");
   });
 });
 
