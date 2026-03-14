@@ -30,6 +30,25 @@ vi.mock("../graph/cache.js", () => ({
   ANALYSIS_CACHE_VERSION: 1,
 }));
 
+// Project cache mocks
+const mockComputeProjectCacheKey = vi.fn().mockResolvedValue("project-cache-key-456");
+const mockLoadProjectCache = vi.fn().mockResolvedValue(null);
+const mockSaveProjectCache = vi.fn().mockResolvedValue(undefined);
+
+vi.mock("../core/project-cache.js", () => ({
+  computeProjectCacheKey: (...args: unknown[]) => mockComputeProjectCacheKey(...args),
+  loadProjectCache: (...args: unknown[]) => mockLoadProjectCache(...args),
+  saveProjectCache: (...args: unknown[]) => mockSaveProjectCache(...args),
+  buildProjectCachePayload: (...args: unknown[]) => ({ version: 1, cacheKey: args[0], ...args }),
+  hydrateProjectCache: () => ({
+    configConstraints: undefined,
+    conventions: undefined,
+    testMapping: undefined,
+    monorepoAnalysis: undefined,
+  }),
+  PROJECT_CACHE_VERSION: 1,
+}));
+
 // Analysis function mocks
 const mockGetHubFiles = vi.fn().mockReturnValue([]);
 const mockFindCircularDeps = vi.fn().mockReturnValue([]);
@@ -160,6 +179,7 @@ const noopProgress = () => {};
 beforeEach(() => {
   vi.clearAllMocks();
   mockLoadAnalysisCache.mockResolvedValue(null);
+  mockLoadProjectCache.mockResolvedValue(null);
   mockAnalyzeGitActivity.mockResolvedValue({
     hotFiles: [{ path: "src/index.ts", commits: 10, lastChanged: "1d ago" }],
     changeCoupling: [],
