@@ -40,6 +40,14 @@ import {
   buildProjectCachePayload,
   hydrateProjectCache,
 } from "./project-cache.js";
+import {
+  computeGitCacheKey,
+  loadGitCache,
+  saveGitCache,
+  buildGitCachePayload,
+  hydrateGitCache,
+  type GitCacheData,
+} from "./git-cache.js";
 import type {
   ConfigConstraints,
   ContextAnalysis,
@@ -102,18 +110,31 @@ export async function runAnalysis(
   const graphResults = runGraphPhase(graph, savedConfig, useGraphCache ? analysisCache : null, log, entryPoints);
   const graphPhaseMs = performance.now() - graphStart;
 
-  // Load project cache
+  // Load project cache + git cache key
   const projectCacheKey = await computeProjectCacheKey(rootDir, graph, detected);
-  const projectCache = await loadProjectCache(rootDir);
+  const [projectCache, gitCacheKey, gitCache] = await Promise.all([
+    loadProjectCache(rootDir),
+    Promise.resolve(computeGitCacheKey(rootDir, analysisDays)),
+    loadGitCache(rootDir),
+  ]);
   const useProjectCache = projectCache !== null && projectCache.cacheKey === projectCacheKey;
+  const validGitCache = gitCacheKey && gitCache && gitCache.cacheKey === gitCacheKey ? gitCache : null;
 
   // Parallel group: git + cacheable project sub-analyses
   const parallelStart = performance.now();
 
-  const gitPromise = runGitPhase(rootDir, detected, analysisDays, verbose ? verboseLog : noopProgress, log);
+  const gitPromise = runGitPhase(
+    rootDir,
+    detected,
+    analysisDays,
+    verbose ? verboseLog : noopProgress,
+    log,
+    gitCacheKey,
+    validGitCache,
+  );
   const projectPromise = runCacheableProjectPhase(rootDir, graph, detected, useProjectCache ? projectCache : null, log);
 
-  const [gitActivity, cacheableProject] = await Promise.all([gitPromise, projectPromise]);
+  const [{ gitActivity, gitCacheHit }, cacheableProject] = await Promise.all([gitPromise, projectPromise]);
   const parallelGroupMs = performance.now() - parallelStart;
 
   // Git-dependent work (fast pure computation, runs after parallel group)
@@ -199,14 +220,16 @@ export async function runAnalysis(
     totalMs: Math.round(totalMs),
     graphCacheHit: useGraphCache,
     projectCacheHit: useProjectCache,
+    gitCacheHit,
     parallelGroupMs: Math.round(parallelGroupMs),
   };
 
   if (verbose && !jsonMode) {
     const graphLabel = useGraphCache ? "cached" : "computed";
     const projectLabel = useProjectCache ? "cached" : "computed";
+    const gitLabel = gitCacheHit ? "cached" : "computed";
     verboseLog(
-      `Phase timing: graph=${timing.graphPhaseMs}ms(${graphLabel}) git=${timing.gitPhaseMs}ms project=${timing.projectPhaseMs}ms(${projectLabel}) delta=${timing.deltaPhaseMs}ms total=${timing.totalMs}ms`,
+      `Phase timing: graph=${timing.graphPhaseMs}ms(${graphLabel}) git=${timing.gitPhaseMs}ms(${gitLabel}) project=${timing.projectPhaseMs}ms(${projectLabel}) delta=${timing.deltaPhaseMs}ms total=${timing.totalMs}ms`,
     );
   }
 
@@ -290,8 +313,27 @@ async function runGitPhase(
   analysisDays: number,
   onProgress: ProgressCallback,
   log: LogCtx,
-): Promise<ContextAnalysis["gitActivity"]> {
-  const gitActivity = detected.isGitRepo ? await analyzeGitActivity(rootDir, onProgress, analysisDays) : null;
+  gitCacheKey: string | null,
+  gitCache: GitCacheData | null,
+): Promise<{ gitActivity: ContextAnalysis["gitActivity"]; gitCacheHit: boolean }> {
+  let gitActivity: ContextAnalysis["gitActivity"];
+  let gitCacheHit = false;
+
+  if (gitCache) {
+    gitActivity = hydrateGitCache(gitCache);
+    gitCacheHit = true;
+  } else {
+    gitActivity = detected.isGitRepo ? await analyzeGitActivity(rootDir, onProgress, analysisDays) : null;
+  }
+
+  // Save unfiltered result on cache miss before filterAlive mutates it
+  if (!gitCacheHit && gitActivity && gitCacheKey) {
+    try {
+      await saveGitCache(rootDir, buildGitCachePayload(gitCacheKey, gitActivity));
+    } catch {
+      // Non-fatal: cache save failure should not block analysis
+    }
+  }
 
   if (gitActivity) {
     await filterAliveGitActivity(rootDir, gitActivity);
@@ -299,7 +341,7 @@ async function runGitPhase(
 
   logGitActivity(gitActivity, analysisDays, log);
 
-  return gitActivity;
+  return { gitActivity, gitCacheHit };
 }
 
 // ---------------------------------------------------------------------------

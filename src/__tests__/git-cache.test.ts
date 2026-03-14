@@ -1,0 +1,371 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import fs from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+import {
+  computeGitCacheKey,
+  loadGitCache,
+  saveGitCache,
+  hydrateGitCache,
+  buildGitCachePayload,
+  GIT_CACHE_VERSION,
+  type GitCacheData,
+} from "../core/git-cache.js";
+import type { GitAnalysis, LagCoupling } from "../types.js";
+
+// ── Mock git/git.js ───────────────────────────────────────────────────────
+
+const mockGitExecSafe = vi.fn<(args: string[], opts: { cwd: string }) => string | null>();
+
+vi.mock("../git/git.js", () => ({
+  gitExecSafe: (...args: unknown[]) => mockGitExecSafe(...(args as [string[], { cwd: string }])),
+}));
+
+// ── Fixtures ─────────────────────────────────────────────────────────────
+
+const FAKE_HEAD = "abc123def456abc123def456abc123def456abc123def456abc123def456abc1";
+
+function makeGitAnalysis(overrides: Partial<GitAnalysis> = {}): GitAnalysis {
+  return {
+    commitCounts: new Map([
+      ["src/index.ts", 10],
+      ["src/utils.ts", 5],
+    ]),
+    hotFiles: [
+      { path: "src/index.ts", commits: 10, lastChanged: "1d ago" },
+      { path: "src/utils.ts", commits: 5, lastChanged: "3d ago" },
+    ],
+    changeCoupling: [
+      {
+        fileA: "src/a.ts",
+        fileB: "src/b.ts",
+        coChangeCount: 3,
+        support: 0.3,
+        confidence: 0.6,
+      },
+    ],
+    lagCouplings: [
+      {
+        fileA: "src/a.ts",
+        fileB: "src/c.ts",
+        sameCommitCount: 2,
+        lagScore: 1.5,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function makeMinimalCacheData(): GitCacheData {
+  return {
+    version: GIT_CACHE_VERSION,
+    cacheKey: "test-key",
+    commitCounts: [["src/index.ts", 7]],
+    hotFiles: [{ path: "src/index.ts", commits: 7, lastChanged: "2d ago" }],
+    changeCoupling: [],
+  };
+}
+
+// ── tmpDir lifecycle ──────────────────────────────────────────────────────
+
+let tmpDir: string;
+
+beforeEach(async () => {
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-git-cache-"));
+  mockGitExecSafe.mockReturnValue(FAKE_HEAD);
+});
+
+afterEach(async () => {
+  await fs.rm(tmpDir, { recursive: true });
+  vi.clearAllMocks();
+});
+
+// ── computeGitCacheKey ────────────────────────────────────────────────────
+
+describe("computeGitCacheKey", () => {
+  it("is deterministic given the same inputs", () => {
+    const key1 = computeGitCacheKey(tmpDir, 90);
+    const key2 = computeGitCacheKey(tmpDir, 90);
+    expect(key1).toBe(key2);
+  });
+
+  it("changes when analysisDays changes", () => {
+    const key1 = computeGitCacheKey(tmpDir, 90);
+    const key2 = computeGitCacheKey(tmpDir, 30);
+    expect(key1).not.toBe(key2);
+  });
+
+  it("changes when HEAD changes", () => {
+    const key1 = computeGitCacheKey(tmpDir, 90);
+    mockGitExecSafe.mockReturnValue("different-sha");
+    const key2 = computeGitCacheKey(tmpDir, 90);
+    expect(key1).not.toBe(key2);
+  });
+
+  it("returns null when gitExecSafe returns null (not a git repo)", () => {
+    mockGitExecSafe.mockReturnValue(null);
+    expect(computeGitCacheKey(tmpDir, 90)).toBeNull();
+  });
+
+  it("returns a 64-char hex string", () => {
+    const key = computeGitCacheKey(tmpDir, 90);
+    expect(key).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("passes rootDir as cwd to gitExecSafe", () => {
+    computeGitCacheKey("/some/dir", 90);
+    expect(mockGitExecSafe).toHaveBeenCalledWith(["rev-parse", "HEAD"], { cwd: "/some/dir" });
+  });
+});
+
+// ── loadGitCache ──────────────────────────────────────────────────────────
+
+describe("loadGitCache", () => {
+  it("returns null when no cache file exists", async () => {
+    expect(await loadGitCache(tmpDir)).toBeNull();
+  });
+
+  it("returns null when cache version does not match", async () => {
+    const payload: GitCacheData = {
+      version: GIT_CACHE_VERSION + 1,
+      cacheKey: "abc",
+      commitCounts: [],
+      hotFiles: [],
+      changeCoupling: [],
+    };
+    const dir = path.join(tmpDir, ".clarte");
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, "git-cache.json"), JSON.stringify(payload));
+
+    expect(await loadGitCache(tmpDir)).toBeNull();
+  });
+
+  it("returns null when cache file is malformed JSON", async () => {
+    const dir = path.join(tmpDir, ".clarte");
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, "git-cache.json"), "not valid json{{{");
+
+    expect(await loadGitCache(tmpDir)).toBeNull();
+  });
+});
+
+// ── saveGitCache / loadGitCache round-trip ────────────────────────────────
+
+describe("saveGitCache / loadGitCache round-trip", () => {
+  it("persists and reloads a minimal cache", async () => {
+    const payload = makeMinimalCacheData();
+    await saveGitCache(tmpDir, payload);
+    const loaded = await loadGitCache(tmpDir);
+    expect(loaded).toEqual(payload);
+  });
+
+  it("creates .clarte directory if it does not exist", async () => {
+    await saveGitCache(tmpDir, makeMinimalCacheData());
+    const stat = await fs.stat(path.join(tmpDir, ".clarte"));
+    expect(stat.isDirectory()).toBe(true);
+  });
+
+  it("round-trips a full cache with optional fields", async () => {
+    const payload: GitCacheData = {
+      version: GIT_CACHE_VERSION,
+      cacheKey: "full-key",
+      commitCounts: [
+        ["src/a.ts", 3],
+        ["src/b.ts", 1],
+      ],
+      hotFiles: [{ path: "src/a.ts", commits: 3, lastChanged: "1d ago" }],
+      changeCoupling: [
+        {
+          fileA: "src/a.ts",
+          fileB: "src/b.ts",
+          coChangeCount: 2,
+          support: 0.4,
+          confidence: 0.8,
+          confidenceAB: 0.9,
+          confidenceBA: 0.7,
+        },
+      ],
+      lagCouplings: [{ fileA: "src/a.ts", fileB: "src/c.ts", sameCommitCount: 1, lagScore: 1.0 }],
+      fileChurn: [["src/a.ts", { linesAdded: 100, linesRemoved: 20 }]],
+    };
+
+    await saveGitCache(tmpDir, payload);
+    const loaded = await loadGitCache(tmpDir);
+    expect(loaded).toEqual(payload);
+  });
+});
+
+// ── hydrateGitCache ───────────────────────────────────────────────────────
+
+describe("hydrateGitCache", () => {
+  it("reconstructs commitCounts as a Map", () => {
+    const cache = makeMinimalCacheData();
+    cache.commitCounts = [
+      ["src/a.ts", 5],
+      ["src/b.ts", 2],
+    ];
+    const { commitCounts } = hydrateGitCache(cache);
+    expect(commitCounts).toBeInstanceOf(Map);
+    expect(commitCounts.get("src/a.ts")).toBe(5);
+    expect(commitCounts.get("src/b.ts")).toBe(2);
+  });
+
+  it("reconstructs fileChurn as a Map when present", () => {
+    const cache = makeMinimalCacheData();
+    cache.fileChurn = [["src/hot.ts", { linesAdded: 80, linesRemoved: 10 }]];
+    const { fileChurn } = hydrateGitCache(cache);
+    expect(fileChurn).toBeInstanceOf(Map);
+    expect(fileChurn?.get("src/hot.ts")).toEqual({ linesAdded: 80, linesRemoved: 10 });
+  });
+
+  it("leaves fileChurn as undefined when not present", () => {
+    const cache = makeMinimalCacheData();
+    const { fileChurn } = hydrateGitCache(cache);
+    expect(fileChurn).toBeUndefined();
+  });
+
+  it("passes hotFiles through unchanged", () => {
+    const cache = makeMinimalCacheData();
+    const { hotFiles } = hydrateGitCache(cache);
+    expect(hotFiles).toBe(cache.hotFiles);
+  });
+
+  it("passes changeCoupling through unchanged", () => {
+    const cache = makeMinimalCacheData();
+    const { changeCoupling } = hydrateGitCache(cache);
+    expect(changeCoupling).toBe(cache.changeCoupling);
+  });
+
+  it("passes lagCouplings through unchanged when present", () => {
+    const lags: LagCoupling[] = [{ fileA: "src/a.ts", fileB: "src/b.ts", sameCommitCount: 1, lagScore: 1.0 }];
+    const cache: GitCacheData = { ...makeMinimalCacheData(), lagCouplings: lags };
+    const { lagCouplings } = hydrateGitCache(cache);
+    expect(lagCouplings).toBe(lags);
+  });
+
+  it("leaves lagCouplings as undefined when not present", () => {
+    const cache = makeMinimalCacheData();
+    const { lagCouplings } = hydrateGitCache(cache);
+    expect(lagCouplings).toBeUndefined();
+  });
+});
+
+// ── buildGitCachePayload ──────────────────────────────────────────────────
+
+describe("buildGitCachePayload", () => {
+  it("stamps the current cache version", () => {
+    const payload = buildGitCachePayload("key", makeGitAnalysis());
+    expect(payload.version).toBe(GIT_CACHE_VERSION);
+  });
+
+  it("stores the provided cacheKey", () => {
+    const payload = buildGitCachePayload("my-key", makeGitAnalysis());
+    expect(payload.cacheKey).toBe("my-key");
+  });
+
+  it("serializes commitCounts Map to array-of-pairs", () => {
+    const ga = makeGitAnalysis({ commitCounts: new Map([["src/x.ts", 7]]) });
+    const payload = buildGitCachePayload("k", ga);
+    expect(Array.isArray(payload.commitCounts)).toBe(true);
+    expect(payload.commitCounts).toContainEqual(["src/x.ts", 7]);
+  });
+
+  it("serializes fileChurn Map to array-of-pairs when present", () => {
+    const ga = makeGitAnalysis({
+      fileChurn: new Map([["src/x.ts", { linesAdded: 50, linesRemoved: 5 }]]),
+    });
+    const payload = buildGitCachePayload("k", ga);
+    expect(Array.isArray(payload.fileChurn)).toBe(true);
+    expect(payload.fileChurn).toContainEqual(["src/x.ts", { linesAdded: 50, linesRemoved: 5 }]);
+  });
+
+  it("omits fileChurn when undefined on GitAnalysis", () => {
+    const ga = makeGitAnalysis({ fileChurn: undefined });
+    const payload = buildGitCachePayload("k", ga);
+    expect(payload.fileChurn).toBeUndefined();
+  });
+
+  it("passes hotFiles through unchanged", () => {
+    const ga = makeGitAnalysis();
+    const payload = buildGitCachePayload("k", ga);
+    expect(payload.hotFiles).toBe(ga.hotFiles);
+  });
+
+  it("passes changeCoupling through unchanged", () => {
+    const ga = makeGitAnalysis();
+    const payload = buildGitCachePayload("k", ga);
+    expect(payload.changeCoupling).toBe(ga.changeCoupling);
+  });
+
+  it("produces a JSON-serializable payload", () => {
+    const ga = makeGitAnalysis({
+      fileChurn: new Map([["src/y.ts", { linesAdded: 10, linesRemoved: 2 }]]),
+    });
+    const payload = buildGitCachePayload("k", ga);
+    expect(() => JSON.stringify(payload)).not.toThrow();
+  });
+});
+
+// ── Full round-trip (save -> load -> hydrate) ─────────────────────────────
+
+describe("full round-trip (save -> load -> hydrate)", () => {
+  it("reconstructs commitCounts Map after disk persistence", async () => {
+    const ga = makeGitAnalysis();
+    const payload = buildGitCachePayload("rt-key", ga);
+    await saveGitCache(tmpDir, payload);
+    const loaded = await loadGitCache(tmpDir);
+    if (!loaded) throw new Error("expected cache to load");
+    const hydrated = hydrateGitCache(loaded);
+
+    expect(hydrated.commitCounts).toBeInstanceOf(Map);
+    expect(hydrated.commitCounts.get("src/index.ts")).toBe(10);
+    expect(hydrated.commitCounts.get("src/utils.ts")).toBe(5);
+  });
+
+  it("reconstructs fileChurn Map after disk persistence", async () => {
+    const ga = makeGitAnalysis({
+      fileChurn: new Map([
+        ["src/a.ts", { linesAdded: 200, linesRemoved: 50 }],
+        ["src/b.ts", { linesAdded: 10, linesRemoved: 0 }],
+      ]),
+    });
+    const payload = buildGitCachePayload("rt-key", ga);
+    await saveGitCache(tmpDir, payload);
+    const loaded = await loadGitCache(tmpDir);
+    if (!loaded) throw new Error("expected cache to load");
+    const hydrated = hydrateGitCache(loaded);
+
+    expect(hydrated.fileChurn).toBeInstanceOf(Map);
+    expect(hydrated.fileChurn?.get("src/a.ts")).toEqual({ linesAdded: 200, linesRemoved: 50 });
+    expect(hydrated.fileChurn?.get("src/b.ts")).toEqual({ linesAdded: 10, linesRemoved: 0 });
+  });
+
+  it("preserves hotFiles, changeCoupling and lagCouplings after disk persistence", async () => {
+    const ga = makeGitAnalysis();
+    const payload = buildGitCachePayload("rt-key", ga);
+    await saveGitCache(tmpDir, payload);
+    const loaded = await loadGitCache(tmpDir);
+    if (!loaded) throw new Error("expected cache to load");
+    const hydrated = hydrateGitCache(loaded);
+
+    expect(hydrated.hotFiles).toEqual(ga.hotFiles);
+    expect(hydrated.changeCoupling[0].fileA).toBe("src/a.ts");
+    expect(hydrated.lagCouplings?.[0].fileA).toBe("src/a.ts");
+  });
+
+  it("handles absent optional fields after disk persistence", async () => {
+    const ga: GitAnalysis = {
+      commitCounts: new Map([["src/z.ts", 1]]),
+      hotFiles: [{ path: "src/z.ts", commits: 1, lastChanged: "5d ago" }],
+      changeCoupling: [],
+    };
+    const payload = buildGitCachePayload("minimal-key", ga);
+    await saveGitCache(tmpDir, payload);
+    const loaded = await loadGitCache(tmpDir);
+    if (!loaded) throw new Error("expected cache to load");
+    const hydrated = hydrateGitCache(loaded);
+
+    expect(hydrated.lagCouplings).toBeUndefined();
+    expect(hydrated.fileChurn).toBeUndefined();
+  });
+});

@@ -49,6 +49,25 @@ vi.mock("../core/project-cache.js", () => ({
   PROJECT_CACHE_VERSION: 1,
 }));
 
+// Git cache mocks
+const mockComputeGitCacheKey = vi.fn().mockReturnValue("git-cache-key-789");
+const mockLoadGitCache = vi.fn().mockResolvedValue(null);
+const mockSaveGitCache = vi.fn().mockResolvedValue(undefined);
+
+vi.mock("../core/git-cache.js", () => ({
+  computeGitCacheKey: (...args: unknown[]) => mockComputeGitCacheKey(...args),
+  loadGitCache: (...args: unknown[]) => mockLoadGitCache(...args),
+  saveGitCache: (...args: unknown[]) => mockSaveGitCache(...args),
+  buildGitCachePayload: (...args: unknown[]) => ({ version: 1, cacheKey: args[0], ...args }),
+  hydrateGitCache: () => ({
+    commitCounts: new Map(),
+    hotFiles: [{ path: "src/cached.ts", commits: 5, lastChanged: "2d ago" }],
+    changeCoupling: [],
+    lagCouplings: [],
+  }),
+  GIT_CACHE_VERSION: 1,
+}));
+
 // Analysis function mocks
 const mockGetHubFiles = vi.fn().mockReturnValue([]);
 const mockFindCircularDeps = vi.fn().mockReturnValue([]);
@@ -180,10 +199,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockLoadAnalysisCache.mockResolvedValue(null);
   mockLoadProjectCache.mockResolvedValue(null);
+  mockLoadGitCache.mockResolvedValue(null);
+  mockComputeGitCacheKey.mockReturnValue("git-cache-key-789");
   mockAnalyzeGitActivity.mockResolvedValue({
     hotFiles: [{ path: "src/index.ts", commits: 10, lastChanged: "1d ago" }],
     changeCoupling: [],
     lagCouplings: [],
+    commitCounts: new Map(),
   });
 });
 
@@ -453,5 +475,139 @@ describe("runAnalysis", () => {
     );
 
     expect(deltaSection).toBeNull();
+  });
+
+  it("git cache hit skips analyzeGitActivity", async () => {
+    mockLoadGitCache.mockResolvedValue({
+      version: 1,
+      cacheKey: "git-cache-key-789",
+      commitCounts: [],
+      hotFiles: [{ path: "src/cached.ts", commits: 5, lastChanged: "2d ago" }],
+      changeCoupling: [],
+      lagCouplings: [],
+    });
+
+    await runAnalysis(
+      "/tmp/test",
+      makeGraph(),
+      makeDetected({ isGitRepo: true }),
+      null,
+      false,
+      true,
+      noopProgress,
+      noopProgress,
+    );
+
+    expect(mockAnalyzeGitActivity).not.toHaveBeenCalled();
+  });
+
+  it("git cache hit still produces gitActivity data via hydration", async () => {
+    mockLoadGitCache.mockResolvedValue({
+      version: 1,
+      cacheKey: "git-cache-key-789",
+      commitCounts: [],
+      hotFiles: [{ path: "src/cached.ts", commits: 5, lastChanged: "2d ago" }],
+      changeCoupling: [],
+      lagCouplings: [],
+    });
+
+    const { analysis } = await runAnalysis(
+      "/tmp/test",
+      makeGraph(),
+      makeDetected({ isGitRepo: true }),
+      null,
+      false,
+      true,
+      noopProgress,
+      noopProgress,
+    );
+
+    expect(analysis.gitActivity).not.toBeNull();
+    expect(analysis.gitActivity?.hotFiles[0].path).toBe("src/cached.ts");
+  });
+
+  it("git cache miss calls analyzeGitActivity", async () => {
+    await runAnalysis(
+      "/tmp/test",
+      makeGraph(),
+      makeDetected({ isGitRepo: true }),
+      null,
+      false,
+      true,
+      noopProgress,
+      noopProgress,
+    );
+
+    expect(mockAnalyzeGitActivity).toHaveBeenCalled();
+  });
+
+  it("git cache miss saves the git cache", async () => {
+    await runAnalysis(
+      "/tmp/test",
+      makeGraph(),
+      makeDetected({ isGitRepo: true }),
+      null,
+      false,
+      true,
+      noopProgress,
+      noopProgress,
+    );
+
+    expect(mockSaveGitCache).toHaveBeenCalled();
+  });
+
+  it("timing.gitCacheHit is true on git cache hit", async () => {
+    mockLoadGitCache.mockResolvedValue({
+      version: 1,
+      cacheKey: "git-cache-key-789",
+      commitCounts: [],
+      hotFiles: [],
+      changeCoupling: [],
+    });
+
+    const { timing } = await runAnalysis(
+      "/tmp/test",
+      makeGraph(),
+      makeDetected({ isGitRepo: true }),
+      null,
+      false,
+      true,
+      noopProgress,
+      noopProgress,
+    );
+
+    expect(timing.gitCacheHit).toBe(true);
+  });
+
+  it("timing.gitCacheHit is false on git cache miss", async () => {
+    const { timing } = await runAnalysis(
+      "/tmp/test",
+      makeGraph(),
+      makeDetected({ isGitRepo: true }),
+      null,
+      false,
+      true,
+      noopProgress,
+      noopProgress,
+    );
+
+    expect(timing.gitCacheHit).toBe(false);
+  });
+
+  it("does not save git cache when computeGitCacheKey returns null", async () => {
+    mockComputeGitCacheKey.mockReturnValue(null);
+
+    await runAnalysis(
+      "/tmp/test",
+      makeGraph(),
+      makeDetected({ isGitRepo: false }),
+      null,
+      false,
+      true,
+      noopProgress,
+      noopProgress,
+    );
+
+    expect(mockSaveGitCache).not.toHaveBeenCalled();
   });
 });
