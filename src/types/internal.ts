@@ -54,6 +54,7 @@ export interface PhaseTiming {
   totalMs: number;
   graphCacheHit: boolean;
   projectCacheHit: boolean;
+  gitCacheHit: boolean;
   /** Wall-clock time for the overlapped git+project parallel group */
   parallelGroupMs: number;
 }
