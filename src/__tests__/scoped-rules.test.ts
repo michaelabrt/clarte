@@ -66,12 +66,11 @@ describe("buildScopedRules", () => {
     const ctx = makeDetectedContext();
 
     const rules = await buildScopedRules(analysis, ctx);
-    // Should have at least one scoped rule (src/core has hub + churn directives)
-    expect(rules.length).toBeGreaterThanOrEqual(0);
-    for (const rule of rules) {
-      expect(rule.filename).toMatch(/^clarte-/);
-      expect(rule.paths[0]).toContain("/**");
-    }
+    // src/core has 3 directives (1 foundation guard + 2 churn), src/graph has only 1 churn (below threshold)
+    expect(rules).toHaveLength(1);
+    expect(rules[0].scope).toBe("src/core");
+    expect(rules[0].filename).toBe("clarte-src-core.md");
+    expect(rules[0].paths).toEqual(["src/core/**"]);
   });
 
   it("returns empty when no analysis directives", async () => {

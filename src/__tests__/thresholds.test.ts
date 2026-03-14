@@ -9,7 +9,23 @@
 import { describe, expect, it } from "vitest";
 import { computeGraphTopology } from "../graph/topology.js";
 import { formatScope, formatImpact, formatFunction } from "../mcp/format.js";
-import { FRAGMENT_MIN_SIZE, MCP } from "../config/thresholds.js";
+import {
+  FRAGMENT_MIN_SIZE,
+  MCP,
+  HITS,
+  ROLE_THRESHOLDS,
+  BARREL_THRESHOLD,
+  MAJORITY_THRESHOLD,
+  STRONG_MAJORITY_THRESHOLD,
+  INSTABILITY_TYPE_ONLY_WEIGHT,
+  HASH_CONCURRENCY,
+  INSTABILITY_THRESHOLD,
+  BETWEENNESS_K,
+  DIFF_COUPLING_THRESHOLD,
+  LAYER_CONSISTENCY,
+  SNAPSHOT_LANGUAGES,
+  GRAPH_DATA,
+} from "../config/thresholds.js";
 import { makeGraph, edge } from "./algorithm/helpers.js";
 import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
 import type { CallSite } from "../types/call-graph.js";
@@ -259,5 +275,133 @@ describe("MCP.DISPLAY_CALLERS truncates caller/callee listings in formatFunction
 
     const text = formatFunction("myFn", "src/target.ts", callerIndex, fileCallIndex);
     expect(text).toContain(`(${extra} more)`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Range validation for all algorithm parameters
+// ---------------------------------------------------------------------------
+
+describe("thresholds: range validation", () => {
+  describe("HITS parameters", () => {
+    it.each([
+      ["TELEPORT_ALPHA", HITS.TELEPORT_ALPHA, 0, 1],
+      ["TYPE_ONLY_DISCOUNT", HITS.TYPE_ONLY_DISCOUNT, 0, 1],
+      ["DYNAMIC_MULTIPLIER", HITS.DYNAMIC_MULTIPLIER, 0, 1],
+      ["MIN_SPECIFICITY", HITS.MIN_SPECIFICITY, 0, 1],
+      ["SPECIFICITY_LOG_BASE", HITS.SPECIFICITY_LOG_BASE, 2, 20],
+      ["BARREL_DISCOUNT", HITS.BARREL_DISCOUNT, 0, 1],
+      ["MAX_ITERATIONS", HITS.MAX_ITERATIONS, 1, 1000],
+      ["EPSILON", HITS.EPSILON, 0, 0.01],
+    ] as const)("%s = %s is in (%s, %s)", (_name, value, min, max) => {
+      expect(value).toBeGreaterThan(min);
+      expect(value).toBeLessThan(max);
+    });
+
+    it("TELEPORT_ALPHA ensures convergence (< 0.5)", () => {
+      expect(HITS.TELEPORT_ALPHA).toBeLessThan(0.5);
+    });
+
+    it("EPSILON is small enough for meaningful convergence", () => {
+      expect(HITS.EPSILON).toBeLessThanOrEqual(1e-4);
+    });
+  });
+
+  describe("ROLE_THRESHOLDS", () => {
+    it.each([
+      ["FOUNDATION_AUTH", ROLE_THRESHOLDS.FOUNDATION_AUTH, 0, 1],
+      ["FOUNDATION_HUB_MAX", ROLE_THRESHOLDS.FOUNDATION_HUB_MAX, 0, 1],
+      ["ORCHESTRATOR_HUB", ROLE_THRESHOLDS.ORCHESTRATOR_HUB, 0, 1],
+      ["ORCHESTRATOR_AUTH_MAX", ROLE_THRESHOLDS.ORCHESTRATOR_AUTH_MAX, 0, 1],
+      ["BRIDGE_MIN", ROLE_THRESHOLDS.BRIDGE_MIN, 0, 1],
+      ["UTILITY_AUTH_MIN", ROLE_THRESHOLDS.UTILITY_AUTH_MIN, 0, 1],
+      ["UTILITY_AUTH_MAX", ROLE_THRESHOLDS.UTILITY_AUTH_MAX, 0, 1],
+      ["UTILITY_HUB_MAX", ROLE_THRESHOLDS.UTILITY_HUB_MAX, 0, 1],
+    ] as const)("%s = %s is in (%s, %s)", (_name, value, min, max) => {
+      expect(value).toBeGreaterThan(min);
+      expect(value).toBeLessThan(max);
+    });
+
+    it("Foundation auth > Utility auth max (non-overlapping)", () => {
+      expect(ROLE_THRESHOLDS.FOUNDATION_AUTH).toBeGreaterThanOrEqual(ROLE_THRESHOLDS.UTILITY_AUTH_MAX);
+    });
+
+    it("Utility auth range is valid (min < max)", () => {
+      expect(ROLE_THRESHOLDS.UTILITY_AUTH_MIN).toBeLessThan(ROLE_THRESHOLDS.UTILITY_AUTH_MAX);
+    });
+
+    it("Orchestrator and Foundation are symmetric opposites", () => {
+      expect(ROLE_THRESHOLDS.FOUNDATION_AUTH).toBe(ROLE_THRESHOLDS.ORCHESTRATOR_HUB);
+      expect(ROLE_THRESHOLDS.FOUNDATION_HUB_MAX).toBe(ROLE_THRESHOLDS.ORCHESTRATOR_AUTH_MAX);
+    });
+  });
+
+  describe("scalar thresholds", () => {
+    it.each([
+      ["BARREL_THRESHOLD", BARREL_THRESHOLD, 0, 1],
+      ["MAJORITY_THRESHOLD", MAJORITY_THRESHOLD, 0, 1],
+      ["STRONG_MAJORITY_THRESHOLD", STRONG_MAJORITY_THRESHOLD, 0, 1],
+      ["INSTABILITY_TYPE_ONLY_WEIGHT", INSTABILITY_TYPE_ONLY_WEIGHT, 0, 1],
+      ["INSTABILITY_THRESHOLD", INSTABILITY_THRESHOLD, 0, 1],
+      ["DIFF_COUPLING_THRESHOLD", DIFF_COUPLING_THRESHOLD, 0, 1],
+    ] as const)("%s = %s is in (%s, %s)", (_name, value, min, max) => {
+      expect(value).toBeGreaterThan(min);
+      expect(value).toBeLessThan(max);
+    });
+
+    it("STRONG_MAJORITY_THRESHOLD > MAJORITY_THRESHOLD", () => {
+      expect(STRONG_MAJORITY_THRESHOLD).toBeGreaterThan(MAJORITY_THRESHOLD);
+    });
+  });
+
+  describe("integer thresholds", () => {
+    it("HASH_CONCURRENCY is a positive integer", () => {
+      expect(HASH_CONCURRENCY).toBeGreaterThan(0);
+      expect(Number.isInteger(HASH_CONCURRENCY)).toBe(true);
+    });
+
+    it("BETWEENNESS_K is a positive integer", () => {
+      expect(BETWEENNESS_K).toBeGreaterThan(0);
+      expect(Number.isInteger(BETWEENNESS_K)).toBe(true);
+    });
+  });
+
+  describe("LAYER_CONSISTENCY", () => {
+    it("MIN_LAYERS_FOR_SCORING >= 2", () => {
+      expect(LAYER_CONSISTENCY.MIN_LAYERS_FOR_SCORING).toBeGreaterThanOrEqual(2);
+    });
+
+    it("MIN_SKIP_DISTANCE >= 2", () => {
+      expect(LAYER_CONSISTENCY.MIN_SKIP_DISTANCE).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe("SNAPSHOT_LANGUAGES", () => {
+    it("contains core languages", () => {
+      for (const lang of ["typescript", "javascript", "python", "go", "rust", "java"]) {
+        expect(SNAPSHOT_LANGUAGES.has(lang)).toBe(true);
+      }
+    });
+
+    it("is non-empty", () => {
+      expect(SNAPSHOT_LANGUAGES.size).toBeGreaterThan(0);
+    });
+  });
+
+  describe("GRAPH_DATA", () => {
+    it("MAX_INTEGRATION_TESTS is a positive integer", () => {
+      expect(GRAPH_DATA.MAX_INTEGRATION_TESTS).toBeGreaterThan(0);
+      expect(Number.isInteger(GRAPH_DATA.MAX_INTEGRATION_TESTS)).toBe(true);
+    });
+
+    it("MAX_COCHANGE is a positive integer", () => {
+      expect(GRAPH_DATA.MAX_COCHANGE).toBeGreaterThan(0);
+      expect(Number.isInteger(GRAPH_DATA.MAX_COCHANGE)).toBe(true);
+    });
+
+    it("MAX_BFS_DEPTH is a positive integer", () => {
+      expect(GRAPH_DATA.MAX_BFS_DEPTH).toBeGreaterThan(0);
+      expect(Number.isInteger(GRAPH_DATA.MAX_BFS_DEPTH)).toBe(true);
+    });
   });
 });

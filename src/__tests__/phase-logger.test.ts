@@ -168,7 +168,7 @@ describe("logHubFiles", () => {
   it("logs count and top file name when populated", () => {
     logHubFiles([makeHubFile("src/utils.ts"), makeHubFile("src/core.ts")], LOG_NORMAL);
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("2");
+    expect(msg).toContain("2 key files");
     expect(msg).toContain("src/utils.ts");
   });
 
@@ -194,15 +194,14 @@ describe("logCircularDeps", () => {
   it("logs count with warning when cycles found", () => {
     logCircularDeps([{ chain: ["a.ts", "b.ts", "a.ts"] }], LOG_NORMAL);
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("1");
-    expect(msg).toContain("cycle");
+    expect(msg).toContain("1 cycle");
+    expect(msg).not.toContain("cycles");
   });
 
   it("uses plural 'cycles' for multiple cycles", () => {
     logCircularDeps([{ chain: ["a.ts", "b.ts", "a.ts"] }, { chain: ["c.ts", "d.ts", "c.ts"] }], LOG_NORMAL);
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("2");
-    expect(msg).toContain("cycles");
+    expect(msg).toContain("2 cycles");
   });
 
   it("logs cycle chains in verbose mode", () => {
@@ -252,8 +251,7 @@ describe("logInstabilities", () => {
   it("logs count with warning when high-instability files found", () => {
     logInstabilities([{ path: "src/a.ts", fanIn: 1, fanOut: 9, instability: 0.9 }], LOG_NORMAL);
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("1");
-    expect(msg).toContain("high-risk");
+    expect(msg).toContain("1 high-risk file");
   });
 
   it("logs file details in verbose mode", () => {
@@ -281,8 +279,7 @@ describe("logCommunities", () => {
     ];
     logCommunities(communities, LOG_NORMAL);
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("2");
-    expect(msg).toContain("cluster");
+    expect(msg).toContain("2 module clusters");
   });
 });
 
@@ -297,8 +294,7 @@ describe("logDeadFiles", () => {
   it("logs count with warning when dead files found", () => {
     logDeadFiles(["src/dead.ts", "src/unused.ts"], LOG_NORMAL);
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("2");
-    expect(msg).toContain("file");
+    expect(msg).toContain("2 files not imported");
   });
 
   it("logs file paths in verbose mode", () => {
@@ -323,8 +319,8 @@ describe("logCrossCuttingFiles", () => {
       LOG_NORMAL,
     );
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("1");
-    expect(msg).toContain("3+");
+    expect(msg).toContain("1 file");
+    expect(msg).toContain("3+ layers");
   });
 });
 
@@ -356,8 +352,7 @@ describe("logLayerConsistency", () => {
     );
     const msg = mockStep.mock.calls[0][0] as string;
     expect(msg).toContain("70%");
-    expect(msg).toContain("2");
-    expect(msg).toContain("violation");
+    expect(msg).toContain("2 violations");
   });
 
   it("logs violation details in verbose mode", () => {
@@ -383,8 +378,7 @@ describe("logChokepoints", () => {
   it("logs count when chokepoints found", () => {
     logChokepoints([{ file: "src/core.ts", importedBy: 15, upstreamCount: 100, downstreamCount: 5 }], LOG_NORMAL);
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("1");
-    expect(msg).toContain("chokepoint");
+    expect(msg).toContain("1 structural chokepoint");
   });
 });
 
@@ -411,8 +405,7 @@ describe("logTopology", () => {
       LOG_NORMAL,
     );
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("3");
-    expect(msg).toContain("component");
+    expect(msg).toContain("3 connected components");
     expect(msg).toContain("fragmented");
   });
 
@@ -447,10 +440,8 @@ describe("logGitActivity", () => {
     };
     logGitActivity(activity, 90, LOG_NORMAL);
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("1");
-    expect(msg).toContain("active");
-    expect(msg).toContain("2");
-    expect(msg).toContain("coupled");
+    expect(msg).toContain("1 active file");
+    expect(msg).toContain("2 coupled pairs");
   });
 
   it("logs hot file details in verbose mode", () => {
@@ -539,15 +530,14 @@ describe("logTestMapping", () => {
       LOG_NORMAL,
     );
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("2");
+    expect(msg).toContain("2 source files with tests");
     expect(msg).toContain("\u2713");
   });
 
   it("logs untested count when untested files exist", () => {
     logTestMapping({ sourceToTests: new Map([["a.ts", ["a.test.ts"]]]), untestedFiles: ["b.ts", "c.ts"] }, LOG_NORMAL);
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("2");
-    expect(msg).toContain("untested");
+    expect(msg).toContain("2 untested");
   });
 
   it("logs untested file paths in verbose mode", () => {
@@ -586,8 +576,7 @@ describe("logMonorepoAnalysis", () => {
       LOG_NORMAL,
     );
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("1");
-    expect(msg).toContain("cross-package");
+    expect(msg).toContain("1 cross-package edge");
     expect(msg).toContain("\u2713");
   });
 
@@ -598,8 +587,7 @@ describe("logMonorepoAnalysis", () => {
       LOG_NORMAL,
     );
     const msg = mockStep.mock.calls[0][0] as string;
-    expect(msg).toContain("1");
-    expect(msg).toContain("encapsulation");
+    expect(msg).toContain("1 encapsulation violation");
   });
 });
 
