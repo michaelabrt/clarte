@@ -6,6 +6,7 @@ dist/
 .env
 .env.*
 coverage/
+package-lock.json
 *.log
 .clarte.json
 .clarte-diff.md
