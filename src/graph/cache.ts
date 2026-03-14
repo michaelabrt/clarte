@@ -191,7 +191,12 @@ function rebuildGraph(edges: ImportEdge[], allFiles: string[], barrelFiles: Set<
   for (const edge of edges) {
     if (!edge.isExternal) {
       inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1);
-      if (!barrelFiles.has(edge.from)) {
+      // Mirror build.ts: barrel-targeted edges only count when barrel-routed;
+      // side-effect imports to barrels (no isBarrelRouted) are excluded.
+      const countsAsDirect = barrelFiles.has(edge.to)
+        ? edge.isBarrelRouted && !barrelFiles.has(edge.from)
+        : !barrelFiles.has(edge.from);
+      if (countsAsDirect) {
         directInDegree.set(edge.to, (directInDegree.get(edge.to) ?? 0) + 1);
       }
     } else {
