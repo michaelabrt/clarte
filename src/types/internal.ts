@@ -45,6 +45,19 @@ export interface GraphPhaseResult {
   archViolations?: ArchViolation[];
 }
 
+/** Timing breakdown for each analysis phase */
+export interface PhaseTiming {
+  graphPhaseMs: number;
+  gitPhaseMs: number;
+  projectPhaseMs: number;
+  deltaPhaseMs: number;
+  totalMs: number;
+  graphCacheHit: boolean;
+  projectCacheHit: boolean;
+  /** Wall-clock time for the overlapped git+project parallel group */
+  parallelGroupMs: number;
+}
+
 /** Result of the project analysis phase (config, conventions, tests, monorepo) */
 export interface ProjectPhaseResult {
   configConstraints: ConfigConstraints | undefined;

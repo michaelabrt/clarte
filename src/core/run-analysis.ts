@@ -33,15 +33,27 @@ import {
   isDeltaEmpty,
   renderDeltaSection,
 } from "../analysis/delta.js";
+import {
+  computeProjectCacheKey,
+  loadProjectCache,
+  saveProjectCache,
+  buildProjectCachePayload,
+  hydrateProjectCache,
+} from "./project-cache.js";
 import type {
+  ConfigConstraints,
   ContextAnalysis,
   DetectedContext,
+  HubFile,
   ImportGraph,
+  InferredConventions,
+  MonorepoAnalysis,
   PackageHubFile,
   ProgressCallback,
   ProjectConfig,
+  TestMapping,
 } from "../types.js";
-import type { GraphPhaseResult, LogCtx, ProjectPhaseResult } from "../types/internal.js";
+import type { GraphPhaseResult, LogCtx, PhaseTiming, ProjectPhaseResult } from "../types/internal.js";
 import {
   logHubFiles,
   logCircularDeps,
@@ -64,6 +76,7 @@ import {
 export interface AnalysisResult {
   analysis: ContextAnalysis;
   deltaSection: string | null;
+  timing: PhaseTiming;
 }
 
 export async function runAnalysis(
@@ -76,18 +89,71 @@ export async function runAnalysis(
   verboseLog: ProgressCallback,
   noopProgress: ProgressCallback,
 ): Promise<AnalysisResult> {
+  const totalStart = performance.now();
   const analysisDays = savedConfig?.analysisDays ?? 90;
   const analysisCacheKey = computeAnalysisCacheKey(graph, savedConfig?.layers);
   const analysisCache = await loadAnalysisCache(rootDir);
-  const useCache = analysisCache !== null && analysisCache.cacheKey === analysisCacheKey;
+  const useGraphCache = analysisCache !== null && analysisCache.cacheKey === analysisCacheKey;
   const log: LogCtx = { jsonMode, verbose };
 
+  // Phase 1: Graph analysis (sync, cacheable)
+  const graphStart = performance.now();
   const entryPoints = readPackageEntryPoints(rootDir);
-  const graphResults = runGraphPhase(graph, savedConfig, useCache ? analysisCache : null, log, entryPoints);
+  const graphResults = runGraphPhase(graph, savedConfig, useGraphCache ? analysisCache : null, log, entryPoints);
+  const graphPhaseMs = performance.now() - graphStart;
 
-  const gitActivity = await runGitPhase(rootDir, detected, analysisDays, verbose ? verboseLog : noopProgress, log);
+  // Load project cache
+  const projectCacheKey = await computeProjectCacheKey(rootDir, graph, detected);
+  const projectCache = await loadProjectCache(rootDir);
+  const useProjectCache = projectCache !== null && projectCache.cacheKey === projectCacheKey;
 
-  const projectResults = await runProjectPhase(rootDir, graph, detected, graphResults, gitActivity, log);
+  // Parallel group: git + cacheable project sub-analyses
+  const parallelStart = performance.now();
+
+  const gitPromise = runGitPhase(rootDir, detected, analysisDays, verbose ? verboseLog : noopProgress, log);
+  const projectPromise = runCacheableProjectPhase(rootDir, graph, detected, useProjectCache ? projectCache : null, log);
+
+  const [gitActivity, cacheableProject] = await Promise.all([gitPromise, projectPromise]);
+  const parallelGroupMs = performance.now() - parallelStart;
+
+  // Git-dependent work (fast pure computation, runs after parallel group)
+  const gitPhaseMs = parallelGroupMs; // git overlapped with project
+  const projectStart = performance.now();
+
+  const structuralMismatches = gitActivity
+    ? findStructuralTemporalMismatches(graph, gitActivity.changeCoupling)
+    : undefined;
+
+  const changeImpact = computeChangeImpactForHubs(graphResults.hubFiles, graph, gitActivity);
+
+  const projectPhaseMs = performance.now() - projectStart + (useProjectCache ? 0 : cacheableProject.computeMs);
+
+  const projectResults: ProjectPhaseResult = {
+    configConstraints: cacheableProject.configConstraints,
+    conventions: cacheableProject.conventions ?? undefined,
+    testMapping: cacheableProject.testMapping ?? undefined,
+    structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined,
+    monorepoAnalysis: cacheableProject.monorepoAnalysis,
+    changeImpact,
+  };
+
+  // Save project cache on miss
+  if (!useProjectCache) {
+    try {
+      await saveProjectCache(
+        rootDir,
+        buildProjectCachePayload(
+          projectCacheKey,
+          cacheableProject.configConstraints,
+          cacheableProject.conventions,
+          cacheableProject.testMapping,
+          cacheableProject.monorepoAnalysis,
+        ),
+      );
+    } catch (err) {
+      if (!jsonMode) verboseLog(`Warning: project cache save failed: ${errorMessage(err)}`);
+    }
+  }
 
   const analysis: ContextAnalysis = {
     ...graphResults,
@@ -96,7 +162,7 @@ export async function runAnalysis(
     analysisDays,
   };
 
-  if (!useCache) {
+  if (!useGraphCache) {
     try {
       await saveAnalysisCache(rootDir, {
         version: ANALYSIS_CACHE_VERSION,
@@ -119,9 +185,32 @@ export async function runAnalysis(
     }
   }
 
+  const deltaStart = performance.now();
   const deltaSection = await runDeltaPhase(rootDir, analysis, log);
+  const deltaPhaseMs = performance.now() - deltaStart;
 
-  return { analysis, deltaSection };
+  const totalMs = performance.now() - totalStart;
+
+  const timing: PhaseTiming = {
+    graphPhaseMs: Math.round(graphPhaseMs),
+    gitPhaseMs: Math.round(gitPhaseMs),
+    projectPhaseMs: Math.round(projectPhaseMs),
+    deltaPhaseMs: Math.round(deltaPhaseMs),
+    totalMs: Math.round(totalMs),
+    graphCacheHit: useGraphCache,
+    projectCacheHit: useProjectCache,
+    parallelGroupMs: Math.round(parallelGroupMs),
+  };
+
+  if (verbose && !jsonMode) {
+    const graphLabel = useGraphCache ? "cached" : "computed";
+    const projectLabel = useProjectCache ? "cached" : "computed";
+    verboseLog(
+      `Phase timing: graph=${timing.graphPhaseMs}ms(${graphLabel}) git=${timing.gitPhaseMs}ms project=${timing.projectPhaseMs}ms(${projectLabel}) delta=${timing.deltaPhaseMs}ms total=${timing.totalMs}ms`,
+    );
+  }
+
+  return { analysis, deltaSection, timing };
 }
 
 // ---------------------------------------------------------------------------
@@ -214,74 +303,123 @@ async function runGitPhase(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 3: Project analysis (config, conventions, tests, monorepo, impact)
+// Phase 3a: Cacheable project sub-analyses (parallel with git)
 // ---------------------------------------------------------------------------
 
-async function runProjectPhase(
+interface CacheableProjectResult {
+  configConstraints: ConfigConstraints | undefined;
+  conventions: InferredConventions | null;
+  testMapping: TestMapping | null;
+  monorepoAnalysis: MonorepoAnalysis | undefined;
+  /** Wall-clock ms spent computing (0 on cache hit) */
+  computeMs: number;
+}
+
+async function runCacheableProjectPhase(
   rootDir: string,
   graph: ImportGraph,
   detected: DetectedContext,
-  graphResults: GraphPhaseResult,
-  gitActivity: ContextAnalysis["gitActivity"],
+  cache: import("./project-cache.js").ProjectCacheData | null,
   log: LogCtx,
-): Promise<ProjectPhaseResult> {
-  const configConstraints = await scanConfigConstraints(rootDir, detected);
-  logConfigConstraints(configConstraints, log);
+): Promise<CacheableProjectResult> {
+  // Cache hit: hydrate and return
+  if (cache) {
+    const hydrated = hydrateProjectCache(cache);
+    if (hydrated.configConstraints) logConfigConstraints(hydrated.configConstraints, log);
+    logConventions(hydrated.conventions, log);
+    logTestMapping(hydrated.testMapping, log);
+    logMonorepoAnalysis(hydrated.monorepoAnalysis, log);
+    return {
+      configConstraints: hydrated.configConstraints,
+      conventions: hydrated.conventions ?? null,
+      testMapping: hydrated.testMapping ?? null,
+      monorepoAnalysis: hydrated.monorepoAnalysis,
+      computeMs: 0,
+    };
+  }
 
+  // Cache miss: compute in parallel where possible
+  const start = performance.now();
+
+  // These can run concurrently: config scan, test mapping, monorepo analysis
+  const [configConstraints, testMapping, monorepoAnalysis] = await Promise.all([
+    scanConfigConstraints(rootDir, detected),
+    Promise.resolve(buildTestMapping(graph, detected)),
+    detected.monorepo ? analyzeMonorepoGraph(rootDir, graph, detected.monorepo) : Promise.resolve(undefined),
+  ]);
+
+  logConfigConstraints(configConstraints, log);
+  logTestMapping(testMapping, log);
+
+  // Conventions chains after configConstraints (needs it as input)
   const conventions = await inferConventions(rootDir, graph, configConstraints);
   logConventions(conventions, log);
 
-  const testMapping = buildTestMapping(graph, detected);
-  logTestMapping(testMapping, log);
-
-  const structuralMismatches = gitActivity
-    ? findStructuralTemporalMismatches(graph, gitActivity.changeCoupling)
-    : undefined;
-
-  const monorepoAnalysis = detected.monorepo
-    ? await analyzeMonorepoGraph(rootDir, graph, detected.monorepo)
-    : undefined;
+  // Attach package hub files to monorepo analysis
   if (monorepoAnalysis && detected.monorepo) {
-    const packageHubFiles = new Map<string, PackageHubFile[]>();
-    for (const pkg of detected.monorepo.packages) {
-      const { authority } = computePackageCentrality(graph, pkg.path);
-      const topFiles = [...authority.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .filter(([, score]) => score > 0)
-        .map(([filePath, score]) => ({ path: filePath, authority: score }));
-      if (topFiles.length > 0) {
-        packageHubFiles.set(pkg.name, topFiles);
-      }
-    }
-    monorepoAnalysis.packageHubFiles = packageHubFiles;
+    monorepoAnalysis.packageHubFiles = computePackageHubFiles(graph, detected.monorepo.packages);
   }
   logMonorepoAnalysis(monorepoAnalysis, log);
 
-  let changeImpact: Map<string, Array<{ file: string; score: number }>> | undefined;
-  if (graphResults.hubFiles.length > 0) {
-    const topHubs = graphResults.hubFiles
-      .slice()
-      .sort((a, b) => b.authority - a.authority || a.path.localeCompare(b.path))
-      .slice(0, 5);
-    const impactMap = new Map<string, Array<{ file: string; score: number }>>();
-    for (const hub of topHubs) {
-      const predictions = predictChangeImpact(hub.path, graph, gitActivity);
-      if (predictions.length > 0) {
-        impactMap.set(hub.path, predictions);
-      }
-    }
-    if (impactMap.size > 0) changeImpact = impactMap;
-  }
-
   return {
     configConstraints,
-    conventions: conventions ?? undefined,
-    testMapping: testMapping ?? undefined,
-    structuralMismatches: structuralMismatches?.length ? structuralMismatches : undefined,
+    conventions,
+    testMapping,
     monorepoAnalysis,
-    changeImpact,
+    computeMs: performance.now() - start,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3b: Git-dependent helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute change impact predictions for the top hub files.
+ */
+function computeChangeImpactForHubs(
+  hubFiles: HubFile[],
+  graph: ImportGraph,
+  gitActivity: ContextAnalysis["gitActivity"],
+): Map<string, Array<{ file: string; score: number }>> | undefined {
+  if (hubFiles.length === 0) return undefined;
+
+  const topHubs = hubFiles
+    .slice()
+    .sort((a, b) => b.authority - a.authority || a.path.localeCompare(b.path))
+    .slice(0, 5);
+
+  const impactMap = new Map<string, Array<{ file: string; score: number }>>();
+  for (const hub of topHubs) {
+    const predictions = predictChangeImpact(hub.path, graph, gitActivity);
+    if (predictions.length > 0) {
+      impactMap.set(hub.path, predictions);
+    }
+  }
+
+  return impactMap.size > 0 ? impactMap : undefined;
+}
+
+/**
+ * Compute per-package hub files from HITS centrality.
+ */
+function computePackageHubFiles(
+  graph: ImportGraph,
+  packages: Array<{ name: string; path: string }>,
+): Map<string, PackageHubFile[]> {
+  const packageHubFiles = new Map<string, PackageHubFile[]>();
+  for (const pkg of packages) {
+    const { authority } = computePackageCentrality(graph, pkg.path);
+    const topFiles = [...authority.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .filter(([, score]) => score > 0)
+      .map(([filePath, score]) => ({ path: filePath, authority: score }));
+    if (topFiles.length > 0) {
+      packageHubFiles.set(pkg.name, topFiles);
+    }
+  }
+  return packageHubFiles;
 }
 
 // ---------------------------------------------------------------------------
