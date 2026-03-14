@@ -55,10 +55,12 @@ describe("printSummary", () => {
     printSummary([makeFile(".claude/rules/clarte.md", content)]);
 
     const output = allOutput();
-    expect(output).toContain("clarte.md");
-    expect(output).toContain("1000 B");
-    expect(output).toContain("tokens");
-    expect(output).toContain("(new)");
+    expect(output).toMatchInlineSnapshot(`
+      "Files created:
+        .claude/rules/clarte.md  1000 B  (~286 tokens)  (new)
+
+        Total: 1000 B, ~286 tokens"
+    `);
   });
 
   it("marks existing files as (updated)", () => {
@@ -111,9 +113,8 @@ describe("printSummary", () => {
     printSummary([makeFile(".claude/rules/clarte.md", "content")], null, analysis);
 
     const output = allOutput();
-    expect(output).toContain("2");
-    expect(output).toContain("circular dependency chain");
-    expect(output).toContain("2 finding");
+    expect(output).toContain("2 circular dependency chains");
+    expect(output).toContain("2 findings");
   });
 
   it("shows single circular dependency with file names", () => {
