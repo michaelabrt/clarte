@@ -306,11 +306,11 @@ On first run, Clarté saves config to `.clarte.json` (add to `.gitignore`). Use 
 ## Development
 
 ```bash
-npm install
-npm run build      # Build with tsup
-npm run dev        # Watch mode
-npm run typecheck  # Type-check without emitting
-npm test           # Run tests with vitest
+bun install
+bun run build      # Build with tsup
+bun run dev        # Watch mode
+bun run typecheck  # Type-check without emitting
+bun test           # Run tests with vitest
 ```
 
 ## License
