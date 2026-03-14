@@ -133,7 +133,7 @@ Tested on 4 real-world bug fixes (3 Hono single-package, 1 TypeORM monorepo), op
 |---|---|---|---|---|
 | Hono: URL fragment (opaque) | $0.34 | $0.28 | -17% cost | 8+8 |
 | Hono: URL fragment (detailed) | $0.16 | $0.15 | parity | 10+1 |
-| Hono: JSX async context | 2 did not finish | $0.64 avg | pre-flight only | 2+2 |
+| Hono: JSX async context | did not finish | $0.64 avg | pre-flight only | 2+2 |
 | Hono: form validator | did not finish | 18t / $0.41 | pre-flight only | 1+1 |
 | TypeORM: SQLite simple-enum array | 47.7t / $1.47 | 16.3t / $0.43 | -66% turns, -71% cost | 3+3 |
 

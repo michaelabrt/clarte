@@ -27,7 +27,7 @@ Real bug fixes in open-source repos. Opaque prompts, Sonnet, `claude -p`:
 | Task | Repo | Without Clarté | With Clarté | n | Stack |
 |------|------|----------------|-------------|---|-------|
 | URL fragment stripping | Hono | $0.34 avg | **$0.28 avg (-17%)** | 8+8 | pre-flight |
-| JSX async context loss | Hono | 2 did not finish | **$0.64 avg** | 2+2 | pre-flight |
+| JSX async context loss | Hono | did not finish | **$0.64 avg** | 2+2 | pre-flight |
 | Form validator prototype pollution | Hono | did not finish | **18 turns / $0.41** | 1+1 | pre-flight |
 | SQLite simple-enum array | TypeORM | 47.7 turns / $1.47 | **16.3 turns / $0.43 (-71%)** | 3+3 | pre-flight |
 | WebSocket adapter shutdown | NestJS | 53 turns / $2.70 | **38 turns / $2.17 (-20%)** | 7+7 | context file |
