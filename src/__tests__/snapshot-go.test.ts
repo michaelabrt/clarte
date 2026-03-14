@@ -61,7 +61,7 @@ type User struct {
 }
 `;
 
-    mockGlob.mockResolvedValue(["models/user.go"] as any);
+    mockGlob.mockResolvedValue(["models/user.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeGoCtx(), []);
@@ -81,7 +81,7 @@ type UserService interface {
 }
 `;
 
-    mockGlob.mockResolvedValue(["services/user.go"] as any);
+    mockGlob.mockResolvedValue(["services/user.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeGoCtx(), []);
@@ -103,7 +103,7 @@ func ProcessOrder(orderID int64) error {
 }
 `;
 
-    mockGlob.mockResolvedValue(["handlers/main.go"] as any);
+    mockGlob.mockResolvedValue(["handlers/main.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeGoCtx(), []);
@@ -127,7 +127,7 @@ func (u *User) Validate() error {
 }
 `;
 
-    mockGlob.mockResolvedValue(["models/user.go"] as any);
+    mockGlob.mockResolvedValue(["models/user.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeGoCtx(), []);
@@ -156,7 +156,7 @@ func ExportedFunc() {
 }
 `;
 
-    mockGlob.mockResolvedValue(["internal/core.go"] as any);
+    mockGlob.mockResolvedValue(["internal/core.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeGoCtx(), []);
@@ -177,7 +177,7 @@ type Message struct {
 }
 `;
 
-    mockGlob.mockResolvedValue(["pb/message.go"] as any);
+    mockGlob.mockResolvedValue(["pb/message.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeGoCtx(), []);
@@ -193,7 +193,7 @@ type UserID int64
 type Callback func(string) error
 `;
 
-    mockGlob.mockResolvedValue(["types/aliases.go"] as any);
+    mockGlob.mockResolvedValue(["types/aliases.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeGoCtx(), []);
@@ -214,7 +214,7 @@ const (
 )
 `;
 
-    mockGlob.mockResolvedValue(["status/status.go"] as any);
+    mockGlob.mockResolvedValue(["status/status.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeGoCtx(), []);
@@ -237,7 +237,7 @@ func NewUser(name string) *User {
 }
 `;
 
-    mockGlob.mockResolvedValue(["models/user.go"] as any);
+    mockGlob.mockResolvedValue(["models/user.go"] as string[]);
     mockReadFileOr.mockResolvedValue(goContent);
 
     const result = await generateSnapshot(makeGoCtx(), []);

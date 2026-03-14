@@ -163,7 +163,7 @@ function detectDirectoryOverrides(
     if (!dirIdentifiers.has(dir)) {
       dirIdentifiers.set(dir, { functions: [], types: [], constants: [], files: [] });
     }
-    const d = dirIdentifiers.get(dir)!;
+    const d = dirIdentifiers.get(dir) as DirectoryIdentifiers;
     d.functions.push(...sample.functions);
     d.types.push(...sample.types);
     d.constants.push(...sample.constants);

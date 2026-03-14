@@ -49,13 +49,13 @@ try {
     mkdirSync(STATE_DIR, { recursive: true });
     appendFileSync(resolve(STATE_DIR, "prediction-log.jsonl"), JSON.stringify(entry) + "\\n");
   }
-} catch {}
+} catch {} // best-effort: prior session may have no prediction data
 
 // Always reset hook state on every new session start
-try { rmSync(resolve(STATE_DIR, "fail-fast.json"), { force: true }); } catch {}
-try { rmSync(resolve(STATE_DIR, "pre-flight.json"), { force: true }); } catch {}
-try { rmSync(resolve(STATE_DIR, "predictions.json"), { force: true }); } catch {}
-try { rmSync(resolve(STATE_DIR, "edits.json"), { force: true }); } catch {}
+try { rmSync(resolve(STATE_DIR, "fail-fast.json"), { force: true }); } catch {} // best-effort cleanup
+try { rmSync(resolve(STATE_DIR, "pre-flight.json"), { force: true }); } catch {} // best-effort cleanup
+try { rmSync(resolve(STATE_DIR, "predictions.json"), { force: true }); } catch {} // best-effort cleanup
+try { rmSync(resolve(STATE_DIR, "edits.json"), { force: true }); } catch {} // best-effort cleanup
 `;
 
 const FAIL_FAST_SCRIPT = `#!/usr/bin/env node
@@ -84,7 +84,7 @@ function readFFState() {
 }
 
 function writeFFState(state) {
-  try { mkdirSync(STATE_DIR, { recursive: true }); writeFileSync(FF_STATE, JSON.stringify(state)); } catch {}
+  try { mkdirSync(STATE_DIR, { recursive: true }); writeFileSync(FF_STATE, JSON.stringify(state)); } catch {} // best-effort state persistence
 }
 
 function extractBase(cmd) {
@@ -298,7 +298,18 @@ if (existsSync(graphPath)) {
       "comma-joined","comma-separated","commas",
     ]);
     const TEST_RE = /(?:^|\\/)(?:test|spec|__tests__|__mocks__)\\/|\\.(?:test|spec)\\.[jt]sx?$/;
-    const K1 = 1.2, B = 0.4, PW = 2.0, SW = 1.0, IW = 0.5, IE = 0.4, IM = 0.2, CF = 0.4, TP = 0.6, MC = 0.5, IC = 0.5;
+    // BM25F tuning constants — sync with resolve-targets.ts
+    const K1 = 1.2;   // BM25 saturation parameter
+    const B = 0.4;     // BM25 length normalization (lowered for short docs)
+    const PW = 2.0;    // path field weight
+    const SW = 1.0;    // symbol field weight
+    const IW = 0.5;    // import field weight
+    const IE = 0.4;    // importer (consumer) expansion factor
+    const IM = 0.2;    // import (provider) expansion factor
+    const CF = 0.4;    // co-change coupling factor
+    const TP = 0.6;    // test-proxy transfer factor
+    const MC = 0.5;    // minimum coupling confidence
+    const IC = 0.5;    // import-only ceiling fraction
 
     function splitCC(s) { return s.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ").filter(Boolean); }
     function tokId(id) {
@@ -379,7 +390,7 @@ if (existsSync(graphPath)) {
     for (const grp of SYN_GROUPS) for (const t of grp) {
       const o = SYN_MAP.get(t) || []; SYN_MAP.set(t, [...new Set([...o, ...grp.filter(x => x !== t)])]);
     }
-    const SD = 0.3;
+    const SYNONYM_DISCOUNT = 0.3; // sync with resolve-targets.ts
 
     function resolveTargets(q, g) {
       const terms = tokQ(q);
@@ -426,10 +437,10 @@ if (existsSync(graphPath)) {
       const impOnly = new Set();
       for (const [fp, doc] of docs) {
         let sc = scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, false);
-        if (uSyn.length) sc += SD * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL, false);
+        if (uSyn.length) sc += SYNONYM_DISCOUNT * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL, false);
         if (sc === 0) {
           sc = scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, true);
-          if (uSyn.length) sc += SD * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL, true);
+          if (uSyn.length) sc += SYNONYM_DISCOUNT * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL, true);
           if (sc > 0) impOnly.add(fp);
         }
         if (sc > 0) scores.set(fp, sc);

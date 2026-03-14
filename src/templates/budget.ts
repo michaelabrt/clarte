@@ -218,7 +218,8 @@ export function applyCharBudget(
     generatedComment.length;
 
   while (totalChars > maxChars && droppable.length > 0) {
-    const toDrop = droppable.shift()!;
+    const toDrop = droppable.shift();
+    if (!toDrop) break;
     const idx = included.findIndex((s) => s.id === toDrop.id);
     if (idx >= 0) {
       totalChars -= toDrop.content.trimEnd().length;

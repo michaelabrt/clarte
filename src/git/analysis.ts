@@ -424,7 +424,7 @@ export function computeChangeCoupling(
   const indices = results.map((_, i) => i);
   indices.sort(
     (a, b) =>
-      resultWeights.get(b)! - resultWeights.get(a)! ||
+      (resultWeights.get(b) ?? 0) - (resultWeights.get(a) ?? 0) ||
       results[b].confidence - results[a].confidence ||
       results[a].fileA.localeCompare(results[b].fileA) ||
       results[a].fileB.localeCompare(results[b].fileB),
@@ -518,11 +518,11 @@ function detectRenames(rootDir: string, window: TimeWindow): Map<string, string>
 
     // Resolve transitive renames: A->B, B->C => A->C
     for (const [oldName] of renameMap) {
-      let current = renameMap.get(oldName)!;
+      let current = renameMap.get(oldName) as string;
       const seen = new Set<string>([oldName]);
       while (renameMap.has(current) && !seen.has(current)) {
         seen.add(current);
-        current = renameMap.get(current)!;
+        current = renameMap.get(current) as string;
       }
       renameMap.set(oldName, current);
     }
@@ -554,11 +554,11 @@ async function detectRenamesAsync(rootDir: string, window: TimeWindow): Promise<
     }
 
     for (const [oldName] of renameMap) {
-      let current = renameMap.get(oldName)!;
+      let current = renameMap.get(oldName) as string;
       const seen = new Set<string>([oldName]);
       while (renameMap.has(current) && !seen.has(current)) {
         seen.add(current);
-        current = renameMap.get(current)!;
+        current = renameMap.get(current) as string;
       }
       renameMap.set(oldName, current);
     }

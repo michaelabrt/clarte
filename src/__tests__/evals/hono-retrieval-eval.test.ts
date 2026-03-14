@@ -110,7 +110,7 @@ function toPersistedGraph(graph: ImportGraph): PersistedGraph {
 /** Reciprocal rank: 1/rank of first correct result, or 0 if not found. */
 function reciprocalRank(results: string[], expected: string[]): number {
   for (let i = 0; i < results.length; i++) {
-    if (expected.includes(results[i]!)) return 1 / (i + 1);
+    if (expected.includes(results[i] ?? "")) return 1 / (i + 1);
   }
   return 0;
 }
@@ -145,7 +145,7 @@ describe.skipIf(SKIP)("Hono BM25F retrieval evaluation", () => {
     const topDirs = new Map<string, number>();
     for (const fp of Object.keys(graph.files)) {
       const parts = fp.split("/");
-      const topDir = parts.length > 2 ? `${parts[0]}/${parts[1]}` : parts[0]!;
+      const topDir = parts.length > 2 ? `${parts[0]}/${parts[1]}` : (parts[0] ?? "");
       topDirs.set(topDir, (topDirs.get(topDir) ?? 0) + 1);
     }
 
@@ -165,15 +165,12 @@ describe.skipIf(SKIP)("Hono BM25F retrieval evaluation", () => {
   it("path-similarity analysis: files sharing basename tokens", () => {
     const filesByBasename = new Map<string, string[]>();
     for (const fp of Object.keys(graph.files)) {
-      const basename = fp
-        .split("/")
-        .pop()!
-        .replace(/\.[jt]sx?$/, "");
+      const basename = (fp.split("/").pop() ?? "").replace(/\.[jt]sx?$/, "");
       const tokens = basename.toLowerCase().split(/[-_./]/);
       for (const tok of tokens) {
         if (tok.length < 2) continue;
         if (!filesByBasename.has(tok)) filesByBasename.set(tok, []);
-        filesByBasename.get(tok)!.push(fp);
+        filesByBasename.get(tok)?.push(fp);
       }
     }
 
@@ -196,7 +193,8 @@ describe.skipIf(SKIP)("Hono BM25F retrieval evaluation", () => {
     const jwtFiles = Object.keys(graph.files).filter((fp) => fp.includes("jwt") || fp.includes("jwk"));
     console.log(`\n  JWT/JWK files (${jwtFiles.length}):`);
     for (const f of jwtFiles) {
-      const rec = graph.files[f]!;
+      const rec = graph.files[f];
+      if (!rec) continue;
       console.log(
         `    ${f}  (betweenness=${rec.betweenness.toFixed(4)}, importedBy=${rec.importedByCount}, symbols=[${(rec.symbolNames ?? []).join(", ")}])`,
       );
@@ -220,8 +218,9 @@ describe.skipIf(SKIP)("Hono BM25F retrieval evaluation", () => {
         console.log(`  Ground truth: ${task.groundTruth.join(", ")}`);
         console.log(`  Top 10 results:`);
         for (let i = 0; i < results.length; i++) {
-          const isGT = task.groundTruth.includes(results[i]!) ? " <<<" : "";
-          const isDecoy = task.decoys?.includes(results[i]!) ? " [DECOY]" : "";
+          const r = results[i] ?? "";
+          const isGT = task.groundTruth.includes(r) ? " <<<" : "";
+          const isDecoy = task.decoys?.includes(r) ? " [DECOY]" : "";
           console.log(`    ${i + 1}. ${results[i]}${isGT}${isDecoy}`);
         }
         console.log(`  RR = ${reciprocalRank(results, task.groundTruth).toFixed(2)}`);

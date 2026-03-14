@@ -78,8 +78,9 @@ function computeStructuralRanking(file: string, graph: ImportGraph): string[] {
   distances.set(file, 0);
 
   while (qHead < queue.length) {
-    const current = queue[qHead++]!;
-    const dist = distances.get(current)!;
+    const current = queue[qHead++];
+    if (!current) break;
+    const dist = distances.get(current) ?? 0;
     for (const neighbor of adj.get(current) ?? []) {
       if (!distances.has(neighbor)) {
         distances.set(neighbor, dist + 1);

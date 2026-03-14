@@ -69,7 +69,7 @@ class UserProfile:
     age: int = 0
 `;
 
-    mockGlob.mockResolvedValue(["models/user.py"] as any);
+    mockGlob.mockResolvedValue(["models/user.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -91,7 +91,7 @@ class UserCreate(BaseModel):
     age: int | None = None
 `;
 
-    mockGlob.mockResolvedValue(["schemas/user.py"] as any);
+    mockGlob.mockResolvedValue(["schemas/user.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -111,7 +111,7 @@ class Config(TypedDict):
     port: int
 `;
 
-    mockGlob.mockResolvedValue(["types/config.py"] as any);
+    mockGlob.mockResolvedValue(["types/config.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -130,7 +130,7 @@ class Serializable(Protocol):
     def deserialize(self, data: bytes) -> None: ...
 `;
 
-    mockGlob.mockResolvedValue(["core/protocols.py"] as any);
+    mockGlob.mockResolvedValue(["core/protocols.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -151,7 +151,7 @@ async def fetch_data(url: str, timeout: float = 30.0) -> dict[str, Any]:
     pass
 `;
 
-    mockGlob.mockResolvedValue(["services/orders.py"] as any);
+    mockGlob.mockResolvedValue(["services/orders.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -177,7 +177,7 @@ def __very_private() -> None:
     pass
 `;
 
-    mockGlob.mockResolvedValue(["utils/helpers.py"] as any);
+    mockGlob.mockResolvedValue(["utils/helpers.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -194,7 +194,7 @@ UserID = NewType("UserID", int)
 Callback = Callable[[str, int], bool]
 `;
 
-    mockGlob.mockResolvedValue(["types/aliases.py"] as any);
+    mockGlob.mockResolvedValue(["types/aliases.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -217,7 +217,7 @@ def get_user(user_id: int) -> User:
     pass
 `;
 
-    mockGlob.mockResolvedValue(["models/user.py"] as any);
+    mockGlob.mockResolvedValue(["models/user.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);
@@ -236,7 +236,7 @@ def create_order(
     pass
 `;
 
-    mockGlob.mockResolvedValue(["services/orders.py"] as any);
+    mockGlob.mockResolvedValue(["services/orders.py"] as string[]);
     mockReadFileOr.mockResolvedValue(pyContent);
 
     const result = await generateSnapshot(makePythonCtx(), []);

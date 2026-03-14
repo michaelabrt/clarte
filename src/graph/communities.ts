@@ -61,7 +61,7 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     if (!dirLabels.has(dir)) {
       dirLabels.set(dir, nextLabel++);
     }
-    fileToCommunity.set(file, dirLabels.get(dir)!);
+    fileToCommunity.set(file, dirLabels.get(dir) as number);
   }
 
   // Phase 2: Merge tiny communities (< 3 files) into best neighbor
@@ -109,7 +109,7 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     let changed = false;
     // Process in deterministic sorted order (spread to avoid mutating original array)
     for (const file of [...files].sort()) {
-      const currentLabel = fileToCommunity.get(file)!;
+      const currentLabel = fileToCommunity.get(file) ?? 0;
       const neighbors = adj.get(file);
       if (!neighbors || neighbors.size === 0) continue;
 
@@ -153,17 +153,17 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     // Sum of degrees per community
     const communityDegree = new Map<number, number>();
     for (const file of files) {
-      const label = fileToCommunity.get(file)!;
+      const label = fileToCommunity.get(file) ?? 0;
       communityDegree.set(label, (communityDegree.get(label) ?? 0) + (degree.get(file) ?? 0));
     }
 
     for (const file of [...files].sort()) {
-      const currentLabel = fileToCommunity.get(file)!;
+      const currentLabel = fileToCommunity.get(file) ?? 0;
       const neighbors = adj.get(file);
       if (!neighbors || neighbors.size === 0) continue;
 
-      const ki = degree.get(file)!;
-      const dA = communityDegree.get(currentLabel)!;
+      const ki = degree.get(file) ?? 0;
+      const dA = communityDegree.get(currentLabel) ?? 0;
 
       // Count edges to each neighboring community
       const edgesToCommunity = new Map<number, number>();
@@ -216,7 +216,7 @@ export function detectCommunities(graph: ImportGraph): Community[] {
     const dir = getDeepestDir(file);
     if (!dirOnlyCommunities.has(dir)) dirOnlyCommunities.set(dir, dirNextLabel++);
   }
-  const ari = computeARI(files, fileToCommunity, (file) => dirOnlyCommunities.get(getDeepestDir(file))!);
+  const ari = computeARI(files, fileToCommunity, (file) => dirOnlyCommunities.get(getDeepestDir(file)) ?? 0);
   if (ari > COMMUNITY.ARI_NOVELTY_THRESHOLD) {
     // Communities just restate directory tree; no novel insight
     return [];
@@ -262,7 +262,7 @@ function computeARI(files: string[], labelingA: Map<string, number>, getLabelB: 
   const bCounts = new Map<number, number>();
 
   for (const file of files) {
-    const a = labelingA.get(file)!;
+    const a = labelingA.get(file) ?? 0;
     const b = getLabelB(file);
     const key = `${a}|${b}`;
     contingency.set(key, (contingency.get(key) ?? 0) + 1);

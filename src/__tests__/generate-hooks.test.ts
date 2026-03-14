@@ -34,10 +34,9 @@ describe("configureClaudeHooks", () => {
 
     const settings = (await readJsonFile(path.join(rootDir, ".claude/settings.json"))) as ClaudeSettings;
     const postHooks = settings?.hooks?.PostToolUse;
-    expect(postHooks).toBeDefined();
-    expect(Array.isArray(postHooks)).toBe(true);
+    if (!postHooks || !Array.isArray(postHooks)) throw new Error("expected PostToolUse hooks array");
 
-    const editTrackerEntry = postHooks?.find((group) =>
+    const editTrackerEntry = postHooks.find((group) =>
       group.hooks?.some((h) => h.command?.includes("on-edit-tracker.mjs")),
     );
     expect(editTrackerEntry).toBeDefined();
@@ -80,8 +79,9 @@ describe("configureClaudeHooks", () => {
 
     const settings = (await readJsonFile(path.join(rootDir, ".claude/settings.json"))) as ClaudeSettings;
     const subagentHooks = settings.hooks?.SubagentStart;
+    if (!subagentHooks) throw new Error("expected SubagentStart hooks");
     expect(subagentHooks).toHaveLength(1);
-    expect(subagentHooks?.[0].matcher).toBe("clarte-pre-flight");
+    expect(subagentHooks[0].matcher).toBe("clarte-pre-flight");
   });
 
   it("does not remove existing non-clarte hooks", async () => {
@@ -189,9 +189,7 @@ describe("configureClaudeHooks", () => {
     // Simulate old clarte hooks with different filenames
     const initial: ClaudeSettings = {
       hooks: {
-        PreToolUse: [
-          { hooks: [{ type: "command", command: "node .clarte/hooks/old-hook.mjs" }] },
-        ],
+        PreToolUse: [{ hooks: [{ type: "command", command: "node .clarte/hooks/old-hook.mjs" }] }],
       },
     };
     await writeFileSafe(settingsPath, JSON.stringify(initial, null, 2) + "\n");

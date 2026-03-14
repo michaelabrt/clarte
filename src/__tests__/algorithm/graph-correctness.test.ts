@@ -39,7 +39,7 @@ describe("eval: layered-app", () => {
       const hubFiles = getHubFiles(graph, fixture.graph.files.length);
       const byAuthority = hubFiles.sort((a, b) => b.authority - a.authority).map((h) => h.path);
 
-      const missing = missingFromTopN(byAuthority, fixture.expectations.topAuthorityFiles!, 5);
+      const missing = missingFromTopN(byAuthority, fixture.expectations.topAuthorityFiles ?? [], 5);
       expect(missing).toEqual([]);
     });
   });
@@ -49,7 +49,7 @@ describe("eval: layered-app", () => {
       const instabilities = computeInstability(graph);
       const highInstability = new Set(instabilities.map((f) => f.path));
 
-      for (const expectedFile of fixture.expectations.highInstabilityFiles!) {
+      for (const expectedFile of fixture.expectations.highInstabilityFiles ?? []) {
         expect(
           highInstability.has(expectedFile),
           `${expectedFile} should have instability > 0.8 but was not in the high-instability set`,
@@ -100,7 +100,7 @@ describe("eval: layered-app", () => {
   describe("betweenness centrality (directed)", () => {
     it("pure sink types/index.ts should have zero betweenness", () => {
       expect(graph.betweennessScores).toBeDefined();
-      for (const file of fixture.expectations.zeroBetweennessFiles!) {
+      for (const file of fixture.expectations.zeroBetweennessFiles ?? []) {
         expect(
           graph.betweennessScores?.get(file) ?? 0,
           `${file} should have zero betweenness (pure sink, no outgoing edges)`,
@@ -148,7 +148,7 @@ describe("eval: hub-and-spoke", () => {
     it("should detect feature files with zero importers as dead files", () => {
       const deadFiles = findDeadFiles(graph);
 
-      for (const expectedDead of fixture.expectations.knownDeadFiles!) {
+      for (const expectedDead of fixture.expectations.knownDeadFiles ?? []) {
         expect(
           deadFiles.includes(expectedDead),
           `${expectedDead} should be detected as a dead file (zero importers, not an entry point)`,
@@ -183,7 +183,7 @@ describe("eval: hub-and-spoke", () => {
   describe("betweenness centrality (directed)", () => {
     it("pure sink config.ts should have zero betweenness", () => {
       expect(graph.betweennessScores).toBeDefined();
-      for (const file of fixture.expectations.zeroBetweennessFiles!) {
+      for (const file of fixture.expectations.zeroBetweennessFiles ?? []) {
         expect(graph.betweennessScores?.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
       }
     });
@@ -192,7 +192,7 @@ describe("eval: hub-and-spoke", () => {
       expect(graph.betweennessScores).toBeDefined();
       const ranked = [...(graph.betweennessScores?.entries() ?? [])].sort((a, b) => b[1] - a[1]).map(([file]) => file);
 
-      const missing = missingFromTopN(ranked, fixture.expectations.topBetweennessFiles!, 3);
+      const missing = missingFromTopN(ranked, fixture.expectations.topBetweennessFiles ?? [], 3);
       expect(missing).toEqual([]);
     });
   });
@@ -279,7 +279,7 @@ describe("eval: circular-mess", () => {
   describe("betweenness centrality (directed)", () => {
     it("pure sink clean-z.ts should have zero betweenness", () => {
       expect(graph.betweennessScores).toBeDefined();
-      for (const file of fixture.expectations.zeroBetweennessFiles!) {
+      for (const file of fixture.expectations.zeroBetweennessFiles ?? []) {
         expect(graph.betweennessScores?.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
       }
     });
@@ -295,8 +295,8 @@ describe("eval: monolith", () => {
   describe("community detection", () => {
     it("should detect a meaningful number of communities (between 3 and 10)", () => {
       const communities = detectCommunities(graph);
-      expect(communities.length).toBeGreaterThanOrEqual(fixture.expectations.minCommunities!);
-      expect(communities.length).toBeLessThanOrEqual(fixture.expectations.maxCommunities!);
+      expect(communities.length).toBeGreaterThanOrEqual(fixture.expectations.minCommunities ?? 3);
+      expect(communities.length).toBeLessThanOrEqual(fixture.expectations.maxCommunities ?? 10);
     });
 
     it("every file in a community should exist in the fixture", () => {
@@ -384,7 +384,7 @@ describe("eval: monolith", () => {
   describe("betweenness centrality (directed)", () => {
     it("pure sink shared/config.ts should have zero betweenness", () => {
       expect(graph.betweennessScores).toBeDefined();
-      for (const file of fixture.expectations.zeroBetweennessFiles!) {
+      for (const file of fixture.expectations.zeroBetweennessFiles ?? []) {
         expect(graph.betweennessScores?.get(file) ?? 0, `${file} should have zero betweenness (pure sink)`).toBe(0);
       }
     });
@@ -458,8 +458,9 @@ describe("eval: cross-fixture consistency", () => {
     for (const fixture of EVAL_FIXTURES) {
       const graph = buildGraphFromFixture(fixture.graph.files, fixture.graph.edges);
       expect(graph.betweennessScores, `betweennessScores should be defined for ${fixture.name}`).toBeDefined();
+      if (!graph.betweennessScores) throw new Error("expected betweennessScores");
 
-      for (const [file, score] of graph.betweennessScores!) {
+      for (const [file, score] of graph.betweennessScores) {
         expect(score, `betweenness for ${file} in ${fixture.name} should be >= 0`).toBeGreaterThanOrEqual(0);
         expect(score, `betweenness for ${file} in ${fixture.name} should be <= 1`).toBeLessThanOrEqual(1);
       }

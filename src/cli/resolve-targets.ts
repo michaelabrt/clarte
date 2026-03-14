@@ -343,6 +343,191 @@ function scoreBM25F(
   return score;
 }
 
+/** Corpus statistics needed for BM25F scoring. */
+type CorpusStats = {
+  docs: Map<string, FileDoc>;
+  N: number;
+  avgdlPath: number;
+  avgdlSymbols: number;
+  avgdlImports: number;
+  df: Map<string, number>;
+};
+
+/** Edge metadata extracted from the graph, indexed per file. */
+type EdgeMetadata = {
+  exportedNames: Map<string, string[]>;
+  fileImportPaths: Map<string, string[]>;
+  fileImportedNames: Map<string, string[]>;
+};
+
+/** Collect exported names and import edges per file from graph edges. */
+function collectEdgeMetadata(edges: PersistedGraph["edges"]): EdgeMetadata {
+  const exportedNames = new Map<string, string[]>();
+  const fileImportPaths = new Map<string, string[]>();
+  const fileImportedNames = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (!exportedNames.has(edge.to)) exportedNames.set(edge.to, []);
+    exportedNames.get(edge.to)?.push(...edge.importedNames);
+    if (!fileImportPaths.has(edge.from)) fileImportPaths.set(edge.from, []);
+    fileImportPaths.get(edge.from)?.push(edge.to);
+    if (!fileImportedNames.has(edge.from)) fileImportedNames.set(edge.from, []);
+    fileImportedNames.get(edge.from)?.push(...edge.importedNames);
+  }
+  return { exportedNames, fileImportPaths, fileImportedNames };
+}
+
+/** Build BM25F corpus: per-file documents, avgdl stats, and unified df. */
+function buildCorpus(filePaths: string[], graph: PersistedGraph, meta: EdgeMetadata): CorpusStats {
+  const docs = new Map<string, FileDoc>(
+    filePaths.map((fp) => {
+      const allSymbols = [...new Set([...(meta.exportedNames.get(fp) ?? []), ...(graph.files[fp]?.symbolNames ?? [])])];
+      return [
+        fp,
+        buildDocument(fp, allSymbols, meta.fileImportPaths.get(fp) ?? [], meta.fileImportedNames.get(fp) ?? []),
+      ];
+    }),
+  );
+
+  const N = docs.size;
+  const docValues = [...docs.values()];
+  const avgdlPath = Math.max(1, docValues.reduce((s, d) => s + d.path.tokens.length, 0) / N);
+  const symbolDocs = docValues.filter((d) => d.symbols.tokens.length > 0);
+  const avgdlSymbols =
+    symbolDocs.length > 0
+      ? Math.max(5, symbolDocs.reduce((s, d) => s + d.symbols.tokens.length, 0) / symbolDocs.length)
+      : 5;
+  const importDocs = docValues.filter((d) => d.imports.tokens.length > 0);
+  const avgdlImports =
+    importDocs.length > 0
+      ? Math.max(5, importDocs.reduce((s, d) => s + d.imports.tokens.length, 0) / importDocs.length)
+      : 5;
+
+  const df = new Map<string, number>();
+  for (const doc of docs.values()) {
+    for (const term of doc.allTerms) {
+      df.set(term, (df.get(term) ?? 0) + 1);
+    }
+  }
+
+  return { docs, N, avgdlPath, avgdlSymbols, avgdlImports, df };
+}
+
+/**
+ * Scale import-only scores so the highest sits at IMPORT_CEILING * min path/symbol score.
+ * Preserves BM25F relative ordering among import-only files.
+ */
+function applyImportCeiling(scores: Map<string, number>, importOnlyFiles: Set<string>): void {
+  if (importOnlyFiles.size === 0) return;
+  const pathSymbolScores: number[] = [];
+  for (const [fp, s] of scores) {
+    if (!importOnlyFiles.has(fp)) pathSymbolScores.push(s);
+  }
+  if (pathSymbolScores.length === 0) return;
+  const minDirect = Math.min(...pathSymbolScores);
+  let maxImport = 0;
+  for (const fp of importOnlyFiles) {
+    const s = scores.get(fp) ?? 0;
+    if (s > maxImport) maxImport = s;
+  }
+  const ceiling = IMPORT_CEILING * minDirect;
+  if (maxImport > ceiling) {
+    const scale = ceiling / maxImport;
+    for (const fp of importOnlyFiles) {
+      scores.set(fp, (scores.get(fp) ?? 0) * scale);
+    }
+  }
+}
+
+/**
+ * Score test files and transfer scores to their source files as proxy signals.
+ * Test file paths encode what they test (e.g. "test/sqlite-query-runner.test.ts"),
+ * so they match queries that the source file's path alone might miss.
+ */
+function applyTestProxy(
+  scores: Map<string, number>,
+  graph: PersistedGraph,
+  meta: EdgeMetadata,
+  corpus: CorpusStats,
+  queryTerms: string[],
+): void {
+  const testMappingEntries = Object.entries(graph.testMapping);
+  if (testMappingEntries.length === 0) return;
+
+  const testToSource = new Map<string, string[]>();
+  for (const [source, tests] of testMappingEntries) {
+    for (const test of tests) {
+      if (!testToSource.has(test)) testToSource.set(test, []);
+      testToSource.get(test)?.push(source);
+    }
+  }
+
+  const { N, avgdlPath, avgdlSymbols, avgdlImports, df } = corpus;
+  for (const [testFp, sources] of testToSource) {
+    if (!graph.files[testFp]) continue;
+    const allSymbols = [
+      ...new Set([...(meta.exportedNames.get(testFp) ?? []), ...(graph.files[testFp]?.symbolNames ?? [])]),
+    ];
+    const testDoc = buildDocument(
+      testFp,
+      allSymbols,
+      meta.fileImportPaths.get(testFp) ?? [],
+      meta.fileImportedNames.get(testFp) ?? [],
+    );
+    let testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
+    if (testScore === 0)
+      testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
+    if (testScore > 0) {
+      const proxyScore = testScore * TEST_PROXY_FACTOR;
+      for (const source of sources) {
+        if (proxyScore > (scores.get(source) ?? 0)) {
+          scores.set(source, proxyScore);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Expand scores to 1-hop import neighbors with directional asymmetry.
+ * Importers (consumers) get a larger boost than imports (providers).
+ * Also adds co-change coupling partners of direct matches.
+ */
+function expandNeighbors(scores: Map<string, number>, directMatches: Set<string>, graph: PersistedGraph): void {
+  const importers = new Map<string, string[]>();
+  const imports = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    if (!importers.has(edge.to)) importers.set(edge.to, []);
+    importers.get(edge.to)?.push(edge.from);
+    if (!imports.has(edge.from)) imports.set(edge.from, []);
+    imports.get(edge.from)?.push(edge.to);
+  }
+  for (const [file, score] of [...scores.entries()]) {
+    if (!directMatches.has(file)) continue;
+    const importerScore = score * IMPORTER_EXPANSION;
+    for (const importer of importers.get(file) ?? []) {
+      if (importerScore > (scores.get(importer) ?? 0)) {
+        scores.set(importer, importerScore);
+      }
+    }
+    const importScore = score * IMPORT_EXPANSION;
+    for (const imp of imports.get(file) ?? []) {
+      if (importScore > (scores.get(imp) ?? 0)) {
+        scores.set(imp, importScore);
+      }
+    }
+  }
+
+  for (const coupling of graph.changeCoupling) {
+    if (coupling.confidence < MIN_COUPLING_CONFIDENCE) continue;
+    if (directMatches.has(coupling.fileA) && !scores.has(coupling.fileB) && graph.files[coupling.fileB]) {
+      scores.set(coupling.fileB, (scores.get(coupling.fileA) ?? 1) * COUPLING_FACTOR);
+    }
+    if (directMatches.has(coupling.fileB) && !scores.has(coupling.fileA) && graph.files[coupling.fileA]) {
+      scores.set(coupling.fileA, (scores.get(coupling.fileB) ?? 1) * COUPLING_FACTOR);
+    }
+  }
+}
+
 /** Build a BM25F document from a file path, its merged symbol list and its import edges. */
 function buildDocument(filePath: string, symbols: string[], importPaths: string[], importedNames: string[]): FileDoc {
   const pathTokens = filePath.split(/[/\\.]/).flatMap((seg) => tokenizeIdentifier(seg));
@@ -392,61 +577,15 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
   const filePaths = Object.keys(graph.files).filter((fp) => !isTestFile(fp));
   if (filePaths.length === 0) return [];
 
-  // Collect exported symbol names per file: symbols other files import from it
-  const exportedNames = new Map<string, string[]>();
-  // Collect import edges per file: what each file imports (paths + names)
-  const fileImportPaths = new Map<string, string[]>();
-  const fileImportedNames = new Map<string, string[]>();
-  for (const edge of graph.edges) {
-    if (!exportedNames.has(edge.to)) exportedNames.set(edge.to, []);
-    exportedNames.get(edge.to)?.push(...edge.importedNames);
-    if (!fileImportPaths.has(edge.from)) fileImportPaths.set(edge.from, []);
-    fileImportPaths.get(edge.from)?.push(edge.to);
-    if (!fileImportedNames.has(edge.from)) fileImportedNames.set(edge.from, []);
-    fileImportedNames.get(edge.from)?.push(...edge.importedNames);
-  }
-
-  // Build BM25F documents (dedup exported + defined symbols to avoid double-counting)
-  const docs = new Map<string, FileDoc>(
-    filePaths.map((fp) => {
-      const allSymbols = [...new Set([...(exportedNames.get(fp) ?? []), ...(graph.files[fp]?.symbolNames ?? [])])];
-      return [fp, buildDocument(fp, allSymbols, fileImportPaths.get(fp) ?? [], fileImportedNames.get(fp) ?? [])];
-    }),
-  );
-
-  // Per-field avgdl for BM25F normalization
-  const N = docs.size;
-  const docValues = [...docs.values()];
-  const avgdlPath = Math.max(1, docValues.reduce((s, d) => s + d.path.tokens.length, 0) / N);
-  // Exclude zero-token docs (config files, .d.ts) to avoid deflating the average.
-  // Floor at 5 (typical minimum for a non-trivial source file).
-  const symbolDocs = docValues.filter((d) => d.symbols.tokens.length > 0);
-  const avgdlSymbols =
-    symbolDocs.length > 0
-      ? Math.max(5, symbolDocs.reduce((s, d) => s + d.symbols.tokens.length, 0) / symbolDocs.length)
-      : 5;
-  const importDocs = docValues.filter((d) => d.imports.tokens.length > 0);
-  const avgdlImports =
-    importDocs.length > 0
-      ? Math.max(5, importDocs.reduce((s, d) => s + d.imports.tokens.length, 0) / importDocs.length)
-      : 5;
-
-  // df increments once per document regardless of which field(s) the term appears in.
-  const df = new Map<string, number>();
-  for (const doc of docs.values()) {
-    for (const term of doc.allTerms) {
-      df.set(term, (df.get(term) ?? 0) + 1);
-    }
-  }
+  // Stage 1: collect edge metadata and build BM25F corpus
+  const meta = collectEdgeMetadata(graph.edges);
+  const corpus = buildCorpus(filePaths, graph, meta);
+  const { docs, N, avgdlPath, avgdlSymbols, avgdlImports, df } = corpus;
 
   const debugBM25 = process.env.DEBUG_BM25 === "1";
-
-  // Synonym expansion: expand query with programming synonyms, scored at reduced weight
   const { expanded: synonymTerms } = expandQuerySynonyms(queryTerms);
 
-  // BM25F scoring: path + symbols first, import field as fallback for zero-overlap files.
-  // The import field only fires when path/symbols produce zero score, preventing
-  // import-boosted files from outranking direct matches (Hono JSX context regression).
+  // Stage 2: BM25F scoring (path + symbols first, import field as fallback)
   const scores = new Map<string, number>();
   const importOnlyFiles = new Set<string>();
   for (const [fp, doc] of docs) {
@@ -454,7 +593,6 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
     if (synonymTerms.length > 0) {
       score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
     }
-    // Fallback: import field for files with zero path/symbol overlap (audit 3.2, 3.3)
     if (score === 0) {
       score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
       if (synonymTerms.length > 0) {
@@ -465,68 +603,11 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
     if (score > 0) scores.set(fp, score);
   }
 
-  // Ceiling: scale import-only scores so the highest sits at IMPORT_CEILING * min
-  // path/symbol score. Preserves BM25F relative ordering (IDF discrimination) among
-  // import-only files while guaranteeing they rank below every path/symbol match.
-  if (importOnlyFiles.size > 0) {
-    const pathSymbolScores: number[] = [];
-    for (const [fp, s] of scores) {
-      if (!importOnlyFiles.has(fp)) pathSymbolScores.push(s);
-    }
-    if (pathSymbolScores.length > 0) {
-      const minDirect = Math.min(...pathSymbolScores);
-      let maxImport = 0;
-      for (const fp of importOnlyFiles) {
-        const s = scores.get(fp) ?? 0;
-        if (s > maxImport) maxImport = s;
-      }
-      const ceiling = IMPORT_CEILING * minDirect;
-      if (maxImport > ceiling) {
-        const scale = ceiling / maxImport;
-        for (const fp of importOnlyFiles) {
-          scores.set(fp, (scores.get(fp) ?? 0) * scale);
-        }
-      }
-    }
-  }
+  // Stage 3: cap import-only scores below path/symbol matches
+  applyImportCeiling(scores, importOnlyFiles);
 
-  // Test-file proxy: score test files using source-file IDF, transfer to source files.
-  // Test file paths encode what they test (e.g. "test/sqlite-query-runner.test.ts"),
-  // so they match queries that the source file's path alone might miss.
-  const testMappingEntries = Object.entries(graph.testMapping);
-  if (testMappingEntries.length > 0) {
-    const testToSource = new Map<string, string[]>();
-    for (const [source, tests] of testMappingEntries) {
-      for (const test of tests) {
-        if (!testToSource.has(test)) testToSource.set(test, []);
-        testToSource.get(test)?.push(source);
-      }
-    }
-
-    for (const [testFp, sources] of testToSource) {
-      if (!graph.files[testFp]) continue;
-      const allSymbols = [
-        ...new Set([...(exportedNames.get(testFp) ?? []), ...(graph.files[testFp]?.symbolNames ?? [])]),
-      ];
-      const testDoc = buildDocument(
-        testFp,
-        allSymbols,
-        fileImportPaths.get(testFp) ?? [],
-        fileImportedNames.get(testFp) ?? [],
-      );
-      let testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
-      if (testScore === 0)
-        testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
-      if (testScore > 0) {
-        const proxyScore = testScore * TEST_PROXY_FACTOR;
-        for (const source of sources) {
-          if (proxyScore > (scores.get(source) ?? 0)) {
-            scores.set(source, proxyScore);
-          }
-        }
-      }
-    }
-  }
+  // Stage 4: test-file proxy transfer
+  applyTestProxy(scores, graph, meta, corpus, queryTerms);
 
   if (scores.size === 0) return [];
 
@@ -547,52 +628,11 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
     }
   }
 
+  // Stage 5: 1-hop neighbor expansion + co-change coupling
   const directMatches = new Set(scores.keys());
+  expandNeighbors(scores, directMatches, graph);
 
-  // Import graph expansion: 1-hop neighbors with directional asymmetry.
-  // Importers (consumers) get a larger boost than imports (providers) because
-  // bug reports describe symptoms at call sites.
-  const importers = new Map<string, string[]>(); // file -> files that import it
-  const imports = new Map<string, string[]>(); // file -> files it imports from
-  for (const edge of graph.edges) {
-    if (!importers.has(edge.to)) importers.set(edge.to, []);
-    importers.get(edge.to)?.push(edge.from);
-    if (!imports.has(edge.from)) imports.set(edge.from, []);
-    imports.get(edge.from)?.push(edge.to);
-  }
-  for (const [file, score] of [...scores.entries()]) {
-    if (!directMatches.has(file)) continue;
-    // Files that import this match (consumers) get higher boost
-    const importerScore = score * IMPORTER_EXPANSION;
-    for (const importer of importers.get(file) ?? []) {
-      if (importerScore > (scores.get(importer) ?? 0)) {
-        scores.set(importer, importerScore);
-      }
-    }
-    // Files this match imports from (providers) get lower boost
-    const importScore = score * IMPORT_EXPANSION;
-    for (const imp of imports.get(file) ?? []) {
-      if (importScore > (scores.get(imp) ?? 0)) {
-        scores.set(imp, importScore);
-      }
-    }
-  }
-
-  // Co-change coupling: add partners of direct matches
-  for (const coupling of graph.changeCoupling) {
-    if (coupling.confidence < MIN_COUPLING_CONFIDENCE) continue;
-    if (directMatches.has(coupling.fileA) && !scores.has(coupling.fileB) && graph.files[coupling.fileB]) {
-      scores.set(coupling.fileB, (scores.get(coupling.fileA) ?? 1) * COUPLING_FACTOR);
-    }
-    if (directMatches.has(coupling.fileB) && !scores.has(coupling.fileA) && graph.files[coupling.fileA]) {
-      scores.set(coupling.fileA, (scores.get(coupling.fileB) ?? 1) * COUPLING_FACTOR);
-    }
-  }
-
-  // Semantic tiebreaker for files with identical BM25 scores.
-  // When scores are tied: (1) prefer consumer over provider (import direction),
-  // (2) prefer higher betweenness centrality, (3) path for determinism.
-  // This disambiguates e.g. middleware/jwt/jwt.ts vs utils/jwt/jwt.ts.
+  // Sort by score with semantic tiebreakers
   const importTargets = new Set(graph.edges.map((e) => e.to));
   const importSources = new Set(graph.edges.map((e) => e.from));
 
@@ -601,20 +641,14 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
       const scoreDiff = b[1] - a[1];
       if (scoreDiff !== 0) return scoreDiff;
 
-      // Tiebreaker 1: prefer consumers over providers among tied files.
-      // A pure consumer (imports but is never imported) is most likely the bug site.
-      // A file that both imports and is imported ranks between pure consumer and pure provider.
-      // Score: +1 for being a consumer (imports from others), -1 for being a provider (imported by others).
       const aDir = (importSources.has(a[0]) ? 1 : 0) - (importTargets.has(a[0]) ? 1 : 0);
       const bDir = (importSources.has(b[0]) ? 1 : 0) - (importTargets.has(b[0]) ? 1 : 0);
       if (aDir !== bDir) return bDir - aDir;
 
-      // Tiebreaker 2: prefer higher betweenness (more central in dependency paths)
       const aBetween = graph.files[a[0]]?.betweenness ?? 0;
       const bBetween = graph.files[b[0]]?.betweenness ?? 0;
       if (aBetween !== bBetween) return bBetween - aBetween;
 
-      // Tiebreaker 3: prefer files imported by more other files
       const aImportedBy = graph.files[a[0]]?.importedByCount ?? 0;
       const bImportedBy = graph.files[b[0]]?.importedByCount ?? 0;
       if (aImportedBy !== bImportedBy) return bImportedBy - aImportedBy;

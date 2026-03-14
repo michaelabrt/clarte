@@ -26,11 +26,11 @@ export function findSCCsFromAdj(allNodes: Iterable<string>, adj: Map<string, str
     onStack.add(file);
 
     while (callStack.length > 0) {
-      const frame = callStack[callStack.length - 1]!;
+      const frame = callStack[callStack.length - 1] as { v: string; neighborIdx: number };
       const neighbors = adj.get(frame.v) ?? [];
 
       if (frame.neighborIdx < neighbors.length) {
-        const w = neighbors[frame.neighborIdx]!;
+        const w = neighbors[frame.neighborIdx] as string;
         frame.neighborIdx++;
         if (!allSet.has(w)) continue;
         if (!indices.has(w)) {
@@ -41,14 +41,14 @@ export function findSCCsFromAdj(allNodes: Iterable<string>, adj: Map<string, str
           stack.push(w);
           onStack.add(w);
         } else if (onStack.has(w)) {
-          lowlinks.set(frame.v, Math.min(lowlinks.get(frame.v)!, indices.get(w)!));
+          lowlinks.set(frame.v, Math.min(lowlinks.get(frame.v) ?? 0, indices.get(w) ?? 0));
         }
       } else {
         if (lowlinks.get(frame.v) === indices.get(frame.v)) {
           const scc: string[] = [];
           let w: string;
           do {
-            w = stack.pop()!;
+            w = stack.pop() as string;
             onStack.delete(w);
             scc.push(w);
           } while (w !== frame.v);
@@ -56,8 +56,8 @@ export function findSCCsFromAdj(allNodes: Iterable<string>, adj: Map<string, str
         }
         callStack.pop();
         if (callStack.length > 0) {
-          const parent = callStack[callStack.length - 1]!;
-          lowlinks.set(parent.v, Math.min(lowlinks.get(parent.v)!, lowlinks.get(frame.v)!));
+          const parent = callStack[callStack.length - 1] as { v: string; neighborIdx: number };
+          lowlinks.set(parent.v, Math.min(lowlinks.get(parent.v) ?? 0, lowlinks.get(frame.v) ?? 0));
         }
       }
     }

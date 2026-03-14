@@ -133,7 +133,7 @@ function topologicalSortLayers(layers: ArchitecturalLayer[], layerEdges: LayerEd
 
   const sorted: string[] = [];
   while (queue.length > 0) {
-    const node = queue.shift()!;
+    const node = queue.shift() as string;
     sorted.push(node);
     for (const neighbor of adj.get(node) ?? []) {
       const newDeg = (inDeg.get(neighbor) ?? 1) - 1;

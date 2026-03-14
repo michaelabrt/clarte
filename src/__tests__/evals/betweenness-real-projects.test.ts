@@ -63,7 +63,8 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
 
       beforeAll(async () => {
         graph = await buildImportGraph(project.dir, "typescript");
-        const scores = graph.betweennessScores!;
+        if (!graph.betweennessScores) throw new Error("betweennessScores missing after buildImportGraph");
+        const scores = graph.betweennessScores;
         const chokepoints = new Set(findChokepoints(graph).map((c) => c.file));
 
         const entries = [...scores.entries()].sort((a, b) => b[1] - a[1]);
@@ -151,8 +152,8 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
       }, 120_000);
 
       it("should compute betweenness scores for all files", () => {
-        expect(graph.betweennessScores).toBeDefined();
-        expect(graph.betweennessScores?.size).toBeGreaterThan(0);
+        if (!graph.betweennessScores) throw new Error("expected betweennessScores");
+        expect(graph.betweennessScores.size).toBeGreaterThan(0);
       });
 
       it("betweennessScores has non-zero entries (graph has structure)", () => {
@@ -161,7 +162,8 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
       });
 
       it("all scores should be in [0, 1]", () => {
-        for (const [file, score] of graph.betweennessScores!) {
+        if (!graph.betweennessScores) throw new Error("betweennessScores missing");
+        for (const [file, score] of graph.betweennessScores) {
           expect(score, `${file} score out of range`).toBeGreaterThanOrEqual(0);
           expect(score, `${file} score out of range`).toBeLessThanOrEqual(1);
         }
@@ -181,7 +183,8 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
 
     beforeAll(async () => {
       const graph = await buildImportGraph("/tmp/clarte-test-drizzle", "typescript");
-      const scores = graph.betweennessScores!;
+      if (!graph.betweennessScores) throw new Error("betweennessScores missing after buildImportGraph");
+      const scores = graph.betweennessScores;
       const chokepointList = findChokepoints(graph);
       const chokepoints = new Set(chokepointList.map((c) => c.file));
 
@@ -245,8 +248,8 @@ describe.skipIf(SKIP)("Real-project betweenness analysis", () => {
     });
 
     it("rendered section starts with '## Working Guidelines'", () => {
-      expect(drizzleResult.renderedSection).toBeDefined();
-      expect(drizzleResult.renderedSection?.startsWith("## Working Guidelines")).toBe(true);
+      if (!drizzleResult.renderedSection) throw new Error("expected renderedSection");
+      expect(drizzleResult.renderedSection.startsWith("## Working Guidelines")).toBe(true);
     });
 
     it("no chokepoint file appears in a flow bottleneck directive", () => {

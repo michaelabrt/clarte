@@ -152,7 +152,7 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const diffRef = diffArg?.startsWith("--diff=") ? diffArg.split("=")[1] : undefined;
   const diffFilterFiles: string[] = [];
   if (diffMode) {
-    const diffIdx = rawArgs.indexOf(diffArg!);
+    const diffIdx = rawArgs.indexOf(diffArg as string);
     for (let i = diffIdx + 1; i < rawArgs.length; i++) {
       const a = rawArgs[i];
       if (a.startsWith("-")) break;

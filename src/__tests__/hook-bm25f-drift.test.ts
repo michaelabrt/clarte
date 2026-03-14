@@ -52,7 +52,7 @@ describe("Hook BM25F drift detection", () => {
     expect(extractHookConst("IM")).toBe(extractConst("IMPORT_EXPANSION"));
     expect(extractHookConst("CF")).toBe(extractConst("COUPLING_FACTOR"));
     expect(extractHookConst("TP")).toBe(extractConst("TEST_PROXY_FACTOR"));
-    expect(extractHookConst("SD")).toBe(extractConst("SYNONYM_DISCOUNT"));
+    expect(extractHookConst("SYNONYM_DISCOUNT")).toBe(extractConst("SYNONYM_DISCOUNT"));
     expect(extractHookConst("MC")).toBe(extractConst("MIN_COUPLING_CONFIDENCE"));
     expect(extractHookConst("IC")).toBe(extractConst("IMPORT_CEILING"));
   });

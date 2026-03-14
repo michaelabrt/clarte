@@ -49,7 +49,7 @@ export function findStructuralTemporalMismatches(
 
     while (qHead < queue.length) {
       const node = queue[qHead++];
-      const dist = distances.get(node)!;
+      const dist = distances.get(node) ?? 0;
       for (const neighbor of adj.get(node) ?? []) {
         if (!visited.has(neighbor)) {
           visited.add(neighbor);

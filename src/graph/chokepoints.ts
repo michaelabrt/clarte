@@ -75,7 +75,9 @@ function bfsReachability(start: string, adj: Map<string, Set<string>>, earlyTerm
   const queue = [start];
   let qHead = 0;
   while (qHead < queue.length) {
-    for (const neighbor of adj.get(queue[qHead++]!) ?? []) {
+    const current = queue[qHead++];
+    if (!current) break;
+    for (const neighbor of adj.get(current) ?? []) {
       if (!visited.has(neighbor)) {
         visited.add(neighbor);
         if (earlyTerminate !== undefined && visited.size - 1 >= earlyTerminate) return visited.size - 1;

@@ -111,6 +111,7 @@ describe("multi-line generic signature extraction", () => {
   return doStuff(arg);
 }`;
 
+    // biome-ignore lint/suspicious/noExplicitAny: vitest mock return value
     mockGlob.mockResolvedValue(["src/utils.ts"] as any);
     mockReadFileOr.mockResolvedValue(tsContent);
 
@@ -136,6 +137,7 @@ describe("multi-line generic signature extraction", () => {
   return convert(input);
 }`;
 
+    // biome-ignore lint/suspicious/noExplicitAny: vitest mock return value
     mockGlob.mockResolvedValue(["src/transform.ts"] as any);
     mockReadFileOr.mockResolvedValue(tsContent);
 
@@ -154,6 +156,7 @@ describe("multi-line generic signature extraction", () => {
   return arg;
 }`;
 
+    // biome-ignore lint/suspicious/noExplicitAny: vitest mock return value
     mockGlob.mockResolvedValue(["src/identity.ts"] as any);
     mockReadFileOr.mockResolvedValue(tsContent);
 

@@ -1,43 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { resolveEditTargets, tokenizeQuery } from "../cli/resolve-targets.js";
 import { formatEditDirective } from "../cli/format-directive.js";
-import type { PersistedGraph } from "../types/persisted-graph.js";
-import { PERSISTED_GRAPH_VERSION } from "../types/persisted-graph.js";
-
-function makeGraph(overrides?: Partial<PersistedGraph>): PersistedGraph {
-  return {
-    version: PERSISTED_GRAPH_VERSION,
-    timestamp: "2026-01-01T00:00:00Z",
-    files: {},
-    edges: [],
-    communities: [],
-    changeCoupling: [],
-    structuralMismatches: [],
-    testMapping: {},
-    lagCouplings: [],
-    ...overrides,
-  };
-}
-
-function makeFileRecord(overrides?: Record<string, unknown>) {
-  return {
-    role: null,
-    authority: 0,
-    hubScore: 0,
-    betweenness: 0,
-    instability: null,
-    importedByCount: 0,
-    isChokepoint: false,
-    separatesComponents: 0,
-    isCrossCutting: false,
-    layerSpread: 0,
-    layers: [],
-    hasTests: false,
-    testFiles: [],
-    communityId: null,
-    ...overrides,
-  };
-}
+import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
 
 // ── tokenizeQuery ────────────────────────────────────────────────────
 
@@ -124,41 +88,41 @@ describe("tokenizeQuery", () => {
 
 describe("resolveEditTargets", () => {
   it("returns empty array for empty query", () => {
-    const graph = makeGraph({ files: { "src/auth.ts": makeFileRecord() } });
+    const graph = makePersistedGraph({ files: { "src/auth.ts": makeFileRecord({ role: null }) } });
     expect(resolveEditTargets("", graph)).toEqual([]);
   });
 
   it("returns empty array for query with only stop words", () => {
-    const graph = makeGraph({ files: { "src/auth.ts": makeFileRecord() } });
+    const graph = makePersistedGraph({ files: { "src/auth.ts": makeFileRecord({ role: null }) } });
     expect(resolveEditTargets("fix the bug", graph)).toEqual([]);
   });
 
   it("matches file by basename keyword", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth.ts": makeFileRecord(),
-        "src/utils.ts": makeFileRecord(),
+        "src/auth.ts": makeFileRecord({ role: null }),
+        "src/utils.ts": makeFileRecord({ role: null }),
       },
     });
     expect(resolveEditTargets("auth module", graph)).toEqual(["src/auth.ts"]);
   });
 
   it("matches file by directory name", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/services/login.ts": makeFileRecord(),
-        "src/utils/helpers.ts": makeFileRecord(),
+        "src/services/login.ts": makeFileRecord({ role: null }),
+        "src/utils/helpers.ts": makeFileRecord({ role: null }),
       },
     });
     expect(resolveEditTargets("services issue", graph)).toEqual(["src/services/login.ts"]);
   });
 
   it("includes co-change partners above confidence threshold", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth.ts": makeFileRecord(),
-        "src/session.ts": makeFileRecord(),
-        "src/unrelated.ts": makeFileRecord(),
+        "src/auth.ts": makeFileRecord({ role: null }),
+        "src/session.ts": makeFileRecord({ role: null }),
+        "src/unrelated.ts": makeFileRecord({ role: null }),
       },
       changeCoupling: [
         { fileA: "src/auth.ts", fileB: "src/session.ts", confidence: 0.8, coChangeCount: 5 },
@@ -174,18 +138,18 @@ describe("resolveEditTargets", () => {
   it("respects maxTargets limit", () => {
     const files: Record<string, ReturnType<typeof makeFileRecord>> = {};
     for (let i = 0; i < 10; i++) {
-      files[`src/auth-${i}.ts`] = makeFileRecord();
+      files[`src/auth-${i}.ts`] = makeFileRecord({ role: null });
     }
-    const graph = makeGraph({ files });
+    const graph = makePersistedGraph({ files });
     const targets = resolveEditTargets("auth", graph, 3);
     expect(targets).toHaveLength(3);
   });
 
   it("ranks exact basename match higher than partial", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth.ts": makeFileRecord(),
-        "src/auth-helpers.ts": makeFileRecord(),
+        "src/auth.ts": makeFileRecord({ role: null }),
+        "src/auth-helpers.ts": makeFileRecord({ role: null }),
       },
     });
     const targets = resolveEditTargets("auth", graph);
@@ -193,20 +157,20 @@ describe("resolveEditTargets", () => {
   });
 
   it("returns empty array when no files match", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/database.ts": makeFileRecord(),
-        "src/server.ts": makeFileRecord(),
+        "src/database.ts": makeFileRecord({ role: null }),
+        "src/server.ts": makeFileRecord({ role: null }),
       },
     });
     expect(resolveEditTargets("auth login", graph)).toEqual([]);
   });
 
   it("handles co-change partner on fileB side", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth.ts": makeFileRecord(),
-        "src/config.ts": makeFileRecord(),
+        "src/auth.ts": makeFileRecord({ role: null }),
+        "src/config.ts": makeFileRecord({ role: null }),
       },
       changeCoupling: [{ fileA: "src/config.ts", fileB: "src/auth.ts", confidence: 0.6, coChangeCount: 3 }],
     });
@@ -216,10 +180,11 @@ describe("resolveEditTargets", () => {
   });
 
   it("does not let symbol-rich files drown out precise path matches", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/database/connections/sqlite.ts": makeFileRecord({ symbolNames: ["connect"] }),
+        "src/database/connections/sqlite.ts": makeFileRecord({ role: null, symbolNames: ["connect"] }),
         "src/driver.ts": makeFileRecord({
+          role: null,
           symbolNames: Array.from({ length: 40 }, (_, i) => `method${i}Sqlite`),
         }),
       },
@@ -229,10 +194,10 @@ describe("resolveEditTargets", () => {
   });
 
   it("matches barrel file by re-exported names", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/types/index.ts": makeFileRecord(),
-        "src/types/graph.ts": makeFileRecord({ symbolNames: ["GraphNode"] }),
+        "src/types/index.ts": makeFileRecord({ role: null }),
+        "src/types/graph.ts": makeFileRecord({ role: null, symbolNames: ["GraphNode"] }),
       },
       edges: [{ from: "src/app.ts", to: "src/types/index.ts", importedNames: ["GraphNode"] }],
     });
@@ -241,10 +206,10 @@ describe("resolveEditTargets", () => {
   });
 
   it("matches file by defined symbol name", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/runner.ts": makeFileRecord({ symbolNames: ["AbstractSqliteQueryRunner"] }),
-        "src/logger.ts": makeFileRecord({ symbolNames: ["ConsoleLogger"] }),
+        "src/runner.ts": makeFileRecord({ role: null, symbolNames: ["AbstractSqliteQueryRunner"] }),
+        "src/logger.ts": makeFileRecord({ role: null, symbolNames: ["ConsoleLogger"] }),
       },
     });
     const targets = resolveEditTargets("sqlite query runner", graph);
@@ -256,11 +221,11 @@ describe("resolveEditTargets", () => {
 
 describe("test-file proxy scoring", () => {
   it("finds source file via its test file path", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/driver/sqlite/SqliteQueryRunner.ts": makeFileRecord(),
-        "src/utils/helpers.ts": makeFileRecord(),
-        "test/driver/sqlite/SqliteQueryRunner.test.ts": makeFileRecord(),
+        "src/driver/sqlite/SqliteQueryRunner.ts": makeFileRecord({ role: null }),
+        "src/utils/helpers.ts": makeFileRecord({ role: null }),
+        "test/driver/sqlite/SqliteQueryRunner.test.ts": makeFileRecord({ role: null }),
       },
       testMapping: {
         "src/driver/sqlite/SqliteQueryRunner.ts": ["test/driver/sqlite/SqliteQueryRunner.test.ts"],
@@ -271,10 +236,10 @@ describe("test-file proxy scoring", () => {
   });
 
   it("does not include the test file itself in results", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth.ts": makeFileRecord(),
-        "test/auth.test.ts": makeFileRecord(),
+        "src/auth.ts": makeFileRecord({ role: null }),
+        "test/auth.test.ts": makeFileRecord({ role: null }),
       },
       testMapping: {
         "src/auth.ts": ["test/auth.test.ts"],
@@ -285,10 +250,10 @@ describe("test-file proxy scoring", () => {
   });
 
   it("does not override a higher direct BM25F score", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth/login.ts": makeFileRecord({ symbolNames: ["authenticate", "validateToken"] }),
-        "test/auth/login.test.ts": makeFileRecord(),
+        "src/auth/login.ts": makeFileRecord({ role: null, symbolNames: ["authenticate", "validateToken"] }),
+        "test/auth/login.test.ts": makeFileRecord({ role: null }),
       },
       testMapping: {
         "src/auth/login.ts": ["test/auth/login.test.ts"],
@@ -300,11 +265,11 @@ describe("test-file proxy scoring", () => {
 
   it("boosts source file when test matches but source does not", () => {
     // Source file has an opaque name; its test file encodes the feature
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/core/processor.ts": makeFileRecord(),
-        "src/utils.ts": makeFileRecord(),
-        "test/core/markdown-renderer.test.ts": makeFileRecord(),
+        "src/core/processor.ts": makeFileRecord({ role: null }),
+        "src/utils.ts": makeFileRecord({ role: null }),
+        "test/core/markdown-renderer.test.ts": makeFileRecord({ role: null }),
       },
       testMapping: {
         "src/core/processor.ts": ["test/core/markdown-renderer.test.ts"],
@@ -319,13 +284,14 @@ describe("test-file proxy scoring", () => {
 
 describe("offline scoring - known queries", () => {
   it("sqlite acronym query finds query runner", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
         "src/driver/sqlite/SqliteQueryRunner.ts": makeFileRecord({
+          role: null,
           symbolNames: ["SqliteQueryRunner", "runQuery", "connect"],
         }),
-        "src/platform/platform.ts": makeFileRecord({ symbolNames: ["getPlatform"] }),
-        "src/util/StringUtils.ts": makeFileRecord({ symbolNames: ["simpleEnumToString", "titleCase"] }),
+        "src/platform/platform.ts": makeFileRecord({ role: null, symbolNames: ["getPlatform"] }),
+        "src/util/StringUtils.ts": makeFileRecord({ role: null, symbolNames: ["simpleEnumToString", "titleCase"] }),
       },
       edges: [
         {
@@ -340,10 +306,10 @@ describe("offline scoring - known queries", () => {
   });
 
   it("enum helper query finds string utils", () => {
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/util/StringUtils.ts": makeFileRecord({ symbolNames: ["simpleEnumToString", "titleCase"] }),
-        "src/driver/Driver.ts": makeFileRecord({ symbolNames: ["connect", "disconnect"] }),
+        "src/util/StringUtils.ts": makeFileRecord({ role: null, symbolNames: ["simpleEnumToString", "titleCase"] }),
+        "src/driver/Driver.ts": makeFileRecord({ role: null, symbolNames: ["connect", "disconnect"] }),
       },
     });
     const targets = resolveEditTargets("simpleEnumToString returns wrong value", graph, 3);
@@ -357,10 +323,10 @@ describe("BM25F scoring behavior", () => {
   it("term in both path and symbols scores higher than term in only one field", () => {
     // File A: term appears in both path and symbols
     // File B: term appears only in symbols
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth/auth.ts": makeFileRecord({ symbolNames: ["authenticate", "authToken"] }),
-        "src/core/session.ts": makeFileRecord({ symbolNames: ["authenticate", "authToken"] }),
+        "src/auth/auth.ts": makeFileRecord({ role: null, symbolNames: ["authenticate", "authToken"] }),
+        "src/core/session.ts": makeFileRecord({ role: null, symbolNames: ["authenticate", "authToken"] }),
       },
     });
     const targets = resolveEditTargets("auth", graph);
@@ -373,10 +339,10 @@ describe("BM25F scoring behavior", () => {
     // File A: short path "src/auth.ts" (3 tokens: src, auth, ts)
     // File B: long path with "auth" in a deep directory (many tokens)
     // Both have the query term "auth" in path, no synonym matches
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth.ts": makeFileRecord(),
-        "src/services/internal/auth-helper-utils.ts": makeFileRecord(),
+        "src/auth.ts": makeFileRecord({ role: null }),
+        "src/services/internal/auth-helper-utils.ts": makeFileRecord({ role: null }),
       },
     });
 
@@ -390,12 +356,12 @@ describe("BM25F scoring behavior", () => {
   it("term appearing in both path and symbols combines pseudo-tf before saturation", () => {
     // True BM25F: weighted pseudo-tf combines across fields before saturation.
     // File with term in path AND symbols should outscore file with term in symbols only.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
         // "cache" appears in path tokens AND as a symbol
-        "src/cache/handler.ts": makeFileRecord({ symbolNames: ["cache", "cacheResult"] }),
+        "src/cache/handler.ts": makeFileRecord({ role: null, symbolNames: ["cache", "cacheResult"] }),
         // "cache" appears only in symbols
-        "src/core/engine.ts": makeFileRecord({ symbolNames: ["cache", "cacheResult"] }),
+        "src/core/engine.ts": makeFileRecord({ role: null, symbolNames: ["cache", "cacheResult"] }),
       },
     });
 
@@ -408,10 +374,11 @@ describe("BM25F scoring behavior", () => {
   it("path match beats single symbol match due to PATH_WEIGHT > SYMBOL_WEIGHT", () => {
     // Path tokens are weighted 1.5x vs 1.0x for symbols.
     // A file with a term in the path should beat one with a single symbol match.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/cache.ts": makeFileRecord({ symbolNames: ["initStore"] }),
+        "src/cache.ts": makeFileRecord({ role: null, symbolNames: ["initStore"] }),
         "src/core/storage.ts": makeFileRecord({
+          role: null,
           // Single "cache" in symbols via camelCase split, no path match
           symbolNames: ["cacheManager"],
         }),
@@ -431,11 +398,11 @@ describe("BM25F import field", () => {
   it("finds a file whose own path/symbols do not match but whose imports do", () => {
     // handler.ts has no path/symbol overlap with "form validation"
     // but it imports from validators/form-validator.ts with importedNames ["validateForm"]
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/handler.ts": makeFileRecord(),
-        "src/validators/form-validator.ts": makeFileRecord({ symbolNames: ["validateForm"] }),
-        "src/unrelated.ts": makeFileRecord(),
+        "src/handler.ts": makeFileRecord({ role: null }),
+        "src/validators/form-validator.ts": makeFileRecord({ role: null, symbolNames: ["validateForm"] }),
+        "src/unrelated.ts": makeFileRecord({ role: null }),
       },
       edges: [
         {
@@ -453,11 +420,11 @@ describe("BM25F import field", () => {
     // Both files match "form" via path+symbols. form-handler.ts also has "form" in its imports,
     // but the import field is fallback-only and should NOT boost it above form-render.ts.
     // Both should score identically from path+symbols (tiebreaker determines order).
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/form-handler.ts": makeFileRecord({ symbolNames: ["handleForm"] }),
-        "src/form-render.ts": makeFileRecord({ symbolNames: ["renderForm"] }),
-        "src/validators/form-validator.ts": makeFileRecord({ symbolNames: ["validateForm"] }),
+        "src/form-handler.ts": makeFileRecord({ role: null, symbolNames: ["handleForm"] }),
+        "src/form-render.ts": makeFileRecord({ role: null, symbolNames: ["renderForm"] }),
+        "src/validators/form-validator.ts": makeFileRecord({ role: null, symbolNames: ["validateForm"] }),
       },
       edges: [
         {
@@ -476,10 +443,10 @@ describe("BM25F import field", () => {
   it("strong path match ranks above a file that matches only via imports", () => {
     // auth.ts: "auth" appears in the path itself (strong signal)
     // consumer.ts: no path/symbol overlap with "auth", but imports from auth.ts
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/auth.ts": makeFileRecord(),
-        "src/consumer.ts": makeFileRecord(),
+        "src/auth.ts": makeFileRecord({ role: null }),
+        "src/consumer.ts": makeFileRecord({ role: null }),
       },
       edges: [{ from: "src/consumer.ts", to: "src/auth.ts", importedNames: ["authenticate"] }],
     });
@@ -492,11 +459,11 @@ describe("BM25F import field", () => {
     // aggregator.ts: no path/symbol overlap with "widget" but imports 5 widget-named modules
     // Without the ceiling, aggregator's import BM25F score could exceed the weak path match.
     // IMPORT_CEILING * minDirect guarantees aggregator stays below widget-wrapper.ts.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/internal/adapters/widget-wrapper.ts": makeFileRecord(),
-        "src/aggregator.ts": makeFileRecord(),
-        "src/unrelated.ts": makeFileRecord(),
+        "src/internal/adapters/widget-wrapper.ts": makeFileRecord({ role: null }),
+        "src/aggregator.ts": makeFileRecord({ role: null }),
+        "src/unrelated.ts": makeFileRecord({ role: null }),
       },
       edges: [
         {
@@ -517,11 +484,11 @@ describe("BM25F import field", () => {
     // Neither file has path/symbol overlap with "ledger".
     // heavy-importer.ts imports 3 ledger-named modules; light-importer.ts imports 1.
     // After ceiling scaling (uniform factor), heavy should still rank above light.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/core/processor.ts": makeFileRecord({ symbolNames: ["ledgerEntry"] }),
-        "src/heavy-importer.ts": makeFileRecord(),
-        "src/light-importer.ts": makeFileRecord(),
+        "src/core/processor.ts": makeFileRecord({ role: null, symbolNames: ["ledgerEntry"] }),
+        "src/heavy-importer.ts": makeFileRecord({ role: null }),
+        "src/light-importer.ts": makeFileRecord({ role: null }),
       },
       edges: [
         {
@@ -550,11 +517,11 @@ describe("BM25F import field", () => {
     // Neither file has path/symbol overlap with "invoice".
     // With no direct matches, pathSymbolScores is empty and the ceiling branch is skipped.
     // Both files should appear and the one with more matching imports ranks first.
-    const graph = makeGraph({
+    const graph = makePersistedGraph({
       files: {
-        "src/dispatcher.ts": makeFileRecord(),
-        "src/notifier.ts": makeFileRecord(),
-        "src/unrelated.ts": makeFileRecord(),
+        "src/dispatcher.ts": makeFileRecord({ role: null }),
+        "src/notifier.ts": makeFileRecord({ role: null }),
+        "src/unrelated.ts": makeFileRecord({ role: null }),
       },
       edges: [
         {

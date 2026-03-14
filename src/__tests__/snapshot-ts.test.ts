@@ -59,31 +59,31 @@ describe("JS/TS snapshot extraction", () => {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/types.ts"] as any);
+    mockGlob.mockResolvedValue(["src/types.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
 
     const entry = result.entries.find((e) => e.signature.includes("interface User"));
-    expect(entry).toBeDefined();
-    expect(entry?.category).toBe("interface");
-    expect(entry?.signature).toContain("id: string");
-    expect(entry?.signature).toContain("email: string");
+    if (!entry) throw new Error("expected interface User entry");
+    expect(entry.category).toBe("interface");
+    expect(entry.signature).toContain("id: string");
+    expect(entry.signature).toContain("email: string");
   });
 
   it("extracts exported type aliases", async () => {
     const content = `export type Result<T> = { ok: true; value: T } | { ok: false; error: Error };
 `;
 
-    mockGlob.mockResolvedValue(["src/types.ts"] as any);
+    mockGlob.mockResolvedValue(["src/types.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
 
     const entry = result.entries.find((e) => e.signature.includes("type Result"));
-    expect(entry).toBeDefined();
-    expect(entry?.category).toBe("type");
-    expect(entry?.signature).toContain("Result<T>");
+    if (!entry) throw new Error("expected type Result entry");
+    expect(entry.category).toBe("type");
+    expect(entry.signature).toContain("Result<T>");
   });
 
   it("extracts exported function signatures (not bodies)", async () => {
@@ -93,19 +93,19 @@ describe("JS/TS snapshot extraction", () => {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/api.ts"] as any);
+    mockGlob.mockResolvedValue(["src/api.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
 
     const entry = result.entries.find((e) => e.signature.includes("fetchUser"));
-    expect(entry).toBeDefined();
-    expect(entry?.category).toBe("function");
-    expect(entry?.signature).toContain("async function fetchUser");
-    expect(entry?.signature).toContain("Promise<User>");
+    if (!entry) throw new Error("expected fetchUser entry");
+    expect(entry.category).toBe("function");
+    expect(entry.signature).toContain("async function fetchUser");
+    expect(entry.signature).toContain("Promise<User>");
     // Should NOT contain the function body
-    expect(entry?.signature).not.toContain("fetch(");
-    expect(entry?.signature).not.toContain("resp.json");
+    expect(entry.signature).not.toContain("fetch(");
+    expect(entry.signature).not.toContain("resp.json");
   });
 
   it("extracts arrow function exports", async () => {
@@ -114,17 +114,17 @@ describe("JS/TS snapshot extraction", () => {
 };
 `;
 
-    mockGlob.mockResolvedValue(["src/utils.ts"] as any);
+    mockGlob.mockResolvedValue(["src/utils.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
 
     const entry = result.entries.find((e) => e.signature.includes("greet"));
-    expect(entry).toBeDefined();
-    expect(entry?.category).toBe("function");
-    expect(entry?.signature).toContain("export const greet");
+    if (!entry) throw new Error("expected greet entry");
+    expect(entry.category).toBe("function");
+    expect(entry.signature).toContain("export const greet");
     // Should NOT contain the function body
-    expect(entry?.signature).not.toContain("hello");
+    expect(entry.signature).not.toContain("hello");
   });
 
   it("skips non-function const exports", async () => {
@@ -134,7 +134,7 @@ export const ITEMS = [1, 2, 3];
 export const NAME = "test";
 `;
 
-    mockGlob.mockResolvedValue(["src/constants.ts"] as any);
+    mockGlob.mockResolvedValue(["src/constants.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
@@ -154,16 +154,16 @@ export const NAME = "test";
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/types.ts"] as any);
+    mockGlob.mockResolvedValue(["src/types.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
 
     const entry = result.entries.find((e) => e.signature.includes("enum Status"));
-    expect(entry).toBeDefined();
-    expect(entry?.category).toBe("type");
-    expect(entry?.signature).toContain("Active");
-    expect(entry?.signature).toContain("Pending");
+    if (!entry) throw new Error("expected enum Status entry");
+    expect(entry.category).toBe("type");
+    expect(entry.signature).toContain("Active");
+    expect(entry.signature).toContain("Pending");
   });
 
   it("extracts export default function", async () => {
@@ -172,17 +172,17 @@ export const NAME = "test";
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/index.ts"] as any);
+    mockGlob.mockResolvedValue(["src/index.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
 
     const entry = result.entries.find((e) => e.signature.includes("main"));
-    expect(entry).toBeDefined();
-    expect(entry?.category).toBe("function");
-    expect(entry?.signature).toContain("export default function main");
+    if (!entry) throw new Error("expected main entry");
+    expect(entry.category).toBe("function");
+    expect(entry.signature).toContain("export default function main");
     // Should NOT contain the body
-    expect(entry?.signature).not.toContain("console.log");
+    expect(entry.signature).not.toContain("console.log");
   });
 
   it("extracts export default class", async () => {
@@ -195,15 +195,15 @@ export const NAME = "test";
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/router.ts"] as any);
+    mockGlob.mockResolvedValue(["src/router.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
 
     const entry = result.entries.find((e) => e.signature.includes("AppRouter"));
-    expect(entry).toBeDefined();
-    expect(entry?.category).toBe("type");
-    expect(entry?.signature).toContain("class AppRouter");
+    if (!entry) throw new Error("expected AppRouter entry");
+    expect(entry.category).toBe("type");
+    expect(entry.signature).toContain("class AppRouter");
   });
 
   it("skips re-exports (export { foo } from './other')", async () => {
@@ -216,7 +216,7 @@ export function localFunc(): void {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/index.ts"] as any);
+    mockGlob.mockResolvedValue(["src/index.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
@@ -239,20 +239,20 @@ export function localFunc(): void {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/utils.ts"] as any);
+    mockGlob.mockResolvedValue(["src/utils.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
 
     const entry = result.entries.find((e) => e.signature.includes("merge"));
-    expect(entry).toBeDefined();
-    expect(entry?.category).toBe("function");
+    if (!entry) throw new Error("expected merge entry");
+    expect(entry.category).toBe("function");
     // The signature should include the full generic parameters
-    expect(entry?.signature).toContain("T extends Record<string, unknown>");
-    expect(entry?.signature).toContain("U extends Record<string, unknown>");
-    expect(entry?.signature).toContain("T & U");
+    expect(entry.signature).toContain("T extends Record<string, unknown>");
+    expect(entry.signature).toContain("U extends Record<string, unknown>");
+    expect(entry.signature).toContain("T & U");
     // Should NOT contain body
-    expect(entry?.signature).not.toContain("...a");
+    expect(entry.signature).not.toContain("...a");
   });
 
   it("handles overloaded function declarations", async () => {
@@ -265,7 +265,7 @@ export function process(input: string | number): string | number {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/utils.ts"] as any);
+    mockGlob.mockResolvedValue(["src/utils.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
@@ -282,14 +282,14 @@ export function process(input: string | number): string | number {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/hooks/useAuth.ts"] as any);
+    mockGlob.mockResolvedValue(["src/hooks/useAuth.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx({ directories: ["src", "src/hooks"] }), []);
 
     const entry = result.entries.find((e) => e.signature.includes("useAuth"));
-    expect(entry).toBeDefined();
-    expect(entry?.category).toBe("hook");
+    if (!entry) throw new Error("expected useAuth entry");
+    expect(entry.category).toBe("hook");
   });
 
   it("categorizes store types correctly", async () => {
@@ -299,14 +299,14 @@ export function process(input: string | number): string | number {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/stores/auth.ts"] as any);
+    mockGlob.mockResolvedValue(["src/stores/auth.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx({ directories: ["src", "src/stores"] }), []);
 
     const entry = result.entries.find((e) => e.signature.includes("AuthSlice"));
-    expect(entry).toBeDefined();
-    expect(entry?.category).toBe("store");
+    if (!entry) throw new Error("expected AuthSlice entry");
+    expect(entry.category).toBe("store");
   });
 
   it("extracts function expression exports", async () => {
@@ -315,16 +315,16 @@ export function process(input: string | number): string | number {
 };
 `;
 
-    mockGlob.mockResolvedValue(["src/handler.ts"] as any);
+    mockGlob.mockResolvedValue(["src/handler.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
 
     const entry = result.entries.find((e) => e.signature.includes("handler"));
-    expect(entry).toBeDefined();
-    expect(entry?.category).toBe("function");
+    if (!entry) throw new Error("expected handler entry");
+    expect(entry.category).toBe("function");
     // Should NOT contain body
-    expect(entry?.signature).not.toContain('Response("ok")');
+    expect(entry.signature).not.toContain('Response("ok")');
   });
 
   it("handles JSX/TSX files", async () => {
@@ -339,14 +339,14 @@ export function Button({ label, onClick }: ButtonProps) {
 `;
 
     // Not in a components dir, so Button should be extracted as a function
-    mockGlob.mockResolvedValue(["src/Button.tsx"] as any);
+    mockGlob.mockResolvedValue(["src/Button.tsx"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx(), []);
 
     const interfaceEntry = result.entries.find((e) => e.signature.includes("interface ButtonProps"));
-    expect(interfaceEntry).toBeDefined();
-    expect(interfaceEntry?.category).toBe("component");
+    if (!interfaceEntry) throw new Error("expected interface ButtonProps entry");
+    expect(interfaceEntry.category).toBe("component");
 
     const funcEntry = result.entries.find((e) => e.signature.includes("function Button"));
     expect(funcEntry).toBeDefined();
@@ -363,15 +363,15 @@ export default function Card({ title, body }: CardProps) {
 }
 `;
 
-    mockGlob.mockResolvedValue(["src/components/Card.tsx"] as any);
+    mockGlob.mockResolvedValue(["src/components/Card.tsx"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     const result = await generateSnapshot(makeTsCtx({ directories: ["src", "src/components"] }), []);
 
     // Non-exported Props interface should be captured in component directories
     const propsEntry = result.entries.find((e) => e.signature.includes("interface CardProps"));
-    expect(propsEntry).toBeDefined();
-    expect(propsEntry?.category).toBe("component");
+    if (!propsEntry) throw new Error("expected interface CardProps entry");
+    expect(propsEntry.category).toBe("component");
   });
 
   it("handles files that cannot be parsed (graceful fallback)", async () => {
@@ -381,7 +381,7 @@ export default function Card({ title, body }: CardProps) {
 @@@
 `;
 
-    mockGlob.mockResolvedValue(["src/broken.ts"] as any);
+    mockGlob.mockResolvedValue(["src/broken.ts"] as string[]);
     mockReadFileOr.mockResolvedValue(content);
 
     // Should not throw; falls back to regex

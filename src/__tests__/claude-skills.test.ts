@@ -3,6 +3,12 @@ import { buildClaudeSkills, renderClaudeSkill } from "../templates/claude-skills
 import { makeContextAnalysis } from "./helpers/factories.js";
 import type { ClaudeSkill } from "../types.js";
 
+function findSkill(skills: ClaudeSkill[], name: string): ClaudeSkill {
+  const skill = skills.find((s) => s.name === name);
+  if (!skill) throw new Error(`Skill "${name}" not found`);
+  return skill;
+}
+
 describe("buildClaudeSkills", () => {
   it("returns exactly 2 skills: check and refresh", () => {
     const skills = buildClaudeSkills();
@@ -18,7 +24,7 @@ describe("buildClaudeSkills", () => {
 
   it("/check skill is auto-invocable with Bash", () => {
     const skills = buildClaudeSkills();
-    const check = skills.find((s) => s.name === "check")!;
+    const check = findSkill(skills, "check");
     expect(check.disableModelInvocation).toBe(false);
     expect(check.allowedTools).toBe("Bash");
     expect(check.body).toContain("--format=json");
@@ -27,7 +33,7 @@ describe("buildClaudeSkills", () => {
 
   it("/refresh skill is user-invoked with Bash", () => {
     const skills = buildClaudeSkills();
-    const refresh = skills.find((s) => s.name === "refresh")!;
+    const refresh = findSkill(skills, "refresh");
     expect(refresh.disableModelInvocation).toBe(true);
     expect(refresh.allowedTools).toBe("Bash");
     expect(refresh.body).toContain("--refresh-snapshot");
@@ -106,15 +112,15 @@ describe("buildClaudeSkills", () => {
     });
 
     const skills = buildClaudeSkills(analysis, true);
-    const coupling = skills.find((s) => s.name === "coupling")!;
+    const coupling = findSkill(skills, "coupling");
     expect(coupling.body).toContain("src/a.ts");
     expect(coupling.body).toContain("Tight Coupling");
 
-    const health = skills.find((s) => s.name === "health")!;
+    const health = findSkill(skills, "health");
     expect(health.body).toContain("src/dead.ts");
     expect(health.body).toContain("Dead Files");
 
-    const tests = skills.find((s) => s.name === "tests")!;
+    const tests = findSkill(skills, "tests");
     expect(tests.body).toContain("src/utils.ts");
   });
 
@@ -130,18 +136,18 @@ describe("buildClaudeSkills", () => {
     });
 
     const skills = buildClaudeSkills(analysis, true);
-    const coupling = skills.find((s) => s.name === "coupling")!;
+    const coupling = findSkill(skills, "coupling");
     expect(coupling.description).toContain("tight coupling");
     expect(coupling.description).toContain("hidden coupling");
     expect(coupling.description).toContain("change coupling");
     expect(coupling.description).toContain("refactoring");
 
-    const health = skills.find((s) => s.name === "health")!;
+    const health = findSkill(skills, "health");
     expect(health.description).toContain("dead files");
     expect(health.description).toContain("circular dependency");
     expect(health.description).toContain("chokepoints");
 
-    const tests = skills.find((s) => s.name === "tests")!;
+    const tests = findSkill(skills, "tests");
     expect(tests.description).toContain("test coverage");
     expect(tests.description).toContain("untested files");
   });
