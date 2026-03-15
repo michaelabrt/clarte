@@ -533,8 +533,8 @@ if (existsSync(graphPath)) {
     }
 
     const allCandidates = resolveTargets(prompt, graph);
-    const targets = allCandidates.slice(0, 10);
-    const runnersUp = allCandidates.slice(10);
+    const targets = allCandidates.slice(0, 5);
+    const runnersUp = allCandidates.slice(5);
     if (targets.length > 0) {
       // Skip when the prompt already names a target file (agent can self-localize).
       // Negation detection: "NOT in src/foo.ts" or "don't edit src/foo.ts" should not trigger bailout.
@@ -667,7 +667,7 @@ const files = diffOutput.trim().split("\\n").filter(Boolean).filter(f => {
 
 if (files.length === 0) process.exit(0);
 
-const fileList = files.slice(0, 10).map(f => "- " + f).join("\\n");
+const fileList = files.slice(0, 5).map(f => "- " + f).join("\\n");
 const content = "# Edit targets (clarte)\\n\\nBased on past fixes to similar issues, these files are most likely to need editing:\\n\\n" + fileList + "\\n\\nMatched commit: " + bestCommit.message + "\\n";
 
 try {

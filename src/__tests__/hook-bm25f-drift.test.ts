@@ -121,9 +121,9 @@ describe("Hook BM25F drift detection", () => {
   });
 
   it("runnersUp split preserves correct boundary", () => {
-    // Top 10 are the primary targets; positions 11+ are the candidate decoys.
-    expect(GENERATE_HOOKS).toContain("allCandidates.slice(0, 10)");
-    expect(GENERATE_HOOKS).toContain("allCandidates.slice(10)");
+    // Top 5 are the primary targets; positions 6-10 are the candidate decoys.
+    expect(GENERATE_HOOKS).toContain("allCandidates.slice(0, 5)");
+    expect(GENERATE_HOOKS).toContain("allCandidates.slice(5)");
   });
 
   it("decoy detection emits Do NOT edit section when basename matches", () => {
