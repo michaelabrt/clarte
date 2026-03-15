@@ -5,7 +5,7 @@ import type {
   CrossCuttingAlert,
   FlowBottleneckAlert,
   TightCouplingAlert,
-} from "../../src/analysis/ci.js";
+} from "../../src/core/analysis/ci.js";
 
 // ── Co-change Table ──────────────────────────────────────────────────
 
@@ -53,7 +53,7 @@ function formatStructuralHotspots(
 
   for (const cp of chokepoints) {
     lines.push(
-      `- :pushpin: \`${cp.file}\` is a chokepoint (${cp.upstreamCount ?? cp.separates} transitive dependents, imported by ${cp.importedBy} files)`,
+      `- :pushpin: \`${cp.file}\` is a chokepoint (${cp.separates} transitive dependents, imported by ${cp.importedBy} files)`,
     );
   }
   for (const fb of flowBottlenecks) {

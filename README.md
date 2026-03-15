@@ -8,17 +8,28 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
-<p align="center"><em>Knows your codebase so the agent doesn't have to guess.</em></p>
+<p align="center"><strong>Edit first, explore never.</strong></p>
 
-Clarté builds a graph from your codebase, mapping how files connect and change together. It predicts where to edit before the agent starts exploring.
-
-In [real-world tests](#case-studies), Clarté completed tasks that agents couldn't finish alone, at 17-71% lower cost.
+Clarté builds a dependency graph from your codebase and predicts which files need editing before the agent starts. In [real-world tests](#case-studies), it completed tasks agents couldn't finish alone, at 17-71% lower cost.
 
 ```bash
-npx clarte
+npx clarte            # set up pre-flight + hooks for your project
+npx clarte observe    # see where your agent wastes time and money
 ```
 
 Zero config. Detects your stack, scans source files, generates everything. Node.js 20+.
+
+## What We Learned
+
+We tested 30+ approaches across 700+ sessions to find what actually changes agent behavior. Over 80% failed.
+
+**What doesn't work:** giving agents more information. We ran 15 content experiments - richer analysis, better formatting, more sections. Zero wins. A [placebo](#placebo) (minimal context with project language and test framework, no structural analysis) performed identically to the full analysis. When we analyzed 170 sessions (7,595 turns), we found agents spend most of their time exploring code they never edit, and 75% of tail waste is test-retry loops where the agent re-runs the same failing command without changing code.
+
+**What works:** telling agents where to edit. First-edit timing was the strongest predictor of session cost in our benchmarks (r=0.70-1.00 across 15 of 19 tasks; 4 tasks excluded due to ceiling effects where all sessions edited within 2 turns). Each turn before the first edit was associated with roughly 1.3 additional total turns. The bottleneck is not knowledge but confidence: agents can find files on their own; they lack a starting point.
+
+So we built a system that gives the agent a starting point. The dependency graph makes the decision; the agent executes.
+
+For the full research story (30+ experiments, ablation studies, statistical methodology), see [docs/research.md](docs/research.md).
 
 ## Case Studies
 
@@ -36,34 +47,42 @@ Real bug fixes in open-source repos. Opaque prompts, Sonnet, `claude -p`:
 
 Clarté completed 5 of 5. Without it, the agent completed 3 of 5 within the same budget. The URL fragment, TypeORM and WebSocket rows are pooled from multiple controlled runs; JSX and form validator include single-run pilots with follow-up ABs. For controlled evidence with statistical testing, see [fixture benchmarks](#fixture-benchmarks).
 
-## What We Learned
-
-We tested 30+ approaches across 700+ sessions to find what actually changes agent behavior. Over 80% failed.
-
-**What doesn't work:** giving agents more information. We ran 15 content experiments - richer analysis, better formatting, more sections. Zero wins. A [placebo](#placebo) (minimal context with project language and test framework, no structural analysis) performed identically to the full analysis. When we analyzed 170 sessions (7,595 turns), we found agents spend most of their time exploring code they never edit, and 75% of tail waste is test-retry loops where the agent re-runs the same failing command without changing code.
-
-**What works:** telling agents where to edit. First-edit timing was the strongest predictor of session cost in our benchmarks (r=0.70-1.00 across 15 of 19 tasks; 4 tasks excluded due to ceiling effects where all sessions edited within 2 turns). Each turn before the first edit was associated with roughly 1.3 additional total turns. The bottleneck is not knowledge but confidence: agents can find files on their own; they lack a starting point.
-
-So we built a system that gives the agent a starting point. The dependency graph makes the decision; the agent executes.
-
-For the full research story (30+ experiments, ablation studies, statistical methodology), see [docs/research.md](docs/research.md).
-
 ## How It Works
 
-`npx clarte` parses your imports with tree-sitter, builds a dependency graph and runs static analysis passes. The results are delivered through three proven mechanisms:
+`npx clarte` parses your imports with tree-sitter, builds a dependency graph and runs static analysis. Three mechanisms work together:
 
-| Mechanism | When | What it does |
+**Steer** - predict edit targets and stop waste loops:
+
+| Component | When | What it does |
 |-----------|------|--------------|
 | [Pre-flight agent](#claude-code-integration) | Per prompt | BM25F retrieval over the dependency graph predicts edit targets. A pre-flight agent reads those targets and returns exact code locations before the main agent writes a single line. |
-| [Context file](#output-targets) | Background | Minimal operational directives: tech stack, config constraints, dev commands, test scripts. Works with any tool that reads context files. |
-| [CI mode](#github-action) | Per PR | Co-change warnings, chokepoint alerts and coupling concerns on pull requests. |
+| [Fail-fast hook](#claude-code-integration) | Per tool call | Blocks repeated test/build loops with no code edit in between. Addresses the #1 agent waste pattern (75% of tail turns in our analysis). |
+| [Context file](#claude-code-integration) | Background | Minimal operational directives: tech stack, config constraints, dev commands, test scripts. |
+| [Scripts](#generated-scripts) | On demand | Framework-aware test runner with structured output, filtered test-by-name runner and a grep wrapper with graph context. |
 
-Supporting infrastructure:
+**Observe** - measure what the agent actually does:
 
-| Component | What it does |
-|-----------|--------------|
-| [Fail-fast hook](#claude-code-integration) | Blocks repeated test/build loops with no code edit in between. Addresses the #1 agent waste pattern (75% of tail turns in our analysis). |
-| [Scripts](#generated-scripts) | Framework-aware test runner with structured output, filtered test-by-name runner and a grep wrapper with graph context. |
+```bash
+$ npx clarte observe --all
+
+19 sessions analyzed
+
+Averages (per session)
+  Turns:        48.2
+  Cost:         $4.04
+  First edit:   turn 16.5
+
+Phase Distribution
+  Explore:  51%
+  Edit:     26%
+  Tail:     23%
+
+Waste
+  Total:    $10.05 of $76.83 (13%)
+  Per session: $0.53
+```
+
+Parses Claude Code session logs, classifies turns into explore/edit/tail phases, detects waste patterns (test reruns, verification re-reads, summary bloat) and computes cost metrics.
 
 ```mermaid
 graph LR
@@ -73,11 +92,13 @@ graph LR
     D --> E[Pre-flight Agent]
     C & E --> F((Agent))
     F -. "edits + commits" .-> A
+    F -. "session logs" .-> G[Observe]
+    G -. "waste patterns" .-> H[You]
 ```
 
-For details on each analysis algorithm (HITS, betweenness centrality, instability scoring, cycle detection, etc.), see [docs/how-it-works.md](docs/how-it-works.md).
-
 ## Fixture Benchmarks
+
+<a id="fixture-benchmarks"></a>
 
 Controlled benchmarks isolating context files alone (no hooks, no pre-flight). Same tasks, same model. Statistical testing with Wilcoxon signed-rank, bootstrap CIs, Benjamini-Hochberg FDR correction and Cliff's delta effect sizes.
 
@@ -129,6 +150,8 @@ For Claude Code, Clarté installs hooks and a pre-flight diagnostic agent on top
 
 Hooks wire into `.claude/settings.json` automatically. The pre-flight agent is stored in `.clarte/agents/` and copied to `.claude/agents/` only when the prompt hook detects an opaque task.
 
+Also generates context files for Cursor, Copilot, Windsurf, Cline, Continue and OpenCode (context file only, no hooks or steering).
+
 ## Generated Scripts
 
 Clarté generates framework-aware shell scripts in `.clarte/scripts/`:
@@ -140,21 +163,6 @@ Clarté generates framework-aware shell scripts in `.clarte/scripts/`:
 | `clarte-grep` | Wraps ripgrep and appends graph context (importers, co-change partners, test file) for each matching file. |
 
 These are referenced in the generated context file with imperative directives ("Always use X instead of Y") so the agent uses them by default.
-
-## Output Targets
-
-Works with any AI coding tool that reads context files. Deep integration with Claude Code (hooks + pre-flight).
-
-| Tool | Generated file |
-|------|---------------|
-| Claude Code | `.claude/rules/clarte.md` + hooks + pre-flight agent |
-| Cursor | `.cursor/rules/clarte.md` + pre-flight agent |
-| OpenCode | `AGENTS.md` |
-| GitHub Copilot | `.github/copilot-instructions.md` |
-| Windsurf | `.windsurfrules` |
-| Cline | `.clinerules` |
-| Continue.dev | `.continuerules` |
-| Generic | `CONTEXT.md` |
 
 ## Supported Languages
 
@@ -203,33 +211,55 @@ jobs:
 
 <a id="options"></a>
 <details>
-<summary><strong>Options</strong></summary>
+<summary><strong>CLI reference</strong></summary>
 
 ```bash
 npx clarte [directory] [options]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `directory` | Path to analyze (defaults to `.`) |
-| `-h, --help` | Show help message |
-| `-V, --version` | Show version number |
-| `--yes` | Overwrite existing files without asking |
-| `--dry-run` | Preview what would be generated |
-| `--refresh-snapshot` | Re-scan source files and update just the code snapshot |
-| `--reconfigure` | Re-prompt even if `.clarte.json` exists |
-| `--check` | Check if the snapshot is stale via hash comparison (exit 0 = fresh, 1 = stale) |
-| `--check=timestamp` | Timestamp-only staleness check, no file hashing (for shell hooks) |
-| `--ci` | Machine-readable output (use with `--check` for CI pipelines) |
-| `--format=json` | Output full analysis as structured JSON to stdout |
-| `--init-hook` | Install git pre-commit hook for auto-refresh on commit |
-| `-v, --verbose` | Show detailed progress output |
-
 **Subcommands:**
 
 | Command | Description |
 |---------|-------------|
-| `ci --base=REF --changed-files=a,b` | Analyze changed files and output architectural findings as JSON |
+| `init` | Set up Clarté for a project (default if no subcommand) |
+| `observe` | Analyze Claude Code session logs for waste patterns |
+| `ci` | Analyze changed files and output architectural findings as JSON |
+
+**Init options:**
+
+| Flag | Description |
+|------|-------------|
+| `--yes` | Overwrite existing files without asking |
+| `--dry-run` | Preview what would be generated |
+| `--reconfigure` | Re-prompt even if `.clarte.json` exists |
+| `--refresh-snapshot` | Re-scan source files and update just the code snapshot |
+| `--format=json` | Output full analysis as structured JSON to stdout |
+| `--init-hook` | Install git pre-commit hook for auto-refresh on commit |
+| `-v, --verbose` | Show detailed progress output |
+
+**Observe options:**
+
+| Flag | Description |
+|------|-------------|
+| `--session=ID` | Analyze a specific session |
+| `--all` | Search all projects, not just current |
+| `--since=7d` | Time window (d/h/m/w) |
+| `--format=json` | Machine-readable JSON output |
+
+**Check options:**
+
+| Flag | Description |
+|------|-------------|
+| `--check` | Exit 0 if snapshot is fresh, 1 if stale (hash-based) |
+| `--check=timestamp` | Timestamp-only staleness check (for shell hooks) |
+| `--ci` | Machine-readable output (use with `--check` for CI pipelines) |
+
+**CI options:**
+
+| Flag | Description |
+|------|-------------|
+| `--base=REF` | Git ref to diff against (default: HEAD) |
+| `--changed-files=a,b` | Explicit list of changed files (comma-separated) |
 
 </details>
 

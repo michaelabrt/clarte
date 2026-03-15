@@ -27,6 +27,11 @@ inputs:
     required: false
     default: '50'
 
+  fail-on-critical:
+    description: 'Exit with non-zero status when critical findings are detected'
+    required: false
+    default: 'false'
+
 outputs:
   has-findings:
     description: 'Whether any architectural findings were detected'
