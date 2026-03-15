@@ -116,16 +116,16 @@ function formatTightCoupling(items: TightCouplingAlert[], collapsible: boolean):
 export function formatComment(result: CIAnalysisResult): string {
   if (!result.hasFindings) {
     return [
-      "## Clarte Architecture Review",
+      "## Clarté Architecture Review",
       "",
       ":white_check_mark: No architectural concerns.",
       "",
       "---",
-      `<sub>Powered by <a href="https://github.com/michaelabrt/clarte">Clarte</a></sub>`,
+      `<sub>Powered by <a href="https://github.com/michaelabrt/clarte">Clarté</a></sub>`,
     ].join("\n");
   }
 
-  const sections: string[] = ["## Clarte Architecture Review"];
+  const sections: string[] = ["## Clarté Architecture Review"];
 
   const coChangeTable = formatCoChangeTable(result.missingCoChanges);
   const hasCoChanges = coChangeTable.length > 0;
@@ -146,7 +146,7 @@ export function formatComment(result: CIAnalysisResult): string {
   sections.push(
     "",
     "---",
-    `<sub>Powered by <a href="https://github.com/michaelabrt/clarte">Clarte</a></sub>`,
+    `<sub>Powered by <a href="https://github.com/michaelabrt/clarte">Clarté</a></sub>`,
   );
 
   return sections.join("\n");
