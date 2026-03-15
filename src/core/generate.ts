@@ -34,7 +34,6 @@ export interface GenerateFilesOptions {
   graph?: ImportGraph;
   persistedGraph?: PersistedGraph | null;
   delivery?: ProjectConfig["delivery"];
-  mcpEnabled?: boolean;
 }
 
 /**
@@ -57,7 +56,6 @@ export async function generateFiles(opts: GenerateFilesOptions): Promise<Generat
     maxChars,
     graph,
     delivery,
-    mcpEnabled,
   } = opts;
   // Deduplicate files by path (e.g. multiple targets that share the same output path)
   const fileMap = new Map<string, GeneratedFile>();
@@ -152,16 +150,8 @@ export async function generateFiles(opts: GenerateFilesOptions): Promise<Generat
       graph,
       ide === "claude" ? excludeDirectives : undefined,
       ide === "claude" ? delivery?.onDemandSkills : undefined,
-      ide === "claude" ? mcpEnabled : undefined,
     );
     await addFile(mainFilename, mainContent);
-
-    if (ide === "cursor") {
-      await addFile(
-        ".cursor/mcp.json",
-        JSON.stringify({ mcpServers: { clarte: { command: "npx", args: ["clarte", "--mcp"] } } }, null, 2) + "\n",
-      );
-    }
 
     // Always write agent to .clarte/agents/ (source of truth).
     // For Cursor, also copy to .cursor/agents/ (no hook mechanism to do it later).

@@ -23,10 +23,6 @@ export function printHelp(): void {
   console.log(`    ${t.accent("-V, --version")}           ${t.text("Show version number")}`);
   console.log(`    ${t.accent("--yes")}                   ${t.text("Overwrite existing files without asking")}`);
   console.log(`    ${t.accent("--dry-run")}               ${t.text("Preview what would be generated")}`);
-  console.log(
-    `    ${t.accent("--diff[=REF] [FILES]")}    ${t.text("Generate focused context for changed files (vs HEAD or REF)")}`,
-  );
-  console.log(`    ${t.accent("--diff-file=PATH")}        ${t.text("Write diff context to file instead of stdout")}`);
   console.log(`    ${t.accent("--reconfigure")}           ${t.text("Re-prompt even if .clarte.json exists")}`);
   console.log(
     `    ${t.accent("--refresh-snapshot")}      ${t.text("Re-scan source files, update code snapshot only")}`,
@@ -58,9 +54,6 @@ export function printHelp(): void {
   console.log(
     `    ${t.accent("--init-hook")}             ${t.text("Install git pre-commit hook for auto-refresh on commit")}`,
   );
-  console.log(
-    `    ${t.accent("--watch")}                 ${t.text("Watch for file changes and re-analyze continuously")}`,
-  );
   console.log(`    ${t.accent("-v, --verbose")}           ${t.text("Show detailed progress output")}`);
   console.log("");
   console.log(`  ${t.textBold("Subcommands:")}`);
@@ -71,15 +64,6 @@ export function printHelp(): void {
   console.log(
     `    ${t.accent("  --changed-files=a,b")}   ${t.text("Explicit list of changed files (comma-separated)")}`,
   );
-  console.log(
-    `    ${t.accent("learn <log.jsonl>")}       ${t.text("Analyze a Claude Code session log against the project graph")}`,
-  );
-  console.log(
-    `    ${t.accent("run <task> [-- flags]")}   ${t.text("Run claude -p with graph-derived edit-target directives")}`,
-  );
-  console.log(
-    `    ${t.accent("serve")}                   ${t.text("Start MCP server (JSON-RPC over stdio) for code graph queries")}`,
-  );
   console.log("");
   console.log(`  ${t.textBold("Examples:")}`);
   console.log(
@@ -87,15 +71,6 @@ export function printHelp(): void {
   );
   console.log(
     `    ${t.muted("$")} ${t.text(`npx ${NAME} ./my-project`)}      ${t.muted("# analyze a specific project")}`,
-  );
-  console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME} --diff`)}             ${t.muted("# focused context for uncommitted changes")}`,
-  );
-  console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME} --diff=main`)}        ${t.muted("# focused context vs main branch")}`,
-  );
-  console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME} --diff src/foo.ts`)}  ${t.muted("# diff context for a specific file")}`,
   );
   console.log(
     `    ${t.muted("$")} ${t.text(`npx ${NAME} ci --base=main`)}     ${t.muted("# CI risk report for PR changes")}`,
@@ -115,10 +90,6 @@ export interface CliArgs {
   dryRun: boolean;
   refresh: boolean;
   reconfigure: boolean;
-  diffMode: boolean;
-  diffRef: string | undefined;
-  diffFilterFiles: string[];
-  diffFile: string | undefined;
   check: boolean;
   checkTimestamp: boolean;
   ciMode: boolean;
@@ -126,20 +97,12 @@ export interface CliArgs {
   ciBase: string | undefined;
   ciChangedFiles: string[];
   verbose: boolean;
-  watchMode: boolean;
   maxTokens: number | undefined;
   jsonMode: boolean;
   effectiveBudget: number | undefined;
   sectionFilter: SectionFilterOptions | undefined;
   maxChars: number | undefined;
   initHook: boolean;
-  learnSubcommand: boolean;
-  learnSessionPath: string | undefined;
-  runSubcommand: boolean;
-  runTaskDescription: string | undefined;
-  runPassthroughArgs: string[];
-  serveSubcommand: boolean;
-  mcpMode: boolean;
 }
 
 export function parseCliArgs(rawArgs: string[]): CliArgs {
@@ -147,18 +110,6 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const dryRun = rawArgs.includes("--dry-run");
   const refresh = rawArgs.includes("--refresh-snapshot");
   const reconfigure = rawArgs.includes("--reconfigure");
-  const diffArg = rawArgs.find((a) => a === "--diff" || a.startsWith("--diff="));
-  const diffMode = !!diffArg;
-  const diffRef = diffArg?.startsWith("--diff=") ? diffArg.split("=")[1] : undefined;
-  const diffFilterFiles: string[] = [];
-  if (diffMode) {
-    const diffIdx = rawArgs.indexOf(diffArg as string);
-    for (let i = diffIdx + 1; i < rawArgs.length; i++) {
-      const a = rawArgs[i];
-      if (a.startsWith("-")) break;
-      diffFilterFiles.push(a);
-    }
-  }
   const checkArg = rawArgs.find((a) => a === "--check" || a.startsWith("--check="));
   const check = !!checkArg;
   const checkTimestamp = checkArg === "--check=timestamp";
@@ -171,7 +122,6 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     ? ciChangedFilesArg.split("=").slice(1).join("=").split(",").filter(Boolean)
     : [];
   const verbose = rawArgs.includes("--verbose") || rawArgs.includes("-v");
-  const watchMode = rawArgs.includes("--watch");
   const maxTokensArg = rawArgs.find((a) => a.startsWith("--max-tokens="));
   const maxTokensRaw = maxTokensArg ? parseInt(maxTokensArg.split("=").slice(1).join("="), 10) : undefined;
   if (maxTokensRaw !== undefined && Number.isNaN(maxTokensRaw)) {
@@ -202,43 +152,12 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     throw new ClarteError(`Invalid --max-chars value: ${maxCharsArg?.split("=").slice(1).join("=")}`);
   }
   const initHook = rawArgs.includes("--init-hook");
-  const learnSubcommand = rawArgs[0] === "learn";
-  const learnSessionPath = learnSubcommand ? rawArgs.slice(1).find((a) => !a.startsWith("-")) : undefined;
-  const runSubcommand = rawArgs[0] === "run";
-  let runTaskDescription: string | undefined;
-  let runPassthroughArgs: string[] = [];
-  if (runSubcommand) {
-    const rest = rawArgs.slice(1);
-    const separatorIdx = rest.indexOf("--");
-    const beforeSeparator = separatorIdx >= 0 ? rest.slice(0, separatorIdx) : rest;
-    runPassthroughArgs = separatorIdx >= 0 ? rest.slice(separatorIdx + 1) : [];
-    runTaskDescription = beforeSeparator.find((a) => !a.startsWith("-"));
-  }
-  const serveSubcommand = rawArgs[0] === "serve";
-  const mcpMode = rawArgs.includes("--mcp");
-  const diffFileArg = rawArgs.find((a) => a.startsWith("--diff-file="));
-  const diffFile = diffFileArg?.split("=").slice(1).join("=");
-  const diffFilterSet = new Set(diffFilterFiles);
-  const subcommands = new Set(["ci", "learn", "run", "serve"]);
+  const subcommands = new Set(["ci"]);
   const targetDir =
-    rawArgs.find((a) => !a.startsWith("-") && !diffFilterSet.has(a) && !subcommands.has(a) && a !== learnSessionPath) ??
+    rawArgs.find((a) => !a.startsWith("-") && !subcommands.has(a)) ??
     process.cwd();
   const rootDir = path.resolve(targetDir);
 
-  if (diffFile && !diffMode) {
-    console.error("[clarte] --diff-file requires --diff mode; ignoring.");
-  }
-
-  // Validate conflicting flag combinations
-  if (diffMode && watchMode) {
-    throw new ClarteError("--diff and --watch cannot be used together.", ExitCode.FAILURE);
-  }
-  if (diffMode && check) {
-    throw new ClarteError("--diff and --check cannot be used together.", ExitCode.FAILURE);
-  }
-  if (watchMode && check) {
-    throw new ClarteError("--watch and --check cannot be used together.", ExitCode.FAILURE);
-  }
   if (dryRun && check) {
     throw new ClarteError("--dry-run and --check cannot be used together.", ExitCode.FAILURE);
   }
@@ -249,23 +168,18 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     "--dry-run",
     "--refresh-snapshot",
     "--reconfigure",
-    "--diff",
     "--check",
     "--ci",
     "--verbose",
     "-v",
-    "--watch",
     "--full",
     "--init-hook",
-    "--mcp",
     "--help",
     "-h",
     "--version",
     "-V",
   ]);
   const knownPrefixes = [
-    "--diff=",
-    "--diff-file=",
     "--check=",
     "--max-tokens=",
     "--format=",
@@ -289,10 +203,6 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     dryRun,
     refresh,
     reconfigure,
-    diffMode,
-    diffRef,
-    diffFilterFiles,
-    diffFile,
     check,
     checkTimestamp,
     ciMode,
@@ -300,20 +210,12 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     ciBase,
     ciChangedFiles,
     verbose,
-    watchMode,
     maxTokens,
     jsonMode,
     effectiveBudget,
     sectionFilter,
     maxChars: maxCharsRaw,
     initHook,
-    learnSubcommand,
-    learnSessionPath,
-    runSubcommand,
-    runTaskDescription,
-    runPassthroughArgs,
-    serveSubcommand,
-    mcpMode,
   };
 }
 

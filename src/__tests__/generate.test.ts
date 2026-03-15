@@ -133,7 +133,7 @@ describe("generateFiles", () => {
     expect(claudeFile.content).toContain("Main Context");
   });
 
-  it("produces MCP config and pre-flight agent for cursor target", async () => {
+  it("produces pre-flight agent for cursor target", async () => {
     const files = await generateFiles({
       ctx: makeCtx(),
       answers: makeAnswers({ ides: ["cursor"] }),
@@ -145,12 +145,6 @@ describe("generateFiles", () => {
     const mainFile = files.find((f) => f.path === ".cursor/rules/clarte.md");
     if (!mainFile) throw new Error("expected .cursor/rules/clarte.md");
     expect(mainFile.content).not.toContain("alwaysApply: true");
-
-    const mcpFile = files.find((f) => f.path === ".cursor/mcp.json");
-    if (!mcpFile) throw new Error("expected .cursor/mcp.json");
-    const mcpConfig = JSON.parse(mcpFile.content);
-    expect(mcpConfig.mcpServers.clarte.command).toBe("npx");
-    expect(mcpConfig.mcpServers.clarte.args).toContain("--mcp");
 
     const agentFile = files.find((f) => f.path === ".cursor/agents/clarte-pre-flight.md");
     if (!agentFile) throw new Error("expected .cursor/agents/clarte-pre-flight.md");
