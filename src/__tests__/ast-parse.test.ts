@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { initTreeSitter } from "../parsers/init.js";
-import { parseImportsAst } from "../parsers/parse-imports.js";
-import { extractSnapshotAst } from "../parsers/extract-snapshot.js";
-import { detectBarrelAst, resolveBarrelExportsAst } from "../parsers/barrel.js";
+import { initTreeSitter } from "../core/parsers/init.js";
+import { parseImportsAst } from "../core/parsers/parse-imports.js";
+import { extractSnapshotAst } from "../core/parsers/extract-snapshot.js";
+import { detectBarrelAst, resolveBarrelExportsAst } from "../core/parsers/barrel.js";
 
 beforeAll(async () => {
   await initTreeSitter();
@@ -32,9 +32,9 @@ describe("parseImportsAst - JS/TS", () => {
   });
 
   it("parses namespace imports", () => {
-    const result = parseImportsAst(`import * as utils from '../utils';`, "typescript");
+    const result = parseImportsAst(`import * as utils from '../core/utils.js';`, "typescript");
     expect(result).toHaveLength(1);
-    expect(result[0].specifier).toBe("../utils");
+    expect(result[0].specifier).toBe("../core/utils.js");
     expect(result[0].importedNames).toEqual([]);
   });
 

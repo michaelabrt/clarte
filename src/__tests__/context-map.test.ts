@@ -2,9 +2,9 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, afterEach } from "vitest";
-import { buildContextMap } from "../hooks/context-map.js";
-import { generateHookFiles, configureClaudeHooks } from "../hooks/generate-hooks.js";
-import { PRE_FLIGHT_AGENT_CONTENT, buildPreFlightAgent } from "../templates/pre-flight-agent.js";
+import { buildContextMap } from "../steer/hooks/context-map.js";
+import { generateHookFiles, configureClaudeHooks } from "../steer/hooks/generate-hooks.js";
+import { PRE_FLIGHT_AGENT_CONTENT, buildPreFlightAgent } from "../steer/context/pre-flight-agent.js";
 import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
 
 async function makeTmpDir(): Promise<string> {
@@ -641,7 +641,7 @@ describe("pre-flight agent consolidation", () => {
   });
 
   it("generatePreFlightAgentFile writes PRE_FLIGHT_AGENT_CONTENT to disk", async () => {
-    const { generatePreFlightAgentFile } = await import("../hooks/generate-hooks.js");
+    const { generatePreFlightAgentFile } = await import("../steer/hooks/generate-hooks.js");
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-agent-"));
     try {
       await generatePreFlightAgentFile(tmp);

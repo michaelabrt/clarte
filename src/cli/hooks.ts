@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { ClarteError, ExitCode } from "../errors.js";
-import { fileExists, readFileOr, writeFileSafe } from "../utils.js";
+import { ClarteError, ExitCode } from "../core/errors.js";
+import { fileExists, readFileOr, writeFileSafe } from "../core/utils.js";
 
 const PRE_COMMIT_CONTENT = `#!/bin/sh
 npx clarte --check || {

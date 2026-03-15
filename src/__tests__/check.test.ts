@@ -2,8 +2,8 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { extractFilePaths, validateContextPaths } from "../analysis/check.js";
-import type { ProjectConfig } from "../types.js";
+import { extractFilePaths, validateContextPaths } from "../core/analysis/check.js";
+import type { ProjectConfig } from "../core/types.js";
 
 describe("extractFilePaths", () => {
   it("extracts backtick-quoted file paths with slashes and valid extensions", () => {

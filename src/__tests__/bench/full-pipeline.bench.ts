@@ -10,10 +10,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { bench, describe, vi, afterAll } from "vitest";
 import { generateGraph } from "./graph-generator.js";
-import { CLARTE_DIR } from "../../config/config.js";
+import { CLARTE_DIR } from "../../core/config/config.js";
 
 // Mock git analysis (no real git repo in fixture)
-vi.mock("../../git/analysis.js", () => ({
+vi.mock("../../core/git/analysis.js", () => ({
   analyzeGitActivity: vi.fn().mockResolvedValue({
     hotFiles: [
       { path: "src/components/File0.ts", commits: 15, lastChanged: "1d ago" },
@@ -27,7 +27,7 @@ vi.mock("../../git/analysis.js", () => ({
 }));
 
 // Mock git filter (needs fileExists which hits disk)
-vi.mock("../../git/filter-alive.js", () => ({
+vi.mock("../../core/git/filter-alive.js", () => ({
   filterAliveGitActivity: vi.fn().mockResolvedValue(undefined),
 }));
 

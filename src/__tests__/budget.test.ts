@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { applyBudget, applyCharBudget } from "../templates/budget.js";
-import { trimSnapshotToChars, renderSnapshot } from "../snapshot/snapshot.js";
-import type { CodeSnapshot, ContextSection, SnapshotEntry } from "../types.js";
+import { applyBudget, applyCharBudget } from "../steer/context/budget.js";
+import { trimSnapshotToChars, renderSnapshot } from "../core/snapshot/snapshot.js";
+import type { CodeSnapshot, ContextSection, SnapshotEntry } from "../core/types.js";
 
 describe("applyBudget", () => {
   const makeSections = (specs: Array<[string, number, number]>): ContextSection[] =>

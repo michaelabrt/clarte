@@ -1,4 +1,4 @@
-import type { DetectedContext } from "../types.js";
+import type { DetectedContext } from "../../core/types.js";
 
 /**
  * Get framework-specific conventions based on detected context.

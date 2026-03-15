@@ -5,16 +5,16 @@ vi.mock("node:child_process", () => ({
   execFileSync: vi.fn(),
 }));
 
-vi.mock("../detect/detect.js", () => ({
+vi.mock("../core/detect/detect.js", () => ({
   detectContext: vi.fn(),
   enrichFrameworksWithUsage: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock("../graph/cache.js", () => ({
+vi.mock("../core/graph/cache.js", () => ({
   buildGraphWithCache: vi.fn(),
 }));
 
-vi.mock("../graph/build.js", () => ({
+vi.mock("../core/graph/build.js", () => ({
   buildImportGraph: vi.fn(),
   mergeGraph: vi.fn(),
 }));
@@ -23,21 +23,21 @@ vi.mock("../core/run-analysis.js", () => ({
   runAnalysis: vi.fn(),
 }));
 
-vi.mock("../config/config.js", () => ({
+vi.mock("../core/config/config.js", () => ({
   loadConfig: vi.fn(),
 }));
 
-vi.mock("../analysis/ci.js", () => ({
+vi.mock("../core/analysis/ci.js", () => ({
   analyzeForCI: vi.fn(),
 }));
 
 const { execFileSync } = await import("node:child_process");
-const { detectContext, enrichFrameworksWithUsage } = await import("../detect/detect.js");
-const { buildGraphWithCache } = await import("../graph/cache.js");
-const { buildImportGraph, mergeGraph } = await import("../graph/build.js");
+const { detectContext, enrichFrameworksWithUsage } = await import("../core/detect/detect.js");
+const { buildGraphWithCache } = await import("../core/graph/cache.js");
+const { buildImportGraph, mergeGraph } = await import("../core/graph/build.js");
 const { runAnalysis } = await import("../core/run-analysis.js");
-const { loadConfig } = await import("../config/config.js");
-const { analyzeForCI } = await import("../analysis/ci.js");
+const { loadConfig } = await import("../core/config/config.js");
+const { analyzeForCI } = await import("../core/analysis/ci.js");
 const { runCiMode } = await import("../cli/ci.js");
 
 const mockExecFileSync = vi.mocked(execFileSync);

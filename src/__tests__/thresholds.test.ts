@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { computeGraphTopology } from "../graph/topology.js";
+import { computeGraphTopology } from "../core/graph/topology.js";
 import {
   FRAGMENT_MIN_SIZE,
   HITS,
@@ -23,7 +23,7 @@ import {
   LAYER_CONSISTENCY,
   SNAPSHOT_LANGUAGES,
   GRAPH_DATA,
-} from "../config/thresholds.js";
+} from "../core/config/thresholds.js";
 import { makeGraph, edge } from "./algorithm/helpers.js";
 
 /**

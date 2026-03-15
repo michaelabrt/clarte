@@ -4,8 +4,8 @@ import {
   PYTHON_FRAMEWORK_MAP,
   enrichFrameworksWithUsage,
   extractMavenVersion,
-} from "../detect/frameworks.js";
-import type { DetectedFramework } from "../types.js";
+} from "../core/detect/frameworks.js";
+import type { DetectedFramework } from "../core/types.js";
 
 describe("FRAMEWORK_MAP", () => {
   it("is a non-empty record of dependency -> framework name", () => {

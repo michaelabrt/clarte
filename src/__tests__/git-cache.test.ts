@@ -11,13 +11,13 @@ import {
   GIT_CACHE_VERSION,
   type GitCacheData,
 } from "../core/git-cache.js";
-import type { GitAnalysis, LagCoupling } from "../types.js";
+import type { GitAnalysis, LagCoupling } from "../core/types.js";
 
 // ── Mock git/git.js ───────────────────────────────────────────────────────
 
 const mockGitExecSafe = vi.fn<(args: string[], opts: { cwd: string }) => string | null>();
 
-vi.mock("../git/git.js", () => ({
+vi.mock("../core/git/git.js", () => ({
   gitExecSafe: (...args: unknown[]) => mockGitExecSafe(...(args as [string[], { cwd: string }])),
 }));
 

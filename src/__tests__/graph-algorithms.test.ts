@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { findSCCs, findCircularDeps, findFeedbackEdges } from "../graph/cycles.js";
-import { getHubFiles } from "../graph/hub-files.js";
-import { computeHITS, deriveRole, computeBetweenness } from "../graph/centrality.js";
-import { detectCommunities } from "../graph/communities.js";
-import { findStructuralTemporalMismatches } from "../graph/mismatches.js";
-import { findTightCouplings } from "../graph/tight-coupling.js";
-import { checkArchitecturalFitness } from "../graph/fitness.js";
-import type { ArchitecturalLayer, CircularDependency, ImportEdge, LayerEdge } from "../types.js";
+import { findSCCs, findCircularDeps, findFeedbackEdges } from "../core/graph/cycles.js";
+import { getHubFiles } from "../core/graph/hub-files.js";
+import { computeHITS, deriveRole, computeBetweenness } from "../core/graph/centrality.js";
+import { detectCommunities } from "../core/graph/communities.js";
+import { findStructuralTemporalMismatches } from "../core/graph/mismatches.js";
+import { findTightCouplings } from "../core/graph/tight-coupling.js";
+import { checkArchitecturalFitness } from "../core/graph/fitness.js";
+import type { ArchitecturalLayer, CircularDependency, ImportEdge, LayerEdge } from "../core/types.js";
 import { makeGraph, edge } from "./algorithm/helpers.js";
 
 function dynamicEdge(from: string, to: string, names: string[] = []): ImportEdge {

@@ -8,13 +8,13 @@ vi.mock("@clack/prompts", async () => {
   return createClackMock().mock;
 });
 
-vi.mock("../theme.js", async () => {
+vi.mock("../core/theme.js", async () => {
   const { THEME_MOCK } = await import("./helpers/mocks.js");
   return { theme: THEME_MOCK };
 });
 
 const mockFileExists = vi.fn().mockResolvedValue(true);
-vi.mock("../utils.js", () => ({
+vi.mock("../core/utils.js", () => ({
   fileExists: (...args: unknown[]) => mockFileExists(...args),
 }));
 
@@ -23,7 +23,7 @@ const mockComputeAnalysisCacheKey = vi.fn().mockReturnValue("cache-key-123");
 const mockLoadAnalysisCache = vi.fn().mockResolvedValue(null);
 const mockSaveAnalysisCache = vi.fn().mockResolvedValue(undefined);
 
-vi.mock("../graph/cache.js", () => ({
+vi.mock("../core/graph/cache.js", () => ({
   computeAnalysisCacheKey: (...args: unknown[]) => mockComputeAnalysisCacheKey(...args),
   loadAnalysisCache: (...args: unknown[]) => mockLoadAnalysisCache(...args),
   saveAnalysisCache: (...args: unknown[]) => mockSaveAnalysisCache(...args),
@@ -107,62 +107,62 @@ const mockComputeDelta = vi.fn().mockReturnValue({});
 const mockIsDeltaEmpty = vi.fn().mockReturnValue(true);
 const mockRenderDeltaSection = vi.fn().mockReturnValue(null);
 
-vi.mock("../graph/cycles.js", () => ({
+vi.mock("../core/graph/cycles.js", () => ({
   findCircularDeps: (...args: unknown[]) => mockFindCircularDeps(...args),
 }));
-vi.mock("../graph/hub-files.js", () => ({
+vi.mock("../core/graph/hub-files.js", () => ({
   getHubFiles: (...args: unknown[]) => mockGetHubFiles(...args),
 }));
-vi.mock("../graph/layers.js", () => ({
+vi.mock("../core/graph/layers.js", () => ({
   detectArchitecturalLayers: (...args: unknown[]) => mockDetectArchitecturalLayers(...args),
   computeLayerConsistency: (...args: unknown[]) => mockComputeLayerConsistency(...args),
 }));
-vi.mock("../graph/instability.js", () => ({
+vi.mock("../core/graph/instability.js", () => ({
   computeInstability: (...args: unknown[]) => mockComputeInstability(...args),
   INSTABILITY_THRESHOLD: 0.8,
 }));
-vi.mock("../graph/communities.js", () => ({
+vi.mock("../core/graph/communities.js", () => ({
   detectCommunities: (...args: unknown[]) => mockDetectCommunities(...args),
 }));
-vi.mock("../graph/dead-files.js", () => ({
+vi.mock("../core/graph/dead-files.js", () => ({
   findDeadFiles: (...args: unknown[]) => mockFindDeadFiles(...args),
   readPackageEntryPoints: () => [],
 }));
-vi.mock("../graph/cross-cutting.js", () => ({
+vi.mock("../core/graph/cross-cutting.js", () => ({
   findCrossCuttingFiles: (...args: unknown[]) => mockFindCrossCuttingFiles(...args),
 }));
-vi.mock("../graph/chokepoints.js", () => ({
+vi.mock("../core/graph/chokepoints.js", () => ({
   findChokepoints: (...args: unknown[]) => mockFindChokepoints(...args),
 }));
-vi.mock("../graph/topology.js", () => ({
+vi.mock("../core/graph/topology.js", () => ({
   computeGraphTopology: (...args: unknown[]) => mockComputeGraphTopology(...args),
 }));
-vi.mock("../graph/mismatches.js", () => ({
+vi.mock("../core/graph/mismatches.js", () => ({
   findStructuralTemporalMismatches: (...args: unknown[]) => mockFindStructuralTemporalMismatches(...args),
 }));
-vi.mock("../graph/tight-coupling.js", () => ({
+vi.mock("../core/graph/tight-coupling.js", () => ({
   findTightCouplings: (...args: unknown[]) => mockFindTightCouplings(...args),
 }));
-vi.mock("../git/analysis.js", () => ({
+vi.mock("../core/git/analysis.js", () => ({
   analyzeGitActivity: (...args: unknown[]) => mockAnalyzeGitActivity(...args),
 }));
-vi.mock("../analysis/monorepo.js", () => ({
+vi.mock("../core/analysis/monorepo.js", () => ({
   analyzeMonorepoGraph: (...args: unknown[]) => mockAnalyzeMonorepoGraph(...args),
   computePackageCentrality: (...args: unknown[]) => mockComputePackageCentrality(...args),
 }));
-vi.mock("../config/scan.js", () => ({
+vi.mock("../core/config/scan.js", () => ({
   scanConfigConstraints: (...args: unknown[]) => mockScanConfigConstraints(...args),
 }));
-vi.mock("../conventions/conventions.js", () => ({
+vi.mock("../core/conventions/conventions.js", () => ({
   inferConventions: (...args: unknown[]) => mockInferConventions(...args),
 }));
-vi.mock("../analysis/test-map.js", () => ({
+vi.mock("../core/analysis/test-map.js", () => ({
   buildTestMapping: (...args: unknown[]) => mockBuildTestMapping(...args),
 }));
-vi.mock("../analysis/change-impact.js", () => ({
+vi.mock("../core/analysis/change-impact.js", () => ({
   predictChangeImpact: (...args: unknown[]) => mockPredictChangeImpact(...args),
 }));
-vi.mock("../analysis/delta.js", () => ({
+vi.mock("../core/analysis/delta.js", () => ({
   extractSnapshot: (...args: unknown[]) => mockExtractSnapshot(...args),
   loadPreviousSnapshot: (...args: unknown[]) => mockLoadPreviousSnapshot(...args),
   saveSnapshot: (...args: unknown[]) => mockSaveSnapshot(...args),
@@ -174,7 +174,7 @@ vi.mock("../analysis/delta.js", () => ({
 // ── Import under test (after mocks) ────────────────────────────────
 
 import { runAnalysis } from "../core/run-analysis.js";
-import type { ImportGraph } from "../types.js";
+import type { ImportGraph } from "../core/types.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

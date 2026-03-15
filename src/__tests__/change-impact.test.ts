@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { predictChangeImpact } from "../analysis/change-impact.js";
-import type { GitAnalysis } from "../types.js";
+import { predictChangeImpact } from "../core/analysis/change-impact.js";
+import type { GitAnalysis } from "../core/types.js";
 import { makeImportGraph } from "./helpers/factories.js";
 
 function makeGraph(edges: Array<{ from: string; to: string }>) {

@@ -1,30 +1,30 @@
-import { errorMessage } from "../utils.js";
-import { filterAliveGitActivity } from "../git/filter-alive.js";
+import { errorMessage } from "./utils.js";
+import { filterAliveGitActivity } from "./git/filter-alive.js";
 import {
   computeAnalysisCacheKey,
   loadAnalysisCache,
   saveAnalysisCache,
   ANALYSIS_CACHE_VERSION,
   type AnalysisCacheData,
-} from "../graph/cache.js";
-import { findCircularDeps } from "../graph/cycles.js";
-import { getHubFiles } from "../graph/hub-files.js";
-import { detectArchitecturalLayers, computeLayerConsistency } from "../graph/layers.js";
-import { computeInstability } from "../graph/instability.js";
-import { detectCommunities } from "../graph/communities.js";
-import { findDeadFiles, readPackageEntryPoints } from "../graph/dead-files.js";
-import { findCrossCuttingFiles } from "../graph/cross-cutting.js";
-import { findChokepoints } from "../graph/chokepoints.js";
-import { computeGraphTopology } from "../graph/topology.js";
-import { findStructuralTemporalMismatches } from "../graph/mismatches.js";
-import { findTightCouplings } from "../graph/tight-coupling.js";
-import { checkArchitecturalFitness } from "../graph/fitness.js";
-import { analyzeGitActivity } from "../git/analysis.js";
-import { analyzeMonorepoGraph, computePackageCentrality } from "../analysis/monorepo.js";
-import { scanConfigConstraints } from "../config/scan.js";
-import { inferConventions } from "../conventions/conventions.js";
-import { buildTestMapping } from "../analysis/test-map.js";
-import { predictChangeImpact } from "../analysis/change-impact.js";
+} from "./graph/cache.js";
+import { findCircularDeps } from "./graph/cycles.js";
+import { getHubFiles } from "./graph/hub-files.js";
+import { detectArchitecturalLayers, computeLayerConsistency } from "./graph/layers.js";
+import { computeInstability } from "./graph/instability.js";
+import { detectCommunities } from "./graph/communities.js";
+import { findDeadFiles, readPackageEntryPoints } from "./graph/dead-files.js";
+import { findCrossCuttingFiles } from "./graph/cross-cutting.js";
+import { findChokepoints } from "./graph/chokepoints.js";
+import { computeGraphTopology } from "./graph/topology.js";
+import { findStructuralTemporalMismatches } from "./graph/mismatches.js";
+import { findTightCouplings } from "./graph/tight-coupling.js";
+import { checkArchitecturalFitness } from "./graph/fitness.js";
+import { analyzeGitActivity } from "./git/analysis.js";
+import { analyzeMonorepoGraph, computePackageCentrality } from "./analysis/monorepo.js";
+import { scanConfigConstraints } from "./config/scan.js";
+import { inferConventions } from "./conventions/conventions.js";
+import { buildTestMapping } from "./analysis/test-map.js";
+import { predictChangeImpact } from "./analysis/change-impact.js";
 import {
   extractSnapshot,
   loadPreviousSnapshot,
@@ -32,7 +32,7 @@ import {
   computeDelta,
   isDeltaEmpty,
   renderDeltaSection,
-} from "../analysis/delta.js";
+} from "./analysis/delta.js";
 import {
   computeProjectCacheKey,
   loadProjectCache,
@@ -60,8 +60,8 @@ import type {
   ProgressCallback,
   ProjectConfig,
   TestMapping,
-} from "../types.js";
-import type { GraphPhaseResult, LogCtx, PhaseTiming, ProjectPhaseResult } from "../types/internal.js";
+} from "./types.js";
+import type { GraphPhaseResult, LogCtx, PhaseTiming, ProjectPhaseResult } from "./types/internal.js";
 import {
   logHubFiles,
   logCircularDeps,

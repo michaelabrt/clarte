@@ -5,7 +5,7 @@ import type {
   DetectedContext,
   IDETarget,
   UserAnswers,
-} from "../types.js";
+} from "../../core/types.js";
 import { getProjectName, resetProjectNameCache, renderProjectInfoSections } from "./sections/project-info.js";
 
 // Re-export for external consumers

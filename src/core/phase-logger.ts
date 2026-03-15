@@ -4,8 +4,8 @@
  * These are separated from computation to keep the phase functions pure.
  */
 import * as p from "@clack/prompts";
-import { theme as t } from "../theme.js";
-import { INSTABILITY_THRESHOLD } from "../config/thresholds.js";
+import { theme as t } from "./theme.js";
+import { INSTABILITY_THRESHOLD } from "./config/thresholds.js";
 import type {
   ArchitecturalLayer,
   Chokepoint,
@@ -21,8 +21,8 @@ import type {
   MonorepoAnalysis,
   ConfigConstraints,
   TestMapping,
-} from "../types.js";
-import type { LogCtx } from "../types/internal.js";
+} from "./types.js";
+import type { LogCtx } from "./types/internal.js";
 
 export function logHubFiles(hubFiles: HubFile[], log: LogCtx): void {
   if (log.jsonMode) return;

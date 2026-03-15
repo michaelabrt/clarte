@@ -12,7 +12,7 @@ import {
   type ProjectCacheData,
 } from "../core/project-cache.js";
 import { makeImportGraph, makeDetectedContext } from "./helpers/factories.js";
-import type { MonorepoAnalysis, TestMapping } from "../types.js";
+import type { MonorepoAnalysis, TestMapping } from "../core/types.js";
 
 let tmpDir: string;
 

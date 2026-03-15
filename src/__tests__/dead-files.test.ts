@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findDeadFiles } from "../graph/dead-files.js";
+import { findDeadFiles } from "../core/graph/dead-files.js";
 import { makeImportGraph } from "./helpers/factories.js";
 
 function makeGraph(files: string[], edges: Array<{ from: string; to: string }> = []) {

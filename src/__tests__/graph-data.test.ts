@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizePath, buildReverseAdjacency, findTransitiveTests, getFileGraphData } from "../graph/data.js";
+import { normalizePath, buildReverseAdjacency, findTransitiveTests, getFileGraphData } from "../core/graph/data.js";
 import { makePersistedGraph, makeFileRecord, makeEdgeRecord } from "./helpers/factories.js";
 
 // ── normalizePath ────────────────────────────────────────────────────

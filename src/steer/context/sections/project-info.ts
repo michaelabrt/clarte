@@ -1,8 +1,8 @@
 import path from "node:path";
-import type { ContextAnalysis, ContextSection, DetectedContext, UserAnswers } from "../../types.js";
-import { summarizeDetection } from "../../detect/detect.js";
-import { renderConstraintsSection } from "../../config/scan.js";
-import { estimateTokens, readJsonFile, readFileOr } from "../../utils.js";
+import type { ContextAnalysis, ContextSection, DetectedContext, UserAnswers } from "../../../core/types.js";
+import { summarizeDetection } from "../../../core/detect/detect.js";
+import { renderConstraintsSection } from "../../../core/config/scan.js";
+import { estimateTokens, readJsonFile, readFileOr } from "../../../core/utils.js";
 
 // Cache for getProjectName to avoid redundant filesystem reads within a single
 // generation. Ideally the project name would be threaded through

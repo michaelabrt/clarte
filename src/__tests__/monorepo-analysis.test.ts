@@ -2,8 +2,8 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { analyzeMonorepoGraph, annotateCrossPackageEdges, computePackageCentrality } from "../analysis/monorepo.js";
-import type { ImportEdge, MonorepoInfo } from "../types.js";
+import { analyzeMonorepoGraph, annotateCrossPackageEdges, computePackageCentrality } from "../core/analysis/monorepo.js";
+import type { ImportEdge, MonorepoInfo } from "../core/types.js";
 import { makeImportGraph } from "./helpers/factories.js";
 
 function makeGraph(edges: ImportEdge[]) {

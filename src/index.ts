@@ -1,6 +1,6 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
-import { ClarteError, ExitCode } from "./errors.js";
+import { ClarteError, ExitCode } from "./core/errors.js";
 import {
   theme as t,
   initTheme,
@@ -8,15 +8,15 @@ import {
   unpatchPicocolors,
   resetTerminalColors,
   detectTerminalBackground,
-} from "./theme.js";
-import { errorMessage, fileExists, writeJsonStdout } from "./utils.js";
-import { loadConfig } from "./config/config.js";
-import { refreshSnapshot } from "./modes/refresh.js";
+} from "./core/theme.js";
+import { errorMessage, fileExists, writeJsonStdout } from "./core/utils.js";
+import { loadConfig } from "./core/config/config.js";
+import { refreshSnapshot } from "./cli/refresh.js";
 import { initPreCommitHook } from "./cli/hooks.js";
 import { handleEarlyExits, parseCliArgs } from "./cli/args.js";
 import { runCheckMode } from "./cli/check.js";
 import { runCiMode } from "./cli/ci.js";
-import { runGenerateMode } from "./modes/generate.js";
+import { runGenerateMode } from "./cli/generate.js";
 
 const PROJECT_MARKERS = [
   "package.json",
