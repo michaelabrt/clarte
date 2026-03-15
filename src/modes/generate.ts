@@ -278,7 +278,6 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       generateSkills,
       onVerbose: verbose ? verboseLog : undefined,
       persistedGraph,
-      delivery: savedConfig?.delivery,
     });
   } finally {
     shimmer.stop();

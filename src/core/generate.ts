@@ -16,7 +16,6 @@ import { buildClaudeSkills, renderClaudeSkill } from "../templates/claude-skills
 import { buildPreFlightAgent } from "../templates/pre-flight-agent.js";
 import { detectContext } from "../detect/detect.js";
 import { generateSnapshot } from "../snapshot/snapshot.js";
-import type { ProjectConfig } from "../types/config.js";
 
 export interface GenerateFilesOptions {
   ctx: DetectedContext;
@@ -28,7 +27,6 @@ export interface GenerateFilesOptions {
   generateSkills?: boolean;
   onVerbose?: ProgressCallback;
   persistedGraph?: PersistedGraph | null;
-  delivery?: ProjectConfig["delivery"];
 }
 
 /**
@@ -46,7 +44,6 @@ export async function generateFiles(opts: GenerateFilesOptions): Promise<Generat
     analysis,
     generateSkills = false,
     onVerbose,
-    delivery,
   } = opts;
   // Deduplicate files by path (e.g. multiple targets that share the same output path)
   const fileMap = new Map<string, GeneratedFile>();
