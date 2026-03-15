@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { filterAnalysisForPackage, filterGraphForPackage } from "../analysis/filter-package.js";
+import { filterAnalysisForPackage, filterGraphForPackage } from "../core/analysis/filter-package.js";
 import { makeContextAnalysis, makeImportGraph } from "./helpers/factories.js";
-import type { ImportGraph } from "../types.js";
+import type { ImportGraph } from "../core/types.js";
 
 // ── filterAnalysisForPackage ────────────────────────────────────────
 

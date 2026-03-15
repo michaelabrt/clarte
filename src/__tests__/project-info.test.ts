@@ -6,8 +6,8 @@ import {
   renderProjectInfoSections,
   getProjectName,
   resetProjectNameCache,
-} from "../templates/sections/project-info.js";
-import type { DetectedContext, UserAnswers } from "../types.js";
+} from "../steer/context/sections/project-info.js";
+import type { DetectedContext, UserAnswers } from "../core/types.js";
 
 function makeCtx(overrides?: Partial<DetectedContext>): DetectedContext {
   return {

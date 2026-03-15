@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
-import { configureClaudeHooks } from "../hooks/generate-hooks.js";
-import { readJsonFile, writeFileSafe } from "../utils.js";
+import { configureClaudeHooks } from "../steer/hooks/generate-hooks.js";
+import { readJsonFile, writeFileSafe } from "../core/utils.js";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";

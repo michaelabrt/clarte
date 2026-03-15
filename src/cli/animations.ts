@@ -1,5 +1,5 @@
-import { isTTY, noColor, trueColor, getShimmerColors } from "../theme.js";
-import type { RGB } from "../theme.js";
+import { isTTY, noColor, trueColor, getShimmerColors } from "../core/theme.js";
+import type { RGB } from "../core/theme.js";
 
 const HIDE_CURSOR = "\x1b[?25l";
 const SHOW_CURSOR = "\x1b[?25h";

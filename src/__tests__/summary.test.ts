@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ContextAnalysis, GeneratedFile, CodeSnapshot } from "../types.js";
+import type { ContextAnalysis, GeneratedFile, CodeSnapshot } from "../core/types.js";
 
 const clackMock = vi.hoisted(() => ({
   logCalls: [] as Array<{ method: string; args: unknown[] }>,
@@ -12,7 +12,7 @@ vi.mock("@clack/prompts", async () => {
   return m.mock;
 });
 
-vi.mock("../theme.js", async () => {
+vi.mock("../core/theme.js", async () => {
   const { THEME_MOCK } = await import("./helpers/mocks.js");
   return { theme: THEME_MOCK };
 });

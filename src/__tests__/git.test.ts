@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gitExec, gitExecSafe, GitError } from "../git/git.js";
+import { gitExec, gitExecSafe, GitError } from "../core/git/git.js";
 
 const cwd = process.cwd();
 

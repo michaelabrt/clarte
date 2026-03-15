@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 // Mock theme module before importing animations
-vi.mock("../theme.js", () => ({
+vi.mock("../core/theme.js", () => ({
   isTTY: false,
   noColor: false,
   trueColor: false,
@@ -89,7 +89,7 @@ describe("startShimmer TTY mode", () => {
     vi.useFakeTimers();
 
     // Override mock to enable TTY mode
-    const theme = await import("../theme.js");
+    const theme = await import("../core/theme.js");
     Object.defineProperty(theme, "isTTY", { value: true, writable: true });
     Object.defineProperty(theme, "noColor", { value: false, writable: true });
     Object.defineProperty(theme, "trueColor", { value: false, writable: true });
@@ -101,7 +101,7 @@ describe("startShimmer TTY mode", () => {
   });
 
   it("starts interval-based animation in TTY mode", async () => {
-    const theme = await import("../theme.js");
+    const theme = await import("../core/theme.js");
     Object.defineProperty(theme, "isTTY", { value: true });
 
     const handle = startShimmer("Scanning...");
@@ -116,7 +116,7 @@ describe("startShimmer TTY mode", () => {
   });
 
   it("stop() clears interval and shows cursor in TTY mode", async () => {
-    const theme = await import("../theme.js");
+    const theme = await import("../core/theme.js");
     Object.defineProperty(theme, "isTTY", { value: true });
 
     const handle = startShimmer("Test");

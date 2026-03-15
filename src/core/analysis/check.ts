@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { ProjectConfig } from "../types.js";
 import { fileExists, readFileOr } from "../utils.js";
-import { getMainContextFilename } from "../templates/main-context.js";
+import { getMainContextFilename } from "../../steer/context/main-context.js";
 
 /**
  * Regex to extract backtick-quoted file paths from markdown content.

@@ -10,8 +10,8 @@ import type {
   PackageHubFile,
   TestMapping,
   TestType,
-} from "../types.js";
-import { CLARTE_DIR } from "../config/config.js";
+} from "./types.js";
+import { CLARTE_DIR } from "./config/config.js";
 
 const PROJECT_CACHE_FILE = "project-cache.json";
 

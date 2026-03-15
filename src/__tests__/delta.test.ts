@@ -5,9 +5,9 @@ import {
   isDeltaEmpty,
   renderDeltaSection,
   buildDeltaDirectives,
-} from "../analysis/delta.js";
-import type { AnalysisSnapshot } from "../analysis/delta.js";
-import type { ContextAnalysis } from "../types.js";
+} from "../core/analysis/delta.js";
+import type { AnalysisSnapshot } from "../core/analysis/delta.js";
+import type { ContextAnalysis } from "../core/types.js";
 
 function mockAnalysis(overrides?: Partial<ContextAnalysis>): ContextAnalysis {
   return {

@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { ChangeCoupling, GitAnalysis, LagCoupling } from "../types.js";
-import { CLARTE_DIR } from "../config/config.js";
-import { gitExecSafe } from "../git/git.js";
+import type { ChangeCoupling, GitAnalysis, LagCoupling } from "./types.js";
+import { CLARTE_DIR } from "./config/config.js";
+import { gitExecSafe } from "./git/git.js";
 
 const GIT_CACHE_FILE = "git-cache.json";
 

@@ -6,7 +6,7 @@
  * that algorithm outputs can be validated without LLM-in-the-loop evaluation.
  */
 
-import type { ImportEdge } from "../../types.js";
+import type { ImportEdge } from "../../core/types.js";
 import { edge } from "./helpers.js";
 
 // ── Fixture type definition ───────────────────────────────────────────

@@ -2,9 +2,9 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { detectContext } from "../detect/detect.js";
-import { buildMainContext } from "../templates/main-context.js";
-import type { DetectedContext, UserAnswers } from "../types.js";
+import { detectContext } from "../core/detect/detect.js";
+import { buildMainContext } from "../steer/context/main-context.js";
+import type { DetectedContext, UserAnswers } from "../core/types.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -63,8 +63,8 @@ describe("multi-line generic signature extraction", () => {
   beforeEach(async () => {
     vi.resetModules();
 
-    vi.doMock("../utils.js", async () => {
-      const actual = await vi.importActual<typeof import("../utils.js")>("../utils.js");
+    vi.doMock("../core/utils.js", async () => {
+      const actual = await vi.importActual<typeof import("../core/utils.js")>("../core/utils.js");
       mockReadFileOr = vi.fn();
       return { ...actual, readFileOr: mockReadFileOr };
     });
@@ -74,8 +74,8 @@ describe("multi-line generic signature extraction", () => {
       return { glob: mockGlob };
     });
 
-    vi.doMock("../graph.js", async () => {
-      const actual = await vi.importActual<typeof import("../graph.js")>("../graph.js");
+    vi.doMock("../core/graph.js", async () => {
+      const actual = await vi.importActual<typeof import("../core/graph.js")>("../core/graph.js");
       return { ...actual, findUsedExports: () => new Set<string>() };
     });
   });
@@ -103,7 +103,7 @@ describe("multi-line generic signature extraction", () => {
   }
 
   it("extracts multi-line generic function signature", async () => {
-    const { generateSnapshot } = await import("../snapshot/snapshot.js");
+    const { generateSnapshot } = await import("../core/snapshot/snapshot.js");
     const tsContent = `export function foo<
   T extends Bar,
   U extends Baz
@@ -129,7 +129,7 @@ describe("multi-line generic signature extraction", () => {
   });
 
   it("handles generics with constraint braces like T extends { key: V }", async () => {
-    const { generateSnapshot } = await import("../snapshot/snapshot.js");
+    const { generateSnapshot } = await import("../core/snapshot/snapshot.js");
     const tsContent = `export function transform<
   T extends { key: string },
   U extends { value: number }
@@ -151,7 +151,7 @@ describe("multi-line generic signature extraction", () => {
   });
 
   it("still works for single-line generics", async () => {
-    const { generateSnapshot } = await import("../snapshot/snapshot.js");
+    const { generateSnapshot } = await import("../core/snapshot/snapshot.js");
     const tsContent = `export function identity<T>(arg: T): T {
   return arg;
 }`;

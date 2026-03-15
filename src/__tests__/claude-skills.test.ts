@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildClaudeSkills, renderClaudeSkill } from "../templates/claude-skills.js";
-import type { ClaudeSkill } from "../types.js";
+import { buildClaudeSkills, renderClaudeSkill } from "../steer/context/claude-skills.js";
+import type { ClaudeSkill } from "../core/types.js";
 
 describe("buildClaudeSkills", () => {
   it("returns exactly 2 skills: check and refresh", () => {

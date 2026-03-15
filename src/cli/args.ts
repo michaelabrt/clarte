@@ -1,6 +1,6 @@
 import path from "node:path";
-import { ClarteError, ExitCode } from "../errors.js";
-import { theme as t, initTheme, resetTerminalColors } from "../theme.js";
+import { ClarteError, ExitCode } from "../core/errors.js";
+import { theme as t, initTheme, resetTerminalColors } from "../core/theme.js";
 
 declare const PKG_VERSION: string;
 declare const PKG_NAME: string;

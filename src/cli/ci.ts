@@ -1,12 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { detectContext, enrichFrameworksWithUsage } from "../detect/detect.js";
-import { buildGraphWithCache } from "../graph/cache.js";
-import { buildImportGraph, mergeGraph } from "../graph/build.js";
+import { detectContext, enrichFrameworksWithUsage } from "../core/detect/detect.js";
+import { buildGraphWithCache } from "../core/graph/cache.js";
+import { buildImportGraph, mergeGraph } from "../core/graph/build.js";
 import { runAnalysis } from "../core/run-analysis.js";
-import { loadConfig } from "../config/config.js";
-import { analyzeForCI, type CIAnalysisResult } from "../analysis/ci.js";
-import { NOOP_PROGRESS } from "../utils.js";
-import type { ProgressCallback } from "../types.js";
+import { loadConfig } from "../core/config/config.js";
+import { analyzeForCI, type CIAnalysisResult } from "../core/analysis/ci.js";
+import { NOOP_PROGRESS } from "../core/utils.js";
+import type { ProgressCallback } from "../core/types.js";
 
 /**
  * Run CI analysis on changed files and output structured JSON.

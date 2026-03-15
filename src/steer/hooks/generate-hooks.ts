@@ -1,10 +1,10 @@
 import { readdir, unlink } from "node:fs/promises";
 import path from "node:path";
-import { readJsonFile, writeFileSafe } from "../utils.js";
-import type { PersistedGraph } from "../types/persisted-graph.js";
+import { readJsonFile, writeFileSafe } from "../../core/utils.js";
+import type { PersistedGraph } from "../../core/types/persisted-graph.js";
 import { buildContextMap } from "./context-map.js";
-import { CLARTE_DIR } from "../config/config.js";
-import { PRE_FLIGHT_AGENT_CONTENT } from "../templates/pre-flight-agent.js";
+import { CLARTE_DIR } from "../../core/config/config.js";
+import { PRE_FLIGHT_AGENT_CONTENT } from "../context/pre-flight-agent.js";
 
 const HOOKS_DIR = `${CLARTE_DIR}/hooks`;
 const CONTEXT_MAP_FILE = "context-map.json";
@@ -132,9 +132,13 @@ if (tool === "Bash") {
       process.stdout.write(output);
       process.exit(0);
     }
+  } else {
+    // Non-test/build Bash (scripts, installs, etc.) may change file state,
+    // so reset the counter. Read-only commands (grep, cat) cause a harmless
+    // extra reset, but that's preferable to false-blocking after a legit fix.
+    log("non-test bash, resetting state");
+    writeFFState({ base: "", count: 0 });
   }
-  // Non-test/build Bash (grep, cat, git) does NOT reset the counter.
-  // Only Edit/Write resets, because the agent actually tried a fix.
 }
 `;
 

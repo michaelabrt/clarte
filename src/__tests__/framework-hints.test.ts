@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getFrameworkHints, getFrameworkHintsSection } from "../templates/framework-hints.js";
-import type { DetectedContext, DetectedFramework } from "../types.js";
+import { getFrameworkHints, getFrameworkHintsSection } from "../steer/context/framework-hints.js";
+import type { DetectedContext, DetectedFramework } from "../core/types.js";
 
 function makeCtx(frameworks: DetectedFramework[] = [], directories: string[] = []): DetectedContext {
   return {

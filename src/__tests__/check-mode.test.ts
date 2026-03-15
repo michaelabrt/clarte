@@ -1,19 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ProjectConfig } from "../types.js";
-import { ExitCode } from "../errors.js";
+import type { ProjectConfig } from "../core/types.js";
+import { ExitCode } from "../core/errors.js";
 
 // Mock dependencies before importing the module under test
-vi.mock("../config/config.js", () => ({
+vi.mock("../core/config/config.js", () => ({
   loadConfig: vi.fn(),
   computeSnapshotHash: vi.fn(),
 }));
 
-vi.mock("../analysis/check.js", () => ({
+vi.mock("../core/analysis/check.js", () => ({
   validateContextPaths: vi.fn(),
 }));
 
-const { loadConfig, computeSnapshotHash } = await import("../config/config.js");
-const { validateContextPaths } = await import("../analysis/check.js");
+const { loadConfig, computeSnapshotHash } = await import("../core/config/config.js");
+const { validateContextPaths } = await import("../core/analysis/check.js");
 const { runCheckMode } = await import("../cli/check.js");
 
 const mockLoadConfig = vi.mocked(loadConfig);

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { ClarteError } from "../errors.js";
+import { ClarteError } from "../core/errors.js";
 import { makeDetectedContext } from "./helpers/mocks.js";
 
 // Mock heavy dependencies
@@ -15,7 +15,7 @@ vi.mock("../cli/animations.js", () => ({
 
 const mockDetectContext = vi.fn().mockResolvedValue(makeDetectedContext());
 
-vi.mock("../detect/detect.js", () => ({
+vi.mock("../core/detect/detect.js", () => ({
   detectContext: (...args: unknown[]) => mockDetectContext(...args),
 }));
 
@@ -29,7 +29,7 @@ const mockBuildImportGraph = vi.fn().mockResolvedValue({
 });
 const mockMergeGraph = vi.fn();
 
-vi.mock("../graph/build.js", () => ({
+vi.mock("../core/graph/build.js", () => ({
   buildImportGraph: (...args: unknown[]) => mockBuildImportGraph(...args),
   mergeGraph: (...args: unknown[]) => mockMergeGraph(...args),
 }));
@@ -40,7 +40,7 @@ const mockGenerateSnapshot = vi.fn().mockResolvedValue({
   budgetExcluded: 0,
 });
 
-vi.mock("../snapshot/snapshot.js", () => ({
+vi.mock("../core/snapshot/snapshot.js", () => ({
   generateSnapshot: (...args: unknown[]) => mockGenerateSnapshot(...args),
 }));
 
@@ -49,7 +49,7 @@ const mockSaveConfig = vi.fn();
 const mockConfigToAnswers = vi.fn().mockReturnValue({});
 const mockComputeSnapshotHash = vi.fn().mockResolvedValue("abc123");
 
-vi.mock("../config/config.js", () => ({
+vi.mock("../core/config/config.js", () => ({
   loadConfig: (...args: unknown[]) => mockLoadConfig(...args),
   saveConfig: (...args: unknown[]) => mockSaveConfig(...args),
   configToAnswers: (...args: unknown[]) => mockConfigToAnswers(...args),
@@ -69,12 +69,12 @@ vi.mock("@clack/prompts", async () => {
   return m.mock;
 });
 
-vi.mock("../theme.js", async () => {
+vi.mock("../core/theme.js", async () => {
   const { THEME_MOCK } = await import("./helpers/mocks.js");
   return { theme: THEME_MOCK };
 });
 
-import { refreshSnapshot } from "../modes/refresh.js";
+import { refreshSnapshot } from "../cli/refresh.js";
 
 let tmpDir: string;
 

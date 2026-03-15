@@ -3,14 +3,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { makeImportGraph, makeContextAnalysis, makeFileRecord } from "./helpers/factories.js";
-import { PERSISTED_GRAPH_VERSION } from "../types/persisted-graph.js";
+import { PERSISTED_GRAPH_VERSION } from "../core/types/persisted-graph.js";
 
-vi.mock("../git/git.js", () => ({
+vi.mock("../core/git/git.js", () => ({
   gitExecSafe: vi.fn().mockReturnValue("abc123def456"),
 }));
 
 // Import after mocks
-const { persistGraph, loadPersistedGraph } = await import("../graph/persist.js");
+const { persistGraph, loadPersistedGraph } = await import("../core/graph/persist.js");
 
 let tmpDir: string;
 

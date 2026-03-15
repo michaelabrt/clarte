@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectImportOrderingDetailed } from "../conventions/imports.js";
+import { detectImportOrderingDetailed } from "../core/conventions/imports.js";
 
 describe("detectImportOrderingDetailed", () => {
   it("returns null ordering for fewer than 3 imports", () => {
@@ -16,7 +16,7 @@ import React from "react";
 import lodash from "lodash";
 
 import { helper } from "./helper";
-import { utils } from "../utils";
+import { utils } from "../core/utils.js";
 `);
     expect(result.ordering).toBe("external-first, blank-line separated");
   });
@@ -26,7 +26,7 @@ import { utils } from "../utils";
 import React from "react";
 import lodash from "lodash";
 import { helper } from "./helper";
-import { utils } from "../utils";
+import { utils } from "../core/utils.js";
 `);
     expect(result.ordering).toBe("external-first");
   });
@@ -34,7 +34,7 @@ import { utils } from "../utils";
   it("returns null when relative imports come first", () => {
     const result = detectImportOrderingDetailed(`
 import { helper } from "./helper";
-import { utils } from "../utils";
+import { utils } from "../core/utils.js";
 import React from "react";
 `);
     expect(result.ordering).toBeNull();

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { LogCtx } from "../types/internal.js";
+import type { LogCtx } from "../core/types/internal.js";
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -20,7 +20,7 @@ vi.mock("@clack/prompts", () => ({
   note: vi.fn(),
 }));
 
-vi.mock("../theme.js", () => ({
+vi.mock("../core/theme.js", () => ({
   theme: {
     text: (s: string) => s,
     textBold: (s: string) => s,
