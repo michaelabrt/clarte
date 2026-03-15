@@ -40,9 +40,6 @@ export interface GenerateOptions {
   verbose: boolean;
   jsonMode: boolean;
   maxTokens?: number;
-  effectiveBudget?: number;
-  sectionFilter?: { include?: Set<string>; exclude?: Set<string> };
-  maxChars?: number;
   savedConfig: ProjectConfig | null;
 }
 
@@ -64,9 +61,6 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     verbose,
     jsonMode,
     maxTokens,
-    effectiveBudget,
-    sectionFilter,
-    maxChars,
     savedConfig,
   } = opts;
 
@@ -283,10 +277,6 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       analysis,
       generateSkills,
       onVerbose: verbose ? verboseLog : undefined,
-      budget: effectiveBudget,
-      sectionFilter,
-      maxChars,
-      graph,
       persistedGraph,
       delivery: savedConfig?.delivery,
     });

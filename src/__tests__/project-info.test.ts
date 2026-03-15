@@ -46,10 +46,7 @@ describe("renderProjectInfoSections", () => {
 
     const ids = sections.map((s) => s.id);
     expect(ids).toContain("header");
-    expect(ids).toContain("what-is-this");
     expect(ids).toContain("tech-stack");
-    expect(ids).toContain("key-patterns");
-    expect(ids).toContain("gotchas");
     expect(ids).toContain("development");
   });
 
@@ -61,31 +58,21 @@ describe("renderProjectInfoSections", () => {
     expect(header?.content).toContain("# my-app");
   });
 
-  it("skips what-is-this when projectPurpose is empty", async () => {
+  it("header includes description when projectPurpose is set", async () => {
+    const ctx = makeCtx();
+    const sections = await renderProjectInfoSections(ctx, defaultAnswers, "test");
+
+    const header = sections.find((s) => s.id === "header");
+    expect(header?.content).toContain("A CLI tool");
+  });
+
+  it("header omits description when projectPurpose is empty", async () => {
     const ctx = makeCtx();
     const answers = { ...defaultAnswers, projectPurpose: "" };
     const sections = await renderProjectInfoSections(ctx, answers, "test");
 
-    const ids = sections.map((s) => s.id);
-    expect(ids).not.toContain("what-is-this");
-  });
-
-  it("skips key-patterns when keyPatterns is empty", async () => {
-    const ctx = makeCtx();
-    const answers = { ...defaultAnswers, keyPatterns: "" };
-    const sections = await renderProjectInfoSections(ctx, answers, "test");
-
-    const ids = sections.map((s) => s.id);
-    expect(ids).not.toContain("key-patterns");
-  });
-
-  it("skips gotchas when gotchas is empty", async () => {
-    const ctx = makeCtx();
-    const answers = { ...defaultAnswers, gotchas: "" };
-    const sections = await renderProjectInfoSections(ctx, answers, "test");
-
-    const ids = sections.map((s) => s.id);
-    expect(ids).not.toContain("gotchas");
+    const header = sections.find((s) => s.id === "header");
+    expect(header?.content).toBe("# test");
   });
 
   it("includes framework info in tech stack", async () => {
@@ -130,14 +117,6 @@ describe("renderProjectInfoSections", () => {
     expect(techStack?.content).toContain("package manager");
   });
 
-  it("includes cursor rules note in header when cursor IDE selected", async () => {
-    const ctx = makeCtx();
-    const answers = { ...defaultAnswers, ides: ["cursor" as const] };
-    const sections = await renderProjectInfoSections(ctx, answers, "test");
-
-    const header = sections.find((s) => s.id === "header");
-    expect(header?.content).toContain(".cursor/rules/");
-  });
 
   it("all sections have positive token estimates", async () => {
     const ctx = makeCtx();

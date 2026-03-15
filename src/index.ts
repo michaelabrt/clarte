@@ -60,9 +60,6 @@ async function main() {
     verbose,
     maxTokens,
     jsonMode,
-    effectiveBudget,
-    sectionFilter,
-    maxChars,
     initHook,
   } = parseCliArgs(rawArgs);
 
@@ -119,9 +116,6 @@ async function main() {
     verbose,
     jsonMode,
     maxTokens,
-    effectiveBudget,
-    sectionFilter,
-    maxChars,
     savedConfig,
   });
 

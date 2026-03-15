@@ -23,9 +23,6 @@ describe("parseCliArgs", () => {
     expect(result.verbose).toBe(false);
     expect(result.maxTokens).toBeUndefined();
     expect(result.jsonMode).toBe(false);
-    expect(result.effectiveBudget).toBeUndefined();
-    expect(result.sectionFilter).toBeUndefined();
-    expect(result.maxChars).toBeUndefined();
     expect(result.initHook).toBe(false);
   });
 
@@ -62,38 +59,9 @@ describe("parseCliArgs", () => {
     expect(() => parseCliArgs(["--max-tokens=abc"])).toThrow(ClarteError);
   });
 
-  it("parses --budget=N", () => {
-    const result = parseCliArgs(["--budget=3000"]);
-    expect(result.effectiveBudget).toBe(3000);
-  });
-
-  it("throws ClarteError on invalid --budget", () => {
-    expect(() => parseCliArgs(["--budget=xyz"])).toThrow(ClarteError);
-  });
-
-  it("parses --full as budget=0", () => {
-    const result = parseCliArgs(["--full"]);
-    expect(result.effectiveBudget).toBe(0);
-  });
-
   it("parses --format=json", () => {
     expect(parseCliArgs(["--format=json"]).jsonMode).toBe(true);
     expect(parseCliArgs(["--format=text"]).jsonMode).toBe(false);
-  });
-
-  it("parses --include and --exclude", () => {
-    const result = parseCliArgs(["--include=snapshot,conventions", "--exclude=dead-files"]);
-    expect(result.sectionFilter?.include).toEqual(new Set(["snapshot", "conventions"]));
-    expect(result.sectionFilter?.exclude).toEqual(new Set(["dead-files"]));
-  });
-
-  it("parses --max-chars=N", () => {
-    const result = parseCliArgs(["--max-chars=20000"]);
-    expect(result.maxChars).toBe(20000);
-  });
-
-  it("throws ClarteError on invalid --max-chars", () => {
-    expect(() => parseCliArgs(["--max-chars=bad"])).toThrow(ClarteError);
   });
 
   it("parses positional directory argument", () => {

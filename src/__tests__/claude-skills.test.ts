@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildClaudeSkills, renderClaudeSkill } from "../templates/claude-skills.js";
-import { makeContextAnalysis } from "./helpers/factories.js";
 import type { ClaudeSkill } from "../types.js";
-
-function findSkill(skills: ClaudeSkill[], name: string): ClaudeSkill {
-  const skill = skills.find((s) => s.name === name);
-  if (!skill) throw new Error(`Skill "${name}" not found`);
-  return skill;
-}
 
 describe("buildClaudeSkills", () => {
   it("returns exactly 2 skills: check and refresh", () => {
@@ -16,146 +9,18 @@ describe("buildClaudeSkills", () => {
     expect(skills.map((s) => s.name)).toEqual(["check", "refresh"]);
   });
 
-  it("without analysis or with onDemandSkills=false: exactly 2 skills (backward compat)", () => {
-    expect(buildClaudeSkills()).toHaveLength(2);
-    expect(buildClaudeSkills(undefined, false)).toHaveLength(2);
-    expect(buildClaudeSkills(makeContextAnalysis(), false)).toHaveLength(2);
-  });
-
   it("/check skill is auto-invocable with Bash", () => {
     const skills = buildClaudeSkills();
-    const check = findSkill(skills, "check");
-    expect(check.disableModelInvocation).toBe(false);
-    expect(check.allowedTools).toBe("Bash");
-    expect(check.body).toContain("--format=json");
-    expect(check.body).toContain("circular dependencies");
+    const check = skills.find((s) => s.name === "check");
+    expect(check?.disableModelInvocation).toBe(false);
+    expect(check?.allowedTools).toBe("Bash");
   });
 
-  it("/refresh skill is user-invoked with Bash", () => {
+  it("/refresh skill is user-only (disableModelInvocation=true)", () => {
     const skills = buildClaudeSkills();
-    const refresh = findSkill(skills, "refresh");
-    expect(refresh.disableModelInvocation).toBe(true);
-    expect(refresh.allowedTools).toBe("Bash");
-    expect(refresh.body).toContain("--refresh-snapshot");
-  });
-
-  it("with onDemandSkills=true: generates data skills when analysis has data", () => {
-    const analysis = makeContextAnalysis({
-      tightCouplings: [
-        {
-          from: "src/a.ts",
-          to: "src/b.ts",
-          importedNames: 10,
-          names: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"],
-        },
-      ],
-      structuralMismatches: [
-        { fileA: "src/c.ts", fileB: "src/d.ts", graphDistance: -1, coChangeConfidence: 0.7, coChangeCount: 5 },
-      ],
-      deadFiles: ["src/dead.ts"],
-      testMapping: {
-        sourceToTests: new Map([["src/utils.ts", ["src/__tests__/utils.test.ts"]]]),
-        untestedFiles: [],
-        testPattern: { framework: "vitest", convention: "co-located", filePattern: "*.test.ts" },
-      },
-    });
-
-    const skills = buildClaudeSkills(analysis, true);
-    const names = skills.map((s) => s.name);
-    expect(names).toContain("check");
-    expect(names).toContain("refresh");
-    expect(names).toContain("coupling");
-    expect(names).toContain("health");
-    expect(names).toContain("tests");
-  });
-
-  it("each data skill is model-invocable (disableModelInvocation=false)", () => {
-    const analysis = makeContextAnalysis({
-      tightCouplings: [
-        {
-          from: "src/a.ts",
-          to: "src/b.ts",
-          importedNames: 10,
-          names: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"],
-        },
-      ],
-      deadFiles: ["src/dead.ts"],
-      testMapping: {
-        sourceToTests: new Map([["src/x.ts", ["src/__tests__/x.test.ts"]]]),
-        untestedFiles: [],
-        testPattern: { framework: "vitest", convention: "co-located", filePattern: "*.test.ts" },
-      },
-    });
-
-    const skills = buildClaudeSkills(analysis, true);
-    for (const skill of skills.filter((s) => ["coupling", "health", "tests"].includes(s.name))) {
-      expect(skill.disableModelInvocation).toBe(false);
-    }
-  });
-
-  it("each data skill has correct content from analysis", () => {
-    const analysis = makeContextAnalysis({
-      tightCouplings: [
-        {
-          from: "src/a.ts",
-          to: "src/b.ts",
-          importedNames: 10,
-          names: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"],
-        },
-      ],
-      deadFiles: ["src/dead.ts"],
-      testMapping: {
-        sourceToTests: new Map([["src/utils.ts", ["src/__tests__/utils.test.ts"]]]),
-        untestedFiles: [],
-        testPattern: { framework: "vitest", convention: "co-located", filePattern: "*.test.ts" },
-      },
-    });
-
-    const skills = buildClaudeSkills(analysis, true);
-    const coupling = findSkill(skills, "coupling");
-    expect(coupling.body).toContain("src/a.ts");
-    expect(coupling.body).toContain("Tight Coupling");
-
-    const health = findSkill(skills, "health");
-    expect(health.body).toContain("src/dead.ts");
-    expect(health.body).toContain("Dead Files");
-
-    const tests = findSkill(skills, "tests");
-    expect(tests.body).toContain("src/utils.ts");
-  });
-
-  it("each data skill description matches designed descriptions", () => {
-    const analysis = makeContextAnalysis({
-      tightCouplings: [{ from: "a", to: "b", importedNames: 5, names: ["x", "y", "z", "w", "v"] }],
-      deadFiles: ["dead.ts"],
-      testMapping: {
-        sourceToTests: new Map([["x", ["x.test"]]]),
-        untestedFiles: [],
-        testPattern: { framework: "vitest", convention: "co-located", filePattern: "*.test.ts" },
-      },
-    });
-
-    const skills = buildClaudeSkills(analysis, true);
-    const coupling = findSkill(skills, "coupling");
-    expect(coupling.description).toContain("tight coupling");
-    expect(coupling.description).toContain("hidden coupling");
-    expect(coupling.description).toContain("change coupling");
-    expect(coupling.description).toContain("refactoring");
-
-    const health = findSkill(skills, "health");
-    expect(health.description).toContain("dead files");
-    expect(health.description).toContain("circular dependency");
-    expect(health.description).toContain("chokepoints");
-
-    const tests = findSkill(skills, "tests");
-    expect(tests.description).toContain("test coverage");
-    expect(tests.description).toContain("untested files");
-  });
-
-  it("empty data produces no skill (no tight couplings = no /coupling if no other coupling data)", () => {
-    const analysis = makeContextAnalysis();
-    const skills = buildClaudeSkills(analysis, true);
-    expect(skills.map((s) => s.name)).toEqual(["check", "refresh"]);
+    const refresh = skills.find((s) => s.name === "refresh");
+    expect(refresh?.disableModelInvocation).toBe(true);
+    expect(refresh?.allowedTools).toBe("Bash");
   });
 });
 

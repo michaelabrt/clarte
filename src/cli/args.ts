@@ -1,7 +1,6 @@
 import path from "node:path";
 import { ClarteError, ExitCode } from "../errors.js";
 import { theme as t, initTheme, resetTerminalColors } from "../theme.js";
-import type { SectionFilterOptions } from "../templates/main-context.js";
 
 declare const PKG_VERSION: string;
 declare const PKG_NAME: string;
@@ -36,21 +35,9 @@ export function printHelp(): void {
   console.log(
     `    ${t.accent("--ci")}                    ${t.text("Machine-readable output (use with --check for CI pipelines)")}`,
   );
-  console.log(`    ${t.accent("--max-tokens=N")}          ${t.text("Set the token budget for the code snapshot")}`);
   console.log(
     `    ${t.accent("--format=json")}           ${t.text("Output full analysis as structured JSON to stdout")}`,
   );
-  console.log(
-    `    ${t.accent("--budget=N")}              ${t.text("Set token budget for the context file (prioritized sections)")}`,
-  );
-  console.log(`    ${t.accent("--full")}                  ${t.text("Disable token budget (include all sections)")}`);
-  console.log(
-    `    ${t.accent("--max-chars=N")}           ${t.text("Set character budget (default: 39500, 0 to disable)")}`,
-  );
-  console.log(
-    `    ${t.accent("--include=a,b")}           ${t.text("Always include these sections (comma-separated IDs)")}`,
-  );
-  console.log(`    ${t.accent("--exclude=a,b")}           ${t.text("Exclude these sections entirely")}`);
   console.log(
     `    ${t.accent("--init-hook")}             ${t.text("Install git pre-commit hook for auto-refresh on commit")}`,
   );
@@ -99,9 +86,6 @@ export interface CliArgs {
   verbose: boolean;
   maxTokens: number | undefined;
   jsonMode: boolean;
-  effectiveBudget: number | undefined;
-  sectionFilter: SectionFilterOptions | undefined;
-  maxChars: number | undefined;
   initHook: boolean;
 }
 
@@ -130,27 +114,6 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const maxTokens = maxTokensRaw;
   const formatArg = rawArgs.find((a) => a.startsWith("--format="));
   const jsonMode = formatArg?.split("=")[1] === "json";
-  const budgetArg = rawArgs.find((a) => a.startsWith("--budget="));
-  const budgetRaw = budgetArg ? parseInt(budgetArg.split("=").slice(1).join("="), 10) : undefined;
-  if (budgetRaw !== undefined && Number.isNaN(budgetRaw)) {
-    throw new ClarteError(`Invalid --budget value: ${budgetArg?.split("=").slice(1).join("=")}`);
-  }
-  const fullMode = rawArgs.includes("--full");
-  const includeArg = rawArgs.find((a) => a.startsWith("--include="));
-  const excludeArg = rawArgs.find((a) => a.startsWith("--exclude="));
-  const sectionFilter: SectionFilterOptions | undefined =
-    includeArg || excludeArg
-      ? {
-          include: includeArg ? new Set(includeArg.split("=").slice(1).join("=").split(",")) : undefined,
-          exclude: excludeArg ? new Set(excludeArg.split("=").slice(1).join("=").split(",")) : undefined,
-        }
-      : undefined;
-  const effectiveBudget = fullMode ? 0 : budgetRaw;
-  const maxCharsArg = rawArgs.find((a) => a.startsWith("--max-chars="));
-  const maxCharsRaw = maxCharsArg ? parseInt(maxCharsArg.split("=").slice(1).join("="), 10) : undefined;
-  if (maxCharsRaw !== undefined && Number.isNaN(maxCharsRaw)) {
-    throw new ClarteError(`Invalid --max-chars value: ${maxCharsArg?.split("=").slice(1).join("=")}`);
-  }
   const initHook = rawArgs.includes("--init-hook");
   const subcommands = new Set(["ci"]);
   const targetDir =
@@ -172,7 +135,6 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     "--ci",
     "--verbose",
     "-v",
-    "--full",
     "--init-hook",
     "--help",
     "-h",
@@ -183,10 +145,6 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     "--check=",
     "--max-tokens=",
     "--format=",
-    "--budget=",
-    "--include=",
-    "--exclude=",
-    "--max-chars=",
     "--base=",
     "--changed-files=",
   ];
@@ -212,9 +170,6 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     verbose,
     maxTokens,
     jsonMode,
-    effectiveBudget,
-    sectionFilter,
-    maxChars: maxCharsRaw,
     initHook,
   };
 }

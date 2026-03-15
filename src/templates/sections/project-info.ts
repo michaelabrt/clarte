@@ -1,6 +1,7 @@
 import path from "node:path";
-import type { ContextSection, DetectedContext, UserAnswers } from "../../types.js";
+import type { ContextAnalysis, ContextSection, DetectedContext, UserAnswers } from "../../types.js";
 import { summarizeDetection } from "../../detect/detect.js";
+import { renderConstraintsSection } from "../../config/scan.js";
 import { estimateTokens, readJsonFile, readFileOr } from "../../utils.js";
 
 // Cache for getProjectName to avoid redundant filesystem reads within a single
@@ -70,66 +71,41 @@ export async function renderProjectInfoSections(
   ctx: DetectedContext,
   answers: UserAnswers,
   projectName: string,
+  analysis?: ContextAnalysis,
 ): Promise<ContextSection[]> {
   const sections: ContextSection[] = [];
   const stackSummary = answers.stackConfirmed
     ? summarizeDetection(ctx)
     : answers.stackCorrections || summarizeDetection(ctx);
 
+  // Header
   const headerLines: string[] = [];
   headerLines.push(`# ${projectName}`);
-  headerLines.push("");
-  headerLines.push(
-    "> **Keep this file up to date.** When you change the architecture, add a dependency, create a new pattern, or learn a gotcha, update this file in the same step. This is the source of truth for how the project works.",
-  );
-  headerLines.push(
-    "> **This file is your starting point.** Only read additional files when the task requires implementation details not captured here.",
-  );
-  if (answers.ides.includes("cursor")) {
-    headerLines.push("> Scoped rules are in `.cursor/rules/` -- update them when conventions change.");
+  if (answers.projectPurpose) {
+    headerLines.push("");
+    headerLines.push(`> ${answers.projectPurpose}`);
   }
   const headerContent = headerLines.join("\n");
   sections.push({ id: "header", priority: 0, content: headerContent, tokens: estimateTokens(headerContent) });
 
-  // What Is This (skip when projectPurpose is empty, e.g. zero-config runs)
-  if (answers.projectPurpose) {
-    const whatContent = `## What Is This\n\n${answers.projectPurpose}`;
-    sections.push({ id: "what-is-this", priority: 0, content: whatContent, tokens: estimateTokens(whatContent) });
-  }
-
+  // Tech Stack
   const techContent = `## Tech Stack\n\n${buildTechStackSection(ctx, stackSummary)}`;
-  sections.push({ id: "tech-stack", priority: 1, content: techContent, tokens: estimateTokens(techContent) });
+  sections.push({ id: "tech-stack", priority: 0, content: techContent, tokens: estimateTokens(techContent) });
 
-  if (answers.keyPatterns) {
-    const patLines: string[] = [];
-    patLines.push("## Key Patterns");
-    patLines.push("");
-    const patterns = answers.keyPatterns
-      .split(/\n/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    for (const p of patterns) {
-      patLines.push(`- ${p}`);
+  // Config Constraints (from analysis if available)
+  if (analysis?.configConstraints) {
+    const constraintsContent = renderConstraintsSection(analysis.configConstraints);
+    if (constraintsContent) {
+      sections.push({
+        id: "config-constraints",
+        priority: 0,
+        content: constraintsContent,
+        tokens: estimateTokens(constraintsContent),
+      });
     }
-    const patContent = patLines.join("\n");
-    sections.push({ id: "key-patterns", priority: 0, content: patContent, tokens: estimateTokens(patContent) });
   }
 
-  if (answers.gotchas) {
-    const gotLines: string[] = [];
-    gotLines.push("## Gotchas");
-    gotLines.push("");
-    const gotchas = answers.gotchas
-      .split(/\n/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    for (const g of gotchas) {
-      gotLines.push(`- ${g}`);
-    }
-    const gotContent = gotLines.join("\n");
-    sections.push({ id: "gotchas", priority: 0, content: gotContent, tokens: estimateTokens(gotContent) });
-  }
-
+  // Development
   const devContent = `## Development\n\n${await buildDevSection(ctx)}`;
   sections.push({ id: "development", priority: 0, content: devContent, tokens: estimateTokens(devContent) });
 
