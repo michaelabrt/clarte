@@ -117,7 +117,6 @@ describe("renderProjectInfoSections", () => {
     expect(techStack?.content).toContain("package manager");
   });
 
-
   it("all sections have positive token estimates", async () => {
     const ctx = makeCtx();
     const sections = await renderProjectInfoSections(ctx, defaultAnswers, "test");

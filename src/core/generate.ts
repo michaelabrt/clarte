@@ -35,16 +35,7 @@ export interface GenerateFilesOptions {
  * When dryRun is true, no files are written to disk.
  */
 export async function generateFiles(opts: GenerateFilesOptions): Promise<GeneratedFile[]> {
-  const {
-    ctx,
-    answers,
-    snapshot,
-    yes = false,
-    dryRun = false,
-    analysis,
-    generateSkills = false,
-    onVerbose,
-  } = opts;
+  const { ctx, answers, snapshot, yes = false, dryRun = false, analysis, generateSkills = false, onVerbose } = opts;
   // Deduplicate files by path (e.g. multiple targets that share the same output path)
   const fileMap = new Map<string, GeneratedFile>();
 

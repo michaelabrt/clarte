@@ -16,7 +16,8 @@ import { initPreCommitHook } from "./cli/hooks.js";
 import { handleEarlyExits, parseCliArgs } from "./cli/args.js";
 import { runCheckMode } from "./cli/check.js";
 import { runCiMode } from "./cli/ci.js";
-import { runGenerateMode } from "./cli/generate.js";
+import { runInitMode } from "./cli/init.js";
+import { runObserveMode } from "./cli/observe.js";
 
 const PROJECT_MARKERS = [
   "package.json",
@@ -45,6 +46,7 @@ async function main() {
 
   handleEarlyExits(rawArgs);
 
+  const args = parseCliArgs(rawArgs);
   const {
     rootDir,
     yes,
@@ -61,10 +63,22 @@ async function main() {
     maxTokens,
     jsonMode,
     initHook,
-  } = parseCliArgs(rawArgs);
+  } = args;
 
   if (initHook) {
     await initPreCommitHook(rootDir);
+    process.exit(ExitCode.SUCCESS);
+  }
+
+  // Subcommand: observe
+  if (args.observeSubcommand) {
+    await runObserveMode({
+      rootDir,
+      sessionId: args.observeSessionId,
+      all: args.observeAll,
+      since: args.observeSince,
+      json: jsonMode,
+    });
     process.exit(ExitCode.SUCCESS);
   }
 
@@ -108,7 +122,7 @@ async function main() {
     return;
   }
 
-  await runGenerateMode({
+  await runInitMode({
     rootDir,
     yes,
     dryRun,

@@ -76,26 +76,3 @@ export interface ProjectConfig {
     onDemandSkills?: boolean;
   };
 }
-
-/** Section include/exclude filter for context generation */
-export interface SectionFilter {
-  include?: Set<string>;
-  exclude?: Set<string>;
-}
-
-/** Options for the generate mode */
-export interface GenerateOptions {
-  rootDir: string;
-  yes: boolean;
-  dryRun: boolean;
-  reconfigure: boolean;
-  verbose: boolean;
-  jsonMode: boolean;
-  /** Token budget for code snapshot generation (controls how many snapshot entries to include) */
-  maxTokens?: number;
-  /** Token budget for the assembled context file sections (default: DEFAULT_BUDGET from budget.ts) */
-  effectiveBudget?: number;
-  sectionFilter?: SectionFilter;
-  maxChars?: number;
-  savedConfig: ProjectConfig | null;
-}

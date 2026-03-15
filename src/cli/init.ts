@@ -3,7 +3,12 @@ import fs from "node:fs/promises";
 import * as p from "@clack/prompts";
 import { theme as t, unpatchPicocolors, resetTerminalColors } from "../core/theme.js";
 import { errorMessage, fileExists, formatBytes, NOOP_PROGRESS, writeJsonStdout } from "../core/utils.js";
-import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "../core/detect/detect.js";
+import {
+  detectContext,
+  detectIDEs,
+  detectProjectDescription,
+  enrichFrameworksWithUsage,
+} from "../core/detect/detect.js";
 import { runPrompts } from "../cli/prompts.js";
 import { generateSnapshot } from "../core/snapshot/snapshot.js";
 import { generateFiles } from "../core/generate.js";
@@ -32,7 +37,7 @@ import { runAnalysis } from "../core/run-analysis.js";
 import { persistGraph, loadPersistedGraph } from "../core/graph/persist.js";
 import { HITS, SNAPSHOT_LANGUAGES } from "../core/config/thresholds.js";
 
-export interface GenerateOptions {
+export interface InitOptions {
   rootDir: string;
   yes: boolean;
   dryRun: boolean;
@@ -43,7 +48,7 @@ export interface GenerateOptions {
   savedConfig: ProjectConfig | null;
 }
 
-export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
+export async function runInitMode(opts: InitOptions): Promise<void> {
   // Clean shutdown on SIGINT to prevent partial file writes
   const cleanup = () => {
     unpatchPicocolors();
@@ -53,16 +58,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
   process.once("SIGINT", cleanup);
 
   const startTime = performance.now();
-  const {
-    rootDir,
-    yes,
-    dryRun,
-    reconfigure,
-    verbose,
-    jsonMode,
-    maxTokens,
-    savedConfig,
-  } = opts;
+  const { rootDir, yes, dryRun, reconfigure, verbose, jsonMode, maxTokens, savedConfig } = opts;
 
   const verboseLog: ProgressCallback = jsonMode
     ? NOOP_PROGRESS
