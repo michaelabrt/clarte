@@ -92,6 +92,16 @@ export async function renderProjectInfoSections(
   const techContent = `## Tech Stack\n\n${buildTechStackSection(ctx, stackSummary)}`;
   sections.push({ id: "tech-stack", priority: 0, content: techContent, tokens: estimateTokens(techContent) });
 
+  // Behavioral (two imperative lines, no heading - proven +2 turns when removed)
+  const behavioralText =
+    "Do not use Grep or Glob to explore the codebase upfront. Based on the task description, open the most relevant files directly. Only broaden your search if your first attempt doesn't find the right code.\nAfter editing, run tests once. Do not re-run tests to reformat output. If tests pass, stop.";
+  sections.push({
+    id: "behavioral",
+    priority: 0,
+    content: behavioralText,
+    tokens: estimateTokens(behavioralText),
+  });
+
   // Config Constraints (from analysis if available)
   if (analysis?.configConstraints) {
     const constraintsContent = renderConstraintsSection(analysis.configConstraints);
@@ -103,6 +113,60 @@ export async function renderProjectInfoSections(
         tokens: estimateTokens(constraintsContent),
       });
     }
+  }
+
+  // Key Files (proven -19pp pass rate when removed)
+  if (analysis?.hubFiles && analysis.hubFiles.length > 0) {
+    const instabilityMap = new Map<string, number>();
+    if (analysis.instabilities) {
+      for (const inst of analysis.instabilities) {
+        instabilityMap.set(inst.path, inst.instability);
+      }
+    }
+    const keyLines: string[] = [];
+    keyLines.push("## Key Files");
+    keyLines.push("");
+    keyLines.push("Most interconnected files. Read these first for architectural understanding.");
+    keyLines.push("");
+    keyLines.push("| File | Imported By | I |");
+    keyLines.push("|------|-------------|---|");
+    for (const hub of analysis.hubFiles) {
+      const inst = instabilityMap.get(hub.path);
+      const stabilityCell = inst == null ? "stable" : `I=${(inst * 100).toFixed(0)}%`;
+      const roleTag = hub.role !== "Leaf" ? ` (${hub.role})` : "";
+      keyLines.push(
+        `| \`${hub.path}\`${roleTag} | ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"} | ${stabilityCell} |`,
+      );
+    }
+    const keyContent = keyLines.join("\n");
+    sections.push({ id: "key-files", priority: 0, content: keyContent, tokens: estimateTokens(keyContent) });
+  }
+
+  // Change Coupling (proven +1 turn when removed)
+  if (analysis?.gitActivity?.changeCoupling && analysis.gitActivity.changeCoupling.length > 0) {
+    const ccLines: string[] = [];
+    ccLines.push("## Change Coupling");
+    ccLines.push("");
+    ccLines.push("Files that frequently change together -- when modifying one, check if the other needs updates too.");
+    ccLines.push("");
+    ccLines.push("| File A | File B | Co-changes | Confidence |");
+    ccLines.push("|--------|--------|------------|------------|");
+    for (const pair of analysis.gitActivity.changeCoupling) {
+      const ab = pair.confidenceAB ?? pair.confidence;
+      const ba = pair.confidenceBA ?? pair.confidence;
+      const diff = Math.abs(ab - ba);
+      let confLabel: string;
+      if (diff >= 0.2 && (ab >= 0.6 || ba >= 0.6)) {
+        confLabel = ab > ba ? `A->B ${(ab * 100).toFixed(0)}%` : `B->A ${(ba * 100).toFixed(0)}%`;
+      } else {
+        confLabel = `${(pair.confidence * 100).toFixed(0)}%`;
+      }
+      ccLines.push(
+        `| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${confLabel} |`,
+      );
+    }
+    const ccContent = ccLines.join("\n");
+    sections.push({ id: "change-coupling", priority: 0, content: ccContent, tokens: estimateTokens(ccContent) });
   }
 
   // Development
