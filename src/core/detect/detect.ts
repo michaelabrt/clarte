@@ -362,7 +362,9 @@ export async function detectIDEs(rootDir: string): Promise<IDETarget[]> {
 
   const detected: IDETarget[] = markers.filter((_, i) => checks[i]).map((m) => m.ide);
 
-  return detected.length > 0 ? detected : ["claude"];
+  // Always include Claude Code (primary target). Other IDEs are additive.
+  if (!detected.includes("claude")) detected.unshift("claude");
+  return detected;
 }
 
 /**
