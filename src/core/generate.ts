@@ -6,13 +6,12 @@ import type {
   ContextAnalysis,
   DetectedContext,
   GeneratedFile,
-  ImportGraph,
   ProgressCallback,
   UserAnswers,
 } from "../types.js";
 import type { PersistedGraph } from "../types/persisted-graph.js";
 import { fileExists, readFileOr, writeFileSafe } from "../utils.js";
-import { buildMainContext, getMainContextFilename, type SectionFilterOptions } from "../templates/main-context.js";
+import { buildMainContext, getMainContextFilename } from "../templates/main-context.js";
 import { buildClaudeSkills, renderClaudeSkill } from "../templates/claude-skills.js";
 import { buildPreFlightAgent } from "../templates/pre-flight-agent.js";
 import { detectContext } from "../detect/detect.js";
@@ -28,10 +27,6 @@ export interface GenerateFilesOptions {
   analysis?: ContextAnalysis;
   generateSkills?: boolean;
   onVerbose?: ProgressCallback;
-  budget?: number;
-  sectionFilter?: SectionFilterOptions;
-  maxChars?: number;
-  graph?: ImportGraph;
   persistedGraph?: PersistedGraph | null;
   delivery?: ProjectConfig["delivery"];
 }
@@ -51,10 +46,6 @@ export async function generateFiles(opts: GenerateFilesOptions): Promise<Generat
     analysis,
     generateSkills = false,
     onVerbose,
-    budget,
-    sectionFilter,
-    maxChars,
-    graph,
     delivery,
   } = opts;
   // Deduplicate files by path (e.g. multiple targets that share the same output path)
@@ -71,86 +62,9 @@ export async function generateFiles(opts: GenerateFilesOptions): Promise<Generat
     onVerbose?.(`Prepared ${filePath} (${content.length} bytes)`);
   }
 
-  let reservedChars = 0;
-  if (maxChars !== 0) {
-    for (const ide of answers.ides) {
-      const mainFilename = getMainContextFilename(ide);
-      // Skip user section reservation for rules-directory files (clarte owns these entirely)
-      const skipUserSections = mainFilename.startsWith(".claude/rules/") || mainFilename.startsWith(".cursor/rules/");
-      if (skipUserSections) continue;
-      if (
-        !mainFilename.endsWith(".md") &&
-        !mainFilename.startsWith(".windsurfrules") &&
-        !mainFilename.startsWith(".clinerules") &&
-        !mainFilename.startsWith(".continuerules")
-      )
-        continue;
-      const absPath = path.join(ctx.rootDir, mainFilename);
-      const existing = await readFileOr(absPath);
-      if (existing) {
-        const userSections = extractUserSections(existing);
-        for (const s of userSections) {
-          reservedChars += s.content.length + 2; // +2 for \n\n
-        }
-      }
-    }
-  }
-
-  // Compute scoped rules and directive exclusions (Exp 1)
-  let scopedRules: Array<{ filename: string; scope: string; paths: string[]; body: string }> = [];
-  let excludeDirectives: Set<string> | undefined;
-  const isFullMode = budget === 0;
-
-  if (delivery?.scopedRules && analysis && answers.ides.includes("claude") && !isFullMode) {
-    const { buildScopedRules, getGlobalDirectives } = await import("../templates/scoped-rules.js");
-    scopedRules = await buildScopedRules(analysis, ctx, graph);
-    if (scopedRules.length > 0) {
-      const { buildDirectives, computeFileComplexity } = await import("../templates/directives.js");
-      const { groupDirectivesByScope } = await import("../templates/directive-scope.js");
-      const fileComplexity =
-        analysis.hubFiles.length > 0 ? await computeFileComplexity(ctx.rootDir, analysis.hubFiles) : undefined;
-      const allDirectives = buildDirectives(analysis, ctx, fileComplexity, graph);
-      const scopedMap = groupDirectivesByScope(allDirectives);
-      const globalDirectives = getGlobalDirectives(allDirectives, scopedMap);
-      // Directives NOT in globalDirectives should be excluded from the main file
-      const globalSet = new Set(globalDirectives);
-      excludeDirectives = new Set(allDirectives.filter((d: string) => !globalSet.has(d)));
-    }
-  }
-
-  // Compute section excludes for on-demand skills (Exp 3)
-  let effectiveSectionFilter = sectionFilter;
-  if (delivery?.onDemandSkills && analysis && !isFullMode) {
-    const skillExcludes = new Set([
-      "tight-coupling",
-      "hidden-coupling",
-      "change-coupling",
-      "dead-files",
-      "cross-cutting",
-      "chokepoints",
-      "layer-consistency",
-      "circular-deps",
-      "test-mapping",
-    ]);
-    const mergedExclude = new Set([...(sectionFilter?.exclude ?? []), ...skillExcludes]);
-    effectiveSectionFilter = { ...sectionFilter, exclude: mergedExclude };
-  }
-
   for (const ide of answers.ides) {
     const mainFilename = getMainContextFilename(ide);
-    const mainContent = await buildMainContext(
-      ctx,
-      answers,
-      snapshot,
-      analysis,
-      budget,
-      ide === "claude" ? effectiveSectionFilter : sectionFilter,
-      maxChars,
-      reservedChars,
-      graph,
-      ide === "claude" ? excludeDirectives : undefined,
-      ide === "claude" ? delivery?.onDemandSkills : undefined,
-    );
+    const mainContent = await buildMainContext(ctx, answers, snapshot, analysis);
     await addFile(mainFilename, mainContent);
 
     // Always write agent to .clarte/agents/ (source of truth).
@@ -164,20 +78,11 @@ export async function generateFiles(opts: GenerateFilesOptions): Promise<Generat
     }
 
     if (generateSkills && ide === "claude") {
-      const skills = buildClaudeSkills(analysis, delivery?.onDemandSkills);
+      const skills = buildClaudeSkills();
       for (const skill of skills) {
         const skillPath = `.claude/skills/${skill.name}/SKILL.md`;
         const skillContent = renderClaudeSkill(skill);
         await addFile(skillPath, skillContent);
-      }
-    }
-
-    // Generate scoped rule files (Exp 1)
-    if (ide === "claude" && scopedRules.length > 0) {
-      const { renderScopedRule: renderRule } = await import("../templates/scoped-rules.js");
-      for (const rule of scopedRules) {
-        const rulePath = `.claude/rules/${rule.filename}`;
-        await addFile(rulePath, renderRule(rule));
       }
     }
 

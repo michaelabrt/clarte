@@ -1,24 +1,11 @@
-import type { ClaudeSkill, ContextAnalysis } from "../types.js";
-import {
-  renderTightCouplingContent,
-  renderHiddenCouplingContent,
-  renderCircularDepsContent,
-  renderDeadFilesContent,
-  renderCrossCuttingContent,
-  renderChokepointsContent,
-} from "./sections/dependencies.js";
-import { renderChangeCouplingContent } from "./sections/git-activity.js";
-import { renderLayerConsistencySection } from "./sections/architecture.js";
-import { renderTestMappingSection } from "../analysis/test-map.js";
+import type { ClaudeSkill } from "../types.js";
 
 /**
  * Build Claude Code skills.
  * Base skills: /check (auto-invocable) and /refresh (user-invoked).
- * When onDemandSkills=true and analysis is available, generates up to 3 additional
- * data skills: /coupling, /health, /tests.
  */
-export function buildClaudeSkills(analysis?: ContextAnalysis, onDemandSkills?: boolean): ClaudeSkill[] {
-  const skills: ClaudeSkill[] = [
+export function buildClaudeSkills(): ClaudeSkill[] {
+  return [
     {
       name: "check",
       description: "Detect architectural regressions after code changes",
@@ -53,104 +40,6 @@ export function buildClaudeSkills(analysis?: ContextAnalysis, onDemandSkills?: b
       ].join("\n"),
     },
   ];
-
-  if (onDemandSkills && analysis) {
-    const couplingSkill = buildCouplingSkill(analysis);
-    if (couplingSkill) skills.push(couplingSkill);
-
-    const healthSkill = buildHealthSkill(analysis);
-    if (healthSkill) skills.push(healthSkill);
-
-    const testsSkill = buildTestsSkill(analysis);
-    if (testsSkill) skills.push(testsSkill);
-  }
-
-  return skills;
-}
-
-function buildCouplingSkill(analysis: ContextAnalysis): ClaudeSkill | null {
-  const parts: string[] = [];
-
-  const tc = renderTightCouplingContent(analysis);
-  if (tc) parts.push(tc);
-
-  const hc = renderHiddenCouplingContent(analysis);
-  if (hc) parts.push(hc);
-
-  const cc = renderChangeCouplingContent(analysis);
-  if (cc) parts.push(cc);
-
-  if (parts.length === 0) return null;
-
-  return {
-    name: "coupling",
-    description:
-      "Analyze file coupling: tight coupling (file pairs importing many names from each other), hidden coupling (files co-changing in git without import paths) and change coupling frequency. Use before refactoring, restructuring exports or investigating why unrelated files break together.",
-    disableModelInvocation: false,
-    body: parts.join("\n\n"),
-  };
-}
-
-function buildHealthSkill(analysis: ContextAnalysis): ClaudeSkill | null {
-  const parts: string[] = [];
-
-  const dead = renderDeadFilesContent(analysis);
-  if (dead) parts.push(dead);
-
-  const circ = renderCircularDepsContent(analysis);
-  if (circ) parts.push(circ);
-
-  const choke = renderChokepointsContent(analysis);
-  if (choke) parts.push(choke);
-
-  const ccf = renderCrossCuttingContent(analysis);
-  if (ccf) parts.push(ccf);
-
-  const lc = renderLayerConsistencySection(analysis);
-  if (lc) parts.push(lc.content);
-
-  const topo = analysis.graphTopology;
-  if (topo) {
-    const topoLines: string[] = ["## Graph Topology"];
-    topoLines.push("");
-    topoLines.push(`| Metric | Value |`);
-    topoLines.push(`|--------|-------|`);
-    topoLines.push(`| Components | ${topo.componentCount} (${topo.isFragmented ? "fragmented" : "connected"}) |`);
-    topoLines.push(`| Diameter | ~${topo.approximateDiameter} hops |`);
-    topoLines.push(`| Reachability | ${(topo.reachability * 100).toFixed(0)}% |`);
-    if (topo.criticalChainLength != null) {
-      topoLines.push(`| Critical chain | ${topo.criticalChainLength} layers |`);
-    }
-    if (topo.modularityQ != null) {
-      topoLines.push(`| Modularity Q | ${topo.modularityQ.toFixed(2)} (directory-based) |`);
-    }
-    parts.push(topoLines.join("\n"));
-  }
-
-  if (parts.length === 0) return null;
-
-  return {
-    name: "health",
-    description:
-      "Diagnose architectural problems: dead files (zero importers), circular dependency chains with break-point suggestions, chokepoints (single points of failure in the import graph), cross-cutting files and layer consistency violations. Use before architectural changes, debt cleanup or quality review.",
-    disableModelInvocation: false,
-    body: parts.join("\n\n"),
-  };
-}
-
-function buildTestsSkill(analysis: ContextAnalysis): ClaudeSkill | null {
-  if (!analysis.testMapping) return null;
-
-  const testSection = renderTestMappingSection(analysis.testMapping, analysis.hubFiles);
-  if (!testSection) return null;
-
-  return {
-    name: "tests",
-    description:
-      "Show test coverage: which test files cover each source file, untested files needing coverage and test conventions. Use before writing tests, checking what to run after a change or assessing coverage gaps.",
-    disableModelInvocation: false,
-    body: testSection,
-  };
 }
 
 /**
