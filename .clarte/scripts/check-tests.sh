@@ -4,7 +4,7 @@
 # Usage: .clarte/scripts/check-tests.sh [extra-args...]
 set -o pipefail
 
-BASE_CMD="bun run test"
+if command -v bun >/dev/null 2>&1; then BASE_CMD="bun run test"; else BASE_CMD="npm run test"; fi
 EXTRA_ARGS="$*"
 CMD="$BASE_CMD${EXTRA_ARGS:+ $EXTRA_ARGS}"
 
@@ -17,7 +17,7 @@ EXIT_CODE=${PIPESTATUS[0]}
 # Strip ANSI escape codes for reliable parsing
 CLEAN=$(mktemp)
 trap 'rm -f "$TMPFILE" "$CLEAN"' EXIT
-sed $'s/\x1b\\[[0-9;]*m//g' "$TMPFILE" > "$CLEAN"
+sed 's/\x1b\[[0-9;]*m//g' "$TMPFILE" > "$CLEAN"
 
 PASS_COUNT="?"
 FAIL_COUNT="?"
@@ -27,11 +27,9 @@ FAIL_NAMES=""
 # Vitest output: "Tests  42 passed | 2 failed | 1 skipped (45)"
 LINE=$(grep -E 'Tests\s+[0-9]' "$CLEAN" | tail -1)
 if [ -n "$LINE" ]; then
-  PASS_COUNT=$(echo "$LINE" | sed -n 's/.*[^0-9]\([0-9][0-9]*\) passed.*/\1/p')
-  FAIL_COUNT=$(echo "$LINE" | sed -n 's/.*[^0-9]\([0-9][0-9]*\) failed.*/\1/p')
-  SKIPPED=$(echo "$LINE" | sed -n 's/.*[^0-9]\([0-9][0-9]*\) skipped.*/\1/p')
-  [ -z "$PASS_COUNT" ] && PASS_COUNT="0"
-  [ -z "$FAIL_COUNT" ] && FAIL_COUNT="0"
+  PASS_COUNT=$(echo "$LINE" | grep -oP '[0-9]+(?=\s+passed)' || echo "0")
+  FAIL_COUNT=$(echo "$LINE" | grep -oP '[0-9]+(?=\s+failed)' || echo "0")
+  SKIPPED=$(echo "$LINE" | grep -oP '[0-9]+(?=\s+skipped)' || echo "")
   [ -n "$SKIPPED" ] && [ "$SKIPPED" != "0" ] && SKIP_INFO=", $SKIPPED skipped"
 fi
 

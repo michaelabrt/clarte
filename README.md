@@ -50,16 +50,20 @@ For the full research story (30+ experiments, ablation studies, statistical meth
 
 ## How It Works
 
-`npx clarte` parses your imports with tree-sitter, builds a dependency graph and runs 20 static analysis passes. The results are delivered through multiple mechanisms:
+`npx clarte` parses your imports with tree-sitter, builds a dependency graph and runs static analysis passes. The results are delivered through three proven mechanisms:
 
 | Mechanism | When | What it does |
 |-----------|------|--------------|
-| [Context file](#output-targets) | Background | Architecture map for every session: key files, working guidelines, coupling patterns, conventions. Works with any tool that reads context files. |
-| [Prompt targeting](#claude-code-integration) | Per prompt | BM25F retrieval over the dependency graph predicts edit targets on every prompt. A pre-flight agent reads those targets and returns exact code locations before the main agent writes a single line. |
-| [Fail-fast hook](#claude-code-integration) | Per command | Blocks repeated test/build loops with no code edit in between. Addresses the #1 agent waste pattern (75% of tail turns in our analysis). |
-| [MCP tools](#mcp-tools) | On demand | Four graph query tools for mid-session lookup: file scope, task routing, call graph and blast radius. |
-| [Scripts](#generated-scripts) | Per task | Framework-aware test runner with structured output, filtered test-by-name runner and a grep wrapper that annotates results with graph context. |
-| [GitHub Action](#github-action) | Per PR | Co-change warnings, chokepoint alerts and coupling concerns on pull requests. |
+| [Pre-flight agent](#claude-code-integration) | Per prompt | BM25F retrieval over the dependency graph predicts edit targets. A pre-flight agent reads those targets and returns exact code locations before the main agent writes a single line. |
+| [Context file](#output-targets) | Background | Minimal operational directives: tech stack, config constraints, dev commands, test scripts. Works with any tool that reads context files. |
+| [CI mode](#github-action) | Per PR | Co-change warnings, chokepoint alerts and coupling concerns on pull requests. |
+
+Supporting infrastructure:
+
+| Component | What it does |
+|-----------|--------------|
+| [Fail-fast hook](#claude-code-integration) | Blocks repeated test/build loops with no code edit in between. Addresses the #1 agent waste pattern (75% of tail turns in our analysis). |
+| [Scripts](#generated-scripts) | Framework-aware test runner with structured output, filtered test-by-name runner and a grep wrapper with graph context. |
 
 ```mermaid
 graph LR
@@ -68,8 +72,6 @@ graph LR
     B --> D[Prompt Hook]
     D --> E[Pre-flight Agent]
     C & E --> F((Agent))
-    B --> G[MCP Tools]
-    G --> F
     F -. "edits + commits" .-> A
 ```
 
@@ -103,24 +105,6 @@ The 7pp pass rate drop is not statistically significant at this sample size, but
 | Turns (median) | 19 | **14** | -26% (p<0.001) |
 | Cost (median) | $0.35 | **$0.29** | -15% |
 
-<details>
-<summary><strong>Section ablation</strong></summary>
-
-Exclude-based ablation on Haiku: remove one section at a time and measure the drop in pass rate.
-
-| Removed Section | Pass Rate | Delta vs. Full Context |
-|----------------|-----------|------------------------|
-| _(none, full context)_ | 95% | -- |
-| Key Files | 76% | **-19pp** |
-| Conventions | 81% | **-14pp** |
-| Test Mapping | 90% | -5pp |
-| Working Guidelines | 91% | -4pp |
-| _(all context removed)_ | 86% | -9pp |
-
-Removing Key Files alone (-19pp) hurts more than removing all context (-9pp). One interpretation: the agent relies on knowing which files are central more than any other single piece of information. An alternative: removing one section while keeping others creates inconsistencies that hurt more than a clean slate. Exclude-based ablation cannot distinguish these.
-
-</details>
-
 Methodology, fixture projects and full reports are in the [benchmark repo](https://github.com/michaelabrt/clarte-benchmark).
 
 ## Claude Code Integration
@@ -137,35 +121,13 @@ For Claude Code, Clarté installs hooks and a pre-flight diagnostic agent on top
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| Context file | `.claude/rules/clarte.md` | Architecture map, always loaded |
+| Context file | `.claude/rules/clarte.md` | Operational directives, always loaded |
 | Prompt hook | `.clarte/hooks/on-prompt.mjs` | BM25F target resolution on every prompt |
 | Fail-fast hook | `.clarte/hooks/on-fail-fast.mjs` | Blocks repeated test/build without a code edit (threshold: 3) |
 | Session hook | `.clarte/hooks/on-session-start.mjs` | Resets hook state, disables hooks for Haiku |
-| Pre-flight agent | `.clarte/agents/clarte-pre-flight.md` | Reads targets, returns exact edit locations. Installed on demand for opaque prompts. |
+| Pre-flight agent | `.clarte/agents/clarte-pre-flight.md` | Reads targets, returns exact edit locations |
 
 Hooks wire into `.claude/settings.json` automatically. The pre-flight agent is stored in `.clarte/agents/` and copied to `.claude/agents/` only when the prompt hook detects an opaque task.
-
-## MCP Tools
-
-The MCP server exposes the dependency graph for real-time queries during a session.
-
-```json
-{
-  "mcpServers": {
-    "clarte": {
-      "command": "npx",
-      "args": ["clarte", "--mcp"]
-    }
-  }
-}
-```
-
-| Tool | What it does |
-|------|-------------|
-| `clarte_route` | Given a natural language task, finds the most relevant file from commit history via BM25 ranking. Designed as the first call before any exploration. |
-| `clarte_scope` | Returns a file's role, importers, co-change partners, test file and first 150 lines with importer snippets. Call after finding a file to edit. |
-| `clarte_calls` | Returns all call sites of a function (who calls it) and all functions it calls, with file paths and line numbers. Call before renaming or changing a signature. |
-| `clarte_impact` | Returns every file that transitively depends on a given file (the blast radius), ranked by distance. Call before removing an export or changing a public type. |
 
 ## Generated Scripts
 
@@ -181,12 +143,12 @@ These are referenced in the generated context file with imperative directives ("
 
 ## Output Targets
 
-Works with any AI coding tool that reads context files. Deep integration with Claude Code (hooks + pre-flight + MCP). Context file generation for everything else.
+Works with any AI coding tool that reads context files. Deep integration with Claude Code (hooks + pre-flight).
 
 | Tool | Generated file |
 |------|---------------|
-| Claude Code | `.claude/rules/clarte.md` + hooks + pre-flight agent + MCP |
-| Cursor | `.cursor/rules/clarte.mdc` + per-directory graph rules |
+| Claude Code | `.claude/rules/clarte.md` + hooks + pre-flight agent |
+| Cursor | `.cursor/rules/clarte.md` + pre-flight agent |
 | OpenCode | `AGENTS.md` |
 | GitHub Copilot | `.github/copilot-instructions.md` |
 | Windsurf | `.windsurfrules` |
@@ -254,23 +216,13 @@ npx clarte [directory] [options]
 | `-V, --version` | Show version number |
 | `--yes` | Overwrite existing files without asking |
 | `--dry-run` | Preview what would be generated |
-| `--diff[=REF] [FILES]` | Generate focused context for changed files (vs HEAD or REF) |
-| `--diff-file=PATH` | Write diff output to a file instead of stdout |
 | `--refresh-snapshot` | Re-scan source files and update just the code snapshot |
 | `--reconfigure` | Re-prompt even if `.clarte.json` exists |
 | `--check` | Check if the snapshot is stale via hash comparison (exit 0 = fresh, 1 = stale) |
 | `--check=timestamp` | Timestamp-only staleness check, no file hashing (for shell hooks) |
 | `--ci` | Machine-readable output (use with `--check` for CI pipelines) |
-| `--max-tokens=N` | Set the token budget for the code snapshot |
-| `--budget=N` | Set token budget for the context file (prioritized sections) |
-| `--max-chars=N` | Set character budget (default: 39500, 0 to disable) |
-| `--full` | Disable token budget (include all sections) |
-| `--include=a,b` | Always include these sections (comma-separated IDs) |
-| `--exclude=a,b` | Exclude these sections entirely |
 | `--format=json` | Output full analysis as structured JSON to stdout |
 | `--init-hook` | Install git pre-commit hook for auto-refresh on commit |
-| `--watch` | Watch for file changes and re-analyze continuously |
-| `--mcp` | Start the MCP server for real-time graph queries |
 | `-v, --verbose` | Show detailed progress output |
 
 **Subcommands:**
@@ -290,14 +242,11 @@ On first run, Clarté saves config to `.clarte.json` (add to `.gitignore`). Use 
 |-------|-------------|
 | `analysisDays` | Git history window in days (default: 90) |
 | `staleDays` | Days before snapshot is considered stale (default: 7) |
-| `sectionOrder` | Custom ordering of context sections; prefix with `-` to exclude |
 | `layers` | Custom architectural layer patterns (regex, for hexagonal/clean/DDD architectures) |
 
 **Monorepo support:** Detects pnpm workspaces, Turborepo and Nx. Per-package context files with scoped dependencies, frameworks and cross-package import analysis.
 
 **Framework conventions:** Detects Next.js, Express, FastAPI, Django, NestJS, SvelteKit, Expo, Hono and more. Includes relevant conventions in the output.
-
-**Context splitting:** Large projects (150+ files) automatically get tiered files: a root overview linking to per-directory context files in `.clarte/context/`.
 
 **User section preservation:** Wrap custom content with `<!-- clarte:user-start -->` / `<!-- clarte:user-end -->` markers to survive regeneration.
 
@@ -306,11 +255,11 @@ On first run, Clarté saves config to `.clarte.json` (add to `.gitignore`). Use 
 ## Development
 
 ```bash
-bun install
-bun run build      # Build with tsup
-bun run dev        # Watch mode
-bun run typecheck  # Type-check without emitting
-bun test           # Run tests with vitest
+npm install
+npm run build      # Build with tsup
+npm run dev        # Watch mode
+npm run typecheck  # Type-check without emitting
+npm test           # Run tests with vitest
 ```
 
 ## License
