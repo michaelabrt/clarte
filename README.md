@@ -8,7 +8,7 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
-<p align="center"><strong>Edit first, explore never.</strong></p>
+<p align="center"><em>The starting point your agent is missing.</em></p>
 
 Clarté builds a dependency graph from your codebase and predicts which files need editing before the agent starts. In [real-world tests](#case-studies), it completed tasks agents couldn't finish alone, at 17-71% lower cost.
 
