@@ -45,6 +45,16 @@ export function printHelp(): void {
   console.log("");
   console.log(`  ${t.textBold("Subcommands:")}`);
   console.log(
+    `    ${t.accent("init")}                    ${t.text("Set up clarte for a project (default if no subcommand)")}`,
+  );
+  console.log(
+    `    ${t.accent("observe")}                 ${t.text("Analyze Claude Code session logs for waste patterns")}`,
+  );
+  console.log(`    ${t.accent("  --session=ID")}          ${t.text("Analyze a specific session")}`);
+  console.log(`    ${t.accent("  --all")}                 ${t.text("Search all projects, not just current")}`);
+  console.log(`    ${t.accent("  --since=7d")}            ${t.text("Time window (d/h/m/w)")}`);
+  console.log(`    ${t.accent("  --format=json")}         ${t.text("Machine-readable JSON output")}`);
+  console.log(
     `    ${t.accent("ci")}                      ${t.text("Analyze changed files and output risk assessment as JSON")}`,
   );
   console.log(`    ${t.accent("  --base=REF")}            ${t.text("Git ref to diff against (default: HEAD)")}`);
@@ -54,19 +64,14 @@ export function printHelp(): void {
   console.log("");
   console.log(`  ${t.textBold("Examples:")}`);
   console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME}`)}                   ${t.muted("# analyze current directory")}`,
+    `    ${t.muted("$")} ${t.text(`npx ${NAME}`)}                   ${t.muted("# set up clarte for current project")}`,
   );
   console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME} ./my-project`)}      ${t.muted("# analyze a specific project")}`,
+    `    ${t.muted("$")} ${t.text(`npx ${NAME} observe`)}            ${t.muted("# analyze recent coding sessions")}`,
   );
+  console.log(`    ${t.muted("$")} ${t.text(`npx ${NAME} observe --all`)}      ${t.muted("# across all projects")}`);
   console.log(
     `    ${t.muted("$")} ${t.text(`npx ${NAME} ci --base=main`)}     ${t.muted("# CI risk report for PR changes")}`,
-  );
-  console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME} --dry-run`)}          ${t.muted("# preview without writing files")}`,
-  );
-  console.log(
-    `    ${t.muted("$")} ${t.text(`npx ${NAME} --refresh-snapshot`)} ${t.muted("# update code snapshot only")}`,
   );
   console.log("");
 }
@@ -87,6 +92,10 @@ export interface CliArgs {
   maxTokens: number | undefined;
   jsonMode: boolean;
   initHook: boolean;
+  observeSubcommand: boolean;
+  observeSessionId: string | undefined;
+  observeAll: boolean;
+  observeSince: string | undefined;
 }
 
 export function parseCliArgs(rawArgs: string[]): CliArgs {
@@ -99,6 +108,12 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const checkTimestamp = checkArg === "--check=timestamp";
   const ciMode = rawArgs.includes("--ci");
   const ciSubcommand = rawArgs[0] === "ci";
+  const observeSubcommand = rawArgs[0] === "observe";
+  const observeSessionArg = rawArgs.find((a) => a.startsWith("--session="));
+  const observeSessionId = observeSessionArg?.split("=").slice(1).join("=");
+  const observeAll = rawArgs.includes("--all");
+  const observeSinceArg = rawArgs.find((a) => a.startsWith("--since="));
+  const observeSince = observeSinceArg?.split("=").slice(1).join("=");
   const ciBaseArg = rawArgs.find((a) => a.startsWith("--base="));
   const ciBase = ciBaseArg?.split("=").slice(1).join("=");
   const ciChangedFilesArg = rawArgs.find((a) => a.startsWith("--changed-files="));
@@ -115,10 +130,8 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
   const formatArg = rawArgs.find((a) => a.startsWith("--format="));
   const jsonMode = formatArg?.split("=")[1] === "json";
   const initHook = rawArgs.includes("--init-hook");
-  const subcommands = new Set(["ci"]);
-  const targetDir =
-    rawArgs.find((a) => !a.startsWith("-") && !subcommands.has(a)) ??
-    process.cwd();
+  const subcommands = new Set(["ci", "observe", "init"]);
+  const targetDir = rawArgs.find((a) => !a.startsWith("-") && !subcommands.has(a)) ?? process.cwd();
   const rootDir = path.resolve(targetDir);
 
   if (dryRun && check) {
@@ -140,6 +153,7 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     "-h",
     "--version",
     "-V",
+    "--all",
   ]);
   const knownPrefixes = [
     "--check=",
@@ -147,6 +161,8 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     "--format=",
     "--base=",
     "--changed-files=",
+    "--session=",
+    "--since=",
   ];
   for (const arg of rawArgs) {
     if (!arg.startsWith("-")) continue;
@@ -171,6 +187,10 @@ export function parseCliArgs(rawArgs: string[]): CliArgs {
     maxTokens,
     jsonMode,
     initHook,
+    observeSubcommand,
+    observeSessionId,
+    observeAll,
+    observeSince,
   };
 }
 

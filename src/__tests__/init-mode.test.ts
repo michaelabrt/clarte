@@ -205,12 +205,12 @@ vi.mock("../core/utils.js", () => ({
 
 // ── Import under test (after mocks) ────────────────────────────────
 
-import { runGenerateMode } from "../cli/generate.js";
+import { runInitMode } from "../cli/init.js";
 import type { ProjectConfig } from "../core/types.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function makeOpts(overrides: Partial<Parameters<typeof runGenerateMode>[0]> = {}) {
+function makeOpts(overrides: Partial<Parameters<typeof runInitMode>[0]> = {}) {
   return {
     rootDir: "/tmp/test",
     yes: false,
@@ -268,9 +268,9 @@ beforeEach(() => {
   });
 });
 
-describe("runGenerateMode", () => {
+describe("runInitMode", () => {
   it("runs the full pipeline: detect -> graph -> analysis -> snapshot -> generate", async () => {
-    await runGenerateMode(makeOpts());
+    await runInitMode(makeOpts());
 
     expect(mockDetectContext).toHaveBeenCalled();
     expect(mockBuildGraphWithCache).toHaveBeenCalled();
@@ -281,7 +281,7 @@ describe("runGenerateMode", () => {
   });
 
   it("passes dryRun through to generateFiles", async () => {
-    await runGenerateMode(makeOpts({ dryRun: true }));
+    await runInitMode(makeOpts({ dryRun: true }));
 
     const callArgs = mockGenerateFiles.mock.calls[0][0];
     expect(callArgs.dryRun).toBe(true);
@@ -295,7 +295,7 @@ describe("runGenerateMode", () => {
       generatePerPackage: false,
     } as ProjectConfig;
 
-    await runGenerateMode(makeOpts({ savedConfig }));
+    await runInitMode(makeOpts({ savedConfig }));
 
     expect(mockConfigToAnswers).toHaveBeenCalledWith(savedConfig);
     expect(mockRunPrompts).not.toHaveBeenCalled();
@@ -310,14 +310,14 @@ describe("runGenerateMode", () => {
       generatePerPackage: false,
     } as ProjectConfig;
 
-    await runGenerateMode(makeOpts({ savedConfig, reconfigure: true }));
+    await runInitMode(makeOpts({ savedConfig, reconfigure: true }));
 
     expect(mockRunPrompts).toHaveBeenCalled();
     expect(mockConfigToAnswers).not.toHaveBeenCalled();
   });
 
   it("auto-detects IDEs on first run (no saved config)", async () => {
-    await runGenerateMode(makeOpts({ savedConfig: null }));
+    await runInitMode(makeOpts({ savedConfig: null }));
 
     expect(mockDetectIDEs).toHaveBeenCalled();
     expect(mockDetectProjectDescription).toHaveBeenCalled();
@@ -338,7 +338,7 @@ describe("runGenerateMode", () => {
     });
     const savedConfig = { generateSnapshot: false } as ProjectConfig;
 
-    await runGenerateMode(makeOpts({ savedConfig }));
+    await runInitMode(makeOpts({ savedConfig }));
 
     expect(mockGenerateSnapshot).not.toHaveBeenCalled();
   });
@@ -347,20 +347,20 @@ describe("runGenerateMode", () => {
     mockGenerateFiles.mockResolvedValue([]);
     const { outro } = await import("@clack/prompts");
 
-    await runGenerateMode(makeOpts());
+    await runInitMode(makeOpts());
 
     expect(outro).toHaveBeenCalledWith("Nothing to write. Done!");
     expect(mockPrintSummary).not.toHaveBeenCalled();
   });
 
   it("saves config on first run when not dry-run", async () => {
-    await runGenerateMode(makeOpts({ dryRun: false, savedConfig: null }));
+    await runInitMode(makeOpts({ dryRun: false, savedConfig: null }));
 
     expect(mockSaveConfig).toHaveBeenCalled();
   });
 
   it("does not save config on dry-run", async () => {
-    await runGenerateMode(makeOpts({ dryRun: true, savedConfig: null }));
+    await runInitMode(makeOpts({ dryRun: true, savedConfig: null }));
 
     expect(mockSaveConfig).not.toHaveBeenCalled();
   });
@@ -382,7 +382,7 @@ describe("runGenerateMode", () => {
       secondaryLanguages: ["python"],
     });
 
-    await runGenerateMode(makeOpts());
+    await runInitMode(makeOpts());
 
     expect(mockBuildImportGraph).toHaveBeenCalledWith("/tmp/test", "python", undefined);
     expect(mockMergeGraph).toHaveBeenCalled();

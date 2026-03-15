@@ -161,9 +161,7 @@ export async function renderProjectInfoSections(
       } else {
         confLabel = `${(pair.confidence * 100).toFixed(0)}%`;
       }
-      ccLines.push(
-        `| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${confLabel} |`,
-      );
+      ccLines.push(`| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${confLabel} |`);
     }
     const ccContent = ccLines.join("\n");
     sections.push({ id: "change-coupling", priority: 0, content: ccContent, tokens: estimateTokens(ccContent) });
