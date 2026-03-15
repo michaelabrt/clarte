@@ -13,8 +13,6 @@ import { errorMessage, fileExists, writeJsonStdout } from "./utils.js";
 import { loadConfig } from "./config/config.js";
 import { refreshSnapshot } from "./modes/refresh.js";
 import { initPreCommitHook } from "./cli/hooks.js";
-import { runDiffMode } from "./modes/diff.js";
-import { runWatchMode } from "./modes/watch.js";
 import { handleEarlyExits, parseCliArgs } from "./cli/args.js";
 import { runCheckMode } from "./cli/check.js";
 import { runCiMode } from "./cli/ci.js";
@@ -53,10 +51,6 @@ async function main() {
     dryRun,
     refresh,
     reconfigure,
-    diffMode,
-    diffRef,
-    diffFilterFiles,
-    diffFile,
     check,
     checkTimestamp,
     ciMode,
@@ -64,20 +58,12 @@ async function main() {
     ciBase,
     ciChangedFiles,
     verbose,
-    watchMode,
     maxTokens,
     jsonMode,
     effectiveBudget,
     sectionFilter,
     maxChars,
     initHook,
-    learnSubcommand,
-    learnSessionPath,
-    runSubcommand,
-    runTaskDescription,
-    runPassthroughArgs,
-    serveSubcommand,
-    mcpMode,
   } = parseCliArgs(rawArgs);
 
   if (initHook) {
@@ -91,33 +77,6 @@ async function main() {
     process.exit(ExitCode.SUCCESS);
   }
 
-  if (learnSubcommand) {
-    if (!learnSessionPath) {
-      throw new ClarteError("Usage: clarte learn <session-log.jsonl>");
-    }
-    const { runLearnMode } = await import("./cli/learn.js");
-    const result = await runLearnMode(rootDir, learnSessionPath, verbose, jsonMode);
-    if (jsonMode) {
-      await writeJsonStdout(result);
-    }
-    process.exit(ExitCode.SUCCESS);
-  }
-
-  if (runSubcommand) {
-    if (!runTaskDescription) {
-      throw new ClarteError('Usage: clarte run "task description" [-- claude flags]');
-    }
-    const { runRunMode } = await import("./cli/run.js");
-    const code = await runRunMode(rootDir, runTaskDescription, runPassthroughArgs, verbose);
-    process.exit(code);
-  }
-
-  if (serveSubcommand) {
-    const { runServeMode } = await import("./modes/serve.js");
-    await runServeMode(rootDir);
-    return;
-  }
-
   const hasProjectMarker = (await Promise.all(PROJECT_MARKERS.map((f) => fileExists(path.join(rootDir, f))))).some(
     Boolean,
   );
@@ -126,11 +85,6 @@ async function main() {
     throw new ClarteError(
       `No project found at ${rootDir}. Run npx clarte from a project directory, or pass a path: npx clarte ./my-project`,
     );
-  }
-
-  if (watchMode) {
-    await runWatchMode(rootDir, verbose);
-    return;
   }
 
   if (check) {
@@ -157,14 +111,6 @@ async function main() {
     return;
   }
 
-  if (diffMode) {
-    p.log.info(t.muted("diff-aware context"));
-    await runDiffMode(rootDir, diffRef, verbose, diffFile, diffFilterFiles);
-    unpatchPicocolors();
-    resetTerminalColors();
-    return;
-  }
-
   await runGenerateMode({
     rootDir,
     yes,
@@ -177,7 +123,6 @@ async function main() {
     sectionFilter,
     maxChars,
     savedConfig,
-    mcpMode,
   });
 
   unpatchPicocolors();

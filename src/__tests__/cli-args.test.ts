@@ -17,14 +17,10 @@ describe("parseCliArgs", () => {
     expect(result.dryRun).toBe(false);
     expect(result.refresh).toBe(false);
     expect(result.reconfigure).toBe(false);
-    expect(result.diffMode).toBe(false);
-    expect(result.diffRef).toBeUndefined();
-    expect(result.diffFilterFiles).toEqual([]);
     expect(result.check).toBe(false);
     expect(result.checkTimestamp).toBe(false);
     expect(result.ciMode).toBe(false);
     expect(result.verbose).toBe(false);
-    expect(result.watchMode).toBe(false);
     expect(result.maxTokens).toBeUndefined();
     expect(result.jsonMode).toBe(false);
     expect(result.effectiveBudget).toBeUndefined();
@@ -34,46 +30,15 @@ describe("parseCliArgs", () => {
   });
 
   it("parses boolean flags", () => {
-    const result = parseCliArgs(["--yes", "--dry-run", "--verbose", "--ci", "--watch"]);
+    const result = parseCliArgs(["--yes", "--dry-run", "--verbose", "--ci"]);
     expect(result.yes).toBe(true);
     expect(result.dryRun).toBe(true);
     expect(result.verbose).toBe(true);
     expect(result.ciMode).toBe(true);
-    expect(result.watchMode).toBe(true);
   });
 
   it("parses -v as verbose", () => {
     expect(parseCliArgs(["-v"]).verbose).toBe(true);
-  });
-
-  it("parses --diff without ref", () => {
-    const result = parseCliArgs(["--diff"]);
-    expect(result.diffMode).toBe(true);
-    expect(result.diffRef).toBeUndefined();
-    expect(result.diffFilterFiles).toEqual([]);
-  });
-
-  it("parses --diff=REF with ref", () => {
-    const result = parseCliArgs(["--diff=main"]);
-    expect(result.diffMode).toBe(true);
-    expect(result.diffRef).toBe("main");
-  });
-
-  it("parses --diff with file filter arguments", () => {
-    const result = parseCliArgs(["--diff", "src/foo.ts", "src/bar.ts"]);
-    expect(result.diffMode).toBe(true);
-    expect(result.diffFilterFiles).toEqual(["src/foo.ts", "src/bar.ts"]);
-  });
-
-  it("stops file filter at next flag", () => {
-    const result = parseCliArgs(["--diff", "src/foo.ts", "--verbose"]);
-    expect(result.diffFilterFiles).toEqual(["src/foo.ts"]);
-    expect(result.verbose).toBe(true);
-  });
-
-  it("parses --diff-file=PATH", () => {
-    const result = parseCliArgs(["--diff", "--diff-file=output.md"]);
-    expect(result.diffFile).toBe("output.md");
   });
 
   it("parses --check", () => {
@@ -136,14 +101,6 @@ describe("parseCliArgs", () => {
     expect(result.rootDir).toContain("my-project");
   });
 
-  it("ignores diff filter files when picking target directory", () => {
-    const result = parseCliArgs(["--diff", "src/foo.ts", "./my-project"]);
-    // src/foo.ts is a diff filter file, ./my-project is the target dir
-    // But since src/foo.ts comes first after --diff, it's a filter file
-    // and ./my-project would also be treated as a filter file (no break on non-flag)
-    expect(result.diffFilterFiles).toEqual(["src/foo.ts", "./my-project"]);
-  });
-
   it("parses --init-hook", () => {
     expect(parseCliArgs(["--init-hook"]).initHook).toBe(true);
   });
@@ -154,19 +111,6 @@ describe("parseCliArgs", () => {
 
   it("parses --reconfigure", () => {
     expect(parseCliArgs(["--reconfigure"]).reconfigure).toBe(true);
-  });
-
-  it("throws on --diff + --watch conflict", () => {
-    expect(() => parseCliArgs(["--diff", "--watch"])).toThrow(ClarteError);
-    expect(() => parseCliArgs(["--diff", "--watch"])).toThrow("cannot be used together");
-  });
-
-  it("throws on --diff + --check conflict", () => {
-    expect(() => parseCliArgs(["--diff", "--check"])).toThrow(ClarteError);
-  });
-
-  it("throws on --watch + --check conflict", () => {
-    expect(() => parseCliArgs(["--watch", "--check"])).toThrow(ClarteError);
   });
 
   it("throws on --dry-run + --check conflict", () => {
@@ -185,24 +129,5 @@ describe("parseCliArgs", () => {
     parseCliArgs(["--yes", "--verbose", "--dry-run"]);
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
-  });
-
-  it("parses learn subcommand without path", () => {
-    const result = parseCliArgs(["learn"]);
-    expect(result.learnSubcommand).toBe(true);
-    expect(result.learnSessionPath).toBeUndefined();
-  });
-
-  it("parses learn subcommand with session path", () => {
-    const result = parseCliArgs(["learn", "session.jsonl"]);
-    expect(result.learnSubcommand).toBe(true);
-    expect(result.learnSessionPath).toBe("session.jsonl");
-  });
-
-  it("parses learn subcommand with --verbose and session path", () => {
-    const result = parseCliArgs(["learn", "--verbose", "session.jsonl"]);
-    expect(result.learnSubcommand).toBe(true);
-    expect(result.verbose).toBe(true);
-    expect(result.learnSessionPath).toBe("session.jsonl");
   });
 });

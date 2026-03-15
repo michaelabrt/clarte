@@ -28,7 +28,6 @@ import { computeHITS, computeBetweenness } from "../graph/centrality.js";
 import { getHubFiles } from "../graph/hub-files.js";
 import { startShimmer, NOOP_SHIMMER } from "../cli/animations.js";
 import { serializeAnalysis } from "../analysis/serialize.js";
-import { buildDirectives } from "../templates/directives.js";
 import { runAnalysis } from "../core/run-analysis.js";
 import { persistGraph, loadPersistedGraph } from "../graph/persist.js";
 import { HITS, SNAPSHOT_LANGUAGES } from "../config/thresholds.js";
@@ -45,22 +44,6 @@ export interface GenerateOptions {
   sectionFilter?: { include?: Set<string>; exclude?: Set<string> };
   maxChars?: number;
   savedConfig: ProjectConfig | null;
-  mcpMode?: boolean;
-}
-
-async function generateMcpConfig(rootDir: string): Promise<void> {
-  const mcpConfigPath = path.join(rootDir, ".mcp.json");
-  let config: Record<string, unknown> = {};
-  try {
-    const parsed: unknown = JSON.parse(await fs.readFile(mcpConfigPath, "utf-8"));
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      config = parsed as Record<string, unknown>;
-    }
-  } catch {}
-  const mcpServers = (config.mcpServers as Record<string, unknown>) ?? {};
-  mcpServers.clarte = { command: "npx", args: ["clarte", "serve"], type: "stdio", cwd: rootDir };
-  config.mcpServers = mcpServers;
-  await fs.writeFile(mcpConfigPath, JSON.stringify(config, null, 2) + "\n");
 }
 
 export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
@@ -85,7 +68,6 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     sectionFilter,
     maxChars,
     savedConfig,
-    mcpMode,
   } = opts;
 
   const verboseLog: ProgressCallback = jsonMode
@@ -175,20 +157,6 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     verboseLog(`Graph load failed: ${errorMessage(err)}`);
   }
 
-  // Build call graph for MCP function-level queries (non-critical, only when MCP is enabled)
-  if (mcpMode) {
-    try {
-      const { buildCallGraph, persistCallGraph } = await import("../graph/build-call-graph.js");
-      const callGraph = await buildCallGraph(rootDir, graph, [...graph.inDegree.keys()], detected.language);
-      await persistCallGraph(rootDir, callGraph);
-      verboseLog(`Call graph: ${callGraph.sites.length} resolved call sites`);
-    } catch (err) {
-      if (!jsonMode) {
-        p.log.warn(t.warn(`Call graph extraction failed: ${errorMessage(err)}`));
-      }
-    }
-  }
-
   if (jsonMode) {
     let snapshot = null;
     if (savedConfig?.generateSnapshot !== false) {
@@ -202,8 +170,7 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       );
       if (snapshot.entries.length === 0) snapshot = null;
     }
-    const directives = buildDirectives(analysis, detected, undefined, graph);
-    const output = serializeAnalysis(detected, analysis, snapshot, graph, directives);
+    const output = serializeAnalysis(detected, analysis, snapshot, graph, []);
     await writeJsonStdout(output);
     process.exit(ExitCode.SUCCESS);
   }
@@ -275,13 +242,6 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     }
   }
 
-  // MCP enforcement is currently implemented for Claude Code only (PreToolUse hook API).
-  // Always include the "claude" target so enforcement hooks and graph-tools instructions are generated,
-  // regardless of which IDEs were auto-detected.
-  if (mcpMode && !answers.ides.includes("claude")) {
-    answers = { ...answers, ides: [...answers.ides, "claude"] };
-  }
-
   let snapshot = null;
   if (answers.generateSnapshot) {
     shimmer = startShimmer("Scanning source files for code snapshot...");
@@ -329,7 +289,6 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
       graph,
       persistedGraph,
       delivery: savedConfig?.delivery,
-      mcpEnabled: mcpMode,
     });
   } finally {
     shimmer.stop();
@@ -351,11 +310,9 @@ export async function runGenerateMode(opts: GenerateOptions): Promise<void> {
     await runPostGenerationTasks({
       rootDir,
       detected,
-      analysis,
       answers,
       persistedGraph,
       savedConfig,
-      mcpMode,
       verboseLog,
     });
   }
@@ -468,16 +425,14 @@ function printAnalysisReport(graph: ImportGraph, analysis: ContextAnalysis): voi
 interface PostGenerationOptions {
   rootDir: string;
   detected: DetectedContext;
-  analysis: ContextAnalysis;
   answers: UserAnswers;
   persistedGraph: PersistedGraph | null;
   savedConfig: ProjectConfig | null;
-  mcpMode?: boolean;
   verboseLog: ProgressCallback;
 }
 
 async function runPostGenerationTasks(opts: PostGenerationOptions): Promise<void> {
-  const { rootDir, detected, analysis, answers, persistedGraph, savedConfig, mcpMode, verboseLog } = opts;
+  const { rootDir, detected, answers, persistedGraph, savedConfig, verboseLog } = opts;
 
   // Generate Claude Code hooks for graph context delivery
   if (persistedGraph && answers.ides.includes("claude") && savedConfig?.hooks !== false) {
@@ -485,24 +440,11 @@ async function runPostGenerationTasks(opts: PostGenerationOptions): Promise<void
       const { generateHookFiles, configureClaudeHooks, generatePreFlightAgentFile } = await import(
         "../hooks/generate-hooks.js"
       );
-      let hookDirectives: string[] | undefined;
-      if (savedConfig?.delivery?.enrichedHooks) {
-        hookDirectives = buildDirectives(analysis, detected);
-      }
-      await generateHookFiles(rootDir, persistedGraph, savedConfig?.delivery?.enrichedHooks, hookDirectives);
+      await generateHookFiles(rootDir, persistedGraph, savedConfig?.delivery?.enrichedHooks);
       await configureClaudeHooks(rootDir);
       await generatePreFlightAgentFile(rootDir);
     } catch (err) {
       verboseLog(`Hook generation failed: ${errorMessage(err)}`);
-    }
-  }
-
-  // Generate .mcp.json for clarte serve
-  if (mcpMode) {
-    try {
-      await generateMcpConfig(rootDir);
-    } catch (err) {
-      verboseLog(`MCP config generation failed: ${errorMessage(err)}`);
     }
   }
 

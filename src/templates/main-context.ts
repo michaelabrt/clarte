@@ -72,7 +72,6 @@ export async function buildMainContext(
   graph?: ImportGraph,
   excludeDirectives?: Set<string>,
   onDemandSkills?: boolean,
-  mcpEnabled?: boolean,
 ): Promise<string> {
   const allSections = await buildSections(
     ctx,
@@ -82,7 +81,6 @@ export async function buildMainContext(
     graph,
     excludeDirectives,
     onDemandSkills,
-    mcpEnabled,
   );
   const effectiveBudget = budget ?? DEFAULT_BUDGET;
   const effectiveMaxChars = maxChars ?? DEFAULT_MAX_CHARS;
@@ -146,7 +144,6 @@ export async function buildSections(
   graph?: ImportGraph,
   excludeDirectives?: Set<string>,
   onDemandSkills?: boolean,
-  mcpEnabled?: boolean,
 ): Promise<ContextSection[]> {
   resetProjectNameCache();
   const projectName = await getProjectName(ctx);
@@ -164,17 +161,6 @@ export async function buildSections(
     byId.set(s.id, s);
   }
 
-  // Add graph-tools section when MCP server is configured
-  if (mcpEnabled) {
-    const graphToolsContent = buildGraphToolsSection();
-    byId.set("graph-tools", {
-      id: "graph-tools",
-      priority: 2,
-      content: graphToolsContent,
-      tokens: estimateTokens(graphToolsContent),
-    });
-  }
-
   // Insert in the exact order matching the original monolithic buildSections().
   // This order determines tiebreaking when sections share a priority level.
   const SECTION_ORDER = [
@@ -183,7 +169,6 @@ export async function buildSections(
     "tech-stack",
     "config-constraints",
     "working-guidelines",
-    "graph-tools",
     "key-files",
     "circular-deps",
     "architecture",
@@ -281,27 +266,6 @@ export async function buildSections(
   }
 
   return sections;
-}
-
-/**
- * Build the Graph Tools section for the MCP CORE DIRECTIVE.
- */
-function buildGraphToolsSection(): string {
-  return `## Graph Tools
-
-When \`.clarte/task-context.md\` exists, always run the pre-flight scan first:
-\`Agent(subagent_type="clarte-pre-flight", prompt="<task description>")\`
-It reads the target files and returns the exact edit locations with full code context. Apply its findings directly - the code is already in your context, no need to re-read those files.
-If it returns \`NO_TARGETS\`, proceed with normal exploration - do not spawn a second sub-agent for the same purpose.
-
-| Trigger | Tool | What it returns |
-|---------|------|-----------------|
-| **Before renaming or removing** a function | \`clarte_calls(<name>)\` | All call sites + all functions it calls |
-| **Before changing** a public API or export | \`clarte_impact(<path>)\` | Full transitive dependent set + risk level |
-
-**STOP CONDITIONS:**
-- Do NOT call \`clarte_calls\` for trivial one-line functions.
-- Do NOT call \`clarte_impact\` on leaf files with zero importers.`;
 }
 
 /**
