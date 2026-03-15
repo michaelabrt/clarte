@@ -16,17 +16,17 @@ We started by asking which sections of the generated context actually help. The 
 
 We tried adding, removing and reorganizing context sections in many configurations:
 
-| Experiment | Idea | Result | Doc |
-|---|---|---|---|
-| [Surprise Scoring](experiments/surprise-scoring.md) | Boost structurally anomalous files | -50% in LLM eval | NO-GO |
-| [Content Dedup](experiments/content-dedup.md) | Remove duplicate info across sections | -5% aggregate delta | NO-GO |
-| [Instability Feedback](experiments/instability-feedback.md) | Add Robert Martin I-metric warnings | +0% in E.3, high variance | NO-GO |
-| [Facade Map](experiments/facade-map.md) | Expose barrel file re-export mappings | Noise, no benefit | NO-GO |
-| [API Surface](experiments/api-surface.md) | Pre-compute function signatures for hubs | -3/4 tasks regressed | NO-GO |
-| [Per-File Docs](experiments/per-file-docs.md) | Per-file context instead of one file | Lost cross-file relationships | NO-GO |
-| [Hierarchical Context](experiments/hierarchical-context.md) | Attention-weighted section ordering | LLMs process full context in one pass | NO-GO |
-| [Typification](experiments/typification.md) | Type-aware section grouping | +0% in E.3 | NO-GO |
-| [Task Relevance](experiments/task-relevance.md) | Weight sections by task type | +0% in E.3 | NO-GO |
+| Experiment | Idea | Result |
+|---|---|---|
+| [Surprise Scoring](experiments/surprise-scoring.md) | Boost structurally anomalous files | -50% in LLM eval |
+| [Content Dedup](experiments/content-dedup.md) | Remove duplicate info across sections | -5% aggregate delta |
+| [Instability Feedback](experiments/instability-feedback.md) | Add Robert Martin I-metric warnings | +0% in E.3, high variance |
+| [Facade Map](experiments/facade-map.md) | Expose barrel file re-export mappings | Noise, no benefit |
+| [API Surface](experiments/api-surface.md) | Pre-compute function signatures for hubs | -3/4 tasks regressed |
+| [Per-File Docs](experiments/per-file-docs.md) | Per-file context instead of one file | Lost cross-file relationships |
+| [Hierarchical Context](experiments/hierarchical-context.md) | Attention-weighted section ordering | LLMs process full context in one pass |
+| [Typification](experiments/typification.md) | Type-aware section grouping | +0% in E.3 |
+| [Task Relevance](experiments/task-relevance.md) | Weight sections by task type | +0% in E.3 |
 
 **Key finding**: E.2 isolated evals (temp=0, single feature) consistently gave false positives. Features showing +6-13% improvement in isolation failed at temp=0.3 with real variance. This taught us to never trust isolated evals.
 
@@ -34,12 +34,12 @@ We tried adding, removing and reorganizing context sections in many configuratio
 
 We tried reformatting the same content in different ways:
 
-| Experiment | Idea | Result | Doc |
-|---|---|---|---|
-| [Context Optimization](experiments/context-optimization.md) | Consolidate directives, trim sections, rewrite voice | Each helped alone; combined = +63% cost | NO-GO |
-| [Negative Framing](experiments/negative-framing.md) | Constraint language ("NEVER do X") | No benefit vs positive guidance | NO-GO |
-| [Five Dimensions (R.7)](experiments/r7-five-dimensions.md) | Culture, checklist, memory, hooks, cochange | All five hurt or did nothing | NO-GO |
-| [Variant Benchmark (R.9)](experiments/r9-variant-benchmark.md) | Reorder, compress, ultra-minimal, hooks | No variant beats placebo | NO-GO |
+| Experiment | Idea | Result |
+|---|---|---|
+| [Context Optimization](experiments/context-optimization.md) | Consolidate directives, trim sections, rewrite voice | Each helped alone; combined = +63% cost |
+| [Negative Framing](experiments/negative-framing.md) | Constraint language ("NEVER do X") | No benefit vs positive guidance |
+| [Five Dimensions (R.7)](experiments/r7-five-dimensions.md) | Culture, checklist, memory, hooks, cochange | All five hurt or did nothing |
+| [Variant Benchmark (R.9)](experiments/r9-variant-benchmark.md) | Reorder, compress, ultra-minimal, hooks | No variant beats placebo |
 
 **Key finding**: Interaction effects are non-linear. Three optimizations that each helped individually (-26%, -16%, -32%) combined to +63% cost. Always test combinations.
 
@@ -47,11 +47,11 @@ We tried reformatting the same content in different ways:
 
 The only changes that passed the E.3 combinatorial benchmark were fixes to the underlying graph algorithms:
 
-| Experiment | Idea | Result | Doc |
-|---|---|---|---|
-| [Directed Betweenness](experiments/directed-betweenness.md) | Fix undirected phantom paths | +40% value on drizzle-orm | GO |
-| [Chokepoints BFS](experiments/chokepoints-bfs.md) | Directed BFS with adaptive threshold | Better wording, fewer false positives | GO |
-| [Go/Rust/Java Imports](experiments/import-resolution-go-rust-java.md) | Language-specific import resolution | +41.7% in E.3 | GO |
+| Experiment | Idea | Result |
+|---|---|---|
+| [Directed Betweenness](experiments/directed-betweenness.md) | Fix undirected phantom paths | +40% value on drizzle-orm |
+| [Chokepoints BFS](experiments/chokepoints-bfs.md) | Directed BFS with adaptive threshold | Better wording, fewer false positives |
+| [Go/Rust/Java Imports](experiments/import-resolution-go-rust-java.md) | Language-specific import resolution | +41.7% in E.3 |
 
 **Key finding**: Making the graph more accurate helps. Adding more content on top of an accurate graph does not.
 
@@ -61,12 +61,12 @@ If content doesn't help, maybe we're delivering it wrong.
 
 ### Delivery experiments (0/4 survived)
 
-| Experiment | Idea | Result | Doc |
-|---|---|---|---|
-| [Delivery Mechanism (R.4)](experiments/delivery-mechanism.md) | Read-executor, prompt injection, MCP | Read-executor hurts; prompt is best | NO-GO |
-| [MCP Tools](experiments/mcp-tools.md) | On-demand graph queries via MCP | 0% voluntary adoption | NO-GO |
-| [Hook Context Injection (R.12, R.13b)](experiments/hook-context-injection.md) | PostToolUse additionalContext, updatedInput | Claude Code silently ignores both | NO-GO |
-| [Stigmergic Context](experiments/stigmergic-context.md) | Adaptive context via hook signals | Passed E.2, failed E.3 | NO-GO |
+| Experiment | Idea | Result |
+|---|---|---|
+| [Delivery Mechanism (R.4)](experiments/delivery-mechanism.md) | Read-executor, prompt injection, MCP | Read-executor hurts; prompt is best |
+| [MCP Tools](experiments/mcp-tools.md) | On-demand graph queries via MCP | 0% voluntary adoption |
+| [Hook Context Injection (R.12, R.13b)](experiments/hook-context-injection.md) | PostToolUse additionalContext, updatedInput | Claude Code silently ignores both |
+| [Stigmergic Context](experiments/stigmergic-context.md) | Adaptive context via hook signals | Passed E.2, failed E.3 |
 
 **Key finding**: Only `permissionDecision: "deny"` works in Claude Code hooks. All context injection mechanisms (additionalContext, updatedInput) are dead code as of Claude Code 2.1.71. The hook test also revealed that any injected context adds processing overhead; agents don't shortcut, they process. See [Hook Context Injection](experiments/hook-context-injection.md) for the full mechanism audit.
 
