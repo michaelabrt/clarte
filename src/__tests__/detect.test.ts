@@ -619,14 +619,21 @@ describe("detectIDEs", () => {
       "AGENTS.md": "# Agents",
     });
     const ides = await detectIDEs(tmpDir);
-    expect(ides).toEqual(expect.arrayContaining(["cursor", "windsurf", "opencode"]));
-    expect(ides).toHaveLength(3);
+    expect(ides).toEqual(expect.arrayContaining(["claude", "cursor", "windsurf", "opencode"]));
+    expect(ides).toHaveLength(4);
   });
 
-  it("falls back to claude when no IDE markers found", async () => {
+  it("always includes claude even when no other IDE markers found", async () => {
     tmpDir = await makeProject({ "src/index.ts": "" });
     const ides = await detectIDEs(tmpDir);
     expect(ides).toEqual(["claude"]);
+  });
+
+  it("always includes claude alongside detected IDEs", async () => {
+    tmpDir = await makeProject({ ".github/copilot-instructions.md": "" });
+    const ides = await detectIDEs(tmpDir);
+    expect(ides[0]).toBe("claude");
+    expect(ides).toContain("copilot");
   });
 });
 

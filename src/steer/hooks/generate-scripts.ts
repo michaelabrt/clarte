@@ -354,8 +354,11 @@ function buildTestFilterFlag(framework: string | undefined): string | null {
 function toNpmFallback(cmd: string): string | null {
   const match = cmd.match(/^(bun|pnpm|yarn)(\s+run)?\b/);
   if (!match) return null;
-  const rest = cmd.slice(match[0].length);
-  return `npm run${rest}`;
+  const pm = match[1];
+  // Replace all occurrences of the package manager in the command chain.
+  // "bun run X && bun ./build.ts" → "npm run X && npx ./build.ts"
+  // Handles: "bun run" → "npm run", standalone "bun" → "npx"
+  return cmd.replace(new RegExp(`\\b${pm}\\s+run\\b`, "g"), "npm run").replace(new RegExp(`\\b${pm}\\b`, "g"), "npx");
 }
 
 /**
