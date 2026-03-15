@@ -72,7 +72,7 @@ describe("cache I/O", () => {
 
   it("round-trips cache data", async () => {
     const data: CacheData = {
-      version: 2,
+      version: 3,
       createdAt: "2025-01-01T00:00:00.000Z",
       language: "typescript",
       fileHashes: { "a.ts": "abc123" },

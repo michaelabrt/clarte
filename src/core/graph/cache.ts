@@ -22,13 +22,14 @@ import {
   type BarrelExportMap,
 } from "./import-resolution.js";
 import { routeBarrelImport } from "./barrel-routing.js";
-import { initForLanguage } from "../parsers/init.js";
+import { initForLanguage, parseSource } from "../parsers/init.js";
+import { extractSymbolNamesFromRoot } from "../parsers/extract-symbols.js";
 import { errorMessage, readFileOr } from "../utils.js";
 import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "../types.js";
 import { HASH_CONCURRENCY } from "../config/thresholds.js";
 import { CLARTE_DIR } from "../config/config.js";
 
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const CACHE_DIR = CLARTE_DIR;
 const CACHE_FILE = "cache.json";
 
@@ -50,6 +51,7 @@ export interface CacheData {
   fileHashes: Record<string, string>;
   edges: SerializedEdge[];
   barrelFiles: string[];
+  symbolNames?: Record<string, string[]>;
 }
 
 export async function loadCache(rootDir: string): Promise<CacheData | null> {
@@ -178,7 +180,12 @@ async function parseFileEdges(
   return edges;
 }
 
-function rebuildGraph(edges: ImportEdge[], allFiles: string[], barrelFiles: Set<string>): ImportGraph {
+function rebuildGraph(
+  edges: ImportEdge[],
+  allFiles: string[],
+  barrelFiles: Set<string>,
+  symbolNames?: Map<string, string[]>,
+): ImportGraph {
   const inDegree = new Map<string, number>();
   const directInDegree = new Map<string, number>();
   const externalImportCounts = new Map<string, number>();
@@ -227,6 +234,7 @@ function rebuildGraph(edges: ImportEdge[], allFiles: string[], barrelFiles: Set<
     hubScores,
     barrelFiles,
     betweennessScores,
+    symbolNames,
   };
 }
 
@@ -253,6 +261,10 @@ async function persistCacheData(
   try {
     const hashRecord: Record<string, string> = {};
     for (const [k, v] of currentHashes) hashRecord[k] = v;
+    const symbolRecord: Record<string, string[]> = {};
+    if (graph.symbolNames) {
+      for (const [k, v] of graph.symbolNames) symbolRecord[k] = v;
+    }
     await saveCache(rootDir, {
       version: CACHE_VERSION,
       createdAt: new Date().toISOString(),
@@ -260,6 +272,7 @@ async function persistCacheData(
       fileHashes: hashRecord,
       edges: serializeEdges(graph.edges),
       barrelFiles: [...(graph.barrelFiles ?? [])],
+      symbolNames: symbolRecord,
     });
   } catch (err) {
     onProgress?.(`Warning: cache save failed: ${errorMessage(err)}`);
@@ -312,7 +325,8 @@ export async function buildGraphWithCache(
       onProgress?.("No files changed, using cached graph");
       const allFiles = [...currentHashes.keys()];
       const barrels = new Set(cache.barrelFiles);
-      return rebuildGraph(cache.edges, allFiles, barrels);
+      const cachedSymbols = cache.symbolNames ? new Map(Object.entries(cache.symbolNames)) : undefined;
+      return rebuildGraph(cache.edges, allFiles, barrels, cachedSymbols);
     }
 
     if (!barrelChanged && changeRatio < 0.1) {
@@ -372,10 +386,31 @@ export async function buildGraphWithCache(
         }
       }
 
+      // Merge symbol names: keep cached, re-extract for changed/new, drop deleted
+      const mergedSymbols = new Map<string, string[]>();
+      if (cache.symbolNames) {
+        for (const [fp, syms] of Object.entries(cache.symbolNames)) {
+          if (!deletedFiles.has(fp) && !changedFiles.includes(fp)) mergedSymbols.set(fp, syms);
+        }
+      }
+      for (const file of [...changedFiles, ...newFiles]) {
+        const absPath = path.join(rootDir, file);
+        const content = await readFileOr(absPath);
+        if (content) {
+          try {
+            const root = parseSource(content, language, file);
+            const syms = extractSymbolNamesFromRoot(root, language);
+            if (syms.length > 0) mergedSymbols.set(file, syms);
+          } catch {
+            // skip files that fail to parse
+          }
+        }
+      }
+
       const mergedEdges = [...keptEdges, ...newEdges];
       const allFiles = [...currentHashes.keys()];
 
-      const graph = rebuildGraph(mergedEdges, allFiles, detectedBarrels);
+      const graph = rebuildGraph(mergedEdges, allFiles, detectedBarrels, mergedSymbols);
       await persistCacheData(rootDir, language, currentHashes, graph, onProgress);
       return graph;
     }
