@@ -5,7 +5,7 @@
   "description": "GitHub Action for Clarte architecture review",
   "type": "module",
   "scripts": {
-    "build": "ncc build src/index.ts -o dist --minify --license licenses.txt",
+    "build": "tsup && node scripts/copy-wasm.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -13,7 +13,7 @@
     "@actions/github": "^6.0.0"
   },
   "devDependencies": {
-    "@vercel/ncc": "^0.38.3",
+    "tsup": "^8.5.0",
     "typescript": "^5.9.3"
   }
 }
