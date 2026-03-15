@@ -47,6 +47,40 @@ export interface CIAnalysisResult {
   hasFindings: boolean;
 }
 
+// ── Noise filters ───────────────────────────────────────────────────
+
+const TEST_PATH_RE = /(?:^|\/)(test|tests|spec|__tests__|__mocks__)\/|\.(?:test|spec)\.[jt]sx?$/;
+const BUILD_OUTPUT_RE = /(?:^|\/)(dist|build|out|\.next|\.output)\//;
+
+/** True if file is a test/spec file */
+function isTestFile(file: string): boolean {
+  return TEST_PATH_RE.test(file);
+}
+
+/** True if file is a build output (dist/, build/, etc.) */
+function isBuildOutput(file: string): boolean {
+  return BUILD_OUTPUT_RE.test(file);
+}
+
+/**
+ * True if the two files form an obvious test-source pair.
+ * e.g. src/foo.ts and src/__tests__/foo.test.ts
+ */
+function isTestSourcePair(a: string, b: string): boolean {
+  const aTest = isTestFile(a);
+  const bTest = isTestFile(b);
+  if (aTest === bTest) return false; // both tests or both source
+  // The test file's base name (without .test/.spec) should contain the source file's base name
+  const testFile = aTest ? a : b;
+  const sourceFile = aTest ? b : a;
+  const sourceBase =
+    sourceFile
+      .split("/")
+      .pop()
+      ?.replace(/\.[^.]+$/, "") ?? "";
+  return sourceBase.length > 0 && testFile.includes(sourceBase);
+}
+
 // ── Collectors ───────────────────────────────────────────────────────
 
 function collectMissingCoChanges(
@@ -67,6 +101,9 @@ function collectMissingCoChanges(
 
         const key = `${changed}:${partner}`;
         if (seen.has(key)) continue;
+        // Skip noise: test-source pairs, build outputs
+        if (isTestSourcePair(changed, partner)) continue;
+        if (isBuildOutput(changed) || isBuildOutput(partner)) continue;
         seen.add(key);
 
         const hasImportEdge = edgeSet.has(`${changed}->${partner}`) || edgeSet.has(`${partner}->${changed}`);
@@ -89,6 +126,8 @@ function collectMissingCoChanges(
 
         const key = `${changed}:${partner}`;
         if (seen.has(key)) continue;
+        if (isTestSourcePair(changed, partner)) continue;
+        if (isBuildOutput(changed) || isBuildOutput(partner)) continue;
         seen.add(key);
 
         results.push({
@@ -167,6 +206,8 @@ function collectTightCouplings(
   const results: TightCouplingAlert[] = [];
   for (const tc of tightCouplings) {
     if (changedFilesSet.has(tc.from) || changedFilesSet.has(tc.to)) {
+      // Test files importing many names from their subject is expected
+      if (isTestFile(tc.from)) continue;
       results.push({ from: tc.from, to: tc.to, importedNames: tc.importedNames });
     }
   }

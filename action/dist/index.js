@@ -37601,6 +37601,23 @@ async function runDeltaPhase(rootDir, analysis, log2) {
 }
 
 // ../src/core/analysis/ci.ts
+var TEST_PATH_RE = /(?:^|\/)(test|tests|spec|__tests__|__mocks__)\/|\.(?:test|spec)\.[jt]sx?$/;
+var BUILD_OUTPUT_RE = /(?:^|\/)(dist|build|out|\.next|\.output)\//;
+function isTestFile2(file) {
+  return TEST_PATH_RE.test(file);
+}
+function isBuildOutput(file) {
+  return BUILD_OUTPUT_RE.test(file);
+}
+function isTestSourcePair(a, b) {
+  const aTest = isTestFile2(a);
+  const bTest = isTestFile2(b);
+  if (aTest === bTest) return false;
+  const testFile = aTest ? a : b;
+  const sourceFile = aTest ? b : a;
+  const sourceBase = sourceFile.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+  return sourceBase.length > 0 && testFile.includes(sourceBase);
+}
 function collectMissingCoChanges(changedFilesSet, analysis, edgeSet) {
   const seen = /* @__PURE__ */ new Set();
   const results = [];
@@ -37611,6 +37628,8 @@ function collectMissingCoChanges(changedFilesSet, analysis, edgeSet) {
         if (!partner || changedFilesSet.has(partner)) continue;
         const key = `${changed}:${partner}`;
         if (seen.has(key)) continue;
+        if (isTestSourcePair(changed, partner)) continue;
+        if (isBuildOutput(changed) || isBuildOutput(partner)) continue;
         seen.add(key);
         const hasImportEdge = edgeSet.has(`${changed}->${partner}`) || edgeSet.has(`${partner}->${changed}`);
         results.push({
@@ -37628,6 +37647,8 @@ function collectMissingCoChanges(changedFilesSet, analysis, edgeSet) {
         if (!partner || changedFilesSet.has(partner)) continue;
         const key = `${changed}:${partner}`;
         if (seen.has(key)) continue;
+        if (isTestSourcePair(changed, partner)) continue;
+        if (isBuildOutput(changed) || isBuildOutput(partner)) continue;
         seen.add(key);
         results.push({
           changed,
@@ -37690,6 +37711,7 @@ function collectTightCouplings(changedFilesSet, tightCouplings) {
   const results = [];
   for (const tc of tightCouplings) {
     if (changedFilesSet.has(tc.from) || changedFilesSet.has(tc.to)) {
+      if (isTestFile2(tc.from)) continue;
       results.push({ from: tc.from, to: tc.to, importedNames: tc.importedNames });
     }
   }
@@ -37873,15 +37895,15 @@ function formatTightCoupling(items, collapsible) {
 function formatComment(result) {
   if (!result.hasFindings) {
     return [
-      "## Clarte Architecture Review",
+      "## Clart\xE9 Architecture Review",
       "",
       ":white_check_mark: No architectural concerns.",
       "",
       "---",
-      `<sub>Powered by <a href="https://github.com/michaelabrt/clarte">Clarte</a></sub>`
+      `<sub>Powered by <a href="https://github.com/michaelabrt/clarte">Clart\xE9</a></sub>`
     ].join("\n");
   }
-  const sections = ["## Clarte Architecture Review"];
+  const sections = ["## Clart\xE9 Architecture Review"];
   const coChangeTable = formatCoChangeTable(result.missingCoChanges);
   const hasCoChanges = coChangeTable.length > 0;
   const hotspots = formatStructuralHotspots(
@@ -37897,7 +37919,7 @@ function formatComment(result) {
   sections.push(
     "",
     "---",
-    `<sub>Powered by <a href="https://github.com/michaelabrt/clarte">Clarte</a></sub>`
+    `<sub>Powered by <a href="https://github.com/michaelabrt/clarte">Clart\xE9</a></sub>`
   );
   return sections.join("\n");
 }
