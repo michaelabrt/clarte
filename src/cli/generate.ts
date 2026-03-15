@@ -1,14 +1,14 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import * as p from "@clack/prompts";
-import { theme as t, unpatchPicocolors, resetTerminalColors } from "../theme.js";
-import { errorMessage, fileExists, formatBytes, NOOP_PROGRESS, writeJsonStdout } from "../utils.js";
-import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "../detect/detect.js";
+import { theme as t, unpatchPicocolors, resetTerminalColors } from "../core/theme.js";
+import { errorMessage, fileExists, formatBytes, NOOP_PROGRESS, writeJsonStdout } from "../core/utils.js";
+import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "../core/detect/detect.js";
 import { runPrompts } from "../cli/prompts.js";
-import { generateSnapshot } from "../snapshot/snapshot.js";
+import { generateSnapshot } from "../core/snapshot/snapshot.js";
 import { generateFiles } from "../core/generate.js";
 import { printSummary } from "../cli/summary.js";
-import { ExitCode } from "../errors.js";
+import { ExitCode } from "../core/errors.js";
 import type {
   ContextAnalysis,
   UserAnswers,
@@ -19,18 +19,18 @@ import type {
   PersistedGraph,
   ProgressCallback,
   ProjectConfig,
-} from "../types.js";
-import { saveConfig, configToAnswers, computeSnapshotHash } from "../config/config.js";
+} from "../core/types.js";
+import { saveConfig, configToAnswers, computeSnapshotHash } from "../core/config/config.js";
 import { initPreCommitHook } from "../cli/hooks.js";
-import { buildGraphWithCache } from "../graph/cache.js";
-import { buildImportGraph, mergeGraph } from "../graph/build.js";
-import { computeHITS, computeBetweenness } from "../graph/centrality.js";
-import { getHubFiles } from "../graph/hub-files.js";
+import { buildGraphWithCache } from "../core/graph/cache.js";
+import { buildImportGraph, mergeGraph } from "../core/graph/build.js";
+import { computeHITS, computeBetweenness } from "../core/graph/centrality.js";
+import { getHubFiles } from "../core/graph/hub-files.js";
 import { startShimmer, NOOP_SHIMMER } from "../cli/animations.js";
-import { serializeAnalysis } from "../analysis/serialize.js";
+import { serializeAnalysis } from "../core/analysis/serialize.js";
 import { runAnalysis } from "../core/run-analysis.js";
-import { persistGraph, loadPersistedGraph } from "../graph/persist.js";
-import { HITS, SNAPSHOT_LANGUAGES } from "../config/thresholds.js";
+import { persistGraph, loadPersistedGraph } from "../core/graph/persist.js";
+import { HITS, SNAPSHOT_LANGUAGES } from "../core/config/thresholds.js";
 
 export interface GenerateOptions {
   rootDir: string;
@@ -427,7 +427,7 @@ async function runPostGenerationTasks(opts: PostGenerationOptions): Promise<void
   if (persistedGraph && answers.ides.includes("claude") && savedConfig?.hooks !== false) {
     try {
       const { generateHookFiles, configureClaudeHooks, generatePreFlightAgentFile } = await import(
-        "../hooks/generate-hooks.js"
+        "../steer/hooks/generate-hooks.js"
       );
       await generateHookFiles(rootDir, persistedGraph, savedConfig?.delivery?.enrichedHooks);
       await configureClaudeHooks(rootDir);
@@ -440,7 +440,7 @@ async function runPostGenerationTasks(opts: PostGenerationOptions): Promise<void
   // Generate skill scripts (check-tests.sh, run-tests.sh, clarte-grep)
   if (answers.ides.includes("claude")) {
     try {
-      const { generateCheckTestsScript, generateRunTestScript } = await import("../hooks/generate-scripts.js");
+      const { generateCheckTestsScript, generateRunTestScript } = await import("../steer/hooks/generate-scripts.js");
       await generateCheckTestsScript(rootDir, detected);
       await generateRunTestScript(rootDir, detected);
     } catch (err) {
@@ -449,7 +449,7 @@ async function runPostGenerationTasks(opts: PostGenerationOptions): Promise<void
 
     if (persistedGraph) {
       try {
-        const { generateClarteGrepScript } = await import("../hooks/generate-scripts.js");
+        const { generateClarteGrepScript } = await import("../steer/hooks/generate-scripts.js");
         await generateClarteGrepScript(rootDir, persistedGraph);
       } catch (err) {
         verboseLog(`clarte-grep generation failed: ${errorMessage(err)}`);

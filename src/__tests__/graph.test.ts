@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll } from "vitest";
-import { parseJsImports, parsePythonImports, parseGoImports, parseRustImports } from "../graph/import-resolution.js";
-import { initTreeSitter } from "../parsers/init.js";
+import { parseJsImports, parsePythonImports, parseGoImports, parseRustImports } from "../core/graph/import-resolution.js";
+import { initTreeSitter } from "../core/parsers/init.js";
 
 beforeAll(async () => {
   await initTreeSitter();

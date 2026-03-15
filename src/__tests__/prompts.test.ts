@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { DetectedContext, ProjectConfig } from "../types.js";
+import type { DetectedContext, ProjectConfig } from "../core/types.js";
 
 // Track prompt calls for verification
 const promptCalls: Array<{ type: string; args: unknown }> = [];
@@ -35,12 +35,12 @@ vi.mock("@clack/prompts", () => ({
   cancel: vi.fn(),
 }));
 
-vi.mock("../theme.js", async () => {
+vi.mock("../core/theme.js", async () => {
   const { THEME_MOCK } = await import("./helpers/mocks.js");
   return { theme: THEME_MOCK };
 });
 
-vi.mock("../detect/detect.js", () => ({
+vi.mock("../core/detect/detect.js", () => ({
   summarizeDetection: () => "TypeScript + React + Vitest",
 }));
 

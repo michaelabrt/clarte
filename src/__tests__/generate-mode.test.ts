@@ -24,7 +24,7 @@ vi.mock("@clack/prompts", async () => {
   return mock;
 });
 
-vi.mock("../theme.js", async () => {
+vi.mock("../core/theme.js", async () => {
   const { THEME_MOCK } = await import("./helpers/mocks.js");
   return { theme: THEME_MOCK, unpatchPicocolors: vi.fn(), resetTerminalColors: vi.fn() };
 });
@@ -48,7 +48,7 @@ const mockDetectIDEs = vi.fn().mockResolvedValue(["claude"]);
 const mockDetectProjectDescription = vi.fn().mockResolvedValue("A test project");
 const mockEnrichFrameworksWithUsage = vi.fn().mockReturnValue([]);
 
-vi.mock("../detect/detect.js", () => ({
+vi.mock("../core/detect/detect.js", () => ({
   detectContext: (...args: unknown[]) => mockDetectContext(...args),
   detectIDEs: (...args: unknown[]) => mockDetectIDEs(...args),
   detectProjectDescription: (...args: unknown[]) => mockDetectProjectDescription(...args),
@@ -74,20 +74,20 @@ const mockBuildImportGraph = vi.fn().mockResolvedValue({
 });
 const mockMergeGraph = vi.fn();
 
-vi.mock("../graph/cache.js", () => ({
+vi.mock("../core/graph/cache.js", () => ({
   buildGraphWithCache: (...args: unknown[]) => mockBuildGraphWithCache(...args),
 }));
-vi.mock("../graph/build.js", () => ({
+vi.mock("../core/graph/build.js", () => ({
   buildImportGraph: (...args: unknown[]) => mockBuildImportGraph(...args),
   mergeGraph: (...args: unknown[]) => mockMergeGraph(...args),
 }));
-vi.mock("../graph/centrality.js", () => ({
+vi.mock("../core/graph/centrality.js", () => ({
   computeHITS: () => ({ authority: new Map(), hub: new Map() }),
   computeBetweenness: () => new Map(),
 }));
 
 const mockGetHubFiles = vi.fn().mockReturnValue([]);
-vi.mock("../graph/hub-files.js", () => ({
+vi.mock("../core/graph/hub-files.js", () => ({
   getHubFiles: (...args: unknown[]) => mockGetHubFiles(...args),
 }));
 
@@ -122,7 +122,7 @@ const mockGenerateSnapshot = vi.fn().mockResolvedValue({
   budgetExcluded: 0,
 });
 
-vi.mock("../snapshot/snapshot.js", () => ({
+vi.mock("../core/snapshot/snapshot.js", () => ({
   generateSnapshot: (...args: unknown[]) => mockGenerateSnapshot(...args),
 }));
 
@@ -156,7 +156,7 @@ const mockConfigToAnswers = vi.fn().mockReturnValue({
 });
 const mockComputeSnapshotHash = vi.fn().mockResolvedValue("hash123");
 
-vi.mock("../config/config.js", () => ({
+vi.mock("../core/config/config.js", () => ({
   CLARTE_DIR: ".clarte",
   saveConfig: (...args: unknown[]) => mockSaveConfig(...args),
   configToAnswers: (...args: unknown[]) => mockConfigToAnswers(...args),
@@ -187,15 +187,15 @@ vi.mock("../cli/hooks.js", () => ({
 
 // Serialize/directives mocks
 const mockSerializeAnalysis = vi.fn().mockReturnValue({ detected: {}, analysis: {} });
-vi.mock("../analysis/serialize.js", () => ({
+vi.mock("../core/analysis/serialize.js", () => ({
   serializeAnalysis: (...args: unknown[]) => mockSerializeAnalysis(...args),
 }));
-vi.mock("../templates/directives.js", () => ({
+vi.mock("../steer/context/directives.js", () => ({
   buildDirectives: vi.fn().mockReturnValue([]),
 }));
 
 const mockFileExists = vi.fn().mockResolvedValue(false);
-vi.mock("../utils.js", () => ({
+vi.mock("../core/utils.js", () => ({
   NOOP_PROGRESS: () => {},
   fileExists: (...args: unknown[]) => mockFileExists(...args),
   formatBytes: (n: number) => `${(n / 1024).toFixed(0)} KB`,
@@ -205,8 +205,8 @@ vi.mock("../utils.js", () => ({
 
 // ── Import under test (after mocks) ────────────────────────────────
 
-import { runGenerateMode } from "../modes/generate.js";
-import type { ProjectConfig } from "../types.js";
+import { runGenerateMode } from "../cli/generate.js";
+import type { ProjectConfig } from "../core/types.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

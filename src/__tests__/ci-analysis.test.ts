@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { analyzeForCI } from "../analysis/ci.js";
-import type { ContextAnalysis } from "../types.js";
+import { analyzeForCI } from "../core/analysis/ci.js";
+import type { ContextAnalysis } from "../core/types.js";
 import { makeImportGraph } from "./helpers/factories.js";
 
 function makeGraph(edges: Array<{ from: string; to: string }>, opts?: { betweenness?: Map<string, number> }) {

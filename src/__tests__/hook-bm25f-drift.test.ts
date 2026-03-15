@@ -13,8 +13,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const RESOLVE_TARGETS = readFileSync(resolve(ROOT, "cli/resolve-targets.ts"), "utf-8");
-const GENERATE_HOOKS = readFileSync(resolve(ROOT, "hooks/generate-hooks.ts"), "utf-8");
+const RESOLVE_TARGETS = readFileSync(resolve(ROOT, "steer/targets-resolve.ts"), "utf-8");
+const GENERATE_HOOKS = readFileSync(resolve(ROOT, "steer/hooks/generate-hooks.ts"), "utf-8");
 
 /** Extract a numeric constant from resolve-targets.ts */
 function extractConst(name: string): number {

@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, afterEach, beforeEach, vi } from "vitest";
 import { initPreCommitHook } from "../cli/hooks.js";
-import { ClarteError } from "../errors.js";
+import { ClarteError } from "../core/errors.js";
 
 let tmpDir: string;
 

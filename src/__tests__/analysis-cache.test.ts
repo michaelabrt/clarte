@@ -9,7 +9,7 @@ import {
   saveAnalysisCache,
   ANALYSIS_CACHE_VERSION,
   type AnalysisCacheData,
-} from "../graph/analysis-cache.js";
+} from "../core/graph/analysis-cache.js";
 
 const TMP = path.join(path.dirname(fileURLToPath(import.meta.url)), ".tmp-analysis-cache-test");
 

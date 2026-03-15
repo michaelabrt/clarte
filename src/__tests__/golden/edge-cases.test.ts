@@ -6,14 +6,14 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
-import { buildImportGraph } from "../../graph/build.js";
-import { getHubFiles } from "../../graph/hub-files.js";
-import { findCircularDeps } from "../../graph/cycles.js";
-import { detectArchitecturalLayers } from "../../graph/layers.js";
-import { computeInstability } from "../../graph/instability.js";
-import { detectCommunities } from "../../graph/communities.js";
-import { findDeadFiles } from "../../graph/dead-files.js";
-import { computeGraphTopology } from "../../graph/topology.js";
+import { buildImportGraph } from "../../core/graph/build.js";
+import { getHubFiles } from "../../core/graph/hub-files.js";
+import { findCircularDeps } from "../../core/graph/cycles.js";
+import { detectArchitecturalLayers } from "../../core/graph/layers.js";
+import { computeInstability } from "../../core/graph/instability.js";
+import { detectCommunities } from "../../core/graph/communities.js";
+import { findDeadFiles } from "../../core/graph/dead-files.js";
+import { computeGraphTopology } from "../../core/graph/topology.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.join(__dirname, "fixtures");

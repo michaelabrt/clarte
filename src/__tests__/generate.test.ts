@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import type { DetectedContext, UserAnswers } from "../types.js";
+import type { DetectedContext, UserAnswers } from "../core/types.js";
 
 // Mock template builders
-vi.mock("../templates/main-context.js", () => ({
+vi.mock("../steer/context/main-context.js", () => ({
   buildMainContext: vi.fn().mockResolvedValue("# Main Context\n\nGenerated content here."),
   getMainContextFilename: vi.fn((ide: string) => {
     switch (ide) {
@@ -31,12 +31,12 @@ vi.mock("../templates/main-context.js", () => ({
   }),
 }));
 
-vi.mock("../templates/claude-skills.js", () => ({
+vi.mock("../steer/context/claude-skills.js", () => ({
   buildClaudeSkills: vi.fn().mockResolvedValue([]),
   renderClaudeSkill: vi.fn(() => ""),
 }));
 
-vi.mock("../detect/detect.js", () => ({
+vi.mock("../core/detect/detect.js", () => ({
   detectContext: vi.fn().mockResolvedValue({
     rootDir: "/tmp/test",
     language: "typescript",
@@ -53,7 +53,7 @@ vi.mock("../detect/detect.js", () => ({
   }),
 }));
 
-vi.mock("../snapshot/snapshot.js", () => ({
+vi.mock("../core/snapshot/snapshot.js", () => ({
   generateSnapshot: vi.fn().mockResolvedValue({
     entries: [],
     markdown: "",
@@ -67,7 +67,7 @@ vi.mock("@clack/prompts", async () => {
   return createClackMock().mock;
 });
 
-vi.mock("../theme.js", async () => {
+vi.mock("../core/theme.js", async () => {
   const { THEME_MOCK } = await import("./helpers/mocks.js");
   return { theme: THEME_MOCK };
 });

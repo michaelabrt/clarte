@@ -1,8 +1,8 @@
 import * as p from "@clack/prompts";
-import { theme as t } from "../theme.js";
-import type { CodeSnapshot, ContextAnalysis, GeneratedFile } from "../types.js";
-import { estimateTokens, formatBytes } from "../utils.js";
-import { INSTABILITY_THRESHOLD } from "../config/thresholds.js";
+import { theme as t } from "../core/theme.js";
+import type { CodeSnapshot, ContextAnalysis, GeneratedFile } from "../core/types.js";
+import { estimateTokens, formatBytes } from "../core/utils.js";
+import { INSTABILITY_THRESHOLD } from "../core/config/thresholds.js";
 
 /**
  * Print a summary of generated files with token estimates.

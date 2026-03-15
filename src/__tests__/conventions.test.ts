@@ -1,10 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { inferConventions, renderConventionsSection } from "../conventions/conventions.js";
-import type { ConfigConstraints, InferredConventions } from "../types.js";
+import { inferConventions, renderConventionsSection } from "../core/conventions/conventions.js";
+import type { ConfigConstraints, InferredConventions } from "../core/types.js";
 import { makeImportGraph } from "./helpers/factories.js";
 
 // Mock utils.ts to control file reads
-vi.mock("../utils.js", async (importOriginal) => {
+vi.mock("../core/utils.js", async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
@@ -12,7 +12,7 @@ vi.mock("../utils.js", async (importOriginal) => {
   };
 });
 
-import { readFileOr } from "../utils.js";
+import { readFileOr } from "../core/utils.js";
 
 const mockReadFileOr = vi.mocked(readFileOr);
 

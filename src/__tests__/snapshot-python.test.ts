@@ -7,8 +7,8 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 // For unit testing the extraction logic, we mock readFileOr and tinyglobby
 // to feed controlled Python file content.
 
-vi.mock("../utils.js", async () => {
-  const actual = await vi.importActual<typeof import("../utils.js")>("../utils.js");
+vi.mock("../core/utils.js", async () => {
+  const actual = await vi.importActual<typeof import("../core/utils.js")>("../core/utils.js");
   return {
     ...actual,
     readFileOr: vi.fn(),
@@ -19,18 +19,18 @@ vi.mock("tinyglobby", () => ({
   glob: vi.fn(),
 }));
 
-vi.mock("../graph.js", async () => {
-  const actual = await vi.importActual<typeof import("../graph.js")>("../graph.js");
+vi.mock("../core/graph.js", async () => {
+  const actual = await vi.importActual<typeof import("../core/graph.js")>("../core/graph.js");
   return {
     ...actual,
     findUsedExports: () => new Set<string>(),
   };
 });
 
-import { generateSnapshot } from "../snapshot/snapshot.js";
-import { readFileOr } from "../utils.js";
+import { generateSnapshot } from "../core/snapshot/snapshot.js";
+import { readFileOr } from "../core/utils.js";
 import { glob } from "tinyglobby";
-import type { DetectedContext } from "../types.js";
+import type { DetectedContext } from "../core/types.js";
 
 const mockReadFileOr = vi.mocked(readFileOr);
 const mockGlob = vi.mocked(glob);

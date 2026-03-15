@@ -7,9 +7,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { resolveEditTargets } from "../cli/resolve-targets.js";
-import type { PersistedGraph } from "../types/persisted-graph.js";
-import { PERSISTED_GRAPH_VERSION } from "../types/persisted-graph.js";
+import { resolveEditTargets } from "../steer/targets-resolve.js";
+import type { PersistedGraph } from "../core/types/persisted-graph.js";
+import { PERSISTED_GRAPH_VERSION } from "../core/types/persisted-graph.js";
 
 function makeGraph(overrides?: Partial<PersistedGraph>): PersistedGraph {
   return {
