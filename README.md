@@ -176,36 +176,16 @@ These are referenced in the generated context file with imperative directives ("
 
 Multi-language projects handled automatically when a secondary language exceeds 15% of source files.
 
-## GitHub Action
+<details>
+<summary><strong>GitHub Action (work in progress)</strong></summary>
 
-Reviews pull requests for architectural concerns: missing co-changes, structural hotspots and tight coupling.
+There's an experimental GitHub Action that reviews PRs for missing co-changes and structural hotspots. It works but the signal-to-noise ratio needs improvement - most findings are technically correct but not actionable yet. Use at your own discretion.
 
 ```yaml
-# .github/workflows/clarte.yml
-name: Architecture Review
-on: [pull_request]
-
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: michaelabrt/clarte@v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+- uses: michaelabrt/clarte@v1
+  with:
+    github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
-
-<details>
-<summary><strong>Action inputs</strong></summary>
-
-| Input | Default | Description |
-|-------|---------|-------------|
-| `github-token` | `${{ github.token }}` | GitHub token for posting PR comments |
-| `working-directory` | `.` | Path to the project root |
-| `comment-mode` | `update` | How to handle PR comments: `create`, `update` or `none` |
-| `max-files` | `50` | Maximum changed files to analyze (0 = unlimited) |
 
 </details>
 
