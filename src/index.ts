@@ -111,7 +111,7 @@ async function main() {
   if (!jsonMode) {
     console.log("");
     p.intro(t.textBold("Clart") + t.brandBold("\u00e9"));
-    p.log.info(t.muted("architecture intelligence for AI coding agents"));
+    p.log.info(t.muted("the starting point your agent is missing"));
   }
 
   if (refresh) {
