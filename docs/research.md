@@ -6,7 +6,7 @@ We ran 30+ experiments across 700+ agent sessions to understand how architectura
 
 ## Background
 
-Clarte generates rich context files from static analysis: key files, chokepoints, coupling patterns, architectural layers, code snapshots. In controlled fixture benchmarks ([clarte-benchmark](https://github.com/michaelabrt/clarte-benchmark)), this context cut agent cost by 58% (p<0.001). But fixture benchmarks are synthetic. Would it hold on real-world bug fixes?
+Clarté generates rich context files from static analysis: key files, chokepoints, coupling patterns, architectural layers, code snapshots. In controlled fixture benchmarks ([clarte-benchmark](https://github.com/michaelabrt/clarte-benchmark)), this context cut agent cost by 58% (p<0.001). But fixture benchmarks are synthetic. Would it hold on real-world bug fixes?
 
 ## Phase 1: Does the content matter?
 
@@ -76,19 +76,19 @@ After 18 experiments with 0 content wins, we stepped back and measured what actu
 
 ### Real-world benchmarks
 
-| Experiment | Finding | Doc |
-|---|---|---|
-| [Content vs Wrapper (R.5)](experiments/content-vs-wrapper.md) | Placebo beats full context on detailed tasks. The system prompt wrapper matters more than content. | |
-| [Real-World Benchmark (R.6)](experiments/r6-real-world-benchmark.md) | Placebo wins turns across all models. "Do not use Grep or Glob" saves 40% cost. | |
-| [Monorepo vs Single (R.8)](experiments/monorepo-vs-single.md) | Clarte helps on monorepos (-29% turns), hurts on single-package (+24% turns). | |
+| Experiment | Finding |
+|---|---|
+| [Content vs Wrapper (R.5)](experiments/content-vs-wrapper.md) | Placebo beats full context on detailed tasks. The system prompt wrapper matters more than content. |
+| [Real-World Benchmark (R.6)](experiments/r6-real-world-benchmark.md) | Placebo wins turns across all models. "Do not use Grep or Glob" saves 40% cost. |
+| [Monorepo vs Single (R.8)](experiments/monorepo-vs-single.md) | Clarté helps on monorepos (-29% turns), hurts on single-package (+24% turns). |
 
 ### Agent behavior analysis
 
-| Experiment | Finding | Doc |
-|---|---|---|
-| [Failure Patterns (R.11)](studies/failure-patterns.md) | 170 sessions, 7595 turns. 59% exploration, 28% edit, 13% tail. Test output parsing loops are 75% of tail waste. | |
-| [Quality Measurement (R.10)](studies/quality-measurement.md) | Code patches identical across conditions. No quality signal on simple bug fixes. | |
-| [Evolving Context (Gate A/B)](studies/evolving-context.md) | 100% of missed files are already in CLAUDE.md. Utilization problem, not coverage. | |
+| Experiment | Finding |
+|---|---|
+| [Failure Patterns (R.11)](studies/failure-patterns.md) | 170 sessions, 7595 turns. 59% exploration, 28% edit, 13% tail. Test output parsing loops are 75% of tail waste. |
+| [Quality Measurement (R.10)](studies/quality-measurement.md) | Code patches identical across conditions. No quality signal on simple bug fixes. |
+| [Evolving Context (Gate A/B)](studies/evolving-context.md) | 100% of missed files are already in CLAUDE.md. Utilization problem, not coverage. |
 
 ### The first-edit timing breakthrough (R.18)
 
@@ -104,20 +104,20 @@ Armed with the first-edit insight, we pivoted from information injection to conf
 
 ### Approaches tested
 
-| Experiment | Idea | Result | Doc |
-|---|---|---|---|
-| [Skill Primitives (R.19)](experiments/skill-primitives.md) | Generated scripts + imperative CLAUDE.md directives | "Always use X" works; "To verify, run X" is ignored | |
-| [Stop Hook (R.14)](experiments/stop-hook.md) | Block repeated test commands without edits | Addressable surface too small (16% of sessions) | NO-GO |
-| [Test Reporter (R.13)](experiments/test-reporter.md) | Pre-configure test reporter to reduce output | Killed by audit; root cause is compulsion, not truncation | Killed |
-| [Haiku Localization (G1)](experiments/gate1-haiku-localization.md) | LLM-based file localization | Agent self-localizes 86-100% on 2/3 repos | NO-GO |
+| Experiment | Idea | Result |
+|---|---|---|
+| [Skill Primitives (R.19)](experiments/skill-primitives.md) | Generated scripts + imperative CLAUDE.md directives | "Always use X" works; "To verify, run X" is ignored |
+| [Stop Hook (R.14)](experiments/stop-hook.md) | Block repeated test commands without edits | NO-GO: addressable surface too small (16% of sessions) |
+| [Test Reporter (R.13)](experiments/test-reporter.md) | Pre-configure test reporter to reduce output | Killed: root cause is compulsion, not truncation |
+| [Haiku Localization (G1)](experiments/gate1-haiku-localization.md) | LLM-based file localization | NO-GO: agent self-localizes 86-100% on 2/3 repos |
 
 Three more were deprioritized as subsumed:
 
-| Experiment | Subsumed by | Doc |
-|---|---|---|
-| [Plan Template (R.15)](experiments/plan-template.md) | Not applicable to real-world use | |
-| [Monorepo Routing (R.16)](experiments/monorepo-routing.md) | R.20 graph-based edit target prediction | |
-| [Exploration Nudge (R.17)](experiments/exploration-nudge.md) | R.20 confidence injection | |
+| Experiment | Subsumed by |
+|---|---|
+| [Plan Template (R.15)](experiments/plan-template.md) | Not applicable to real-world use |
+| [Monorepo Routing (R.16)](experiments/monorepo-routing.md) | R.20 graph-based edit target prediction |
+| [Exploration Nudge (R.17)](experiments/exploration-nudge.md) | R.20 confidence injection |
 
 ### The pre-flight breakthrough (R.20)
 
