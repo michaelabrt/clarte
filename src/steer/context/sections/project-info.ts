@@ -94,7 +94,7 @@ export async function renderProjectInfoSections(
 
   // Behavioral (two imperative lines, no heading - proven +2 turns when removed)
   const behavioralText =
-    "Do not use Grep or Glob to explore the codebase upfront. Based on the task description, open the most relevant files directly. Only broaden your search if your first attempt doesn't find the right code.\nAfter editing, run tests once. Do not re-run tests to reformat output. If tests pass, stop.";
+    "Do not use Grep or Glob to explore the codebase upfront. Based on the task description, open the most relevant files directly. Only broaden your search if your first attempt doesn't find the right code. When searching is needed, prefer clarte-grep over plain grep for graph-annotated results.\nAfter editing, run tests once. Do not re-run tests to reformat output. If tests pass, stop.";
   sections.push({
     id: "behavioral",
     priority: 0,
@@ -217,7 +217,14 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
 
   const pkg = await readJsonFile(path.join(ctx.rootDir, "package.json"));
   const scripts = (pkg?.scripts as Record<string, string> | undefined) ?? {};
-  const hasSlowCompile = SLOW_COMPILE_RE.test(scripts.test ?? "");
+  const hasSlowCompile = (() => {
+    const rawTest = scripts.test ?? "";
+    if (!SLOW_COMPILE_RE.test(rawTest)) return false;
+    // tsc --noEmit is type-checking only, not compilation
+    const segments = rawTest.split("&&").map((p) => p.trim());
+    const compileSegs = segments.filter((p) => /\b(gulp|tsc|compile)\b/.test(p));
+    return compileSegs.some((p) => !(/\btsc\b/.test(p) && /--noEmit\b/.test(p)));
+  })();
 
   const runPrefix = (script: string) => {
     switch (ctx.packageManager) {
@@ -342,9 +349,15 @@ async function buildDevSection(ctx: DetectedContext): Promise<string> {
     const hasRunTest = ["Mocha", "Jest", "Vitest", "pytest"].includes(ctx.testFramework);
     if (hasRunTest) {
       lines.push("");
-      lines.push(
-        "Always use `.clarte/scripts/run-tests.sh '<pattern>'` to run a subset of tests by name. It compiles automatically before running - never run the compile step separately. Never run the full suite when you only need to verify specific tests.",
-      );
+      if (hasSlowCompile) {
+        lines.push(
+          "Always use `.clarte/scripts/run-tests.sh '<pattern>'` to run a subset of tests by name. It compiles automatically before running - never run the compile step separately. Never run the full suite when you only need to verify specific tests.",
+        );
+      } else {
+        lines.push(
+          "Always use `.clarte/scripts/run-tests.sh '<pattern>'` to run a subset of tests by name. Never run the full suite when you only need to verify specific tests.",
+        );
+      }
     }
   }
 
