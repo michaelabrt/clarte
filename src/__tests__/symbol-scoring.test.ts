@@ -321,16 +321,14 @@ describe("computeSymbolAuthority", () => {
       { from: "b.ts", to: "a.ts", importedNames: ["foo"] },
       { from: "c.ts", to: "a.ts", importedNames: ["foo"] },
     ];
-    const intraCalls = new Map([
-      ["a.ts", [{ caller: "bar", callee: "foo" }]],
-    ]);
+    const intraCalls = new Map([["a.ts", [{ caller: "bar", callee: "foo" }]]]);
     const result = computeSymbolAuthority(edges, files, intraCalls);
     const auth = result.get("a.ts");
     expect(auth).toBeDefined();
     // foo: 2 cross-file imports (weight 2.0) + 1 intra-file caller (weight 0.3) = 2.3
     // bar: 0 imports + 0 callers = 0 (not in result because it has no callers)
     // foo should be the max (1.0 after normalization)
-    expect(auth!.foo).toBe(1);
+    expect(auth?.foo).toBe(1);
   });
 
   it("type-only edges discounted at 0.3x (S7)", () => {
@@ -346,8 +344,8 @@ describe("computeSymbolAuthority", () => {
     expect(auth).toBeDefined();
     // Bar has weight 1.0 (runtime import), Foo has weight 0.3 (type-only)
     // After max normalization: Bar = 1.0, Foo = 0.3
-    expect(auth!.Bar).toBe(1);
-    expect(auth!.Foo).toBe(0.3);
+    expect(auth?.Bar).toBe(1);
+    expect(auth?.Foo).toBe(0.3);
   });
 
   it("normalizes per-file to [0,1]", () => {
@@ -364,8 +362,8 @@ describe("computeSymbolAuthority", () => {
     const auth = result.get("a.ts");
     expect(auth).toBeDefined();
     // x: 3 imports → 1.0, y: 1 import → 0.333
-    expect(auth!.x).toBe(1);
-    expect(auth!.y).toBeCloseTo(0.333, 2);
+    expect(auth?.x).toBe(1);
+    expect(auth?.y).toBeCloseTo(0.333, 2);
   });
 });
 
@@ -536,10 +534,12 @@ describe("symbol BM25+ scoring logic", () => {
     const directTerms = ["authentication"];
     const synonymTerms = ["auth", "authorize", "authorization"];
 
-    const scoreAuth = symBM25(bodies.authHandler, directTerms, 1, symN, symDf, avgBL)
-      + symBM25(bodies.authHandler, synonymTerms, 0.3, symN, symDf, avgBL);
-    const scoreData = symBM25(bodies.dataHandler, directTerms, 1, symN, symDf, avgBL)
-      + symBM25(bodies.dataHandler, synonymTerms, 0.3, symN, symDf, avgBL);
+    const scoreAuth =
+      symBM25(bodies.authHandler, directTerms, 1, symN, symDf, avgBL) +
+      symBM25(bodies.authHandler, synonymTerms, 0.3, symN, symDf, avgBL);
+    const scoreData =
+      symBM25(bodies.dataHandler, directTerms, 1, symN, symDf, avgBL) +
+      symBM25(bodies.dataHandler, synonymTerms, 0.3, symN, symDf, avgBL);
 
     // authHandler should score higher because "auth" matches via synonym expansion
     expect(scoreAuth).toBeGreaterThan(scoreData);

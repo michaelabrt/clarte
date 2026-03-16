@@ -8,11 +8,18 @@ import type { Language } from "../types/detection.js";
 function barrelLang(filePath?: string): Language {
   if (!filePath) return "typescript";
   const ext = path.extname(filePath).slice(1).toLowerCase();
-  return ext === "jsx" || ext === "tsx" ? "typescript" : ext === "js" || ext === "mjs" || ext === "cjs" ? "javascript" : "typescript";
+  return ext === "jsx" || ext === "tsx"
+    ? "typescript"
+    : ext === "js" || ext === "mjs" || ext === "cjs"
+      ? "javascript"
+      : "typescript";
 }
 
-/** Check barrel status from a pre-parsed root node (avoids re-parsing). */
-export function detectBarrelFromRoot(root: import("web-tree-sitter").Node): boolean {
+/** Count re-exports and total statements in an AST root. */
+function countBarrelStatements(root: import("web-tree-sitter").Node): {
+  reExportCount: number;
+  totalStatements: number;
+} {
   let reExportCount = 0;
   let totalStatements = 0;
   for (const node of root.namedChildren) {
@@ -20,15 +27,19 @@ export function detectBarrelFromRoot(root: import("web-tree-sitter").Node): bool
       totalStatements++;
       if (node.childForFieldName("source")) reExportCount++;
     } else if (
-      node.type === "import_statement" || node.type === "lexical_declaration" ||
-      node.type === "function_declaration" || node.type === "class_declaration" ||
-      node.type === "interface_declaration" || node.type === "type_alias_declaration" ||
-      node.type === "enum_declaration" || node.type === "expression_statement"
+      node.type === "import_statement" ||
+      node.type === "lexical_declaration" ||
+      node.type === "function_declaration" ||
+      node.type === "class_declaration" ||
+      node.type === "interface_declaration" ||
+      node.type === "type_alias_declaration" ||
+      node.type === "enum_declaration" ||
+      node.type === "expression_statement"
     ) {
       totalStatements++;
     }
   }
-  return totalStatements > 0 && reExportCount / totalStatements > BARREL_THRESHOLD;
+  return { reExportCount, totalStatements };
 }
 
 /**
@@ -43,29 +54,7 @@ export function detectBarrelAst(
   totalStatements: number;
 } {
   return withParsedTree(content, barrelLang(filePath), filePath, (root) => {
-    let reExportCount = 0;
-    let totalStatements = 0;
-
-    for (const node of root.namedChildren) {
-      if (node.type === "export_statement") {
-        totalStatements++;
-        if (node.childForFieldName("source")) {
-          reExportCount++;
-        }
-      } else if (
-        node.type === "import_statement" ||
-        node.type === "lexical_declaration" ||
-        node.type === "function_declaration" ||
-        node.type === "class_declaration" ||
-        node.type === "interface_declaration" ||
-        node.type === "type_alias_declaration" ||
-        node.type === "enum_declaration" ||
-        node.type === "expression_statement"
-      ) {
-        totalStatements++;
-      }
-    }
-
+    const { reExportCount, totalStatements } = countBarrelStatements(root);
     return {
       isBarrel: totalStatements > 0 && reExportCount / totalStatements > BARREL_THRESHOLD,
       reExportCount,

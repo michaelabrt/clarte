@@ -347,8 +347,7 @@ function scoreBM25F(
     // True BM25F: compute weighted pseudo-tf across fields, then apply saturation once
     let pseudoTf = 0;
     if (tfPath > 0) {
-      pseudoTf +=
-        (PATH_WEIGHT * tfPath) / (1 - BM25_B_PATH + BM25_B_PATH * (doc.path.tokens.length / avgdlPath));
+      pseudoTf += (PATH_WEIGHT * tfPath) / (1 - BM25_B_PATH + BM25_B_PATH * (doc.path.tokens.length / avgdlPath));
     }
     if (tfSymbol > 0) {
       pseudoTf +=
@@ -358,7 +357,8 @@ function scoreBM25F(
       const tfImport = doc.imports.termFreq.get(term) ?? 0;
       if (tfImport > 0) {
         pseudoTf +=
-          (IMPORT_WEIGHT * tfImport) / (1 - BM25_B_IMPORTS + BM25_B_IMPORTS * (doc.imports.tokens.length / avgdlImports));
+          (IMPORT_WEIGHT * tfImport) /
+          (1 - BM25_B_IMPORTS + BM25_B_IMPORTS * (doc.imports.tokens.length / avgdlImports));
       }
     }
 
@@ -604,14 +604,18 @@ function buildDocument(filePath: string, symbols: string[], importPaths: string[
  * 5. Add co-change partners above confidence threshold at COUPLING_FACTOR of seed score
  * 6. Sort by score descending, return top N
  */
-export function resolveEditTargets(query: string, graph: PersistedGraph, maxTargets = DEFAULT_MAX_TARGETS): string[] {
+/** Internal scoring pipeline shared by resolveEditTargets and resolveEditTargetsWithMeta. */
+function runScoringPipeline(
+  query: string,
+  graph: PersistedGraph,
+  maxTargets: number,
+): { ranked: Array<[string, number]>; importOnlyFiles: Set<string>; directMatches: Set<string> } | null {
   const queryTerms = tokenizeQuery(query);
-  if (queryTerms.length === 0) return [];
+  if (queryTerms.length === 0) return null;
 
   const filePaths = Object.keys(graph.files).filter((fp) => !isTestFile(fp));
-  if (filePaths.length === 0) return [];
+  if (filePaths.length === 0) return null;
 
-  // Stage 1: collect edge metadata and build BM25F corpus
   const meta = collectEdgeMetadata(graph.edges);
   const corpus = buildCorpus(filePaths, graph, meta);
   const { docs, N, avgdlPath, avgdlSymbols, avgdlImports, df } = corpus;
@@ -619,7 +623,6 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
   const debugBM25 = process.env.DEBUG_BM25 === "1";
   const { expanded: synonymTerms } = expandQuerySynonyms(queryTerms);
 
-  // Stage 2: BM25F scoring (all three fields always active; IMPORT_CEILING prevents import-dominated rankings)
   const scores = new Map<string, number>();
   const importOnlyFiles = new Set<string>();
   for (const [fp, doc] of docs) {
@@ -628,7 +631,6 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
       score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
     }
     if (score > 0) {
-      // Check if score comes only from imports (no path/symbol overlap)
       const hasPathSymbol =
         queryTerms.some((t) => doc.path.termFreq.has(t) || doc.symbols.termFreq.has(t)) ||
         (synonymTerms.length > 0 && synonymTerms.some((t) => doc.path.termFreq.has(t) || doc.symbols.termFreq.has(t)));
@@ -637,13 +639,10 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
     }
   }
 
-  // Stage 3: cap import-only scores below path/symbol matches
   applyImportCeiling(scores, importOnlyFiles);
-
-  // Stage 4: test-file proxy transfer
   applyTestProxy(scores, graph, meta, corpus, queryTerms);
 
-  if (scores.size === 0) return [];
+  if (scores.size === 0) return null;
 
   if (debugBM25) {
     for (const [fp, score] of [...scores.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)) {
@@ -662,35 +661,36 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
     }
   }
 
-  // Stage 5: 1-hop neighbor expansion + co-change coupling
   const directMatches = new Set(scores.keys());
   expandNeighbors(scores, directMatches, graph);
 
-  // Sort by score with semantic tiebreakers
   const importTargets = new Set(graph.edges.map((e) => e.to));
   const importSources = new Set(graph.edges.map((e) => e.from));
 
-  return [...scores.entries()]
+  const ranked = [...scores.entries()]
     .sort((a, b) => {
       const scoreDiff = b[1] - a[1];
       if (scoreDiff !== 0) return scoreDiff;
-
       const aDir = (importSources.has(a[0]) ? 1 : 0) - (importTargets.has(a[0]) ? 1 : 0);
       const bDir = (importSources.has(b[0]) ? 1 : 0) - (importTargets.has(b[0]) ? 1 : 0);
       if (aDir !== bDir) return bDir - aDir;
-
       const aBetween = graph.files[a[0]]?.betweenness ?? 0;
       const bBetween = graph.files[b[0]]?.betweenness ?? 0;
       if (aBetween !== bBetween) return bBetween - aBetween;
-
       const aImportedBy = graph.files[a[0]]?.importedByCount ?? 0;
       const bImportedBy = graph.files[b[0]]?.importedByCount ?? 0;
       if (aImportedBy !== bImportedBy) return bImportedBy - aImportedBy;
-
       return a[0].localeCompare(b[0]);
     })
-    .slice(0, maxTargets)
-    .map(([fp]) => fp);
+    .slice(0, maxTargets);
+
+  return { ranked, importOnlyFiles, directMatches };
+}
+
+export function resolveEditTargets(query: string, graph: PersistedGraph, maxTargets = DEFAULT_MAX_TARGETS): string[] {
+  const result = runScoringPipeline(query, graph, maxTargets);
+  if (!result) return [];
+  return result.ranked.map(([fp]) => fp);
 }
 
 export type TargetMatch = {
@@ -708,90 +708,25 @@ export function resolveEditTargetsWithMeta(
   graph: PersistedGraph,
   maxTargets = DEFAULT_MAX_TARGETS,
 ): TargetMatch[] {
-  const queryTerms = tokenizeQuery(query);
-  if (queryTerms.length === 0) return [];
+  const result = runScoringPipeline(query, graph, maxTargets);
+  if (!result) return [];
 
-  const filePaths = Object.keys(graph.files).filter((fp) => !isTestFile(fp));
-  if (filePaths.length === 0) return [];
+  const { ranked, importOnlyFiles, directMatches } = result;
 
-  const meta = collectEdgeMetadata(graph.edges);
-  const corpus = buildCorpus(filePaths, graph, meta);
-  const { docs, N, avgdlPath, avgdlSymbols, avgdlImports, df } = corpus;
-
-  const { expanded: synonymTerms } = expandQuerySynonyms(queryTerms);
-
-  const scores = new Map<string, number>();
-  const matchTypes = new Map<string, TargetMatch["matchType"]>();
-  const importOnlyFiles = new Set<string>();
-
-  for (const [fp, doc] of docs) {
-    let score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
-    if (synonymTerms.length > 0) {
-      score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
-    }
-    if (score > 0) {
-      const hasPathSymbol =
-        queryTerms.some((t) => doc.path.termFreq.has(t) || doc.symbols.termFreq.has(t)) ||
-        (synonymTerms.length > 0 && synonymTerms.some((t) => doc.path.termFreq.has(t) || doc.symbols.termFreq.has(t)));
-      if (!hasPathSymbol) {
-        importOnlyFiles.add(fp);
-        matchTypes.set(fp, "import-only");
-      }
-      scores.set(fp, score);
-      if (!matchTypes.has(fp)) matchTypes.set(fp, "direct");
-    }
-  }
-
-  applyImportCeiling(scores, importOnlyFiles);
-  applyTestProxy(scores, graph, meta, corpus, queryTerms);
-
-  // Mark proxy-transferred files
-  for (const [fp] of scores) {
-    if (!matchTypes.has(fp)) matchTypes.set(fp, "proxy");
-  }
-
-  if (scores.size === 0) return [];
-
-  const directMatches = new Set(scores.keys());
-  expandNeighbors(scores, directMatches, graph);
-
-  // Mark expansion-added files
-  for (const [fp] of scores) {
-    if (!matchTypes.has(fp)) {
-      // Determine if it was added by coupling or import neighbor
+  return ranked.map(([fp], i) => {
+    let matchType: TargetMatch["matchType"] = "direct";
+    if (importOnlyFiles.has(fp)) {
+      matchType = "import-only";
+    } else if (!directMatches.has(fp)) {
       const isCoupled = graph.changeCoupling.some(
         (c) =>
           c.confidence >= MIN_COUPLING_CONFIDENCE &&
           ((directMatches.has(c.fileA) && c.fileB === fp) || (directMatches.has(c.fileB) && c.fileA === fp)),
       );
-      matchTypes.set(fp, isCoupled ? "coupling" : "neighbor");
+      matchType = isCoupled ? "coupling" : "neighbor";
     }
-  }
-
-  const importTargets = new Set(graph.edges.map((e) => e.to));
-  const importSources = new Set(graph.edges.map((e) => e.from));
-
-  return [...scores.entries()]
-    .sort((a, b) => {
-      const scoreDiff = b[1] - a[1];
-      if (scoreDiff !== 0) return scoreDiff;
-      const aDir = (importSources.has(a[0]) ? 1 : 0) - (importTargets.has(a[0]) ? 1 : 0);
-      const bDir = (importSources.has(b[0]) ? 1 : 0) - (importTargets.has(b[0]) ? 1 : 0);
-      if (aDir !== bDir) return bDir - aDir;
-      const aBetween = graph.files[a[0]]?.betweenness ?? 0;
-      const bBetween = graph.files[b[0]]?.betweenness ?? 0;
-      if (aBetween !== bBetween) return bBetween - aBetween;
-      const aImportedBy = graph.files[a[0]]?.importedByCount ?? 0;
-      const bImportedBy = graph.files[b[0]]?.importedByCount ?? 0;
-      if (aImportedBy !== bImportedBy) return bImportedBy - aImportedBy;
-      return a[0].localeCompare(b[0]);
-    })
-    .slice(0, maxTargets)
-    .map(([fp], i) => ({
-      file: fp,
-      rank: i + 1,
-      matchType: matchTypes.get(fp) ?? "direct",
-    }));
+    return { file: fp, rank: i + 1, matchType };
+  });
 }
 
 /**
