@@ -88,12 +88,8 @@ export interface FileInstability {
   fanIn: number;
   /** Number of outgoing dependencies */
   fanOut: number;
-  /** Instability score: fanOut / (fanIn + fanOut), range 0-1 */
+  /** Instability score: fanOut / (fanIn + fanOut), range 0-1. Uses raw weighted values (type-only edges contribute 0.3x). */
   instability: number;
-  /** Weighted fan-in (type-only edges contribute fractional weight) */
-  weightedFanIn?: number;
-  /** Weighted fan-out (type-only edges contribute fractional weight) */
-  weightedFanOut?: number;
 }
 
 /** A detected community/cluster of tightly-connected files */

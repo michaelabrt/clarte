@@ -57,8 +57,7 @@ export function computeHITS(
     const typeOnlyDiscount = edge.isTypeOnly ? HITS.TYPE_ONLY_DISCOUNT : 0;
     const dynamicDiscount = edge.isDynamic ? HITS.DYNAMIC_MULTIPLIER : 1.0;
     // Namespace imports ("*") represent moderate specificity (equivalent to ~3 named imports)
-    const nameCount =
-      edge.importedNames.length === 1 && edge.importedNames[0] === "*" ? 3 : edge.importedNames.length;
+    const nameCount = edge.importedNames.length === 1 && edge.importedNames[0] === "*" ? 3 : edge.importedNames.length;
     const specificity =
       nameCount > 0
         ? Math.max(HITS.MIN_SPECIFICITY, Math.log2(nameCount + 1) / Math.log2(HITS.SPECIFICITY_LOG_BASE))
@@ -162,116 +161,6 @@ export function computeHITS(
   for (let i = 0; i < n; i++) {
     authorityMap.set(files[i], authRange > NORM_EPSILON ? (auth[i] - authMin) / authRange : 0.5);
     hubMap.set(files[i], hubRange > NORM_EPSILON ? (hub[i] - hubMin) / hubRange : 0.5);
-  }
-
-  return { authority: authorityMap, hub: hubMap };
-}
-
-/**
- * Task-seeded HITS: biases authority scores toward files that are structurally
- * connected to the seed set (e.g., BM25F edit targets). Uses the same iterative
- * HITS algorithm but initializes seed files with authority=1.0 instead of uniform.
- *
- * This produces "local importance" scores relative to the task context, which
- * can complement BM25F for re-ranking. Experimental - gate behind a flag.
- */
-export function personalizedHITS(
-  files: string[],
-  edges: ImportEdge[],
-  seedFiles: string[],
-  maxIterations: number,
-  epsilon: number,
-  barrels: Set<string>,
-): { authority: Map<string, number>; hub: Map<string, number> } {
-  const n = files.length;
-  if (n === 0) return { authority: new Map(), hub: new Map() };
-
-  const fileIndex = new Map(files.map((f, i) => [f, i]));
-  const seedSet = new Set(seedFiles.map((f) => fileIndex.get(f)).filter((i) => i !== undefined));
-
-  // Initialize: seeds get 1.0, others get 0.01
-  let auth = new Float64Array(n);
-  let hub = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    auth[i] = seedSet.has(i) ? 1.0 : 0.01;
-    hub[i] = seedSet.has(i) ? 1.0 : 0.01;
-  }
-
-  // Build edge structures (reuse the same weighting as global HITS)
-  const edgeData: Array<{ from: number; to: number; weight: number }> = [];
-  for (const edge of edges) {
-    if (edge.isExternal) continue;
-    const fromIdx = fileIndex.get(edge.from);
-    const toIdx = fileIndex.get(edge.to);
-    if (fromIdx === undefined || toIdx === undefined) continue;
-
-    const typeOnlyDiscount = edge.isTypeOnly ? 0.7 : 0;
-    const dynamicDiscount = edge.isDynamic ? 0.5 : 1.0;
-    const nameCount = edge.importedNames.length;
-    const specificity = nameCount > 0 ? Math.max(0.2, Math.log2(nameCount + 1) / Math.log2(6)) : 0.2;
-    let weight = (1 - typeOnlyDiscount) * dynamicDiscount * specificity;
-    if (barrels.has(edge.to)) weight *= 0.3;
-
-    edgeData.push({ from: fromIdx, to: toIdx, weight });
-  }
-
-  const alpha = 0.15;
-
-  for (let iter = 0; iter < maxIterations; iter++) {
-    const newAuth = new Float64Array(n);
-    const newHub = new Float64Array(n);
-
-    for (const { from, to, weight } of edgeData) {
-      newAuth[to] += hub[from] * weight;
-      newHub[from] += auth[to] * weight;
-    }
-
-    // Teleportation with seed bias
-    for (let i = 0; i < n; i++) {
-      const seedBias = seedSet.has(i) ? 1.0 : 0.01;
-      newAuth[i] = (1 - alpha) * newAuth[i] + alpha * seedBias;
-      newHub[i] = (1 - alpha) * newHub[i] + alpha * seedBias;
-    }
-
-    // L2 normalize
-    let authNorm = 0;
-    let hubNorm = 0;
-    for (let i = 0; i < n; i++) {
-      authNorm += newAuth[i] * newAuth[i];
-      hubNorm += newHub[i] * newHub[i];
-    }
-    authNorm = Math.sqrt(authNorm) || 1;
-    hubNorm = Math.sqrt(hubNorm) || 1;
-    for (let i = 0; i < n; i++) {
-      newAuth[i] /= authNorm;
-      newHub[i] /= hubNorm;
-    }
-
-    let maxDelta = 0;
-    for (let i = 0; i < n; i++) {
-      maxDelta = Math.max(maxDelta, Math.abs(newAuth[i] - auth[i]) + Math.abs(newHub[i] - hub[i]));
-    }
-
-    auth = newAuth;
-    hub = newHub;
-
-    if (maxDelta < epsilon) break;
-  }
-
-  // Min-max normalize
-  let authMin = Infinity;
-  let authMax = -Infinity;
-  for (let i = 0; i < n; i++) {
-    if (auth[i] < authMin) authMin = auth[i];
-    if (auth[i] > authMax) authMax = auth[i];
-  }
-  const authRange = authMax - authMin;
-
-  const authorityMap = new Map<string, number>();
-  const hubMap = new Map<string, number>();
-  for (let i = 0; i < n; i++) {
-    authorityMap.set(files[i], authRange > 1e-9 ? (auth[i] - authMin) / authRange : 0.5);
-    hubMap.set(files[i], 0); // hub scores not needed for task-seeded variant
   }
 
   return { authority: authorityMap, hub: hubMap };

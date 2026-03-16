@@ -2,7 +2,7 @@ import path from "node:path";
 import { glob } from "tinyglobby";
 import { readFileOr } from "../utils.js";
 import { initForLanguage, withParsedTree } from "../parsers/init.js";
-import { detectBarrelAst, detectBarrelFromRoot } from "../parsers/barrel.js";
+import { detectBarrelAst } from "../parsers/barrel.js";
 import { computeHITS, computeBetweenness } from "./centrality.js";
 import { HITS } from "../config/thresholds.js";
 import {
@@ -369,13 +369,7 @@ export function mergeGraph(target: ImportGraph, source: ImportGraph): void {
  */
 export function recomputeScoresAfterMerge(graph: ImportGraph): void {
   const allFiles = [...graph.inDegree.keys()];
-  const { authority, hub } = computeHITS(
-    allFiles,
-    graph.edges,
-    HITS.MAX_ITERATIONS,
-    HITS.EPSILON,
-    graph.barrelFiles,
-  );
+  const { authority, hub } = computeHITS(allFiles, graph.edges, HITS.MAX_ITERATIONS, HITS.EPSILON, graph.barrelFiles);
   graph.authority = authority;
   graph.hubScores = hub;
   graph.centrality = authority;
