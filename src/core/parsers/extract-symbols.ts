@@ -155,6 +155,7 @@ const TS_BODY_IDENT_TYPES = [
   "type_identifier",
   "shorthand_property_identifier",
   "string_fragment",
+  "template_string",
 ];
 
 const PY_BODY_IDENT_TYPES = ["identifier"];

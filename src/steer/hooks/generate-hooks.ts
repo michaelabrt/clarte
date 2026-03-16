@@ -313,7 +313,7 @@ if (existsSync(graphPath)) {
       "comma-joined","comma-separated","commas",
     ]);
     const TEST_RE = /(?:^|\\/)(?:test|spec|__tests__|__mocks__)\\/|\\.(?:test|spec)\\.[jt]sx?$/;
-    // BM25F tuning constants — sync with resolve-targets.ts
+    // SYNC: targets-resolve.ts -- BM25F tuning constants
     const K1 = 1.2;   // BM25 saturation parameter
     const B = 0.4;     // BM25 length normalization (lowered for short docs)
     const PW = 2.0;    // path field weight
@@ -326,6 +326,7 @@ if (existsSync(graphPath)) {
     const MC = 0.5;    // minimum coupling confidence
     const IC = 0.5;    // import-only ceiling fraction
 
+    // SYNC: targets-resolve.ts -- tokenizeIdentifier
     function splitCC(s) { return s.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ").filter(Boolean); }
     function tokId(id) {
       const result = [];
@@ -369,6 +370,7 @@ if (existsSync(graphPath)) {
       for (const t of it) itf.set(t, (itf.get(t) || 0) + 1);
       return { pt, st, it, ptf, stf, itf, all: new Set([...ptf.keys(), ...stf.keys()]) };
     }
+    // SYNC: targets-resolve.ts -- scoreBM25F
     function scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, useImports) {
       let sc = 0;
       for (const term of terms) {
@@ -422,7 +424,7 @@ if (existsSync(graphPath)) {
     for (const grp of SYN_GROUPS) for (const t of grp) {
       const o = SYN_MAP.get(t) || []; SYN_MAP.set(t, [...new Set([...o, ...grp.filter(x => x !== t)])]);
     }
-    const SYNONYM_DISCOUNT = 0.3; // sync with resolve-targets.ts
+    const SYNONYM_DISCOUNT = 0.3; // SYNC: targets-resolve.ts
 
     function resolveTargets(q, g) {
       const terms = tokQ(q);

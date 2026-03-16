@@ -19,7 +19,7 @@ const GRAPH_PATH = `${CLARTE_DIR}/graph.json`;
  * Uses weighted in-degree (not HITS): type-only edges at 0.3x, intra-file callers at 0.3x.
  * Normalized per-file to [0, 1] using max.
  */
-function computeSymbolAuthority(
+export function computeSymbolAuthority(
   edges: EdgeRecord[],
   files: Record<string, FileRecord>,
   intraFileCalls: Map<string, Array<{ caller: string; callee: string }>>,
