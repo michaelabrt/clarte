@@ -89,27 +89,16 @@ describe("cache I/O", () => {
     };
     await saveCache(tmpDir, data);
     const loaded = await loadCache(tmpDir);
-    expect(loaded).toEqual(data);
-  });
-
-  it("returns null for version mismatch", async () => {
-    const data: CacheData = {
-      version: 999,
-      createdAt: "2025-01-01T00:00:00.000Z",
-      language: "typescript",
-      fileHashes: {},
-      edges: [],
-      barrelFiles: [],
-    };
-    await saveCache(tmpDir, data);
-    expect(await loadCache(tmpDir)).toBeNull();
-  });
-
-  it("returns null for corrupted JSON", async () => {
-    const cacheDir = path.join(tmpDir, ".clarte");
-    await fs.mkdir(cacheDir, { recursive: true });
-    await fs.writeFile(path.join(cacheDir, "cache.json"), "{broken json!!!");
-    expect(await loadCache(tmpDir)).toBeNull();
+    expect(loaded).not.toBeNull();
+    expect(loaded?.version).toBe(3);
+    expect(loaded?.language).toBe("typescript");
+    expect(loaded?.fileHashes).toEqual({ "a.ts": "abc123" });
+    // Edge round-trip: from/to/importedNames are preserved; specifier uses target path
+    expect(loaded?.edges).toHaveLength(1);
+    expect(loaded?.edges[0].from).toBe("a.ts");
+    expect(loaded?.edges[0].to).toBe("b.ts");
+    expect(loaded?.edges[0].importedNames).toEqual(["foo"]);
+    expect(loaded?.barrelFiles).toEqual([]);
   });
 });
 
@@ -275,36 +264,16 @@ describe("analysis cache I/O", () => {
     expect(loaded).toEqual(data);
   });
 
-  it("returns null for version mismatch", async () => {
-    const data: AnalysisCacheData = {
-      version: 999,
-      cacheKey: "abc",
-      hubFiles: [],
-      circularDeps: [],
-      layers: [],
-      layerEdges: [],
-      instabilities: [],
-      communities: [],
-      deadFiles: [],
-      crossCuttingFiles: [],
-      chokepoints: [],
-      tightCouplings: [],
-      graphTopology: {
-        componentCount: 1,
-        componentSizes: [1],
-        approximateDiameter: 0,
-        reachability: 1,
-        isFragmented: false,
-      },
-    };
-    await saveAnalysisCache(tmpDir, data);
-    expect(await loadAnalysisCache(tmpDir)).toBeNull();
-  });
-
-  it("returns null for corrupted JSON", async () => {
-    const cacheDir = path.join(tmpDir, ".clarte");
-    await fs.mkdir(cacheDir, { recursive: true });
-    await fs.writeFile(path.join(cacheDir, "analysis-cache.json"), "not valid json{{{");
+  it("returns null for version mismatch when stored directly in meta", async () => {
+    // Write directly to meta table with wrong version
+    const { openGraphStore } = await import("../storage/loader.js");
+    const store = await openGraphStore(tmpDir);
+    try {
+      store.setMeta("analysis_cache_key", "some-key");
+      store.setMeta("analysis_cache_data", JSON.stringify({ version: 999, cacheKey: "abc" }));
+    } finally {
+      store.close();
+    }
     expect(await loadAnalysisCache(tmpDir)).toBeNull();
   });
 });

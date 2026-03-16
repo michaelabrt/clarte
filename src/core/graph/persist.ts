@@ -1,88 +1,50 @@
-import path from "node:path";
-import { readFileOr, writeFileSafe } from "../utils.js";
 import { gitExecSafe } from "../git/git.js";
 import { deriveRole } from "./centrality.js";
 import { computeAllInstabilities } from "./instability.js";
 import type { ContextAnalysis, ImportGraph } from "../types.js";
-import {
-  PERSISTED_GRAPH_VERSION,
-  type EdgeRecord,
-  type FileRecord,
-  type PersistedGraph,
-} from "../types/persisted-graph.js";
+import { PERSISTED_GRAPH_VERSION, type PersistedGraph } from "../types/persisted-graph.js";
 import { CLARTE_DIR } from "../config/config.js";
-
-const GRAPH_PATH = `${CLARTE_DIR}/graph.json`;
+import { openGraphStore } from "../../storage/loader.js";
+import { buildPersistedGraphFromStore } from "../../storage/loader.js";
+import type { GraphStore } from "../../storage/graph-store.js";
+import type {
+  FileRecord,
+  FileEdgeRecord,
+  CommunityRecord,
+  ChangeCouplingRecord,
+  SymbolRecord,
+} from "../../storage/types.js";
+import { computeSymbolAuthority } from "./persist-helpers.js";
 
 /**
- * Compute per-symbol authority from cross-file imports + intra-file callers.
- * Uses weighted in-degree (not HITS): type-only edges at 0.3x, intra-file callers at 0.3x.
- * Normalized per-file to [0, 1] using max.
+ * Persist the analysis graph to .clarte/graph.db.
+ * Stores file scores, edges, communities and change coupling in SQLite.
+ * Non-critical: callers should wrap in try/catch.
  */
-export function computeSymbolAuthority(
-  edges: EdgeRecord[],
-  files: Record<string, FileRecord>,
-  intraFileCalls: Map<string, Array<{ caller: string; callee: string }>>,
-): Map<string, Record<string, number>> {
-  const counts = new Map<string, Map<string, number>>();
+export async function persistGraph(rootDir: string, graph: ImportGraph, analysis: ContextAnalysis): Promise<void>;
+export async function persistGraph(
+  rootDir: string,
+  graph: ImportGraph,
+  analysis: ContextAnalysis,
+  store?: GraphStore,
+): Promise<void> {
+  const ownStore = !store;
+  const activeStore = store ?? (await openGraphStore(rootDir));
 
-  // Cross-file: count distinct source files importing each symbol
-  // Discount type-only edges at 0.3x (S7)
-  for (const edge of edges) {
-    const targetSymbols = files[edge.to]?.symbolNames;
-    if (!targetSymbols) continue;
-    const targetSet = new Set(targetSymbols);
-    const weight = edge.isTypeOnly ? 0.3 : 1;
-    for (const name of edge.importedNames) {
-      if (!targetSet.has(name)) continue;
-      let m = counts.get(edge.to);
-      if (!m) {
-        m = new Map();
-        counts.set(edge.to, m);
-      }
-      m.set(name, (m.get(name) || 0) + weight);
-    }
+  try {
+    persistGraphToStore(rootDir, activeStore, graph, analysis);
+  } finally {
+    if (ownStore) activeStore.close();
   }
-
-  // Intra-file: count callers within file (weight: 0.3)
-  for (const [file, calls] of intraFileCalls) {
-    let m = counts.get(file);
-    if (!m) {
-      m = new Map();
-      counts.set(file, m);
-    }
-    for (const { callee } of calls) {
-      m.set(callee, (m.get(callee) || 0) + 0.3);
-    }
-  }
-
-  // Normalize per-file to [0, 1] using max
-  const result = new Map<string, Record<string, number>>();
-  for (const [file, symbolCounts] of counts) {
-    const maxCount = Math.max(...symbolCounts.values(), 1);
-    const normalized: Record<string, number> = {};
-    for (const [sym, count] of symbolCounts) {
-      normalized[sym] = Math.round((count / maxCount) * 1000) / 1000;
-    }
-    result.set(file, normalized);
-  }
-  return result;
 }
 
-/**
- * Build a PersistedGraph from an ImportGraph and ContextAnalysis.
- * This creates the serializable graph structure for persistent storage.
- */
-function buildPersistedGraph(rootDir: string, graph: ImportGraph, analysis: ContextAnalysis): PersistedGraph {
-  // Build lookup maps from analysis data
+function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGraph, analysis: ContextAnalysis): void {
+  const now = new Date().toISOString();
+
   const hubByPath = new Map(analysis.hubFiles.map((h) => [h.path, h]));
   const chokepointByPath = new Map((analysis.chokepoints ?? []).map((c) => [c.file, c]));
   const crossCuttingByPath = new Map((analysis.crossCuttingFiles ?? []).map((c) => [c.file, c]));
-
-  // Compute instability for all files (not just high-instability)
   const instabilityMap = computeAllInstabilities(graph);
-
-  // Build file -> communityId lookup
   const fileToCommunity = new Map<string, number>();
   for (const community of analysis.communities) {
     for (const file of community.files) {
@@ -90,11 +52,73 @@ function buildPersistedGraph(rootDir: string, graph: ImportGraph, analysis: Cont
     }
   }
 
-  // Build test mapping lookup
+  // Detect layer per file
+  const fileToLayers = new Map<string, string[]>();
+  for (const layer of analysis.layers ?? []) {
+    for (const file of layer.files) {
+      let arr = fileToLayers.get(file);
+      if (!arr) {
+        arr = [];
+        fileToLayers.set(file, arr);
+      }
+      arr.push(layer.name);
+    }
+  }
+
   const sourceToTests = analysis.testMapping?.sourceToTests ?? new Map<string, string[]>();
 
-  // Build files record
-  const files: Record<string, FileRecord> = {};
+  // Build internal edge list (for symbol authority computation)
+  const internalEdges = graph.edges
+    .filter((e) => !e.isExternal)
+    .map((e) => ({
+      from: e.from,
+      to: e.to,
+      importedNames: e.importedNames,
+      isTypeOnly: e.isTypeOnly,
+    }));
+
+  // Compute per-file symbol data
+  const fileSymbolData = new Map<
+    string,
+    {
+      symbolNames: string[];
+      symbolBodyTokens: Record<string, string[]>;
+      symbolStartLines: Record<string, number>;
+      symbolAuthority: Record<string, number>;
+      intraFileCalls: Array<[string, string]>;
+    }
+  >();
+
+  for (const [filePath] of graph.inDegree) {
+    const symbolNames = graph.symbolNames?.get(filePath) ?? [];
+    const bodyTokens = graph.symbolBodyTokens?.get(filePath);
+    const startLines = graph.symbolStartLines?.get(filePath);
+    const intraCalls = graph.intraFileCalls?.get(filePath);
+
+    if (symbolNames.length === 0 && !bodyTokens && !startLines && !intraCalls) continue;
+
+    fileSymbolData.set(filePath, {
+      symbolNames,
+      symbolBodyTokens: bodyTokens ? Object.fromEntries(bodyTokens) : {},
+      symbolStartLines: startLines ? Object.fromEntries(startLines) : {},
+      symbolAuthority: {},
+      intraFileCalls: intraCalls ? intraCalls.map((c) => [c.caller, c.callee] as [string, string]) : [],
+    });
+  }
+
+  // Compute symbol authority
+  const filesRecord: Record<string, { symbolNames?: string[] }> = {};
+  for (const [fp, data] of fileSymbolData) {
+    filesRecord[fp] = { symbolNames: data.symbolNames };
+  }
+  const symAuthMap = computeSymbolAuthority(internalEdges, filesRecord, graph.intraFileCalls ?? new Map());
+  for (const [fp, auth] of symAuthMap) {
+    const data = fileSymbolData.get(fp);
+    if (data) data.symbolAuthority = auth;
+  }
+
+  // Build file records
+  const fileRecords: FileRecord[] = [];
   for (const [filePath] of graph.inDegree) {
     const hub = hubByPath.get(filePath);
     const authority = graph.authority?.get(filePath) ?? 0;
@@ -103,137 +127,132 @@ function buildPersistedGraph(rootDir: string, graph: ImportGraph, analysis: Cont
     const chokepoint = chokepointByPath.get(filePath);
     const crossCutting = crossCuttingByPath.get(filePath);
     const tests = sourceToTests.get(filePath) ?? [];
+    const layers = fileToLayers.get(filePath) ?? [];
+    const symData = fileSymbolData.get(filePath);
 
-    const symbols = graph.symbolNames?.get(filePath);
-    files[filePath] = {
+    fileRecords.push({
+      path: filePath,
+      hash: "", // hash already stored by cache layer; don't overwrite
       role: hub?.role ?? deriveRole(authority, hubScore, isBarrel),
       authority,
-      hubScore,
+      hub_score: hubScore,
       betweenness: graph.betweennessScores?.get(filePath) ?? 0,
       instability: instabilityMap.get(filePath) ?? null,
-      importedByCount: graph.inDegree.get(filePath) ?? 0,
-      isChokepoint: !!chokepoint,
-      separatesComponents: chokepoint?.upstreamCount ?? 0,
-      isCrossCutting: !!crossCutting,
-      layerSpread: crossCutting?.layerSpread ?? 0,
-      layers: crossCutting?.layers ?? [],
-      hasTests: tests.length > 0,
-      testFiles: tests,
-      communityId: fileToCommunity.get(filePath) ?? null,
-      ...(symbols && symbols.length > 0 && { symbolNames: symbols }),
-    };
-  }
-
-  // Build edges (internal only, needed before symbol authority computation)
-  const edges: EdgeRecord[] = graph.edges
-    .filter((e) => !e.isExternal)
-    .map((e) => {
-      const rec: EdgeRecord = {
-        from: e.from,
-        to: e.to,
-        importedNames: e.importedNames,
-      };
-      if (e.isTypeOnly) rec.isTypeOnly = true;
-      if (e.isDynamic) rec.isDynamic = true;
-      if (e.isBarrelRouted) rec.isBarrelRouted = true;
-      return rec;
+      community_id: fileToCommunity.get(filePath) ?? null,
+      layer: layers[0] ?? null,
+      is_barrel: isBarrel ? 1 : 0,
+      is_dead: (graph.inDegree.get(filePath) ?? 0) === 0 ? 1 : 0,
+      is_chokepoint: chokepoint ? 1 : 0,
+      separates_components: chokepoint?.upstreamCount ?? 0,
+      is_cross_cutting: crossCutting ? 1 : 0,
+      layer_spread: crossCutting?.layerSpread ?? 0,
+      has_tests: tests.length > 0 ? 1 : 0,
+      layers: layers.length > 0 ? JSON.stringify(layers) : null,
+      test_files: tests.length > 0 ? JSON.stringify(tests) : null,
+      intra_file_calls: symData?.intraFileCalls?.length ? JSON.stringify(symData.intraFileCalls) : null,
+      updated_at: now,
     });
-
-  // Enrich FileRecords with symbol-level data (body tokens, start lines, authority, intra-file calls)
-  const symbolAuthMap = computeSymbolAuthority(edges, files, graph.intraFileCalls ?? new Map());
-  for (const filePath of Object.keys(files)) {
-    const record = files[filePath];
-
-    const bodyToks = graph.symbolBodyTokens?.get(filePath);
-    if (bodyToks?.size) record.symbolBodyTokens = Object.fromEntries(bodyToks);
-
-    const startLines = graph.symbolStartLines?.get(filePath);
-    if (startLines?.size) record.symbolStartLines = Object.fromEntries(startLines);
-
-    const symAuth = symbolAuthMap.get(filePath);
-    if (symAuth && Object.keys(symAuth).length > 0) record.symbolAuthority = symAuth;
-
-    const intraCalls = graph.intraFileCalls?.get(filePath);
-    if (intraCalls?.length) record.intraFileCalls = intraCalls.map((c) => [c.caller, c.callee]);
   }
+
+  // Build edge records (internal edges only)
+  const edgeRecords: FileEdgeRecord[] = internalEdges.map((e) => ({
+    from_path: e.from,
+    to_path: e.to,
+    imported_names: e.importedNames,
+    is_type_only: e.isTypeOnly ? 1 : 0,
+  }));
+
+  // Build symbol records
+  const symbolRecords: SymbolRecord[] = [];
+  for (const [filePath, data] of fileSymbolData) {
+    const importNames = graph.edges.filter((e) => e.from === filePath && !e.isExternal).flatMap((e) => e.importedNames);
+    const importNamesStr = importNames.length > 0 ? JSON.stringify(importNames) : null;
+
+    for (const name of data.symbolNames) {
+      const startLine = data.symbolStartLines[name] ?? 0;
+      const tokens = data.symbolBodyTokens[name];
+      symbolRecords.push({
+        file_path: filePath,
+        name,
+        kind: "unknown",
+        start_line: startLine,
+        authority: data.symbolAuthority[name] ?? null,
+        body_tokens: tokens ? tokens.join(" ") : null,
+        import_names: importNamesStr,
+      });
+    }
+  }
+
+  // Build community records
+  const communityRecords: CommunityRecord[] = analysis.communities.map((c) => ({
+    id: c.id,
+    label: c.label,
+  }));
 
   // Build change coupling records
-  const changeCoupling = (analysis.gitActivity?.changeCoupling ?? []).map((c) => ({
-    fileA: c.fileA,
-    fileB: c.fileB,
+  const changeCouplingRecords: ChangeCouplingRecord[] = (analysis.gitActivity?.changeCoupling ?? []).map((c) => ({
+    file_a: c.fileA,
+    file_b: c.fileB,
+    co_changes: c.coChangeCount,
     confidence: c.confidence,
-    coChangeCount: c.coChangeCount,
   }));
 
-  // Build structural mismatches
-  const structuralMismatches = (analysis.structuralMismatches ?? []).map((m) => ({
-    fileA: m.fileA,
-    fileB: m.fileB,
-    graphDistance: m.graphDistance,
-    coChangeConfidence: m.coChangeConfidence,
-    coChangeCount: m.coChangeCount,
+  // Write to SQLite
+  // Preserve existing hashes for files already in the DB
+  const existingHashes = store.getAllHashes();
+
+  const mergedFileRecords = fileRecords.map((f) => ({
+    ...f,
+    hash: existingHashes.get(f.path) ?? f.hash,
   }));
 
-  // Build test mapping record (Map -> Record for JSON serialization)
-  const testMapping: Record<string, string[]> = {};
-  for (const [src, tests] of sourceToTests) {
-    testMapping[src] = tests;
+  // Ensure all edge target files exist in the files table (FK constraint)
+  const knownPaths = new Set(mergedFileRecords.map((f) => f.path));
+  for (const e of edgeRecords) {
+    if (!knownPaths.has(e.from_path)) {
+      mergedFileRecords.push({ path: e.from_path, hash: existingHashes.get(e.from_path) ?? "", updated_at: now });
+      knownPaths.add(e.from_path);
+    }
+    if (e.to_path && !knownPaths.has(e.to_path)) {
+      mergedFileRecords.push({ path: e.to_path, hash: existingHashes.get(e.to_path) ?? "", updated_at: now });
+      knownPaths.add(e.to_path);
+    }
   }
 
-  // Build lag couplings
-  const lagCouplings = (analysis.gitActivity?.lagCouplings ?? []).map((l) => ({
-    fileA: l.fileA,
-    fileB: l.fileB,
-    lagScore: l.lagScore,
-  }));
+  store.upsertFiles(mergedFileRecords);
+  store.upsertFileEdges(edgeRecords);
+  if (symbolRecords.length > 0) store.upsertSymbols(symbolRecords);
+  if (communityRecords.length > 0) store.upsertCommunities(communityRecords);
+  if (changeCouplingRecords.length > 0) store.upsertChangeCoupling(changeCouplingRecords);
 
-  // Get head commit
+  // Store head commit
   const headCommit = gitExecSafe(["rev-parse", "HEAD"], { cwd: rootDir }) ?? undefined;
-
-  return {
-    version: PERSISTED_GRAPH_VERSION,
-    timestamp: new Date().toISOString(),
-    headCommit,
-    files,
-    edges,
-    communities: analysis.communities.map((c) => ({
-      id: c.id,
-      files: c.files,
-      label: c.label,
-    })),
-    changeCoupling,
-    structuralMismatches,
-    testMapping,
-    lagCouplings,
-  };
+  if (headCommit) store.setMeta("head_commit", headCommit);
+  store.setMeta("build_timestamp", now);
 }
 
 /**
- * Persist the analysis graph to .clarte/graph.json.
- * Non-critical: callers should wrap in try/catch.
+ * Load the persisted graph from SQLite for use by the steer module.
+ * Returns null if no database exists.
  */
-export async function persistGraph(rootDir: string, graph: ImportGraph, analysis: ContextAnalysis): Promise<void> {
-  const persisted = buildPersistedGraph(rootDir, graph, analysis);
-  const filePath = path.join(rootDir, GRAPH_PATH);
-  // Pretty-print for debuggability (graph.json is the most inspected cache file)
-  await writeFileSafe(filePath, JSON.stringify(persisted, null, 2));
-}
-
-/**
- * Load and validate a persisted graph from .clarte/graph.json.
- * Returns null if the file doesn't exist or is invalid.
- */
-export async function loadPersistedGraph(rootDir: string): Promise<PersistedGraph | null> {
-  const filePath = path.join(rootDir, GRAPH_PATH);
-  const content = await readFileOr(filePath);
-  if (!content) return null;
-
+export async function loadPersistedGraph(rootDir: string): Promise<PersistedGraph | null>;
+export async function loadPersistedGraph(rootDir: string, store?: GraphStore): Promise<PersistedGraph | null> {
+  const ownStore = !store;
+  let activeStore: GraphStore | undefined;
   try {
-    const parsed = JSON.parse(content) as PersistedGraph;
-    if (parsed.version !== PERSISTED_GRAPH_VERSION) return null;
-    if (!parsed.files || !parsed.edges) return null;
-    return parsed;
+    activeStore = store ?? (await openGraphStore(rootDir));
+    const persisted = buildPersistedGraphFromStore(activeStore);
+    // Check if we have any data
+    if (Object.keys(persisted.files).length === 0) return null;
+    return persisted;
   } catch {
     return null;
+  } finally {
+    if (ownStore) activeStore?.close();
   }
 }
+
+// Re-export for test compatibility
+export { CLARTE_DIR };
+export { PERSISTED_GRAPH_VERSION };
+export { computeSymbolAuthority } from "./persist-helpers.js";

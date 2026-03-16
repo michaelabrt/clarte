@@ -86,10 +86,13 @@ describe("buildFileCallIndex", () => {
 
 describe("buildCallGraph - extraction", () => {
   const projectRoot = path.join(FIXTURE_DIR, "..", "..", "..", "..");
-  const cacheFile = path.join(projectRoot, ".clarte/call-graph.json");
 
   beforeEach(async () => {
-    await fs.rm(cacheFile, { force: true });
+    // Clean up the SQLite DB before each test to ensure fresh state
+    const dbPath = path.join(projectRoot, ".clarte/graph.db");
+    await fs.rm(dbPath, { force: true });
+    await fs.rm(dbPath + "-wal", { force: true });
+    await fs.rm(dbPath + "-shm", { force: true });
   });
 
   beforeAll(async () => {
@@ -150,7 +153,15 @@ describe("persistCallGraph / loadCallGraph - round-trip", () => {
   it("persists and reloads the call graph intact", async () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-cg-"));
     try {
-      await fs.mkdir(path.join(tmpDir, ".clarte"), { recursive: true });
+      // Need a file record before inserting call sites (FK constraint)
+      const { openGraphStore } = await import("../storage/loader.js");
+      const store = await openGraphStore(tmpDir);
+      store.upsertFiles([
+        { path: "src/a.ts", hash: "abc123", updated_at: new Date().toISOString() },
+        { path: "src/b.ts", hash: "def456", updated_at: new Date().toISOString() },
+      ]);
+      store.close();
+
       const original = {
         version: 1 as const,
         timestamp: new Date().toISOString(),
@@ -170,39 +181,27 @@ describe("persistCallGraph / loadCallGraph - round-trip", () => {
       expect(loaded).not.toBeNull();
       expect(loaded?.sites).toHaveLength(1);
       expect(loaded?.sites[0].callee).toBe("bar");
+      // fileHashes comes from the files table
       expect(loaded?.fileHashes["src/a.ts"]).toBe("abc123");
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
   });
 
-  it("returns null for missing file", async () => {
+  it("returns null for missing database", async () => {
     const loaded = await loadCallGraph("/nonexistent/dir");
     expect(loaded).toBeNull();
-  });
-
-  it("returns null for invalid version", async () => {
-    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-cg-"));
-    try {
-      await fs.mkdir(path.join(tmpDir, ".clarte"), { recursive: true });
-      await fs.writeFile(
-        path.join(tmpDir, ".clarte/call-graph.json"),
-        JSON.stringify({ version: 99, sites: [], fileHashes: {} }),
-      );
-      const loaded = await loadCallGraph(tmpDir);
-      expect(loaded).toBeNull();
-    } finally {
-      await fs.rm(tmpDir, { recursive: true, force: true });
-    }
   });
 });
 
 describe("buildCallGraph - extraction (new fixtures)", () => {
   const projectRoot = path.join(FIXTURE_DIR, "..", "..", "..", "..");
-  const cacheFile = path.join(projectRoot, ".clarte/call-graph.json");
 
   beforeEach(async () => {
-    await fs.rm(cacheFile, { force: true });
+    const dbPath = path.join(projectRoot, ".clarte/graph.db");
+    await fs.rm(dbPath, { force: true });
+    await fs.rm(dbPath + "-wal", { force: true });
+    await fs.rm(dbPath + "-shm", { force: true });
   });
 
   it("arrow.ts: arrowFn calling doThing resolves to helper.ts", async () => {
@@ -325,10 +324,12 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
 
 describe("buildCallGraph - incremental invalidation", () => {
   const projectRoot = path.join(FIXTURE_DIR, "..", "..", "..", "..");
-  const cacheFile = path.join(projectRoot, ".clarte/call-graph.json");
 
   beforeEach(async () => {
-    await fs.rm(cacheFile, { force: true });
+    const dbPath = path.join(projectRoot, ".clarte/graph.db");
+    await fs.rm(dbPath, { force: true });
+    await fs.rm(dbPath + "-wal", { force: true });
+    await fs.rm(dbPath + "-shm", { force: true });
   });
 
   it("reuses previous results for unchanged files", async () => {

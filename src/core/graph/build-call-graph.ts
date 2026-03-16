@@ -1,13 +1,13 @@
 import path from "node:path";
 import { createHash } from "node:crypto";
 import type { Node } from "web-tree-sitter";
-import { readFileOr, writeFileSafe } from "../utils.js";
+import { readFileOr } from "../utils.js";
 import { withParsedTree, initForLanguage } from "../parsers/init.js";
-import { CLARTE_DIR } from "../config/config.js";
 import type { ImportGraph, Language } from "../types.js";
 import type { CallSite, PersistedCallGraph } from "../types/call-graph.js";
-
-const CALL_GRAPH_PATH = `${CLARTE_DIR}/call-graph.json`;
+import { openGraphStore } from "../../storage/loader.js";
+import type { GraphStore } from "../../storage/graph-store.js";
+import type { CallSiteRecord } from "../../storage/types.js";
 
 const BUILTIN_GLOBALS = new Set([
   "console",
@@ -214,29 +214,67 @@ export async function buildCallGraph(
 }
 
 /**
- * Persist the call graph to .clarte/call-graph.json.
+ * Persist the call graph to graph.db.
  */
-export async function persistCallGraph(rootDir: string, callGraph: PersistedCallGraph): Promise<void> {
-  const filePath = path.join(rootDir, CALL_GRAPH_PATH);
-  await writeFileSafe(filePath, JSON.stringify(callGraph));
+export async function persistCallGraph(
+  rootDir: string,
+  callGraph: PersistedCallGraph,
+  store?: GraphStore,
+): Promise<void> {
+  const ownStore = !store;
+  const activeStore = store ?? (await openGraphStore(rootDir));
+  try {
+    const records: CallSiteRecord[] = callGraph.sites
+      .filter((s) => s.calleeFile !== null)
+      .map((s) => ({
+        caller_file: s.caller,
+        caller_fn: s.callerFn || null,
+        callee_name: s.callee,
+        callee_file: s.calleeFile,
+        line: s.line,
+      }));
+    if (records.length > 0) activeStore.upsertCallSites(records);
+    activeStore.setMeta("call_graph_timestamp", callGraph.timestamp);
+  } finally {
+    if (ownStore) activeStore.close();
+  }
 }
 
 /**
- * Load a persisted call graph from .clarte/call-graph.json.
- * Returns null if the file doesn't exist or is invalid.
+ * Load the call graph from graph.db.
+ * Returns null if no data exists.
  */
-export async function loadCallGraph(rootDir: string): Promise<PersistedCallGraph | null> {
-  const filePath = path.join(rootDir, CALL_GRAPH_PATH);
-  const content = await readFileOr(filePath);
-  if (!content) return null;
-
+export async function loadCallGraph(rootDir: string, store?: GraphStore): Promise<PersistedCallGraph | null> {
+  const ownStore = !store;
+  let activeStore: GraphStore | undefined;
   try {
-    const parsed = JSON.parse(content) as PersistedCallGraph;
-    if (parsed.version !== 1) return null;
-    if (!Array.isArray(parsed.sites)) return null;
-    return parsed;
+    activeStore = store ?? (await openGraphStore(rootDir));
+    const rows = activeStore.loadAllCallSites();
+    if (rows.length === 0) return null;
+
+    // Reconstruct PersistedCallGraph
+    const sites: CallSite[] = rows.map((r) => ({
+      caller: r.caller_file,
+      callerFn: r.caller_fn ?? "",
+      callee: r.callee_name,
+      calleeFile: r.callee_file,
+      line: r.line,
+    }));
+
+    const hashes = activeStore.getAllHashes();
+    const fileHashes: Record<string, string> = {};
+    for (const [p, h] of hashes) fileHashes[p] = h;
+
+    return {
+      version: 1,
+      timestamp: activeStore.getMeta("call_graph_timestamp") ?? new Date().toISOString(),
+      sites,
+      fileHashes,
+    };
   } catch {
     return null;
+  } finally {
+    if (ownStore) activeStore?.close();
   }
 }
 
