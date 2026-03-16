@@ -88,10 +88,10 @@ describe("Hook BM25F drift detection", () => {
     expect(GENERATE_HOOKS).toMatch(/ceil.*IC|IC.*ceil/i);
   });
 
-  it("fallback-only import pattern exists in hook", () => {
-    // Import field should only fire when path/symbol score is 0
-    expect(GENERATE_HOOKS).toMatch(/sc\s*===?\s*0/);
-    expect(GENERATE_HOOKS).toContain("useImports");
+  it("imports always contribute in hook (3.7 SYNC)", () => {
+    // Import field always active; import-only files tracked via hasPS check for IMPORT_CEILING
+    expect(GENERATE_HOOKS).toContain("impOnly");
+    expect(GENERATE_HOOKS).toContain("hasPS");
   });
 
   it("consumer preference tiebreaker exists in hook", () => {
