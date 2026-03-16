@@ -42,7 +42,7 @@
     "ai-tools"
   ],
   "author": "Michael Aboukrat",
-  "license": "MIT",
+  "license": "FSL-1.1-MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/michaelabrt/clarte.git"
