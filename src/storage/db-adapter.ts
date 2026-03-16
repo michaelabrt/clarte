@@ -349,3 +349,40 @@ export const _sqlJsTier: TierLoader = async (dbPath) => {
 export async function createDatabase(dbPath: string): Promise<DatabaseAdapter> {
   return createDatabaseWithTiers(dbPath, [tier1Loader, _bunSqliteTier, _sqlJsTier]);
 }
+
+// ── Read-only factory (F.5: for MCP server) ──────────────────────────────────
+
+const readonlyTier1Loader: TierLoader = async (dbPath) => {
+  try {
+    const { createRequire } = await import("node:module");
+    const req = createRequire(import.meta.url);
+    const BetterSqlite3 = req("better-sqlite3") as new (path: string, options?: { readonly?: boolean }) => DatabaseLike;
+    const db = new BetterSqlite3(dbPath, { readonly: true });
+    if (process.env.CLARTE_DEBUG) process.stderr.write("[clarte:db] using better-sqlite3 (read-only)\n");
+    return wrapBetterSqlite3(db);
+  } catch {
+    return null;
+  }
+};
+
+const readonlyBunTier: TierLoader = async (dbPath) => {
+  try {
+    const mod = (await import("bun:sqlite" as never as string)) as {
+      Database: new (path: string, options?: { readonly?: boolean }) => DatabaseLike;
+    };
+    const db = new mod.Database(dbPath, { readonly: true });
+    if (process.env.CLARTE_DEBUG) process.stderr.write("[clarte:db] using bun:sqlite (read-only)\n");
+    return wrapBunSqlite(db);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Create a read-only SQLite database connection.
+ * Used by the MCP server to prevent accidental writes and avoid WAL lock contention
+ * with the main clarte indexer process.
+ */
+export async function createReadonlyDatabase(dbPath: string): Promise<DatabaseAdapter> {
+  return createDatabaseWithTiers(dbPath, [readonlyTier1Loader, readonlyBunTier, _sqlJsTier]);
+}
