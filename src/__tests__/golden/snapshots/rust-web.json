@@ -1,18 +1,18 @@
 {
   "fileCount": 9,
-  "edgeCount": 15,
+  "edgeCount": 14,
   "hubFiles": [
     {
       "path": "src/config.rs",
-      "authority": 1
+      "authority": 0.9922
     },
     {
       "path": "src/db/mod.rs",
-      "authority": 0.2182
+      "authority": 0.2089
     },
     {
       "path": "src/db/queries.rs",
-      "authority": 0.1574
+      "authority": 0.3361
     },
     {
       "path": "src/main.rs",
@@ -20,30 +20,33 @@
     },
     {
       "path": "src/models/mod.rs",
-      "authority": 0.2182
+      "authority": 0.2089
     },
     {
       "path": "src/models/product.rs",
-      "authority": 0.4123
+      "authority": 0.6939
     },
     {
       "path": "src/models/user.rs",
-      "authority": 0.5549
+      "authority": 1
     },
     {
       "path": "src/routes/handlers.rs",
-      "authority": 0.4501
+      "authority": 0.4397
     },
     {
       "path": "src/routes/mod.rs",
-      "authority": 0.2182
+      "authority": 0.2089
     }
   ],
   "circularDeps": [],
   "layers": [
     {
       "name": "pages",
-      "files": ["src/routes/handlers.rs", "src/routes/mod.rs"],
+      "files": [
+        "src/routes/handlers.rs",
+        "src/routes/mod.rs"
+      ],
       "dependsOn": []
     }
   ],
@@ -101,7 +104,9 @@
   ],
   "graphTopology": {
     "componentCount": 1,
-    "componentSizes": [9],
+    "componentSizes": [
+      9
+    ],
     "approximateDiameter": 2,
     "reachability": 1,
     "isFragmented": false
