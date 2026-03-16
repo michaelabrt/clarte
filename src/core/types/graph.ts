@@ -44,6 +44,12 @@ export interface ImportGraph {
   betweennessScores?: Map<string, number>;
   /** All function/method/class names defined in each file, for BM25 symbol indexing */
   symbolNames?: Map<string, string[]>;
+  /** Deduped body tokens per symbol per file, for symbol-level BM25 scoring */
+  symbolBodyTokens?: Map<string, Map<string, string[]>>;
+  /** 1-based start line per symbol per file, for navigation hints */
+  symbolStartLines?: Map<string, Map<string, number>>;
+  /** Intra-file caller→callee edges per file, for navigation chain display */
+  intraFileCalls?: Map<string, Array<{ caller: string; callee: string }>>;
 }
 
 /** A highly-connected file identified by HITS analysis */

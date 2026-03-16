@@ -15,6 +15,61 @@ import { CLARTE_DIR } from "../config/config.js";
 const GRAPH_PATH = `${CLARTE_DIR}/graph.json`;
 
 /**
+ * Compute per-symbol authority from cross-file imports + intra-file callers.
+ * Uses weighted in-degree (not HITS): type-only edges at 0.3x, intra-file callers at 0.3x.
+ * Normalized per-file to [0, 1] using max.
+ */
+function computeSymbolAuthority(
+  edges: EdgeRecord[],
+  files: Record<string, FileRecord>,
+  intraFileCalls: Map<string, Array<{ caller: string; callee: string }>>,
+): Map<string, Record<string, number>> {
+  const counts = new Map<string, Map<string, number>>();
+
+  // Cross-file: count distinct source files importing each symbol
+  // Discount type-only edges at 0.3x (S7)
+  for (const edge of edges) {
+    const targetSymbols = files[edge.to]?.symbolNames;
+    if (!targetSymbols) continue;
+    const targetSet = new Set(targetSymbols);
+    const weight = edge.isTypeOnly ? 0.3 : 1;
+    for (const name of edge.importedNames) {
+      if (!targetSet.has(name)) continue;
+      let m = counts.get(edge.to);
+      if (!m) {
+        m = new Map();
+        counts.set(edge.to, m);
+      }
+      m.set(name, (m.get(name) || 0) + weight);
+    }
+  }
+
+  // Intra-file: count callers within file (weight: 0.3)
+  for (const [file, calls] of intraFileCalls) {
+    let m = counts.get(file);
+    if (!m) {
+      m = new Map();
+      counts.set(file, m);
+    }
+    for (const { callee } of calls) {
+      m.set(callee, (m.get(callee) || 0) + 0.3);
+    }
+  }
+
+  // Normalize per-file to [0, 1] using max
+  const result = new Map<string, Record<string, number>>();
+  for (const [file, symbolCounts] of counts) {
+    const maxCount = Math.max(...symbolCounts.values(), 1);
+    const normalized: Record<string, number> = {};
+    for (const [sym, count] of symbolCounts) {
+      normalized[sym] = Math.round((count / maxCount) * 1000) / 1000;
+    }
+    result.set(file, normalized);
+  }
+  return result;
+}
+
+/**
  * Build a PersistedGraph from an ImportGraph and ContextAnalysis.
  * This creates the serializable graph structure for persistent storage.
  */
@@ -69,7 +124,7 @@ function buildPersistedGraph(rootDir: string, graph: ImportGraph, analysis: Cont
     };
   }
 
-  // Build edges (internal only)
+  // Build edges (internal only, needed before symbol authority computation)
   const edges: EdgeRecord[] = graph.edges
     .filter((e) => !e.isExternal)
     .map((e) => {
@@ -83,6 +138,24 @@ function buildPersistedGraph(rootDir: string, graph: ImportGraph, analysis: Cont
       if (e.isBarrelRouted) rec.isBarrelRouted = true;
       return rec;
     });
+
+  // Enrich FileRecords with symbol-level data (body tokens, start lines, authority, intra-file calls)
+  const symbolAuthMap = computeSymbolAuthority(edges, files, graph.intraFileCalls ?? new Map());
+  for (const filePath of Object.keys(files)) {
+    const record = files[filePath];
+
+    const bodyToks = graph.symbolBodyTokens?.get(filePath);
+    if (bodyToks?.size) record.symbolBodyTokens = Object.fromEntries(bodyToks);
+
+    const startLines = graph.symbolStartLines?.get(filePath);
+    if (startLines?.size) record.symbolStartLines = Object.fromEntries(startLines);
+
+    const symAuth = symbolAuthMap.get(filePath);
+    if (symAuth && Object.keys(symAuth).length > 0) record.symbolAuthority = symAuth;
+
+    const intraCalls = graph.intraFileCalls?.get(filePath);
+    if (intraCalls?.length) record.intraFileCalls = intraCalls.map((c) => [c.caller, c.callee]);
+  }
 
   // Build change coupling records
   const changeCoupling = (analysis.gitActivity?.changeCoupling ?? []).map((c) => ({
