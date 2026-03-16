@@ -41,6 +41,8 @@ export interface SymbolRecord {
   body_tokens?: string | null;
   /** JSON array of import names for FTS5 content-sync */
   import_names?: string | null;
+  /** Whether this symbol is exported from its file (F3) */
+  is_exported?: number;
 }
 
 export interface FileEdgeRecord {
@@ -58,6 +60,9 @@ export interface SymbolEdgeRecord {
   to_symbol_id: number;
   kind: string;
   line?: number | null;
+  ordinal?: number | null;
+  /** Resolution confidence tier (F19) */
+  confidence?: number | null;
 }
 
 export interface CallSiteRecord {
@@ -136,6 +141,7 @@ export interface InMemorySymbolNode {
   authority?: number | null;
   bodyHash?: string | null;
   bodyTokens?: string | null;
+  isExported: boolean;
 }
 
 export interface InMemorySymEdge {
@@ -143,6 +149,8 @@ export interface InMemorySymEdge {
   toSymbolId: number;
   kind: string;
   line?: number | null;
+  ordinal?: number | null;
+  confidence?: number | null;
 }
 
 export interface InMemorySymbolGraph {

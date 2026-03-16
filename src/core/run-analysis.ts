@@ -11,7 +11,7 @@ import { findCircularDeps } from "./graph/cycles.js";
 import { getHubFiles } from "./graph/hub-files.js";
 import { detectArchitecturalLayers, computeLayerConsistency } from "./graph/layers.js";
 import { computeInstability } from "./graph/instability.js";
-import { detectCommunities } from "./graph/communities.js";
+import { detectCommunitiesLeiden } from "./graph/leiden.js";
 import { findDeadFiles, readPackageEntryPoints } from "./graph/dead-files.js";
 import { findCrossCuttingFiles } from "./graph/cross-cutting.js";
 import { findChokepoints } from "./graph/chokepoints.js";
@@ -262,7 +262,7 @@ function runGraphPhase(
   const instabilities = cache ? cache.instabilities : computeInstability(graph);
   logInstabilities(instabilities, log);
 
-  const communities = cache ? cache.communities : detectCommunities(graph);
+  const communities = cache ? cache.communities : detectCommunitiesLeiden(graph);
   logCommunities(communities, log);
 
   const deadFiles = cache ? cache.deadFiles : findDeadFiles(graph, entryPoints);

@@ -121,8 +121,8 @@ vi.mock("../core/graph/instability.js", () => ({
   computeInstability: (...args: unknown[]) => mockComputeInstability(...args),
   INSTABILITY_THRESHOLD: 0.8,
 }));
-vi.mock("../core/graph/communities.js", () => ({
-  detectCommunities: (...args: unknown[]) => mockDetectCommunities(...args),
+vi.mock("../core/graph/leiden.js", () => ({
+  detectCommunitiesLeiden: (...args: unknown[]) => mockDetectCommunities(...args),
 }));
 vi.mock("../core/graph/dead-files.js", () => ({
   findDeadFiles: (...args: unknown[]) => mockFindDeadFiles(...args),

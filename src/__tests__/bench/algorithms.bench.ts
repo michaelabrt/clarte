@@ -7,7 +7,7 @@
 
 import { bench, describe } from "vitest";
 import { computeHITS, computeBetweenness } from "../../core/graph/centrality.js";
-import { detectCommunities } from "../../core/graph/communities.js";
+import { detectCommunitiesLeiden as detectCommunities } from "../../core/graph/leiden.js";
 import { findChokepoints } from "../../core/graph/chokepoints.js";
 import { computeInstability } from "../../core/graph/instability.js";
 import { findCircularDeps } from "../../core/graph/cycles.js";

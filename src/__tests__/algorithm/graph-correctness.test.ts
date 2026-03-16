@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import { findSCCs, findCircularDeps } from "../../core/graph/cycles.js";
 import { getHubFiles } from "../../core/graph/hub-files.js";
 import { computeInstability } from "../../core/graph/instability.js";
-import { detectCommunities } from "../../core/graph/communities.js";
+import { detectCommunitiesLeiden as detectCommunities } from "../../core/graph/leiden.js";
 import { detectArchitecturalLayers } from "../../core/graph/layers.js";
 import { findDeadFiles } from "../../core/graph/dead-files.js";
 import { buildGraphFromFixture, missingFromTopN } from "./helpers.js";
