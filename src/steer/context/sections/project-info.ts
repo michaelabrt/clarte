@@ -3,6 +3,7 @@ import type { ContextAnalysis, ContextSection, DetectedContext, UserAnswers } fr
 import { summarizeDetection } from "../../../core/detect/detect.js";
 import { renderConstraintsSection } from "../../../core/config/scan.js";
 import { estimateTokens, readJsonFile, readFileOr } from "../../../core/utils.js";
+import { getFrameworkHintsSection } from "../framework-hints.js";
 
 // Cache for getProjectName to avoid redundant filesystem reads within a single
 // generation. Ideally the project name would be threaded through
@@ -139,7 +140,8 @@ export async function renderProjectInfoSections(
       );
     }
     const keyContent = keyLines.join("\n");
-    sections.push({ id: "key-files", priority: 0, content: keyContent, tokens: estimateTokens(keyContent) });
+    // Priority 1: proven -19pp pass rate when removed but not always needed. Budget can shed this.
+    sections.push({ id: "key-files", priority: 1, content: keyContent, tokens: estimateTokens(keyContent) });
   }
 
   // Change Coupling (proven +1 turn when removed)
@@ -164,12 +166,19 @@ export async function renderProjectInfoSections(
       ccLines.push(`| \`${pair.fileA}\` | \`${pair.fileB}\` | ${pair.coChangeCount} | ${confLabel} |`);
     }
     const ccContent = ccLines.join("\n");
-    sections.push({ id: "change-coupling", priority: 0, content: ccContent, tokens: estimateTokens(ccContent) });
+    // Priority 1: proven +1 turn when removed but not always needed. Budget can shed this.
+    sections.push({ id: "change-coupling", priority: 1, content: ccContent, tokens: estimateTokens(ccContent) });
   }
 
   // Development
   const devContent = `## Development\n\n${await buildDevSection(ctx)}`;
   sections.push({ id: "development", priority: 0, content: devContent, tokens: estimateTokens(devContent) });
+
+  // Framework Conventions (priority 3: shed when budget is tight, untested in ablation)
+  const fwContent = getFrameworkHintsSection(ctx);
+  if (fwContent) {
+    sections.push({ id: "framework-hints", priority: 3, content: fwContent, tokens: estimateTokens(fwContent) });
+  }
 
   return sections;
 }

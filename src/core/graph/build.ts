@@ -50,6 +50,22 @@ export async function detectBarrelFiles(rootDir: string, fileSet: Set<string>): 
   return barrels;
 }
 
+/** Deduplicate edges by (from, to) key, merging importedNames and keeping isTypeOnly only if ALL edges are type-only. */
+function deduplicateEdges(edges: ImportEdge[]): ImportEdge[] {
+  const map = new Map<string, ImportEdge>();
+  for (const e of edges) {
+    const key = `${e.from}|${e.to}`;
+    const existing = map.get(key);
+    if (existing) {
+      existing.importedNames = [...new Set([...existing.importedNames, ...e.importedNames])];
+      existing.isTypeOnly = existing.isTypeOnly && (e.isTypeOnly ?? false);
+    } else {
+      map.set(key, { ...e });
+    }
+  }
+  return [...map.values()];
+}
+
 /**
  * Build the import graph for a project.
  */
@@ -276,12 +292,15 @@ export async function buildImportGraph(
     }
   }
 
+  // Deduplicate edges: multiple import statements from A to B merge into one edge
+  const deduped = deduplicateEdges(edges);
+
   onProgress?.("Computing centrality (HITS)...");
-  const { authority, hub: hubScores } = computeHITS(files, edges, 30, 1e-6, detectedBarrels);
+  const { authority, hub: hubScores } = computeHITS(files, deduped, 30, 1e-6, detectedBarrels);
 
   onProgress?.("Computing betweenness centrality...");
   const graphForBetweenness: ImportGraph = {
-    edges,
+    edges: deduped,
     inDegree,
     directInDegree,
     centrality: authority,
@@ -294,7 +313,7 @@ export async function buildImportGraph(
 
   // Use authority as centrality for backward compat (snapshot.ts etc.)
   return {
-    edges,
+    edges: deduped,
     inDegree,
     directInDegree,
     centrality: authority,

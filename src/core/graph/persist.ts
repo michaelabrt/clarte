@@ -215,7 +215,8 @@ function buildPersistedGraph(rootDir: string, graph: ImportGraph, analysis: Cont
 export async function persistGraph(rootDir: string, graph: ImportGraph, analysis: ContextAnalysis): Promise<void> {
   const persisted = buildPersistedGraph(rootDir, graph, analysis);
   const filePath = path.join(rootDir, GRAPH_PATH);
-  await writeFileSafe(filePath, JSON.stringify(persisted));
+  // Pretty-print for debuggability (graph.json is the most inspected cache file)
+  await writeFileSafe(filePath, JSON.stringify(persisted, null, 2));
 }
 
 /**
