@@ -17,6 +17,24 @@ export function routeBarrelImport(
   if (!barrelNamed && !barrelStars) return [];
 
   const edges: ImportEdge[] = [];
+
+  // Namespace import (import * as ns from './barrel'): route to all star export sources
+  if (edge.importedNames.includes("*") && barrelStars) {
+    for (const [starSource] of barrelStars) {
+      edges.push({
+        from: edge.from,
+        to: starSource,
+        isExternal: false,
+        specifier: edge.specifier,
+        importedNames: ["*"],
+        isTypeOnly: edge.isTypeOnly,
+        isDynamic: edge.isDynamic,
+        isBarrelRouted: true,
+      });
+    }
+    return edges;
+  }
+
   const routedNames = new Map<string, string[]>();
   const unresolved: string[] = [];
 

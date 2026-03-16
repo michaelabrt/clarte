@@ -1,6 +1,15 @@
+import path from "node:path";
 import { parseSource } from "./init.js";
 import { extractStringContent } from "./ts-imports.js";
 import { BARREL_THRESHOLD } from "../config/thresholds.js";
+import type { Language } from "../types/detection.js";
+
+/** Pick the correct grammar for a JS/TS file. JSX/TSX files need the tsx grammar. */
+function barrelLang(filePath?: string): Language {
+  if (!filePath) return "typescript";
+  const ext = path.extname(filePath).slice(1).toLowerCase();
+  return ext === "jsx" || ext === "tsx" ? "typescript" : ext === "js" || ext === "mjs" || ext === "cjs" ? "javascript" : "typescript";
+}
 
 /**
  * Detect if a file is a barrel file (index.ts that re-exports from other modules).
@@ -13,7 +22,7 @@ export function detectBarrelAst(
   reExportCount: number;
   totalStatements: number;
 } {
-  const root = parseSource(content, "typescript", filePath);
+  const root = parseSource(content, barrelLang(filePath), filePath);
 
   let reExportCount = 0;
   let totalStatements = 0;
@@ -56,7 +65,7 @@ export function resolveBarrelExportsAst(
   namedExports: Map<string, string>;
   starExports: Set<string>;
 } {
-  const root = parseSource(content, "typescript", filePath);
+  const root = parseSource(content, barrelLang(filePath), filePath);
   const namedExports = new Map<string, string>();
   const starExports = new Set<string>();
 
@@ -68,9 +77,10 @@ export function resolveBarrelExportsAst(
     const specifier = extractStringContent(source);
     if (!specifier) continue;
 
-    // Check for star export: export * from '...'
+    // Check for star export: export * from '...' or export * as ns from '...'
     const hasStar = node.children.some((c) => c.type === "*" && !c.isNamed);
-    if (hasStar) {
+    const hasNsExport = node.namedChildren.some((c) => c.type === "namespace_export");
+    if (hasStar || hasNsExport) {
       starExports.add(specifier);
       continue;
     }
@@ -97,7 +107,7 @@ export function resolveBarrelExportsAst(
  * Used to resolve which names a star-exported source actually provides.
  */
 export function extractExportedNamesAst(content: string, filePath?: string): Set<string> {
-  const root = parseSource(content, "typescript", filePath);
+  const root = parseSource(content, barrelLang(filePath), filePath);
   const names = new Set<string>();
 
   for (const node of root.namedChildren) {

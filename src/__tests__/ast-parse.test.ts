@@ -35,7 +35,7 @@ describe("parseImportsAst - JS/TS", () => {
     const result = parseImportsAst(`import * as utils from '../core/utils.js';`, "typescript");
     expect(result).toHaveLength(1);
     expect(result[0].specifier).toBe("../core/utils.js");
-    expect(result[0].importedNames).toEqual([]);
+    expect(result[0].importedNames).toEqual(["*"]);
   });
 
   it("parses side-effect imports", () => {

@@ -31,7 +31,7 @@ describe("parseJsImports", () => {
 
   it("parses namespace imports (* as)", () => {
     const result = parseJsImports(`import * as path from 'node:path'`);
-    expect(result).toEqual([{ specifier: "node:path", importedNames: [], isTypeOnly: false }]);
+    expect(result).toEqual([{ specifier: "node:path", importedNames: ["*"], isTypeOnly: false }]);
   });
 
   it("parses type-only imports", () => {

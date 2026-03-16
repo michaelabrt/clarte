@@ -3,11 +3,11 @@ import type { Language } from "../types/detection.js";
 import type { Node } from "web-tree-sitter";
 
 /** Single-pass descendantsOfType for multiple node types. */
-function collectNames(root: Node, types: string[]): string[] {
+function collectNames(root: Node, types: string[], minLen = 2): string[] {
   const names: string[] = [];
   for (const node of root.descendantsOfType(types)) {
     const name = node.childForFieldName("name")?.text;
-    if (name && name.length > 1 && !name.startsWith("_")) names.push(name);
+    if (name && name.length >= minLen && !name.startsWith("_")) names.push(name);
   }
   return names;
 }
@@ -84,11 +84,14 @@ function extractTsSymbols(root: Node): string[] {
 }
 
 function extractPythonSymbols(root: Node): string[] {
-  return collectNames(root, ["function_definition", "class_definition"]);
+  // decorated_definition wraps function/class with @decorator; the inner
+  // definition's name is extracted by collectNames via the "name" field.
+  return collectNames(root, ["function_definition", "class_definition", "decorated_definition"]);
 }
 
 function extractGoSymbols(root: Node): string[] {
-  return collectNames(root, ["function_declaration", "method_declaration", "type_spec"]);
+  // Go allows single-char exported names (e.g., interface T, type R)
+  return collectNames(root, ["function_declaration", "method_declaration", "type_spec"], 1);
 }
 
 function extractRustSymbols(root: Node): string[] {
@@ -140,7 +143,7 @@ export function extractSymbolNames(content: string, language: Language, filePath
 export function tokenizeBody(id: string): string[] {
   const tokens: string[] = [];
   for (const part of id.split(/[^a-zA-Z0-9]+/).filter(Boolean)) {
-    for (const seg of part.replace(/([a-z])([A-Z])/g, "$1\0$2").split("\0")) {
+    for (const seg of part.replace(/([a-z])([A-Z])/g, "$1\0$2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1\0$2").split("\0")) {
       const lower = seg.toLowerCase();
       if (lower.length >= 2) tokens.push(lower);
     }

@@ -325,13 +325,15 @@ function resolveJavaImport(specifier: string, allFiles: Set<string>, sourceRoots
  * Handles crate::, super::, self::, and mod:: (synthetic prefix for mod declarations).
  */
 function resolveRustImport(specifier: string, fromFile: string, allFiles: Set<string>): string | null {
-  // Detect crate root (directory containing lib.rs or main.rs)
+  // Detect crate root (directory containing lib.rs or main.rs).
+  // Sort candidates by path length (prefer src/lib.rs over deeply nested crates)
+  // then alphabetically for determinism across Set iteration orders.
   let crateRoot = "src";
-  for (const f of allFiles) {
-    if (f.endsWith("/lib.rs") || f === "src/lib.rs" || f.endsWith("/main.rs") || f === "src/main.rs") {
-      crateRoot = path.dirname(f).replace(/\\/g, "/");
-      break;
-    }
+  const crateRootCandidates = [...allFiles]
+    .filter((f) => f.endsWith("/lib.rs") || f === "src/lib.rs" || f.endsWith("/main.rs") || f === "src/main.rs")
+    .sort((a, b) => a.length - b.length || a.localeCompare(b));
+  if (crateRootCandidates.length > 0) {
+    crateRoot = path.dirname(crateRootCandidates[0]).replace(/\\/g, "/");
   }
 
   // mod:: prefix: synthetic for `mod foo;` declarations
