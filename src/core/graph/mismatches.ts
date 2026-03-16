@@ -29,7 +29,9 @@ export function findStructuralTemporalMismatches(
     adj.get(edge.to)?.add(edge.from);
   }
 
-  // Cache BFS results to avoid redundant traversals for the same source node
+  // Cache BFS results to avoid redundant traversals. Bounded at 100 entries
+  // to cap memory at O(100*V) for large graphs with many change-coupling pairs.
+  const MAX_DIST_CACHE = 100;
   const distCache = new Map<string, Map<string, number>>();
 
   const bfsDistance = (from: string, to: string): number => {
@@ -59,7 +61,11 @@ export function findStructuralTemporalMismatches(
       }
     }
 
-    // Cache all distances from this source
+    // Cache all distances from this source (evict oldest if at capacity)
+    if (distCache.size >= MAX_DIST_CACHE) {
+      const oldest = distCache.keys().next().value;
+      if (oldest !== undefined) distCache.delete(oldest);
+    }
     distCache.set(from, distances);
     return distances.get(to) ?? -1;
   };
