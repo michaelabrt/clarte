@@ -17,6 +17,57 @@ import type { PersistedGraph, FileRecord as PersistedFileRecord, EdgeRecord } fr
 const CLARTE_DIR = ".clarte";
 const DB_FILENAME = "graph.db";
 
+async function deleteFileSafe(filePath: string): Promise<void> {
+  try {
+    await fs.unlink(filePath);
+  } catch {
+    // non-fatal
+  }
+}
+
+/**
+ * If `dbPath` exists but has no schema_version row, it is a partial migration artifact.
+ * Delete it (and any WAL/SHM files) so a fresh DB can be created.
+ */
+async function deleteIfPartialMigration(dbPath: string): Promise<void> {
+  try {
+    await fs.access(dbPath);
+  } catch {
+    return; // file doesn't exist - nothing to do
+  }
+
+  let db: import("./db-adapter.js").DatabaseAdapter | undefined;
+  try {
+    db = await createDatabase(dbPath);
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get<{ value: string }>();
+    if (!row) {
+      // No schema_version row - partial migration, delete and recreate
+      db.close();
+      db = undefined;
+      await deleteFileSafe(dbPath);
+      await deleteFileSafe(`${dbPath}-wal`);
+      await deleteFileSafe(`${dbPath}-shm`);
+    }
+  } catch {
+    // Any error (corrupt DB, missing table, etc.) - delete and recreate
+    try {
+      db?.close();
+    } catch {
+      // ignore close errors
+    }
+    db = undefined;
+    await deleteFileSafe(dbPath);
+    await deleteFileSafe(`${dbPath}-wal`);
+    await deleteFileSafe(`${dbPath}-shm`);
+  } finally {
+    try {
+      db?.close();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 /**
  * Open (or create) the graph database for a project root.
  *
@@ -35,12 +86,7 @@ export async function openGraphStore(rootDir: string): Promise<GraphStore> {
   await fs.mkdir(clarteDir, { recursive: true });
 
   // Handle partial migration: if graph.db exists but lacks schema_version, delete and start fresh
-  try {
-    await fs.access(dbPath);
-    // File exists - check if it's valid
-  } catch {
-    // File doesn't exist - will be created by createDatabase
-  }
+  await deleteIfPartialMigration(dbPath);
 
   const db = await createDatabase(dbPath);
   initSchema(db);

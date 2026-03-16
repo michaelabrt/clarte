@@ -229,6 +229,8 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
   const headCommit = gitExecSafe(["rev-parse", "HEAD"], { cwd: rootDir }) ?? undefined;
   if (headCommit) store.setMeta("head_commit", headCommit);
   store.setMeta("build_timestamp", now);
+
+  store.refreshBm25fStats();
 }
 
 /**

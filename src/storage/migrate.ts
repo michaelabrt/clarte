@@ -153,18 +153,17 @@ export async function migrateFromJson(rootDir: string, store: GraphStore): Promi
   const callSiteRecords = buildCallSiteRecords(callGraph);
   const symbolRecords = buildSymbolRecords(cache, graph);
 
-  // Write to SQLite in a single transaction
-  store.transaction(() => {
-    if (fileRecords.length > 0) store.upsertFiles(fileRecords);
-    if (edgeRecords.length > 0) store.upsertFileEdges(edgeRecords);
-    if (communityRecords.length > 0) store.upsertCommunities(communityRecords);
-    if (changeCouplingRecords.length > 0) store.upsertChangeCoupling(changeCouplingRecords);
-    if (callSiteRecords.length > 0) store.upsertCallSites(callSiteRecords);
-    if (symbolRecords.length > 0) store.upsertSymbols(symbolRecords);
+  // Write to SQLite - each upsert method handles its own transaction
+  if (fileRecords.length > 0) store.upsertFiles(fileRecords);
+  if (edgeRecords.length > 0) store.upsertFileEdges(edgeRecords);
+  if (communityRecords.length > 0) store.upsertCommunities(communityRecords);
+  if (changeCouplingRecords.length > 0) store.upsertChangeCoupling(changeCouplingRecords);
+  if (callSiteRecords.length > 0) store.upsertCallSites(callSiteRecords);
+  if (symbolRecords.length > 0) store.upsertSymbols(symbolRecords);
+  if (headCommit) store.setMeta("head_commit", headCommit);
+  if (cache?.createdAt) store.setMeta("created_at", cache.createdAt);
 
-    if (headCommit) store.setMeta("head_commit", headCommit);
-    if (cache?.createdAt) store.setMeta("created_at", cache.createdAt);
-  });
+  store.refreshBm25fStats();
 
   // Delete legacy files after successful migration
   await deleteFileSafe(cachePath);

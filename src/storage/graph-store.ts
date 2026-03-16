@@ -668,6 +668,66 @@ export class GraphStore {
   }
 
   /**
+   * Compute and store BM25F corpus statistics for the symbols table.
+   * Writes three meta keys: bm25f_avg_field_lengths, bm25f_doc_count, bm25f_doc_freqs.
+   */
+  refreshBm25fStats(): void {
+    interface AvgRow {
+      avg_file_path: number | null;
+      avg_symbol_name: number | null;
+      avg_body_tokens: number | null;
+      avg_import_names: number | null;
+    }
+    interface CountRow { count: number; }
+    interface SymbolTokenRow { file_path: string; name: string; body_tokens: string | null; }
+
+    const avgRow = this.db
+      .prepare(`SELECT
+        AVG(COALESCE(LENGTH(file_path), 0)) as avg_file_path,
+        AVG(COALESCE(LENGTH(name), 0)) as avg_symbol_name,
+        AVG(COALESCE(LENGTH(body_tokens), 0)) as avg_body_tokens,
+        AVG(COALESCE(LENGTH(import_names), 0)) as avg_import_names
+      FROM symbols`)
+      .get<AvgRow>();
+
+    this.stmtSetMeta.run(
+      "bm25f_avg_field_lengths",
+      JSON.stringify({
+        file_path: avgRow?.avg_file_path ?? 0,
+        symbol_name: avgRow?.avg_symbol_name ?? 0,
+        body_tokens: avgRow?.avg_body_tokens ?? 0,
+        import_names: avgRow?.avg_import_names ?? 0,
+      }),
+    );
+
+    const countRow = this.db.prepare("SELECT COUNT(*) as count FROM symbols").get<CountRow>();
+    this.stmtSetMeta.run("bm25f_doc_count", String(countRow?.count ?? 0));
+
+    const symbolRows = this.db
+      .prepare("SELECT file_path, name, body_tokens FROM symbols")
+      .all<SymbolTokenRow>();
+
+    const df = new Map<string, number>();
+    for (const row of symbolRows) {
+      const terms = new Set<string>([
+        ...tokenizeBm25f(row.file_path),
+        ...tokenizeBm25f(row.name),
+        ...(row.body_tokens ? row.body_tokens.split(/\s+/).filter((t) => t.length > 1) : []),
+      ]);
+      for (const term of terms) {
+        df.set(term, (df.get(term) ?? 0) + 1);
+      }
+    }
+
+    const filteredDf = new Map<string, number>();
+    for (const [term, count] of df) {
+      if (count >= 2) filteredDf.set(term, count);
+    }
+
+    this.stmtSetMeta.run("bm25f_doc_freqs", JSON.stringify(Object.fromEntries(filteredDf)));
+  }
+
+  /**
    * Run a function within a transaction.
    */
   transaction<T>(fn: () => T): T {
@@ -738,4 +798,14 @@ function parseIntraFileCalls(value: string | null | undefined): Array<[string, s
   } catch {
     return [];
   }
+}
+
+function tokenizeBm25f(text: string): string[] {
+  return text
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .split(/[_\-./:@\\]/)
+    .join(" ")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length > 1);
 }
