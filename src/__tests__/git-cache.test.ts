@@ -1,7 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import fs from "node:fs/promises";
-import path from "node:path";
-import os from "node:os";
 import {
   computeGitCacheKey,
   loadGitCache,
@@ -12,6 +9,9 @@ import {
   type GitCacheData,
 } from "../core/git-cache.js";
 import type { GitAnalysis, LagCoupling } from "../core/types.js";
+import { createDatabase } from "../storage/db-adapter.js";
+import { initSchema } from "../storage/schema.js";
+import { GraphStore } from "../storage/graph-store.js";
 
 // ── Mock git/git.js ───────────────────────────────────────────────────────
 
@@ -66,17 +66,19 @@ function makeMinimalCacheData(): GitCacheData {
   };
 }
 
-// ── tmpDir lifecycle ──────────────────────────────────────────────────────
+// ── Store lifecycle ──────────────────────────────────────────────────────
 
-let tmpDir: string;
+let store: GraphStore;
 
 beforeEach(async () => {
-  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-git-cache-"));
+  const db = await createDatabase(":memory:");
+  initSchema(db);
+  store = new GraphStore(db);
   mockGitExecSafe.mockReturnValue(FAKE_HEAD);
 });
 
-afterEach(async () => {
-  await fs.rm(tmpDir, { recursive: true });
+afterEach(() => {
+  store.close();
   vi.clearAllMocks();
 });
 
@@ -84,31 +86,31 @@ afterEach(async () => {
 
 describe("computeGitCacheKey", () => {
   it("is deterministic given the same inputs", () => {
-    const key1 = computeGitCacheKey(tmpDir, 90);
-    const key2 = computeGitCacheKey(tmpDir, 90);
+    const key1 = computeGitCacheKey("/tmp/test", 90);
+    const key2 = computeGitCacheKey("/tmp/test", 90);
     expect(key1).toBe(key2);
   });
 
   it("changes when analysisDays changes", () => {
-    const key1 = computeGitCacheKey(tmpDir, 90);
-    const key2 = computeGitCacheKey(tmpDir, 30);
+    const key1 = computeGitCacheKey("/tmp/test", 90);
+    const key2 = computeGitCacheKey("/tmp/test", 30);
     expect(key1).not.toBe(key2);
   });
 
   it("changes when HEAD changes", () => {
-    const key1 = computeGitCacheKey(tmpDir, 90);
+    const key1 = computeGitCacheKey("/tmp/test", 90);
     mockGitExecSafe.mockReturnValue("different-sha");
-    const key2 = computeGitCacheKey(tmpDir, 90);
+    const key2 = computeGitCacheKey("/tmp/test", 90);
     expect(key1).not.toBe(key2);
   });
 
   it("returns null when gitExecSafe returns null (not a git repo)", () => {
     mockGitExecSafe.mockReturnValue(null);
-    expect(computeGitCacheKey(tmpDir, 90)).toBeNull();
+    expect(computeGitCacheKey("/tmp/test", 90)).toBeNull();
   });
 
   it("returns a 64-char hex string", () => {
-    const key = computeGitCacheKey(tmpDir, 90);
+    const key = computeGitCacheKey("/tmp/test", 90);
     expect(key).toMatch(/^[0-9a-f]{64}$/);
   });
 
@@ -121,11 +123,11 @@ describe("computeGitCacheKey", () => {
 // ── loadGitCache ──────────────────────────────────────────────────────────
 
 describe("loadGitCache", () => {
-  it("returns null when no cache file exists", async () => {
-    expect(await loadGitCache(tmpDir)).toBeNull();
+  it("returns null when no cache exists", () => {
+    expect(loadGitCache(store)).toBeNull();
   });
 
-  it("returns null when cache version does not match", async () => {
+  it("returns null when cache version does not match", () => {
     const payload: GitCacheData = {
       version: GIT_CACHE_VERSION + 1,
       cacheKey: "abc",
@@ -133,39 +135,29 @@ describe("loadGitCache", () => {
       hotFiles: [],
       changeCoupling: [],
     };
-    const dir = path.join(tmpDir, ".clarte");
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, "git-cache.json"), JSON.stringify(payload));
+    store.setCache("git_cache", JSON.stringify(payload));
 
-    expect(await loadGitCache(tmpDir)).toBeNull();
+    expect(loadGitCache(store)).toBeNull();
   });
 
-  it("returns null when cache file is malformed JSON", async () => {
-    const dir = path.join(tmpDir, ".clarte");
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, "git-cache.json"), "not valid json{{{");
+  it("returns null when cache value is malformed JSON", () => {
+    store.setCache("git_cache", "not valid json{{{");
 
-    expect(await loadGitCache(tmpDir)).toBeNull();
+    expect(loadGitCache(store)).toBeNull();
   });
 });
 
 // ── saveGitCache / loadGitCache round-trip ────────────────────────────────
 
 describe("saveGitCache / loadGitCache round-trip", () => {
-  it("persists and reloads a minimal cache", async () => {
+  it("persists and reloads a minimal cache", () => {
     const payload = makeMinimalCacheData();
-    await saveGitCache(tmpDir, payload);
-    const loaded = await loadGitCache(tmpDir);
+    saveGitCache(store, payload);
+    const loaded = loadGitCache(store);
     expect(loaded).toEqual(payload);
   });
 
-  it("creates .clarte directory if it does not exist", async () => {
-    await saveGitCache(tmpDir, makeMinimalCacheData());
-    const stat = await fs.stat(path.join(tmpDir, ".clarte"));
-    expect(stat.isDirectory()).toBe(true);
-  });
-
-  it("round-trips a full cache with optional fields", async () => {
+  it("round-trips a full cache with optional fields", () => {
     const payload: GitCacheData = {
       version: GIT_CACHE_VERSION,
       cacheKey: "full-key",
@@ -189,8 +181,8 @@ describe("saveGitCache / loadGitCache round-trip", () => {
       fileChurn: [["src/a.ts", { linesAdded: 100, linesRemoved: 20 }]],
     };
 
-    await saveGitCache(tmpDir, payload);
-    const loaded = await loadGitCache(tmpDir);
+    saveGitCache(store, payload);
+    const loaded = loadGitCache(store);
     expect(loaded).toEqual(payload);
   });
 });
@@ -309,11 +301,11 @@ describe("buildGitCachePayload", () => {
 // ── Full round-trip (save -> load -> hydrate) ─────────────────────────────
 
 describe("full round-trip (save -> load -> hydrate)", () => {
-  it("reconstructs commitCounts Map after disk persistence", async () => {
+  it("reconstructs commitCounts Map after persistence", () => {
     const ga = makeGitAnalysis();
     const payload = buildGitCachePayload("rt-key", ga);
-    await saveGitCache(tmpDir, payload);
-    const loaded = await loadGitCache(tmpDir);
+    saveGitCache(store, payload);
+    const loaded = loadGitCache(store);
     if (!loaded) throw new Error("expected cache to load");
     const hydrated = hydrateGitCache(loaded);
 
@@ -322,7 +314,7 @@ describe("full round-trip (save -> load -> hydrate)", () => {
     expect(hydrated.commitCounts.get("src/utils.ts")).toBe(5);
   });
 
-  it("reconstructs fileChurn Map after disk persistence", async () => {
+  it("reconstructs fileChurn Map after persistence", () => {
     const ga = makeGitAnalysis({
       fileChurn: new Map([
         ["src/a.ts", { linesAdded: 200, linesRemoved: 50 }],
@@ -330,8 +322,8 @@ describe("full round-trip (save -> load -> hydrate)", () => {
       ]),
     });
     const payload = buildGitCachePayload("rt-key", ga);
-    await saveGitCache(tmpDir, payload);
-    const loaded = await loadGitCache(tmpDir);
+    saveGitCache(store, payload);
+    const loaded = loadGitCache(store);
     if (!loaded) throw new Error("expected cache to load");
     const hydrated = hydrateGitCache(loaded);
 
@@ -340,11 +332,11 @@ describe("full round-trip (save -> load -> hydrate)", () => {
     expect(hydrated.fileChurn?.get("src/b.ts")).toEqual({ linesAdded: 10, linesRemoved: 0 });
   });
 
-  it("preserves hotFiles, changeCoupling and lagCouplings after disk persistence", async () => {
+  it("preserves hotFiles, changeCoupling and lagCouplings after persistence", () => {
     const ga = makeGitAnalysis();
     const payload = buildGitCachePayload("rt-key", ga);
-    await saveGitCache(tmpDir, payload);
-    const loaded = await loadGitCache(tmpDir);
+    saveGitCache(store, payload);
+    const loaded = loadGitCache(store);
     if (!loaded) throw new Error("expected cache to load");
     const hydrated = hydrateGitCache(loaded);
 
@@ -353,15 +345,15 @@ describe("full round-trip (save -> load -> hydrate)", () => {
     expect(hydrated.lagCouplings?.[0].fileA).toBe("src/a.ts");
   });
 
-  it("handles absent optional fields after disk persistence", async () => {
+  it("handles absent optional fields after persistence", () => {
     const ga: GitAnalysis = {
       commitCounts: new Map([["src/z.ts", 1]]),
       hotFiles: [{ path: "src/z.ts", commits: 1, lastChanged: "5d ago" }],
       changeCoupling: [],
     };
     const payload = buildGitCachePayload("minimal-key", ga);
-    await saveGitCache(tmpDir, payload);
-    const loaded = await loadGitCache(tmpDir);
+    saveGitCache(store, payload);
+    const loaded = loadGitCache(store);
     if (!loaded) throw new Error("expected cache to load");
     const hydrated = hydrateGitCache(loaded);
 

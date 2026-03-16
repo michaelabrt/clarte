@@ -4,15 +4,20 @@
  * On first run after upgrade, reads legacy JSON cache files and writes their
  * contents to graph.db, then deletes the JSON files.
  *
- * Three JSON files consolidate into one SQLite database:
+ * Legacy JSON files consolidate into one SQLite database:
  *   .clarte/cache.json         -> files + file_edges tables
  *   .clarte/graph.json         -> files table (scores) + communities + change_coupling
  *   .clarte/call-graph.json    -> call_sites table
+ *   .clarte/project-cache.json -> kv_cache (key: "project_cache")
+ *   .clarte/git-cache.json     -> kv_cache (key: "git_cache")
+ *   .clarte/history.json       -> kv_cache (key: "history_snapshot")
+ *   .clarte/analysis-cache.json -> already in meta table (migrated separately)
  *
- * Idempotent: if graph.db already has schema_version set, migration is skipped.
+ * Idempotent: checks for file existence before migrating.
  * Crash-safe: if graph.db exists but lacks schema_version, it is deleted and recreated.
  */
 
+import { readFileSync as nodeReadFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { GraphStore } from "./graph-store.js";
@@ -174,6 +179,63 @@ export async function migrateFromJson(rootDir: string, store: GraphStore): Promi
   return true;
 }
 
+/**
+ * Migrate remaining JSON state files (project-cache, git-cache, history) into kv_cache.
+ * Runs within a single transaction. Idempotent: skipped if no JSON files exist.
+ * Returns true if any files were migrated.
+ */
+export async function migrateStateCaches(rootDir: string, store: GraphStore): Promise<boolean> {
+  const clarteDir = path.join(rootDir, CLARTE_DIR);
+
+  const projectCachePath = path.join(clarteDir, "project-cache.json");
+  const gitCachePath = path.join(clarteDir, "git-cache.json");
+  const historyPath = path.join(clarteDir, "history.json");
+
+  const [pcExists, gcExists, hExists] = await Promise.all([
+    fileExists(projectCachePath),
+    fileExists(gitCachePath),
+    fileExists(historyPath),
+  ]);
+
+  if (!pcExists && !gcExists && !hExists) return false;
+
+  let migrated = 0;
+
+  store.transaction(() => {
+    if (pcExists) {
+      const raw = readFileSync(projectCachePath);
+      if (raw) {
+        store.setCache("project_cache", raw);
+        migrated++;
+      }
+    }
+    if (gcExists) {
+      const raw = readFileSync(gitCachePath);
+      if (raw) {
+        store.setCache("git_cache", raw);
+        migrated++;
+      }
+    }
+    if (hExists) {
+      const raw = readFileSync(historyPath);
+      if (raw) {
+        store.setCache("history_snapshot", raw);
+        migrated++;
+      }
+    }
+  });
+
+  // Delete JSON files after successful migration
+  await deleteFileSafe(projectCachePath);
+  await deleteFileSafe(gitCachePath);
+  await deleteFileSafe(historyPath);
+
+  if (migrated > 0) {
+    process.stderr.write(`[clarte] Migrated ${migrated} JSON state file(s) into kv_cache\n`);
+  }
+  return migrated > 0;
+}
+
 // ── Builders ──────────────────────────────────────────────────────────────────
 
 function buildFileRecords(
@@ -318,10 +380,11 @@ function buildSymbolRecords(
     const authority = fileRec.symbolAuthority ?? {};
 
     for (const name of symbolNames) {
-      const startLine = startLines[name] ?? 0;
+      if (typeof name !== "string") continue;
+      const startLine = Number(startLines[name]) || 0;
       const tokens = bodyTokens[name];
-      const bodyTokenStr = tokens ? tokens.join(" ") : null;
-      const symAuth = authority[name] ?? null;
+      const bodyTokenStr = tokens ? (Array.isArray(tokens) ? tokens.join(" ") : String(tokens)) : null;
+      const symAuth = typeof authority[name] === "number" ? authority[name] : null;
 
       records.push({
         file_path: filePath,
@@ -353,6 +416,14 @@ async function parseJsonFile<T>(filePath: string): Promise<T | null> {
   try {
     const raw = await fs.readFile(filePath, "utf-8");
     return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function readFileSync(filePath: string): string | null {
+  try {
+    return nodeReadFileSync(filePath, "utf-8");
   } catch {
     return null;
   }

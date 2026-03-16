@@ -31,6 +31,15 @@ vi.mock("../core/analysis/ci.js", () => ({
   analyzeForCI: vi.fn(),
 }));
 
+const mockStore = vi.hoisted(() => ({
+  close: vi.fn(),
+  getCache: vi.fn().mockReturnValue(undefined),
+  setCache: vi.fn(),
+}));
+vi.mock("../storage/loader.js", () => ({
+  openGraphStore: vi.fn().mockResolvedValue(mockStore),
+}));
+
 const { execFileSync } = await import("node:child_process");
 const { detectContext } = await import("../core/detect/detect.js");
 const { buildGraphWithCache } = await import("../core/graph/cache.js");

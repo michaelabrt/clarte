@@ -1,8 +1,7 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { ContextAnalysis } from "../types.js";
-import { CLARTE_DIR } from "../config/config.js";
-const HISTORY_FILE = "history.json";
+import type { GraphStore } from "../../storage/graph-store.js";
+
+const KV_KEY = "history_snapshot";
 
 export interface AnalysisSnapshot {
   timestamp: string;
@@ -30,21 +29,18 @@ export interface ArchitectureDelta {
   modularityQDelta?: number;
 }
 
-export async function loadPreviousSnapshot(rootDir: string): Promise<AnalysisSnapshot | null> {
-  const filePath = path.join(rootDir, CLARTE_DIR, HISTORY_FILE);
+export function loadPreviousSnapshot(store: GraphStore): AnalysisSnapshot | null {
   try {
-    const raw = await fs.readFile(filePath, "utf-8");
+    const raw = store.getCache(KV_KEY);
+    if (!raw) return null;
     return JSON.parse(raw) as AnalysisSnapshot;
   } catch {
     return null;
   }
 }
 
-export async function saveSnapshot(rootDir: string, snapshot: AnalysisSnapshot): Promise<void> {
-  const dir = path.join(rootDir, CLARTE_DIR);
-  await fs.mkdir(dir, { recursive: true });
-  const filePath = path.join(dir, HISTORY_FILE);
-  await fs.writeFile(filePath, JSON.stringify(snapshot, null, 2), "utf-8");
+export function saveSnapshot(store: GraphStore, snapshot: AnalysisSnapshot): void {
+  store.setCache(KV_KEY, JSON.stringify(snapshot));
 }
 
 export function extractSnapshot(analysis: ContextAnalysis): AnalysisSnapshot {

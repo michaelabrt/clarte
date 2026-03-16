@@ -2,14 +2,15 @@
  * SQLite schema DDL for the clarte graph database.
  * All tables, indexes, virtual tables and pragmas defined here.
  *
- * Schema version: 2
+ * Schema version: 3
  *   v1 -> v2: added symbols.is_exported, symbol_edges.confidence,
  *             FTS5 column rename (name -> symbol_name), dropped content-sync.
+ *   v2 -> v3: added kv_cache table, removed dead vec_symbols virtual table.
  */
 
 import type { DatabaseAdapter } from "./db-adapter.js";
 
-export const SCHEMA_VERSION = "2";
+export const SCHEMA_VERSION = "3";
 
 /**
  * Initialize the database schema within a single transaction.
@@ -148,15 +149,21 @@ export function initSchema(db: DatabaseAdapter): void {
     // Standalone (no content-sync) so column names are independent of the symbols table.
     tryCreateFts5(db);
 
-    // vec0 virtual table for semantic search (optional, requires sqlite-vec extension).
-    tryCreateVec0(db);
-
     // Regular table for embedding BLOB storage (always available, no extensions needed).
     db.exec(`
       CREATE TABLE IF NOT EXISTS symbol_embeddings (
         symbol_id INTEGER PRIMARY KEY REFERENCES symbols(id) ON DELETE CASCADE,
         embedding BLOB NOT NULL,
         body_hash TEXT
+      )
+    `);
+
+    // General-purpose key-value cache (replaces project-cache.json, git-cache.json, history.json).
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS kv_cache (
+        key        TEXT PRIMARY KEY,
+        value      TEXT NOT NULL,
+        expires_at INTEGER
       )
     `);
 
@@ -167,9 +174,12 @@ export function initSchema(db: DatabaseAdapter): void {
 
   createAll();
 
-  // Migrate existing v1 databases to v2
+  // Migrate existing databases forward
   if (currentVersion === 1) {
     migrateV1toV2(db);
+    migrateV2toV3(db);
+  } else if (currentVersion === 2) {
+    migrateV2toV3(db);
   }
 }
 
@@ -244,6 +254,22 @@ function tryAddColumn(db: DatabaseAdapter, table: string, columnDef: string): vo
   }
 }
 
+/**
+ * Migrate a v2 database to v3:
+ * - Add kv_cache table
+ */
+function migrateV2toV3(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS kv_cache (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      expires_at INTEGER
+    )
+  `);
+
+  db.exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`);
+}
+
 function tryCreateFts5(db: DatabaseAdapter): void {
   try {
     db.exec(`
@@ -258,18 +284,5 @@ function tryCreateFts5(db: DatabaseAdapter): void {
   } catch {
     // FTS5 may not be available in all SQLite builds - skip gracefully
     process.stderr.write("[clarte] FTS5 not available: symbol full-text search disabled\n");
-  }
-}
-
-function tryCreateVec0(db: DatabaseAdapter): void {
-  try {
-    db.exec(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS vec_symbols USING vec0(
-        symbol_id INTEGER PRIMARY KEY,
-        embedding FLOAT[384]
-      )
-    `);
-  } catch {
-    // sqlite-vec extension not loaded - skip gracefully (Phase 3 feature)
   }
 }

@@ -4,6 +4,7 @@ import { buildGraphWithCache } from "../core/graph/cache.js";
 import { buildImportGraph, mergeGraph, recomputeScoresAfterMerge } from "../core/graph/build.js";
 import { runAnalysis } from "../core/run-analysis.js";
 import { loadConfig } from "../core/config/config.js";
+import { openGraphStore } from "../storage/loader.js";
 import { analyzeForCI, type CIAnalysisResult } from "../core/analysis/ci.js";
 import { NOOP_PROGRESS } from "../core/utils.js";
 import type { ProgressCallback } from "../core/types.js";
@@ -84,16 +85,25 @@ export async function runCiMode(
   }
   detected.frameworks = enrichFrameworksWithUsage(detected.frameworks, graph.externalImportCounts);
 
-  const { analysis } = await runAnalysis(
-    rootDir,
-    graph,
-    detected,
-    savedConfig,
-    verbose,
-    true, // jsonMode — suppress CLI output
-    verboseLog,
-    NOOP_PROGRESS,
-  );
+  const store = await openGraphStore(rootDir);
+  const analysis = await (async () => {
+    try {
+      const result = await runAnalysis(
+        rootDir,
+        graph,
+        detected,
+        savedConfig,
+        verbose,
+        true, // jsonMode - suppress CLI output
+        verboseLog,
+        NOOP_PROGRESS,
+        store,
+      );
+      return result.analysis;
+    } finally {
+      store.close();
+    }
+  })();
 
   // Filter to only files that exist in the graph (source files, not config/docs)
   const sourceFiles = files.filter((f) => graph.centrality.has(f) || graph.inDegree.has(f));

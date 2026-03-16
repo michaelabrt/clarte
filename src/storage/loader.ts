@@ -9,7 +9,7 @@ import fs from "node:fs/promises";
 import { createDatabase } from "./db-adapter.js";
 import { initSchema } from "./schema.js";
 import { GraphStore } from "./graph-store.js";
-import { migrateFromJson } from "./migrate.js";
+import { migrateFromJson, migrateStateCaches } from "./migrate.js";
 import type { InMemoryFileGraph } from "./types.js";
 import type { ImportEdge, ImportGraph } from "../core/types.js";
 import type { PersistedGraph, FileRecord as PersistedFileRecord, EdgeRecord } from "../core/types/persisted-graph.js";
@@ -95,6 +95,9 @@ export async function openGraphStore(rootDir: string): Promise<GraphStore> {
 
   // Run migration from legacy JSON files (no-op if already migrated)
   await migrateFromJson(rootDir, store);
+
+  // Migrate active JSON state files (project-cache, git-cache, history) to kv_cache
+  await migrateStateCaches(rootDir, store);
 
   return store;
 }
@@ -305,7 +308,6 @@ export function buildPersistedGraphFromStore(store: GraphStore): PersistedGraph 
 
 function buildTestMapping(files: Record<string, PersistedFileRecord>): Record<string, string[]> {
   const mapping: Record<string, string[]> = {};
-  void files; // test mapping stored in project-cache.json, not in graph.db
-  // Return empty - this data is stored in project-cache.json (not migrated)
+  void files; // test mapping stored in kv_cache table, not in the files table
   return mapping;
 }

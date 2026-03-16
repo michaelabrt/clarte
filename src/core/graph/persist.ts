@@ -1,31 +1,33 @@
-import { gitExecSafe } from "../git/git.js";
-import { deriveRole } from "./centrality.js";
-import { computeAllInstabilities } from "./instability.js";
-import type { ContextAnalysis, ImportGraph } from "../types.js";
-import { PERSISTED_GRAPH_VERSION, type PersistedGraph } from "../types/persisted-graph.js";
-import { CLARTE_DIR } from "../config/config.js";
-import { openGraphStore } from "../../storage/loader.js";
-import { buildPersistedGraphFromStore } from "../../storage/loader.js";
 import type { GraphStore } from "../../storage/graph-store.js";
+import { buildPersistedGraphFromStore, openGraphStore } from "../../storage/loader.js";
 import type {
-  FileRecord,
-  FileEdgeRecord,
-  CommunityRecord,
   ChangeCouplingRecord,
-  SymbolRecord,
+  CommunityRecord,
+  FileEdgeRecord,
+  FileRecord,
   SymbolEdgeRecord,
+  SymbolRecord,
 } from "../../storage/types.js";
+import { CLARTE_DIR } from "../config/config.js";
+import { gitExecSafe } from "../git/git.js";
+import { PERSISTED_GRAPH_VERSION, type PersistedGraph } from "../types/persisted-graph.js";
+import type { ContextAnalysis, ImportGraph } from "../types.js";
+import { deriveRole } from "./centrality.js";
+import { resolveGoStructuralEdges } from "./go-resolution.js";
+import { computeAllInstabilities } from "./instability.js";
 import { computeSymbolAuthority } from "./persist-helpers.js";
+import { resolvePythonMROEdges } from "./python-mro.js";
+import { resolveRustTraitEdges } from "./rust-resolution.js";
+import { aggregateToFileLevel, computeSymbolHITS, type SymbolNode } from "./symbol-hits.js";
+import { buildImportMap, buildSymbolIndex, LRUCache, resolveAllSymbolEdges } from "./symbol-resolution.js";
 import type { FileGraphResult, ResolvedSymbolEdge } from "./symbol-types.js";
-import { resolveAllSymbolEdges, buildSymbolIndex, LRUCache } from "./symbol-resolution.js";
-import { computeSymbolHITS, type SymbolNode } from "./symbol-hits.js";
+import { buildAliasMap } from "./type-aliases.js";
 
 /**
  * Persist the analysis graph to .clarte/graph.db.
  * Stores file scores, edges, communities and change coupling in SQLite.
  * Non-critical: callers should wrap in try/catch.
  */
-export async function persistGraph(rootDir: string, graph: ImportGraph, analysis: ContextAnalysis): Promise<void>;
 export async function persistGraph(
   rootDir: string,
   graph: ImportGraph,
@@ -172,24 +174,57 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
     is_type_only: e.isTypeOnly ? 1 : 0,
   }));
 
-  // Build symbol records
+  // Build symbol records.
+  // When Phase 2 fileGraphResults are available, use SymbolDefinition.kind for correct kinds.
+  // Fall back to the legacy graph.symbolNames path only when fileGraphResults is absent,
+  // using "function" as a safe default (RFC §2.2 valid kinds exclude "unknown").
+  const fileGraphResults = graph.fileGraphResults;
   const symbolRecords: SymbolRecord[] = [];
-  for (const [filePath, data] of fileSymbolData) {
-    const importNames = graph.edges.filter((e) => e.from === filePath && !e.isExternal).flatMap((e) => e.importedNames);
-    const importNamesStr = importNames.length > 0 ? JSON.stringify(importNames) : null;
 
-    for (const name of data.symbolNames) {
-      const startLine = data.symbolStartLines[name] ?? 0;
-      const tokens = data.symbolBodyTokens[name];
-      symbolRecords.push({
-        file_path: filePath,
-        name,
-        kind: "unknown",
-        start_line: startLine,
-        authority: data.symbolAuthority[name] ?? null,
-        body_tokens: tokens ? tokens.join(" ") : null,
-        import_names: importNamesStr,
-      });
+  if (fileGraphResults && fileGraphResults.size > 0) {
+    for (const [filePath, result] of fileGraphResults) {
+      if (result.symbols.length === 0) continue;
+      const importNames = graph.edges
+        .filter((e) => e.from === filePath && !e.isExternal)
+        .flatMap((e) => e.importedNames);
+      const importNamesStr = importNames.length > 0 ? JSON.stringify(importNames) : null;
+      const data = fileSymbolData.get(filePath);
+
+      for (const sym of result.symbols) {
+        symbolRecords.push({
+          file_path: filePath,
+          name: sym.name,
+          kind: sym.kind,
+          start_line: sym.startLine,
+          end_line: sym.endLine ?? null,
+          body_hash: sym.bodyHash,
+          body_tokens: sym.bodyTokens || null,
+          authority: data?.symbolAuthority[sym.name] ?? null,
+          import_names: importNamesStr,
+          is_exported: sym.isExported ? 1 : 0,
+        });
+      }
+    }
+  } else {
+    for (const [filePath, data] of fileSymbolData) {
+      const importNames = graph.edges
+        .filter((e) => e.from === filePath && !e.isExternal)
+        .flatMap((e) => e.importedNames);
+      const importNamesStr = importNames.length > 0 ? JSON.stringify(importNames) : null;
+
+      for (const name of data.symbolNames) {
+        const startLine = data.symbolStartLines[name] ?? 0;
+        const tokens = data.symbolBodyTokens[name];
+        symbolRecords.push({
+          file_path: filePath,
+          name,
+          kind: "function", // safe default; "unknown" is not a valid SymbolKind
+          start_line: startLine,
+          authority: data.symbolAuthority[name] ?? null,
+          body_tokens: tokens ? (Array.isArray(tokens) ? tokens.join(" ") : String(tokens)) : null,
+          import_names: importNamesStr,
+        });
+      }
     }
   }
 
@@ -220,11 +255,19 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
   const knownPaths = new Set(mergedFileRecords.map((f) => f.path));
   for (const e of edgeRecords) {
     if (!knownPaths.has(e.from_path)) {
-      mergedFileRecords.push({ path: e.from_path, hash: existingHashes.get(e.from_path) ?? "", updated_at: now });
+      mergedFileRecords.push({
+        path: e.from_path,
+        hash: existingHashes.get(e.from_path) ?? "",
+        updated_at: now,
+      });
       knownPaths.add(e.from_path);
     }
     if (e.to_path && !knownPaths.has(e.to_path)) {
-      mergedFileRecords.push({ path: e.to_path, hash: existingHashes.get(e.to_path) ?? "", updated_at: now });
+      mergedFileRecords.push({
+        path: e.to_path,
+        hash: existingHashes.get(e.to_path) ?? "",
+        updated_at: now,
+      });
       knownPaths.add(e.to_path);
     }
   }
@@ -236,7 +279,6 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
   if (changeCouplingRecords.length > 0) store.upsertChangeCoupling(changeCouplingRecords);
 
   // Phase 2: Symbol resolution, symbol edges and symbol HITS
-  const fileGraphResults = graph.fileGraphResults;
   if (fileGraphResults && fileGraphResults.size > 0 && symbolRecords.length > 0) {
     runSymbolPipeline(store, graph, fileGraphResults, edgeRecords);
   }
@@ -253,7 +295,6 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
  * Load the persisted graph from SQLite for use by the steer module.
  * Returns null if no database exists.
  */
-export async function loadPersistedGraph(rootDir: string): Promise<PersistedGraph | null>;
 export async function loadPersistedGraph(rootDir: string, store?: GraphStore): Promise<PersistedGraph | null> {
   const ownStore = !store;
   let activeStore: GraphStore | undefined;
@@ -323,17 +364,35 @@ function runSymbolPipeline(
     }
   }
 
-  // 4. Run resolution
+  // 4. Build import maps (needed by all resolution modules)
+  const importMaps = new Map<string, ReturnType<typeof buildImportMap>>();
+  for (const [filePath] of fileGraphResults) {
+    importMaps.set(filePath, buildImportMap(filePath, fileEdgesForImportMap));
+  }
+
+  // 4b. Build type alias map (RFC §2.15) - must precede resolution so aliases are followed
+  const aliasMap = buildAliasMap(fileGraphResults, symbolIndex, importMaps);
+
+  // 4c. Run core 4-tier resolution with alias awareness
   const cache = new LRUCache<string, number | null>(10000);
   const resolvedEdges = resolveAllSymbolEdges({
     fileGraphs: fileGraphResults,
     fileEdges: fileEdgesForImportMap,
     symbolIndex,
     cache,
+    aliasMap,
   });
 
+  // 4d. Language-specific resolution (Python MRO, Go structural, Rust traits)
+  const pythonMROEdges = resolvePythonMROEdges(fileGraphResults, symbolIndex, importMaps);
+  const goStructuralEdges = resolveGoStructuralEdges(fileGraphResults, symbolIndex, importMaps);
+  const rustTraitEdges = resolveRustTraitEdges(fileGraphResults, symbolIndex, importMaps);
+
+  // Merge all resolved edges
+  const allResolvedEdges = [...resolvedEdges, ...pythonMROEdges, ...goStructuralEdges, ...rustTraitEdges];
+
   // 5. Convert to DB records and store
-  const symbolEdgeRecords = resolvedEdgesToRecords(resolvedEdges, symbolIndex, cache);
+  const symbolEdgeRecords = resolvedEdgesToRecords(allResolvedEdges, symbolIndex, cache);
   if (symbolEdgeRecords.length > 0) {
     store.upsertSymbolEdges(symbolEdgeRecords);
   }
@@ -363,7 +422,7 @@ function runSymbolPipeline(
     return id;
   };
 
-  const symbolHITS = computeSymbolHITS(symbolNodes, resolvedEdges, symbolIdLookup);
+  const symbolHITS = computeSymbolHITS(symbolNodes, allResolvedEdges, symbolIdLookup);
 
   // 7. Update symbol authority in DB
   const authorityUpdates: SymbolRecord[] = [];
@@ -380,6 +439,33 @@ function runSymbolPipeline(
   }
   if (authorityUpdates.length > 0) {
     store.upsertSymbols(authorityUpdates);
+  }
+
+  // 8. M4: Aggregate symbol-level scores to file level and write back.
+  // File authority = max symbol authority, file hub = max symbol hub.
+  // This closes the feedback loop: symbol resolution feeds file-level metrics.
+  const fileAgg = aggregateToFileLevel(symbolNodes, symbolHITS, allResolvedEdges);
+  const now = new Date().toISOString();
+  const fileScoreUpdates: FileRecord[] = [];
+  for (const [filePath, auth] of fileAgg.authority) {
+    const hub = fileAgg.hubScores.get(filePath) ?? 0;
+    fileScoreUpdates.push({
+      path: filePath,
+      hash: "",
+      authority: auth,
+      hub_score: hub,
+      role: deriveRole(auth, hub, barrelFiles.has(filePath)),
+      updated_at: now,
+    });
+  }
+  if (fileScoreUpdates.length > 0) {
+    // Preserve existing hashes so we don't blank them
+    const hashes = store.getAllHashes();
+    const merged = fileScoreUpdates.map((f) => ({
+      ...f,
+      hash: hashes.get(f.path) ?? f.hash,
+    }));
+    store.upsertFiles(merged);
   }
 
   store.setMeta("symbol_edge_count", String(symbolEdgeRecords.length));
@@ -427,13 +513,14 @@ function resolvedEdgesToRecords(
       to_symbol_id: toId,
       kind: edge.kind,
       line: edge.line,
+      ordinal: edge.ordinal ?? null,
+      confidence: edge.confidence,
     });
   }
 
   return records;
 }
 
-// Re-export for test compatibility
-export { CLARTE_DIR };
-export { PERSISTED_GRAPH_VERSION };
 export { computeSymbolAuthority } from "./persist-helpers.js";
+// Re-export for test compatibility
+export { CLARTE_DIR, PERSISTED_GRAPH_VERSION };

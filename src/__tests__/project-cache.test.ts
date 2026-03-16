@@ -13,14 +13,22 @@ import {
 } from "../core/project-cache.js";
 import { makeImportGraph, makeDetectedContext } from "./helpers/factories.js";
 import type { MonorepoAnalysis, TestMapping } from "../core/types.js";
+import { createDatabase } from "../storage/db-adapter.js";
+import { initSchema } from "../storage/schema.js";
+import { GraphStore } from "../storage/graph-store.js";
 
 let tmpDir: string;
+let store: GraphStore;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-project-cache-"));
+  const db = await createDatabase(":memory:");
+  initSchema(db);
+  store = new GraphStore(db);
 });
 
 afterEach(async () => {
+  store.close();
   await fs.rm(tmpDir, { recursive: true });
 });
 
@@ -101,10 +109,16 @@ describe("computeProjectCacheKey", () => {
   it("changes when monorepo packages change", async () => {
     const graph = makeImportGraph();
     const detected1 = makeDetectedContext({
-      monorepo: { type: "npm", packages: [{ name: "pkg-a", path: "packages/a" }] },
+      monorepo: {
+        type: "npm-workspaces",
+        packages: [{ name: "pkg-a", path: "packages/a", dependencies: [], frameworks: [] }],
+      },
     });
     const detected2 = makeDetectedContext({
-      monorepo: { type: "npm", packages: [{ name: "pkg-b", path: "packages/b" }] },
+      monorepo: {
+        type: "npm-workspaces",
+        packages: [{ name: "pkg-b", path: "packages/b", dependencies: [], frameworks: [] }],
+      },
     });
 
     const key1 = await computeProjectCacheKey(tmpDir, graph, detected1);
@@ -122,11 +136,11 @@ describe("computeProjectCacheKey", () => {
 // ── loadProjectCache / saveProjectCache ──────────────────────────────────
 
 describe("loadProjectCache", () => {
-  it("returns null when no cache file exists", async () => {
-    expect(await loadProjectCache(tmpDir)).toBeNull();
+  it("returns null when no cache exists", () => {
+    expect(loadProjectCache(store)).toBeNull();
   });
 
-  it("returns null when cache version does not match", async () => {
+  it("returns null when cache version does not match", () => {
     const payload: ProjectCacheData = {
       version: PROJECT_CACHE_VERSION + 1,
       cacheKey: "abc",
@@ -135,24 +149,20 @@ describe("loadProjectCache", () => {
       testMapping: undefined,
       monorepoAnalysis: undefined,
     };
-    const dir = path.join(tmpDir, ".clarte");
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, "project-cache.json"), JSON.stringify(payload));
+    store.setCache("project_cache", JSON.stringify(payload));
 
-    expect(await loadProjectCache(tmpDir)).toBeNull();
+    expect(loadProjectCache(store)).toBeNull();
   });
 
-  it("returns null when cache file is malformed JSON", async () => {
-    const dir = path.join(tmpDir, ".clarte");
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, "project-cache.json"), "not valid json{{{");
+  it("returns null when cache value is malformed JSON", () => {
+    store.setCache("project_cache", "not valid json{{{");
 
-    expect(await loadProjectCache(tmpDir)).toBeNull();
+    expect(loadProjectCache(store)).toBeNull();
   });
 });
 
 describe("saveProjectCache / loadProjectCache round-trip", () => {
-  it("persists and reloads a minimal cache", async () => {
+  it("persists and reloads a minimal cache", () => {
     const payload: ProjectCacheData = {
       version: PROJECT_CACHE_VERSION,
       cacheKey: "test-key",
@@ -162,29 +172,13 @@ describe("saveProjectCache / loadProjectCache round-trip", () => {
       monorepoAnalysis: undefined,
     };
 
-    await saveProjectCache(tmpDir, payload);
-    const loaded = await loadProjectCache(tmpDir);
+    saveProjectCache(store, payload);
+    const loaded = loadProjectCache(store);
 
     expect(loaded).toEqual(payload);
   });
 
-  it("creates .clarte directory if it does not exist", async () => {
-    const payload: ProjectCacheData = {
-      version: PROJECT_CACHE_VERSION,
-      cacheKey: "key",
-      configConstraints: undefined,
-      conventions: undefined,
-      testMapping: undefined,
-      monorepoAnalysis: undefined,
-    };
-
-    await saveProjectCache(tmpDir, payload);
-
-    const stat = await fs.stat(path.join(tmpDir, ".clarte"));
-    expect(stat.isDirectory()).toBe(true);
-  });
-
-  it("round-trips configConstraints", async () => {
+  it("round-trips configConstraints", () => {
     const payload = buildProjectCachePayload(
       "key",
       { typescript: { strict: true, target: "ES2022", pathAliases: {}, otherStrict: [] } },
@@ -193,8 +187,8 @@ describe("saveProjectCache / loadProjectCache round-trip", () => {
       undefined,
     );
 
-    await saveProjectCache(tmpDir, payload);
-    const loaded = await loadProjectCache(tmpDir);
+    saveProjectCache(store, payload);
+    const loaded = loadProjectCache(store);
 
     expect(loaded?.configConstraints?.typescript?.strict).toBe(true);
     expect(loaded?.configConstraints?.typescript?.target).toBe("ES2022");
@@ -392,7 +386,7 @@ describe("buildProjectCachePayload", () => {
 // ── Full round-trip through save/load/hydrate ────────────────────────────
 
 describe("full round-trip (save -> load -> hydrate)", () => {
-  it("reconstructs TestMapping Maps after disk persistence", async () => {
+  it("reconstructs TestMapping Maps after persistence", () => {
     const tm: TestMapping = {
       sourceToTests: new Map([
         ["src/a.ts", ["src/a.test.ts"]],
@@ -404,8 +398,8 @@ describe("full round-trip (save -> load -> hydrate)", () => {
     };
 
     const payload = buildProjectCachePayload("round-trip-key", undefined, undefined, tm, undefined);
-    await saveProjectCache(tmpDir, payload);
-    const loaded = await loadProjectCache(tmpDir);
+    saveProjectCache(store, payload);
+    const loaded = loadProjectCache(store);
     if (!loaded) throw new Error("expected cache to load");
     const { testMapping } = hydrateProjectCache(loaded);
 
@@ -416,7 +410,7 @@ describe("full round-trip (save -> load -> hydrate)", () => {
     expect(testMapping?.exemplarTestFile).toBe("src/a.test.ts");
   });
 
-  it("reconstructs MonorepoAnalysis Map and Sets after disk persistence", async () => {
+  it("reconstructs MonorepoAnalysis Map and Sets after persistence", () => {
     const monorepo: MonorepoAnalysis = {
       crossPackageEdges: [],
       encapsulationViolations: [],
@@ -425,8 +419,8 @@ describe("full round-trip (save -> load -> hydrate)", () => {
     };
 
     const payload = buildProjectCachePayload("round-trip-key", undefined, undefined, undefined, monorepo);
-    await saveProjectCache(tmpDir, payload);
-    const loaded = await loadProjectCache(tmpDir);
+    saveProjectCache(store, payload);
+    const loaded = loadProjectCache(store);
     if (!loaded) throw new Error("expected cache to load");
     const { monorepoAnalysis } = hydrateProjectCache(loaded);
 

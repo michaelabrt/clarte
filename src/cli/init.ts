@@ -35,6 +35,7 @@ import { startShimmer, NOOP_SHIMMER } from "../cli/animations.js";
 import { serializeAnalysis } from "../core/analysis/serialize.js";
 import { runAnalysis } from "../core/run-analysis.js";
 import { persistGraph, loadPersistedGraph } from "../core/graph/persist.js";
+import { openGraphStore } from "../storage/loader.js";
 import { SNAPSHOT_LANGUAGES } from "../core/config/thresholds.js";
 
 export interface InitOptions {
@@ -119,28 +120,36 @@ export async function runInitMode(opts: InitOptions): Promise<void> {
 
   if (!jsonMode) printDetectedStack(detected);
 
-  const { analysis } = await runAnalysis(
-    rootDir,
-    graph,
-    detected,
-    savedConfig,
-    verbose,
-    jsonMode,
-    verboseLog,
-    NOOP_PROGRESS,
-  );
-
-  // Persist analysis graph for hooks and cursor rules (non-critical)
+  const store = await openGraphStore(rootDir);
+  let analysis: ContextAnalysis;
   let persistedGraph: PersistedGraph | null = null;
   try {
-    await persistGraph(rootDir, graph, analysis);
-  } catch (err) {
-    verboseLog(`Graph persistence failed: ${errorMessage(err)}`);
-  }
-  try {
-    persistedGraph = await loadPersistedGraph(rootDir);
-  } catch (err) {
-    verboseLog(`Graph load failed: ${errorMessage(err)}`);
+    const result = await runAnalysis(
+      rootDir,
+      graph,
+      detected,
+      savedConfig,
+      verbose,
+      jsonMode,
+      verboseLog,
+      NOOP_PROGRESS,
+      store,
+    );
+    analysis = result.analysis;
+
+    // Persist analysis graph for hooks and cursor rules (non-critical)
+    try {
+      await persistGraph(rootDir, graph, analysis, store);
+    } catch (err) {
+      verboseLog(`Graph persistence failed: ${errorMessage(err)}`);
+    }
+    try {
+      persistedGraph = await loadPersistedGraph(rootDir, store);
+    } catch (err) {
+      verboseLog(`Graph load failed: ${errorMessage(err)}`);
+    }
+  } finally {
+    store.close();
   }
 
   if (jsonMode) {
