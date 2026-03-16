@@ -11,12 +11,19 @@ export function parseRustImportsAst(root: Node): RawImport[] {
         parseRustUsePath(arg, imports);
       }
     } else if (node.type === "mod_item") {
-      // mod config;
       const name = node.childForFieldName("name");
-      if (name && !node.namedChildren.some((c) => c.type === "declaration_list")) {
-        // Only external mod declarations (mod foo;), not inline mod blocks
-        // Prefix with "mod::" so resolveImport can distinguish from use declarations
+      const body = node.namedChildren.find((c) => c.type === "declaration_list");
+      if (name && !body) {
+        // External mod declaration (mod foo;)
         imports.push({ specifier: `mod::${name.text}`, importedNames: [] });
+      } else if (body && name?.text !== "tests") {
+        // Inline non-test mod block: scan for use declarations
+        for (const child of body.namedChildren) {
+          if (child.type === "use_declaration") {
+            const arg = child.childForFieldName("argument");
+            if (arg) parseRustUsePath(arg, imports);
+          }
+        }
       }
     }
   }

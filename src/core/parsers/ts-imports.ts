@@ -89,8 +89,11 @@ function parseJsImportStatement(node: Node): RawImport | null {
           if (name) names.push(name.text);
         }
       }
+    } else if (child.type === "namespace_import") {
+      // import * as utils from '...' — mark as namespace with "*" sentinel
+      // so barrel routing and call graph resolution can handle it
+      names.push("*");
     }
-    // namespace_import: import * as utils from '...' -> no named imports
   }
 
   return { specifier, importedNames: names, isTypeOnly };
@@ -102,6 +105,12 @@ function parseJsExportReexport(exportNode: Node, source: Node): RawImport | null
 
   const isTypeOnly = exportNode.children.some((c) => c.type === "type" && !c.isNamed);
   const names: string[] = [];
+
+  // export * as ns from '...' — namespace re-export (TS 3.8+)
+  const nsExport = exportNode.namedChildren.find((c) => c.type === "namespace_export");
+  if (nsExport) {
+    return { specifier, importedNames: ["*"], isTypeOnly };
+  }
 
   const exportClause = exportNode.namedChildren.find((c) => c.type === "export_clause");
   if (exportClause) {
@@ -142,10 +151,16 @@ export function extractStringContent(node: Node): string | null {
   const fragment = node.namedChildren.find((c) => c.type === "string_fragment" || c.type === "string_content");
   if (fragment) return fragment.text;
 
-  // For some grammars the text is the full quoted string
+  // For some grammars the text is the full quoted string — unescape common sequences
   const text = node.text;
   if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
-    return text.slice(1, -1);
+    return text
+      .slice(1, -1)
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t")
+      .replace(/\\'/g, "'")
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, "\\");
   }
 
   return null;
