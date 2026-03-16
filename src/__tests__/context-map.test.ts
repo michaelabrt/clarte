@@ -235,7 +235,7 @@ describe("generateHookFiles", () => {
     expect(script).toContain("fail-fast-override");
   });
 
-  it("generates context-map.json", async () => {
+  it("does not generate context-map.json (removed: R.12 vestige)", async () => {
     tmpDir = await makeTmpDir();
     const graph = makePersistedGraph({
       files: {
@@ -245,9 +245,8 @@ describe("generateHookFiles", () => {
 
     await generateHookFiles(tmpDir, graph);
 
-    const mapContent = await fs.readFile(path.join(tmpDir, ".clarte/hooks/context-map.json"), "utf-8");
-    const map = JSON.parse(mapContent);
-    expect(map["src/utils.ts"]).toBeDefined();
+    const exists = await fs.access(path.join(tmpDir, ".clarte/hooks/context-map.json")).then(() => true, () => false);
+    expect(exists).toBe(false);
   });
 
   it("generates on-session-start.mjs with model gate and state cleanup", async () => {

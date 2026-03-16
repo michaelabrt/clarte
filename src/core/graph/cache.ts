@@ -329,7 +329,11 @@ export async function buildGraphWithCache(
       return rebuildGraph(cache.edges, allFiles, barrels, cachedSymbols);
     }
 
-    if (!barrelChanged && changeRatio < 0.1) {
+    // Incremental rebuild up to 25% of files changed (raised from 10% which
+    // was overly conservative). The incremental path correctly re-parses changed
+    // files and reuses cached edges for unchanged files regardless of ratio.
+    // Barrel changes still force full rebuild (barrel routing affects all edges).
+    if (!barrelChanged && changeRatio < 0.25) {
       onProgress?.(`Incremental rebuild: ${totalChanged} file${totalChanged === 1 ? "" : "s"} changed`);
 
       const staleFromFiles = new Set([...changedFiles, ...deletedFiles]);
