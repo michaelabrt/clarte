@@ -153,11 +153,13 @@ export function computeHITS(
   const authRange = authMax - authMin;
   const hubRange = hubMax - hubMin;
 
+  // Flat graph guard: when all scores are within epsilon, assign uniform 0.5
+  // instead of 0 to avoid false Leaf classification in small/homogeneous graphs.
   const authorityMap = new Map<string, number>();
   const hubMap = new Map<string, number>();
   for (let i = 0; i < n; i++) {
-    authorityMap.set(files[i], authRange > NORM_EPSILON ? (auth[i] - authMin) / authRange : 0);
-    hubMap.set(files[i], hubRange > NORM_EPSILON ? (hub[i] - hubMin) / hubRange : 0);
+    authorityMap.set(files[i], authRange > NORM_EPSILON ? (auth[i] - authMin) / authRange : 0.5);
+    hubMap.set(files[i], hubRange > NORM_EPSILON ? (hub[i] - hubMin) / hubRange : 0.5);
   }
 
   return { authority: authorityMap, hub: hubMap };
