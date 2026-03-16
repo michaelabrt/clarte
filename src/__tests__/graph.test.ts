@@ -4,6 +4,8 @@ import {
   parsePythonImports,
   parseGoImports,
   parseRustImports,
+  resolveImport,
+  detectPythonPackageRoots,
 } from "../core/graph/import-resolution.js";
 import { initTreeSitter } from "../core/parsers/init.js";
 
@@ -213,5 +215,70 @@ describe("parsePythonImports ignores comments", () => {
     const result = parsePythonImports(`# comment\nfrom real import foo`);
     expect(result).toHaveLength(1);
     expect(result[0].specifier).toBe("real");
+  });
+});
+
+describe("detectPythonPackageRoots", () => {
+  it("detects top-level package from __init__.py", () => {
+    const files = ["app/__init__.py", "app/models/__init__.py", "app/models/user.py", "tests/test_app.py"];
+    expect(detectPythonPackageRoots(files)).toEqual(["app"]);
+  });
+
+  it("detects multiple package roots", () => {
+    const files = ["app/__init__.py", "lib/__init__.py", "lib/utils.py"];
+    const roots = detectPythonPackageRoots(files);
+    expect(roots).toContain("app");
+    expect(roots).toContain("lib");
+  });
+
+  it("returns empty for no __init__.py files", () => {
+    const files = ["main.py", "utils.py"];
+    expect(detectPythonPackageRoots(files)).toEqual([]);
+  });
+});
+
+describe("Python absolute import resolution", () => {
+  const allFiles = new Set([
+    "app/__init__.py",
+    "app/models/__init__.py",
+    "app/models/user.py",
+    "app/config.py",
+    "app/routes/users.py",
+    "tests/test_app.py",
+  ]);
+
+  it("resolves absolute import to .py file", () => {
+    const result = resolveImport("app.config", "app/routes/users.py", "python", allFiles, {
+      pythonPackageRoots: ["app"],
+    });
+    expect(result).toBe("app/config.py");
+  });
+
+  it("resolves absolute import to __init__.py", () => {
+    const result = resolveImport("app.models", "app/routes/users.py", "python", allFiles, {
+      pythonPackageRoots: ["app"],
+    });
+    expect(result).toBe("app/models/__init__.py");
+  });
+
+  it("resolves absolute import to nested module", () => {
+    const result = resolveImport("app.models.user", "tests/test_app.py", "python", allFiles, {
+      pythonPackageRoots: ["app"],
+    });
+    expect(result).toBe("app/models/user.py");
+  });
+
+  it("returns null for unknown package (external)", () => {
+    const result = resolveImport("flask", "app/routes/users.py", "python", allFiles, {
+      pythonPackageRoots: ["app"],
+    });
+    expect(result).toBeNull();
+  });
+
+  it("still resolves relative imports", () => {
+    const result = resolveImport("..config", "app/routes/users.py", "python", allFiles, {
+      pythonPackageRoots: ["app"],
+    });
+    expect(result).toBe("app/config.py");
   });
 });

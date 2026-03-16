@@ -43,22 +43,13 @@
   "layers": [
     {
       "name": "models",
-      "files": [
-        "src/models/mod.rs",
-        "src/models/product.rs",
-        "src/models/user.rs"
-      ],
+      "files": ["src/models/mod.rs", "src/models/product.rs", "src/models/user.rs"],
       "dependsOn": []
     },
     {
       "name": "pages",
-      "files": [
-        "src/routes/handlers.rs",
-        "src/routes/mod.rs"
-      ],
-      "dependsOn": [
-        "models"
-      ]
+      "files": ["src/routes/handlers.rs", "src/routes/mod.rs"],
+      "dependsOn": ["models"]
     }
   ],
   "layerEdges": [
@@ -125,9 +116,7 @@
   ],
   "graphTopology": {
     "componentCount": 1,
-    "componentSizes": [
-      9
-    ],
+    "componentSizes": [9],
     "approximateDiameter": 2,
     "reachability": 1,
     "isFragmented": false

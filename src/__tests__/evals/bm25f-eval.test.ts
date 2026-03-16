@@ -408,9 +408,7 @@ function buildBenchmarkQueries(): BenchmarkQuery[] {
         "src/forms/schema/validation.ts": file({ symbolNames: ["validateForm", "checkRequired"] }),
         "src/api/routes.ts": file({ symbolNames: ["registerRoutes"] }),
       },
-      edges: [
-        { from: "src/api/routes.ts", to: "src/api/schema/validation.ts", importedNames: ["validateRequest"] },
-      ],
+      edges: [{ from: "src/api/routes.ts", to: "src/api/schema/validation.ts", importedNames: ["validateRequest"] }],
     }),
   });
 
@@ -521,9 +519,7 @@ function buildBenchmarkQueries(): BenchmarkQuery[] {
         "src/db/schema.ts": file({ symbolNames: ["createTable", "addColumn"] }),
         "src/db/seed.ts": file({ symbolNames: ["seedData"] }),
       },
-      changeCoupling: [
-        { fileA: "src/db/migrate.ts", fileB: "src/db/schema.ts", coChangeCount: 15, confidence: 0.88 },
-      ],
+      changeCoupling: [{ fileA: "src/db/migrate.ts", fileB: "src/db/schema.ts", coChangeCount: 15, confidence: 0.88 }],
     }),
   });
 
@@ -557,7 +553,11 @@ function buildBenchmarkQueries(): BenchmarkQuery[] {
         "src/payments/index.ts": file({ symbolNames: ["processPayment"] }),
       },
       edges: [
-        { from: "src/checkout/validate-payment.ts", to: "src/payments/validator.ts", importedNames: ["validatePayment"] },
+        {
+          from: "src/checkout/validate-payment.ts",
+          to: "src/payments/validator.ts",
+          importedNames: ["validatePayment"],
+        },
       ],
     }),
   });
@@ -679,7 +679,9 @@ describe("BM25F offline evaluation", () => {
     // Lower threshold for held-out (0.6) since these queries weren't used for tuning
     expect(mean).toBeGreaterThanOrEqual(0.6);
     // Log CI for visibility
-    console.error(`Held-out MRR: ${mean.toFixed(3)} [${ci95[0].toFixed(3)}, ${ci95[1].toFixed(3)}] (n=${testQueries.length})`);
+    console.error(
+      `Held-out MRR: ${mean.toFixed(3)} [${ci95[0].toFixed(3)}, ${ci95[1].toFixed(3)}] (n=${testQueries.length})`,
+    );
   });
 
   // Bootstrap confidence interval for full MRR

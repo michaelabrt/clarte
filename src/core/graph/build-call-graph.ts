@@ -40,8 +40,6 @@ const BUILTIN_GLOBALS = new Set([
   "isFinite",
 ]);
 
-const TS_JS_EXTENSIONS = new Set(["ts", "tsx", "js", "mjs", "jsx", "cjs"]);
-
 function hashContent(content: string): string {
   return createHash("sha256").update(content).digest("hex").slice(0, 16);
 }
@@ -141,6 +139,8 @@ function resolveCallee(
   if (!edges) return null;
   for (const edge of edges) {
     if (edge.importedNames.includes(name)) return edge.to;
+    // Namespace import (import * as ns): any callee name matches
+    if (edge.importedNames.includes("*")) return edge.to;
   }
   return null;
 }
@@ -180,12 +180,7 @@ export async function buildCallGraph(
   const newFileHashes: Record<string, string> = {};
   const allSites: CallSite[] = [];
 
-  const tsFiles = files.filter((f) => {
-    const ext = f.split(".").pop()?.toLowerCase();
-    return ext !== undefined && TS_JS_EXTENSIONS.has(ext);
-  });
-
-  for (const file of tsFiles) {
+  for (const file of files) {
     const absPath = path.join(rootDir, file);
     const content = await readFileOr(absPath);
     if (!content) continue;

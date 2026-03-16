@@ -21,9 +21,11 @@ import {
   loadTsconfigPaths,
   loadGoModule,
   detectJavaSourceRoots,
+  detectPythonPackageRoots,
   getPackageName,
   SOURCE_IGNORE,
   type BarrelExportMap,
+  type PathAlias,
   type ResolveContext,
 } from "./import-resolution.js";
 import { routeBarrelImport } from "./barrel-routing.js";
@@ -73,6 +75,7 @@ export async function buildImportGraph(
   rootDir: string,
   language: Language,
   onProgress?: ProgressCallback,
+  extraAliases?: PathAlias[],
 ): Promise<ImportGraph> {
   await initForLanguage(language);
   const globs = getSourceGlob(language);
@@ -113,6 +116,7 @@ export async function buildImportGraph(
 
   const isJsTs = language === "typescript" || language === "javascript";
   const pathAliases = isJsTs ? await loadTsconfigPaths(rootDir) : [];
+  if (extraAliases) pathAliases.push(...extraAliases);
   if (pathAliases.length > 0) {
     onProgress?.(`Loaded ${pathAliases.length} path alias(es) from tsconfig`);
   }
@@ -130,6 +134,13 @@ export async function buildImportGraph(
       onProgress?.(
         `Java source root${resolveCtx.javaSourceRoots.length === 1 ? "" : "s"}: ${resolveCtx.javaSourceRoots.join(", ")}`,
       );
+    }
+  }
+  if (language === "python") {
+    const pyRoots = detectPythonPackageRoots(files);
+    resolveCtx.pythonPackageRoots = pyRoots;
+    if (pyRoots.length > 0) {
+      onProgress?.(`Python package root${pyRoots.length === 1 ? "" : "s"}: ${pyRoots.join(", ")}`);
     }
   }
 
@@ -245,8 +256,8 @@ export async function buildImportGraph(
               directInDegree.set(resolved, (directInDegree.get(resolved) ?? 0) + 1);
             }
           }
-        } else if (language === "go" || language === "java" || language === "rust") {
-          // For Go/Java/Rust, unresolved "relative" imports are actually external
+        } else if (language === "go" || language === "java" || language === "rust" || language === "python") {
+          // For Go/Java/Rust/Python, unresolved imports are actually external
           // (stdlib, third-party). Fall through to external edge creation.
           // Skip unresolved mod declarations (mod::) -- these are Rust compile errors, not packages.
           if (raw.specifier.startsWith("mod::")) continue;

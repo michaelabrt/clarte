@@ -381,7 +381,7 @@ describe("runInitMode", () => {
 
     await runInitMode(makeOpts());
 
-    expect(mockBuildImportGraph).toHaveBeenCalledWith("/tmp/test", "python", undefined);
+    expect(mockBuildImportGraph).toHaveBeenCalledWith("/tmp/test", "python", undefined, undefined);
     expect(mockMergeGraph).toHaveBeenCalled();
   });
 });

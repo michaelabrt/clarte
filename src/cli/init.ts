@@ -29,6 +29,7 @@ import { saveConfig, configToAnswers, computeSnapshotHash } from "../core/config
 import { initPreCommitHook } from "../cli/hooks.js";
 import { buildGraphWithCache } from "../core/graph/cache.js";
 import { buildImportGraph, mergeGraph, recomputeScoresAfterMerge } from "../core/graph/build.js";
+import { buildWorkspaceAliases } from "../core/graph/import-resolution.js";
 import { getHubFiles } from "../core/graph/hub-files.js";
 import { startShimmer, NOOP_SHIMMER } from "../cli/animations.js";
 import { serializeAnalysis } from "../core/analysis/serialize.js";
@@ -83,13 +84,21 @@ export async function runInitMode(opts: InitOptions): Promise<void> {
   shimmer = jsonMode ? NOOP_SHIMMER : startShimmer(`Building import graph (${detected.sourceFileCount} files)...`);
   let graph: ImportGraph;
   let topHub: HubFile | undefined;
+  const workspaceAliases = detected.monorepo
+    ? await buildWorkspaceAliases(detected.monorepo.packages, rootDir)
+    : undefined;
   try {
-    graph = await buildGraphWithCache(rootDir, detected.language, verbose ? verboseLog : (msg) => shimmer.message(msg));
+    graph = await buildGraphWithCache(
+      rootDir,
+      detected.language,
+      verbose ? verboseLog : (msg) => shimmer.message(msg),
+      workspaceAliases,
+    );
 
     if (detected.secondaryLanguages) {
       for (const secLang of detected.secondaryLanguages) {
         shimmer.message(`Building ${secLang} import graph...`);
-        const secGraph = await buildImportGraph(rootDir, secLang, verbose ? verboseLog : undefined);
+        const secGraph = await buildImportGraph(rootDir, secLang, verbose ? verboseLog : undefined, workspaceAliases);
         mergeGraph(graph, secGraph);
       }
       recomputeScoresAfterMerge(graph);

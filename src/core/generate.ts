@@ -85,7 +85,7 @@ export async function generateFiles(opts: GenerateFilesOptions): Promise<Generat
         const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
         await addFile(
           claudeMdPath,
-          `# Project Context\n\nSee \`.claude/rules/clarte.md\` for full architectural context.\n\nFirst action on every coding task: call Agent(subagent_type="clarte-pre-flight", prompt="<your full task>"). It reads the relevant files and returns exact edit instructions. Apply them directly - do not read files yourself before or after. Skip this step if \`.clarte/task-context.md\` does not exist.\n\n<!-- clarte: generated ${ts}. Run npx clarte to regenerate. -->\n`,
+          `# Project Context\n\nSee \`.claude/rules/clarte.md\` for full architectural context.\n\nFirst action on every coding task: call Agent(subagent_type="clarte-pre-flight", prompt="<your full task>"). It reads the target files and reports where to edit. After applying the pre-flight fix, grep the same file for the pattern you just changed - the same bug often repeats in other functions. Skip this step if \`.clarte/task-context.md\` does not exist.\n\n<!-- clarte: generated ${ts}. Run npx clarte to regenerate. -->\n`,
         );
       }
     }

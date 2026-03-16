@@ -109,6 +109,41 @@ export function resolveAliasImport(specifier: string, aliases: PathAlias[], allF
   return null;
 }
 
+/**
+ * Build path aliases from monorepo workspace packages.
+ * Maps package names to their source directories so that
+ * `import { X } from "@myorg/core"` resolves to the actual files.
+ */
+export async function buildWorkspaceAliases(
+  packages: Array<{ name: string; path: string }>,
+  rootDir: string,
+): Promise<PathAlias[]> {
+  const aliases: PathAlias[] = [];
+  for (const pkg of packages) {
+    const pkgJson = await readJsonFile(path.join(rootDir, pkg.path, "package.json"));
+    if (!pkgJson) continue;
+
+    // Determine source entry directory from package.json fields
+    const main = (pkgJson.main as string | undefined) ?? (pkgJson.module as string | undefined);
+    let srcDir = pkg.path;
+    if (main) {
+      // "main": "src/index.ts" -> src dir is "packages/core/src"
+      const mainDir = path.dirname(main);
+      srcDir = mainDir === "." ? pkg.path : path.join(pkg.path, mainDir).replace(/\\/g, "/");
+    } else {
+      // Fall back to src/ if it's likely present
+      const srcIndex = path.join(pkg.path, "src");
+      srcDir = srcIndex;
+    }
+
+    // Bare import: "@myorg/core" -> "packages/core/src/index"
+    aliases.push({ prefix: pkg.name, replacement: srcDir });
+    // Subpath import: "@myorg/core/utils" -> "packages/core/src/utils"
+    aliases.push({ prefix: pkg.name + "/", replacement: srcDir + "/" });
+  }
+  return aliases;
+}
+
 export function getSourceGlob(lang: Language): string[] {
   switch (lang) {
     case "typescript":
@@ -157,7 +192,8 @@ export function isRelativeSpecifier(spec: string, lang: Language): boolean {
     return spec.startsWith("./") || spec.startsWith("../");
   }
   if (lang === "python") {
-    return spec.startsWith(".");
+    // All Python imports attempt resolution first; unresolved fall through to external
+    return true;
   }
   if (lang === "go") {
     // All Go imports attempt resolution first; stdlib/third-party fall through
@@ -243,7 +279,7 @@ function resolveGoImport(specifier: string, goModulePath: string, allFiles: Set<
 /**
  * Try to resolve a Python relative import to a file path.
  */
-function resolvePythonImport(specifier: string, fromFile: string, allFiles: Set<string>): string | null {
+function resolvePythonRelativeImport(specifier: string, fromFile: string, allFiles: Set<string>): string | null {
   if (!specifier.startsWith(".")) return null;
   const dir = path.dirname(fromFile);
   let dots = 0;
@@ -259,6 +295,54 @@ function resolvePythonImport(specifier: string, fromFile: string, allFiles: Set<
   if (allFiles.has(base + "/__init__.py")) return base + "/__init__.py";
 
   return null;
+}
+
+/**
+ * Detect Python package root directories by scanning for top-level __init__.py files.
+ * Returns directory names that are importable as packages (e.g. ["app", "src/mypackage"]).
+ */
+export function detectPythonPackageRoots(allFiles: string[]): string[] {
+  const roots = new Set<string>();
+  for (const file of allFiles) {
+    if (!file.endsWith("/__init__.py")) continue;
+    // Get the top-level package directory: "app/models/__init__.py" -> "app"
+    const dir = path.dirname(file).replace(/\\/g, "/");
+    const topLevel = dir.split("/")[0];
+    if (topLevel) roots.add(topLevel);
+  }
+  return [...roots];
+}
+
+/**
+ * Try to resolve a Python absolute import to a file path.
+ * Converts dot-separated segments to paths and checks against known package roots.
+ * e.g. "myapp.models.user" -> "myapp/models/user.py" or "myapp/models/user/__init__.py"
+ */
+function resolvePythonAbsoluteImport(specifier: string, allFiles: Set<string>, packageRoots: string[]): string | null {
+  // Only attempt if the first segment matches a known package root
+  const firstSegment = specifier.split(".")[0];
+  if (!packageRoots.includes(firstSegment)) return null;
+
+  const modulePath = specifier.replace(/\./g, "/");
+
+  if (allFiles.has(modulePath + ".py")) return modulePath + ".py";
+  if (allFiles.has(modulePath + "/__init__.py")) return modulePath + "/__init__.py";
+
+  return null;
+}
+
+function resolvePythonImport(
+  specifier: string,
+  fromFile: string,
+  allFiles: Set<string>,
+  packageRoots: string[],
+): string | null {
+  // Try relative imports first (dot-prefixed)
+  if (specifier.startsWith(".")) {
+    return resolvePythonRelativeImport(specifier, fromFile, allFiles);
+  }
+  // Then try absolute imports against known package roots
+  return resolvePythonAbsoluteImport(specifier, allFiles, packageRoots);
 }
 
 /**
@@ -408,6 +492,7 @@ function resolveRustModulePath(baseDir: string, segments: string[], allFiles: Se
 export interface ResolveContext {
   goModulePath?: string | null;
   javaSourceRoots?: string[];
+  pythonPackageRoots?: string[];
 }
 
 export function resolveImport(
@@ -422,7 +507,7 @@ export function resolveImport(
     case "javascript":
       return resolveJsImport(specifier, fromFile, allFiles);
     case "python":
-      return resolvePythonImport(specifier, fromFile, allFiles);
+      return resolvePythonImport(specifier, fromFile, allFiles, ctx.pythonPackageRoots ?? []);
     case "go":
       return ctx.goModulePath ? resolveGoImport(specifier, ctx.goModulePath, allFiles) : null;
     case "java":
