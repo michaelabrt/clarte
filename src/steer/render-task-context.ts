@@ -1,9 +1,24 @@
 import type { PersistedGraph } from "../core/types/persisted-graph.js";
 import type { SymbolMatch } from "./targets-resolve.js";
+import type { ExecutionFlow } from "../mcp/tools/execution-flow.js";
+import type { FileRole } from "../core/types.js";
+
+// ── Types for task-scoped data ───────────────────────────────────────────────
+
+export interface TaskScopedInfo {
+  /** Task-scoped role per file (only files whose task role differs from global) */
+  taskRoles: Map<string, FileRole>;
+  /** Task-scoped authority per file */
+  taskAuthority: Map<string, number>;
+}
+
+// ── Main renderer ────────────────────────────────────────────────────────────
 
 /**
  * Render the task-context.md content from resolved targets and symbol rankings.
  * Pure function: given data, returns the markdown string.
+ *
+ * Supports optional execution flows (§4.7) and task-scoped rankings (§4.8).
  */
 export function renderTaskContext(
   targets: string[],
@@ -11,6 +26,8 @@ export function renderTaskContext(
   graph: PersistedGraph,
   symbolRanking: Map<string, SymbolMatch[]>,
   lastModified?: Map<string, string>,
+  executionFlows?: ExecutionFlow[],
+  taskScoped?: TaskScopedInfo,
 ): string {
   const fileImporters = new Map<string, string[]>();
   const fileImports = new Map<string, string[]>();
@@ -34,6 +51,17 @@ export function renderTaskContext(
     const fp = targets[i];
     const ageSuffix = lastModified?.get(fp) ? `, modified ${lastModified.get(fp)}` : "";
     lines.push(`## ${fp} [rank ${i + 1}${ageSuffix}]`);
+
+    // §4.8: Task-scoped role (only when it differs from global)
+    if (taskScoped) {
+      const taskRole = taskScoped.taskRoles.get(fp);
+      const globalRole = graph.files[fp]?.role;
+      if (taskRole && globalRole && taskRole !== globalRole) {
+        const taskAuth = taskScoped.taskAuthority.get(fp) ?? 0;
+        lines.push(`Global role: ${globalRole} (authority ${(graph.files[fp]?.authority ?? 0).toFixed(2)})`);
+        lines.push(`Task role: ${taskRole} (task-authority ${taskAuth.toFixed(2)})`);
+      }
+    }
 
     const topSyms = symbolRanking.get(fp) ?? [];
     const intraCalls = graph.files[fp]?.intraFileCalls ?? [];
@@ -70,6 +98,25 @@ export function renderTaskContext(
       lines.push("When writing tests, update these existing test files rather than creating new ones.");
     }
     lines.push("");
+  }
+
+  // §4.7: Execution flows (max 3)
+  if (executionFlows && executionFlows.length > 0) {
+    for (const flow of executionFlows.slice(0, 3)) {
+      const lastStep = flow.steps[flow.steps.length - 1];
+      const title = lastStep ? `${flow.entryPoint.symbol} -> ... -> ${lastStep.symbol}` : flow.entryPoint.symbol;
+      lines.push(`## Execution flow: ${title}`);
+
+      // Entry point as step 0
+      lines.push(`1. ${flow.entryPoint.file}::${flow.entryPoint.symbol} (L${flow.entryPoint.line})`);
+
+      for (let j = 0; j < flow.steps.length; j++) {
+        const step = flow.steps[j];
+        const editMarker = targetSet.has(step.file) ? "  <- edit target" : "";
+        lines.push(`${j + 2}. ${step.file}::${step.symbol} (L${step.line})${editMarker}`);
+      }
+      lines.push("");
+    }
   }
 
   // Negative guidance: warn about runners-up with same basename as a target (decoys)

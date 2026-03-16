@@ -1,7 +1,7 @@
-import { defineConfig } from "tsup";
+import { defineConfig, type Options } from "tsup";
 import pkg from "./package.json";
 
-export default defineConfig((options) => [
+export default defineConfig((options): Options[] => [
   {
     entry: ["src/index.ts"],
     format: ["esm"],
@@ -32,5 +32,19 @@ export default defineConfig((options) => [
     sourcemap: false,
     dts: false,
     noExternal: [/.*/],
+  },
+  {
+    entry: { "mcp-server": "src/mcp/server.ts" },
+    format: ["esm"],
+    target: "node20",
+    outDir: "dist",
+    clean: false,
+    splitting: false,
+    external: ["web-tree-sitter", "@modelcontextprotocol/sdk", "@huggingface/transformers"],
+    sourcemap: false,
+    dts: false,
+    banner: {
+      js: "#!/usr/bin/env node",
+    },
   },
 ]);
