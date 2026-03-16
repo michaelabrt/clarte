@@ -8,6 +8,43 @@ const languages = new Map<string, Language>();
 let parser: Parser | null = null;
 let parserReady: Promise<void> | null = null;
 
+/** Pool size: 1 for now (web-tree-sitter parse is synchronous; true parallelism needs workers). */
+export const POOL_SIZE = 1;
+
+/**
+ * Parser pool for future parallel parsing support.
+ * web-tree-sitter Parser.parse() is synchronous, so true parallelism requires
+ * worker threads. The pool infrastructure is in place for when that becomes worthwhile.
+ */
+export class ParserPool {
+  private parsers: Parser[] = [];
+  private available: Parser[] = [];
+
+  async init(size: number): Promise<void> {
+    for (let i = 0; i < size; i++) {
+      const p = new Parser();
+      this.parsers.push(p);
+      this.available.push(p);
+    }
+  }
+
+  acquire(): Parser {
+    const p = this.available.pop();
+    if (!p) throw new Error("No parser available in pool");
+    return p;
+  }
+
+  release(p: Parser): void {
+    this.available.push(p);
+  }
+
+  setLanguageAll(lang: Language): void {
+    for (const p of this.parsers) p.setLanguage(lang);
+  }
+}
+
+let pool: ParserPool | null = null;
+
 const LANG_FILES: Record<string, string> = {
   typescript: "tree-sitter-typescript.wasm",
   tsx: "tree-sitter-tsx.wasm",
@@ -89,9 +126,16 @@ async function ensureParser(): Promise<void> {
       // vs the language-specific grammars - so they use different paths.
       await Parser.init();
       parser = new Parser();
+      pool = new ParserPool();
+      await pool.init(POOL_SIZE);
     })();
   }
   return parserReady;
+}
+
+/** Get the parser pool instance (initialized after ensureParser). */
+export function getParserPool(): ParserPool | null {
+  return pool;
 }
 
 /**

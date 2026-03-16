@@ -82,6 +82,22 @@ describe("tokenizeQuery", () => {
     const result = tokenizeQuery("isA");
     expect(result).toEqual([]);
   });
+
+  it("splits UPPERCASE-to-CamelCase boundaries", () => {
+    const tokens = tokenizeQuery("SQLiteDB HTTPSServer JSONParser XMLReader");
+    // SQLiteDB -> "SQ" + "Lite" + "DB" -> ["sq", "lite", "db"]
+    // HTTPSServer -> "HTTPS" + "Server" -> ["https", "server"]
+    // JSONParser -> "JSON" + "Parser" -> ["json", "parser"]
+    // XMLReader -> "XML" + "Reader" -> ["xml", "reader"]
+    expect(tokens).toContain("lite");
+    expect(tokens).toContain("db");
+    expect(tokens).toContain("https");
+    expect(tokens).toContain("server");
+    expect(tokens).toContain("json");
+    expect(tokens).toContain("parser");
+    expect(tokens).toContain("xml");
+    expect(tokens).toContain("reader");
+  });
 });
 
 // ── resolveEditTargets ───────────────────────────────────────────────

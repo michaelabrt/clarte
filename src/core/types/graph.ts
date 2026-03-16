@@ -90,6 +90,10 @@ export interface FileInstability {
   fanOut: number;
   /** Instability score: fanOut / (fanIn + fanOut), range 0-1 */
   instability: number;
+  /** Weighted fan-in (type-only edges contribute fractional weight) */
+  weightedFanIn?: number;
+  /** Weighted fan-out (type-only edges contribute fractional weight) */
+  weightedFanOut?: number;
 }
 
 /** A detected community/cluster of tightly-connected files */

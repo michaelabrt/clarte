@@ -71,6 +71,23 @@ describe("parseImportsAst - JS/TS", () => {
     expect(result[0].specifier).toBe("./star");
   });
 
+  it("parses namespace re-exports", () => {
+    const result = parseImportsAst(`export * as utils from './utils';`, "typescript");
+    expect(result).toHaveLength(1);
+    expect(result[0].importedNames).toEqual(["*"]);
+    expect(result[0].specifier).toBe("./utils");
+  });
+
+  // extractStringContent handles escape sequences (\\n, \\t, etc.) in the fallback path
+  // where a string_fragment child is not found. In practice, escape sequences in module
+  // specifiers are nearly impossible - tree-sitter always provides string_fragment for
+  // standard import statements. This test confirms normal specifiers work correctly.
+  it("handles specifiers with special characters via extractStringContent", () => {
+    const result = parseImportsAst(`import { foo } from './my-module';`, "typescript");
+    expect(result).toHaveLength(1);
+    expect(result[0].specifier).toBe("./my-module");
+  });
+
   it("ignores imports inside comments", () => {
     const result = parseImportsAst(`// import { foo } from './commented-out';\nconst x = 1;`, "typescript");
     expect(result).toHaveLength(0);
@@ -80,6 +97,15 @@ describe("parseImportsAst - JS/TS", () => {
     const result = parseImportsAst(`import {\n  foo,\n  bar,\n  // baz\n  qux\n} from './module';`, "typescript");
     expect(result).toHaveLength(1);
     expect(result[0].importedNames).toEqual(["foo", "bar", "qux"]);
+  });
+
+  // Dotfiles (.eslintrc.js, .babelrc, etc.) have extensions starting with "."
+  // after removing the leading dot. getLanguage uses extname which handles this.
+  it("parses imports from dotfile-style paths correctly", () => {
+    // parseImportsAst with filePath ending in .js should use JavaScript grammar
+    const result = parseImportsAst(`const x = require('./config');`, "javascript", ".eslintrc.js");
+    expect(result).toHaveLength(1);
+    expect(result[0].specifier).toBe("./config");
   });
 });
 

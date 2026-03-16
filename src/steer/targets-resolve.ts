@@ -323,8 +323,8 @@ type FileDoc = {
  */
 /**
  * @param includeImports When true, includes the imports field in scoring.
- *   Used as a fallback for files with zero path/symbol overlap (audit 3.2, 3.3).
- *   Disabled by default to prevent import-field boost from outranking direct matches.
+ *   Enabled by default so imports always contribute. IMPORT_CEILING prevents
+ *   import-only files from outranking direct path/symbol matches.
  */
 function scoreBM25F(
   doc: FileDoc,
@@ -334,7 +334,7 @@ function scoreBM25F(
   avgdlPath: number,
   avgdlSymbols: number,
   avgdlImports: number,
-  includeImports = false,
+  includeImports = true,
 ): number {
   let score = 0;
   for (const term of queryTerms) {
@@ -499,9 +499,7 @@ function applyTestProxy(
       meta.fileImportPaths.get(testFp) ?? [],
       meta.fileImportedNames.get(testFp) ?? [],
     );
-    let testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
-    if (testScore === 0)
-      testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
+    const testScore = scoreBM25F(testDoc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
     if (testScore > 0) {
       const proxyScore = testScore * TEST_PROXY_FACTOR;
       for (const source of sources) {
@@ -621,7 +619,7 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
   const debugBM25 = process.env.DEBUG_BM25 === "1";
   const { expanded: synonymTerms } = expandQuerySynonyms(queryTerms);
 
-  // Stage 2: BM25F scoring (path + symbols first, import field as fallback)
+  // Stage 2: BM25F scoring (all three fields always active; IMPORT_CEILING prevents import-dominated rankings)
   const scores = new Map<string, number>();
   const importOnlyFiles = new Set<string>();
   for (const [fp, doc] of docs) {
@@ -629,14 +627,14 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
     if (synonymTerms.length > 0) {
       score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
     }
-    if (score === 0) {
-      score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
-      if (synonymTerms.length > 0) {
-        score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
-      }
-      if (score > 0) importOnlyFiles.add(fp);
+    if (score > 0) {
+      // Check if score comes only from imports (no path/symbol overlap)
+      const hasPathSymbol =
+        queryTerms.some((t) => doc.path.termFreq.has(t) || doc.symbols.termFreq.has(t)) ||
+        (synonymTerms.length > 0 && synonymTerms.some((t) => doc.path.termFreq.has(t) || doc.symbols.termFreq.has(t)));
+      if (!hasPathSymbol) importOnlyFiles.add(fp);
+      scores.set(fp, score);
     }
-    if (score > 0) scores.set(fp, score);
   }
 
   // Stage 3: cap import-only scores below path/symbol matches
@@ -731,17 +729,14 @@ export function resolveEditTargetsWithMeta(
     if (synonymTerms.length > 0) {
       score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
     }
-    if (score === 0) {
-      score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
-      if (synonymTerms.length > 0) {
-        score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
-      }
-      if (score > 0) {
+    if (score > 0) {
+      const hasPathSymbol =
+        queryTerms.some((t) => doc.path.termFreq.has(t) || doc.symbols.termFreq.has(t)) ||
+        (synonymTerms.length > 0 && synonymTerms.some((t) => doc.path.termFreq.has(t) || doc.symbols.termFreq.has(t)));
+      if (!hasPathSymbol) {
         importOnlyFiles.add(fp);
         matchTypes.set(fp, "import-only");
       }
-    }
-    if (score > 0) {
       scores.set(fp, score);
       if (!matchTypes.has(fp)) matchTypes.set(fp, "direct");
     }

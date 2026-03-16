@@ -43,7 +43,11 @@
   "layers": [
     {
       "name": "utils",
-      "files": ["src/lib/cache.ts", "src/lib/db.ts", "src/lib/utils.ts"],
+      "files": [
+        "src/lib/cache.ts",
+        "src/lib/db.ts",
+        "src/lib/utils.ts"
+      ],
       "dependsOn": []
     }
   ],
@@ -51,10 +55,26 @@
   "instabilities": [],
   "communityCount": 2,
   "communityFiles": [
-    ["src/core/handler.ts", "src/lib/cache.ts", "src/lib/db.ts", "src/lib/utils.ts"],
-    ["src/core/router.ts", "src/features/a.ts", "src/features/b.ts", "src/features/c.ts", "src/features/d.ts"]
+    [
+      "src/core/handler.ts",
+      "src/lib/cache.ts",
+      "src/lib/db.ts",
+      "src/lib/utils.ts"
+    ],
+    [
+      "src/core/router.ts",
+      "src/features/a.ts",
+      "src/features/b.ts",
+      "src/features/c.ts",
+      "src/features/d.ts"
+    ]
   ],
-  "deadFiles": ["src/features/a.ts", "src/features/b.ts", "src/features/c.ts", "src/features/d.ts"],
+  "deadFiles": [
+    "src/features/a.ts",
+    "src/features/b.ts",
+    "src/features/c.ts",
+    "src/features/d.ts"
+  ],
   "crossCuttingFiles": [],
   "layerConsistency": {
     "consistency": 1,
@@ -133,7 +153,9 @@
   ],
   "graphTopology": {
     "componentCount": 1,
-    "componentSizes": [9],
+    "componentSizes": [
+      9
+    ],
     "approximateDiameter": 3,
     "reachability": 1,
     "isFragmented": false

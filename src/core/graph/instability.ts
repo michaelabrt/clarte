@@ -36,7 +36,14 @@ export function computeInstability(graph: ImportGraph): FileInstability[] {
     if (instability > INSTABILITY_THRESHOLD && fanIn >= 1) {
       // Display values are rounded (fanIn/fanOut) but instability uses raw weighted values.
       // Type-only edges contribute INSTABILITY_TYPE_ONLY_WEIGHT (0.3) instead of 1.
-      results.push({ path: filePath, fanIn: Math.round(fanIn), fanOut: Math.round(fanOut), instability });
+      results.push({
+        path: filePath,
+        fanIn: Math.round(fanIn),
+        fanOut: Math.round(fanOut),
+        instability,
+        weightedFanIn: Math.round(fanIn * 100) / 100,
+        weightedFanOut: Math.round(fanOut * 100) / 100,
+      });
     }
   }
 

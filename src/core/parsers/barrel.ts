@@ -1,5 +1,5 @@
 import path from "node:path";
-import { parseSource } from "./init.js";
+import { withParsedTree } from "./init.js";
 import { extractStringContent } from "./ts-imports.js";
 import { BARREL_THRESHOLD } from "../config/thresholds.js";
 import type { Language } from "../types/detection.js";
@@ -42,37 +42,36 @@ export function detectBarrelAst(
   reExportCount: number;
   totalStatements: number;
 } {
-  const root = parseSource(content, barrelLang(filePath), filePath);
+  return withParsedTree(content, barrelLang(filePath), filePath, (root) => {
+    let reExportCount = 0;
+    let totalStatements = 0;
 
-  let reExportCount = 0;
-  let totalStatements = 0;
-
-  for (const node of root.namedChildren) {
-    if (node.type === "export_statement") {
-      totalStatements++;
-      // Re-export if it has a source (from '...')
-      if (node.childForFieldName("source")) {
-        reExportCount++;
+    for (const node of root.namedChildren) {
+      if (node.type === "export_statement") {
+        totalStatements++;
+        if (node.childForFieldName("source")) {
+          reExportCount++;
+        }
+      } else if (
+        node.type === "import_statement" ||
+        node.type === "lexical_declaration" ||
+        node.type === "function_declaration" ||
+        node.type === "class_declaration" ||
+        node.type === "interface_declaration" ||
+        node.type === "type_alias_declaration" ||
+        node.type === "enum_declaration" ||
+        node.type === "expression_statement"
+      ) {
+        totalStatements++;
       }
-    } else if (
-      node.type === "import_statement" ||
-      node.type === "lexical_declaration" ||
-      node.type === "function_declaration" ||
-      node.type === "class_declaration" ||
-      node.type === "interface_declaration" ||
-      node.type === "type_alias_declaration" ||
-      node.type === "enum_declaration" ||
-      node.type === "expression_statement"
-    ) {
-      totalStatements++;
     }
-  }
 
-  return {
-    isBarrel: totalStatements > 0 && reExportCount / totalStatements > BARREL_THRESHOLD,
-    reExportCount,
-    totalStatements,
-  };
+    return {
+      isBarrel: totalStatements > 0 && reExportCount / totalStatements > BARREL_THRESHOLD,
+      reExportCount,
+      totalStatements,
+    };
+  });
 }
 
 /**
@@ -85,41 +84,40 @@ export function resolveBarrelExportsAst(
   namedExports: Map<string, string>;
   starExports: Set<string>;
 } {
-  const root = parseSource(content, barrelLang(filePath), filePath);
-  const namedExports = new Map<string, string>();
-  const starExports = new Set<string>();
+  return withParsedTree(content, barrelLang(filePath), filePath, (root) => {
+    const namedExports = new Map<string, string>();
+    const starExports = new Set<string>();
 
-  for (const node of root.namedChildren) {
-    if (node.type !== "export_statement") continue;
-    const source = node.childForFieldName("source");
-    if (!source) continue;
+    for (const node of root.namedChildren) {
+      if (node.type !== "export_statement") continue;
+      const source = node.childForFieldName("source");
+      if (!source) continue;
 
-    const specifier = extractStringContent(source);
-    if (!specifier) continue;
+      const specifier = extractStringContent(source);
+      if (!specifier) continue;
 
-    // Check for star export: export * from '...' or export * as ns from '...'
-    const hasStar = node.children.some((c) => c.type === "*" && !c.isNamed);
-    const hasNsExport = node.namedChildren.some((c) => c.type === "namespace_export");
-    if (hasStar || hasNsExport) {
-      starExports.add(specifier);
-      continue;
-    }
+      const hasStar = node.children.some((c) => c.type === "*" && !c.isNamed);
+      const hasNsExport = node.namedChildren.some((c) => c.type === "namespace_export");
+      if (hasStar || hasNsExport) {
+        starExports.add(specifier);
+        continue;
+      }
 
-    // Named re-exports: export { Foo, Bar } from '...'
-    const exportClause = node.namedChildren.find((c) => c.type === "export_clause");
-    if (exportClause) {
-      for (const spec of exportClause.namedChildren) {
-        if (spec.type === "export_specifier") {
-          const name = spec.childForFieldName("name");
-          if (name) {
-            namedExports.set(name.text, specifier);
+      const exportClause = node.namedChildren.find((c) => c.type === "export_clause");
+      if (exportClause) {
+        for (const spec of exportClause.namedChildren) {
+          if (spec.type === "export_specifier") {
+            const name = spec.childForFieldName("name");
+            if (name) {
+              namedExports.set(name.text, specifier);
+            }
           }
         }
       }
     }
-  }
 
-  return { namedExports, starExports };
+    return { namedExports, starExports };
+  });
 }
 
 /**
@@ -127,42 +125,39 @@ export function resolveBarrelExportsAst(
  * Used to resolve which names a star-exported source actually provides.
  */
 export function extractExportedNamesAst(content: string, filePath?: string): Set<string> {
-  const root = parseSource(content, barrelLang(filePath), filePath);
-  const names = new Set<string>();
+  return withParsedTree(content, barrelLang(filePath), filePath, (root) => {
+    const names = new Set<string>();
 
-  for (const node of root.namedChildren) {
-    if (node.type !== "export_statement") continue;
-    // Skip re-exports (they have a source)
-    if (node.childForFieldName("source")) continue;
+    for (const node of root.namedChildren) {
+      if (node.type !== "export_statement") continue;
+      if (node.childForFieldName("source")) continue;
 
-    // export { foo, bar }
-    const exportClause = node.namedChildren.find((c) => c.type === "export_clause");
-    if (exportClause) {
-      for (const spec of exportClause.namedChildren) {
-        if (spec.type === "export_specifier") {
-          const name = spec.childForFieldName("name");
-          if (name) names.add(name.text);
+      const exportClause = node.namedChildren.find((c) => c.type === "export_clause");
+      if (exportClause) {
+        for (const spec of exportClause.namedChildren) {
+          if (spec.type === "export_specifier") {
+            const name = spec.childForFieldName("name");
+            if (name) names.add(name.text);
+          }
         }
+        continue;
       }
-      continue;
-    }
 
-    // export function foo(), export class Bar, export enum Baz, etc.
-    const decl = node.childForFieldName("declaration");
-    if (decl) {
-      const name = decl.childForFieldName("name")?.text;
-      if (name) names.add(name);
-      // export const foo = ..., export let bar = ...
-      if (decl.type === "lexical_declaration") {
-        for (const declarator of decl.namedChildren) {
-          if (declarator.type === "variable_declarator") {
-            const varName = declarator.childForFieldName("name")?.text;
-            if (varName) names.add(varName);
+      const decl = node.childForFieldName("declaration");
+      if (decl) {
+        const name = decl.childForFieldName("name")?.text;
+        if (name) names.add(name);
+        if (decl.type === "lexical_declaration") {
+          for (const declarator of decl.namedChildren) {
+            if (declarator.type === "variable_declarator") {
+              const varName = declarator.childForFieldName("name")?.text;
+              if (varName) names.add(varName);
+            }
           }
         }
       }
     }
-  }
 
-  return names;
+    return names;
+  });
 }

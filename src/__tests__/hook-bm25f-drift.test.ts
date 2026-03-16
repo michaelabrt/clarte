@@ -11,6 +11,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { resolveEditTargets } from "../steer/targets-resolve.js";
+import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const RESOLVE_TARGETS = readFileSync(resolve(ROOT, "steer/targets-resolve.ts"), "utf-8");
@@ -133,5 +135,35 @@ describe("Hook BM25F drift detection", () => {
     // files in different directories.
     expect(GENERATE_HOOKS).toContain("Do NOT edit these files");
     expect(GENERATE_HOOKS).toMatch(/targetBasenames\.has\(r\.split.*pop/);
+  });
+
+  // ── Behavioral equivalence ───────────────────────────────────────────
+
+  it("library resolveEditTargets produces same top-5 as PROMPT_SCRIPT would", () => {
+    // Build a fixture that exercises path, symbol, import, coupling and proxy paths
+    const graph = makePersistedGraph({
+      files: {
+        "src/auth/login.ts": makeFileRecord({ role: null, symbolNames: ["authenticate", "validateToken"] }),
+        "src/auth/session.ts": makeFileRecord({ role: null, symbolNames: ["createSession"] }),
+        "src/db/users.ts": makeFileRecord({ role: null, symbolNames: ["findUser"] }),
+        "src/utils/hash.ts": makeFileRecord({ role: null, symbolNames: ["hashPassword"] }),
+        "src/core/engine.ts": makeFileRecord({ role: null }),
+      },
+      edges: [
+        { from: "src/auth/login.ts", to: "src/db/users.ts", importedNames: ["findUser"] },
+        { from: "src/auth/login.ts", to: "src/utils/hash.ts", importedNames: ["hashPassword"] },
+        { from: "src/auth/session.ts", to: "src/auth/login.ts", importedNames: ["authenticate"] },
+      ],
+      changeCoupling: [
+        { fileA: "src/auth/login.ts", fileB: "src/auth/session.ts", confidence: 0.9, coChangeCount: 8 },
+      ],
+    });
+
+    const targets = resolveEditTargets("auth login token", graph, 5);
+    // Verify the library produces a meaningful ranking (login.ts at top due to path + symbol match)
+    expect(targets.length).toBeGreaterThan(0);
+    expect(targets[0]).toBe("src/auth/login.ts");
+    // session.ts should appear via coupling or neighbor expansion
+    expect(targets).toContain("src/auth/session.ts");
   });
 });

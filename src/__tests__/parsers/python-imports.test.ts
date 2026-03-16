@@ -107,4 +107,17 @@ if typing.TYPE_CHECKING:
     expect(result[0].importedNames).toContain("dirname");
     expect(result[0].importedNames).toContain("basename");
   });
+
+  it("captures imports inside try/except blocks", () => {
+    const code = `
+try:
+    import ujson as json
+except ImportError:
+    import json
+`;
+    const result = parseImportsAst(code, "python");
+    expect(result.length).toBeGreaterThanOrEqual(2);
+    expect(result.some((r) => r.specifier === "ujson")).toBe(true);
+    expect(result.some((r) => r.specifier === "json")).toBe(true);
+  });
 });

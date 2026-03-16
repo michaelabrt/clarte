@@ -1,8 +1,8 @@
 import type { ArchitecturalLayer, ImportGraph, LayerConsistency, LayerEdge, LayerViolation } from "../types.js";
 import { LAYER_CONSISTENCY } from "../config/thresholds.js";
 
-/** Directory patterns for classifying files into architectural layers */
-const LAYER_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
+/** Directory patterns for classifying files into architectural layers (frontend) */
+const FRONTEND_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
   { name: "types", pattern: /(?:^|\/)types?\// },
   { name: "stores", pattern: /(?:^|\/)stores?\// },
   { name: "hooks", pattern: /(?:^|\/)hooks?\// },
@@ -12,6 +12,32 @@ const LAYER_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
   { name: "utils", pattern: /(?:^|\/)(?:utils?|lib|helpers?)\// },
   { name: "config", pattern: /(?:^|\/)config\// },
 ];
+
+/** Directory patterns for backend projects (Express, NestJS, Django, etc.) */
+const BACKEND_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
+  { name: "models", pattern: /(?:^|\/)models?\// },
+  { name: "controllers", pattern: /(?:^|\/)controllers?\// },
+  { name: "services", pattern: /(?:^|\/)services?\// },
+  { name: "middleware", pattern: /(?:^|\/)middleware\// },
+  { name: "routes", pattern: /(?:^|\/)routes?\// },
+  { name: "repositories", pattern: /(?:^|\/)repositor(?:y|ies)\// },
+  { name: "utils", pattern: /(?:^|\/)(?:utils?|lib|helpers?)\// },
+  { name: "config", pattern: /(?:^|\/)config\// },
+];
+
+/** Merged frontend + backend patterns (first match wins; duplicates like utils/config are deduplicated) */
+const LAYER_PATTERNS: Array<{ name: string; pattern: RegExp }> = (() => {
+  const seen = new Set<string>();
+  const merged: Array<{ name: string; pattern: RegExp }> = [];
+  for (const p of [...FRONTEND_PATTERNS, ...BACKEND_PATTERNS]) {
+    const key = `${p.name}:${p.pattern.source}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(p);
+    }
+  }
+  return merged;
+})();
 
 /**
  * Classify files into architectural layers and determine their dependency ordering.
@@ -132,15 +158,22 @@ function topologicalSortLayers(layers: ArchitecturalLayer[], layerEdges: LayerEd
   queue.sort(); // deterministic tie-breaking
 
   const sorted: string[] = [];
-  while (queue.length > 0) {
-    const node = queue.shift() as string;
+  let qi = 0;
+  while (qi < queue.length) {
+    const node = queue[qi++];
     sorted.push(node);
     for (const neighbor of adj.get(node) ?? []) {
       const newDeg = (inDeg.get(neighbor) ?? 1) - 1;
       inDeg.set(neighbor, newDeg);
       if (newDeg === 0) {
-        // Insert in sorted position for determinism
-        const insertIdx = queue.findIndex((q) => q > neighbor);
+        // Insert in sorted position within the unprocessed portion (after qi) for determinism
+        let insertIdx = -1;
+        for (let j = qi; j < queue.length; j++) {
+          if (queue[j] > neighbor) {
+            insertIdx = j;
+            break;
+          }
+        }
         if (insertIdx === -1) queue.push(neighbor);
         else queue.splice(insertIdx, 0, neighbor);
       }

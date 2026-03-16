@@ -4,6 +4,15 @@
  *
  * This avoids shipping the full @vscode/tree-sitter-wasm package (22 MB)
  * when we only need 7 grammars + the runtime (5.4 MB).
+ *
+ * Only 7 of 15+ grammars from @vscode/tree-sitter-wasm are copied
+ * (TypeScript, TSX, JavaScript, Python, Go, Rust, Java), saving ~16 MB.
+ *
+ * At runtime, initForLanguage() loads grammars lazily - only the grammars
+ * needed for the detected project language are loaded into memory.
+ *
+ * To reduce package size further, grammars could be split into optional
+ * peer dependencies or downloaded on demand at first use.
  */
 
 import { cpSync, mkdirSync, statSync } from "node:fs";

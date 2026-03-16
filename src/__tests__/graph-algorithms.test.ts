@@ -86,6 +86,16 @@ describe("findCircularDeps", () => {
 });
 
 describe("computeHITS", () => {
+  it("assigns uniform 0.5 scores for flat graphs", () => {
+    const files = ["a.ts", "b.ts", "c.ts"];
+    // No edges = all scores identical after HITS (flat graph guard)
+    const { authority, hub } = computeHITS(files, [], 30, 1e-6, new Set());
+    for (const f of files) {
+      expect(authority.get(f)).toBe(0.5);
+      expect(hub.get(f)).toBe(0.5);
+    }
+  });
+
   it("assigns high authority to star center (widely depended upon)", () => {
     const files = ["center", "a", "b", "c"];
     const edges = [edge("a", "center", ["foo", "bar"]), edge("b", "center", ["foo"]), edge("c", "center", ["baz"])];
