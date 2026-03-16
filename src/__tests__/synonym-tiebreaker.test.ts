@@ -163,20 +163,19 @@ describe("synonym expansion", () => {
     expect(targets[0]).toBe("src/runner/task-runner.ts");
   });
 
-  it("query 'api' expands to 'route' and 'handler' synonyms (exact token match)", () => {
-    // "api" → synonyms include "endpoint", "route", "handler".
-    // Path token matching is exact: "src/route/user.ts" has token "route".
-    // "src/handler/payment.ts" has token "handler".
+  it("query 'api' expands to 'endpoint' synonym only (S3: tightened groups)", () => {
+    // After S3: "api" → synonyms include "endpoint" only (not "route", "handler").
+    // "route" and "handler" are in a separate group.
     const graph = makeGraph({
       files: {
-        "src/route/user.ts": makeFile({ symbolNames: ["createUser", "getUser"] }),
+        "src/endpoint/user.ts": makeFile({ symbolNames: ["createUser", "getUser"] }),
         "src/handler/payment.ts": makeFile({ symbolNames: ["processPayment"] }),
         "src/utils/format.ts": makeFile({ symbolNames: ["formatDate"] }),
       },
     });
     const targets = resolveEditTargets("api broken", graph);
-    expect(targets).toContain("src/route/user.ts");
-    expect(targets).toContain("src/handler/payment.ts");
+    expect(targets).toContain("src/endpoint/user.ts");
+    expect(targets).not.toContain("src/handler/payment.ts");
     expect(targets).not.toContain("src/utils/format.ts");
   });
 

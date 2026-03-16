@@ -343,6 +343,22 @@ if (existsSync(graphPath)) {
       return result;
     }
     function tokQ(q) { return [...new Set(tokId(q))]; }
+    // Symbol-level query tokenizer: NL-only stop list, keeps programming terms (I2)
+    const NL_STOP = new Set([
+      "a","an","the","in","on","at","to","for","of","and","or","is","it","be","are","was","has",
+      "have","do","does","did","will","can","if","so","no","as","by","that","this","with","from",
+      "not","but","should","when","what","how","why","like","also","only","each","more","some",
+      "just","into",
+    ]);
+    function tokQSym(q) {
+      const parts = q.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+      const tokens = [];
+      for (const p of parts) {
+        const cc = splitCC(p).map(t => t.toLowerCase()).filter(t => t.length >= 2 && !NL_STOP.has(t));
+        tokens.push(...cc);
+      }
+      return [...new Set(tokens)];
+    }
     function buildDoc(fp, syms, impPaths, impNames) {
       const pt = fp.split(/[/.]+/).flatMap(s => tokId(s));
       const st = syms.flatMap(n => tokId(n));
@@ -368,30 +384,31 @@ if (existsSync(graphPath)) {
       return sc;
     }
 
+    // SYNC: targets-resolve.ts -- synonym groups (S3: split overly broad groups)
     const SYN_GROUPS = [
       ["auth","authentication","authorize","authorization"],["jwt","jsonwebtoken","token"],
-      ["session","cookie","credential"],["db","database","datastore"],
+      ["session","cookie","credential"],["db","database"],["datastore","persistence"],
       ["sql","sqlite","postgres","mysql","mariadb"],["orm","repository","entity","migration"],
-      ["api","endpoint","route","handler"],["http","request","response","fetch"],
-      ["ws","websocket","socket"],["msg","message","event","signal"],
+      ["api","endpoint"],["route","handler","middleware"],["http","request","response","fetch"],
+      ["ws","websocket","socket"],["msg","message"],["event","signal"],
       ["err","error","exception","fault"],["log","logger","logging"],
       ["cache","memoize","memo"],["queue","worker","job"],
-      ["pub","publish","subscribe","subscriber"],
+      ["pub","publish"],["subscribe","subscriber"],
       ["env","environment","dotenv"],["cfg","config","configuration","settings"],
       ["cmd","command","cli"],["fs","filesystem","directory"],
-      ["fmt","format","formatter","prettier","biome"],["lint","linter","eslint"],
-      ["pkg","package","module","bundle"],["dep","dependency","dependencies"],
-      ["tpl","template","render","renderer"],["jsx","tsx","component","react"],
-      ["css","style","stylesheet","tailwind"],["nav","navigation","router","routing"],
+      ["fmt","format","formatter"],["lint","linter","eslint"],
+      ["pkg","package","module"],["dep","dependency","dependencies"],
+      ["tpl","template"],["render","renderer"],["jsx","tsx","component","react"],
+      ["css","style","stylesheet","tailwind"],["nav","navigation"],["router","routing"],
       ["i18n","locale","translation","intl"],["tz","timezone","datetime"],
       ["url","uri","href","link"],["regex","regexp","pattern"],
       ["json","serialize","deserialize","marshal"],
       ["schema","validate","validator","validation"],
-      ["middleware","interceptor","guard","filter"],
+      ["interceptor","guard","filter"],
       ["mock","stub","fake","spy"],
-      ["async","promise","await","concurrent"],
-      ["stream","pipe","transform","readable","writable"],
-      ["crypto","encrypt","decrypt","hash","hmac"],["cert","certificate","tls","ssl"],
+      ["async","promise","await"],
+      ["stream","pipe","transform"],["readable","writable"],
+      ["crypto","encrypt","decrypt"],["hash","hmac"],["cert","certificate","tls","ssl"],
       ["verify","verification"],
       ["param","parameter","arg","argument"],["init","initialize","bootstrap"],
       ["delete","remove","destroy"],["send","emit","dispatch"],
@@ -502,7 +519,8 @@ if (existsSync(graphPath)) {
 
       if (!scores.size) return [];
 
-      // 1-hop directional expansion: importers (consumers) > imports (providers)
+      // Spreading activation expansion (S11): replaces 1-hop fixed-factor
+      // Hop 1 = current behavior, hops 2-3 capture transitive dependencies at decay
       const direct = new Set(scores.keys());
       const importers = new Map(), imports = new Map();
       for (const e of (g.edges || [])) {
@@ -511,19 +529,40 @@ if (existsSync(graphPath)) {
         if (!imports.has(e.from)) imports.set(e.from, []);
         imports.get(e.from).push(e.to);
       }
-      for (const [f, sc] of [...scores.entries()]) {
-        if (!direct.has(f)) continue;
-        const ieSc = sc * IE;
-        for (const imp of (importers.get(f) || [])) if (ieSc > (scores.get(imp) || 0)) scores.set(imp, ieSc);
-        const imSc = sc * IM;
-        for (const dep of (imports.get(f) || [])) if (imSc > (scores.get(dep) || 0)) scores.set(dep, imSc);
-      }
-
-      // Co-change coupling
+      const couplingMap = new Map();
       for (const c of (g.changeCoupling || [])) {
         if (c.confidence < MC) continue;
-        if (direct.has(c.fileA) && !scores.has(c.fileB) && g.files[c.fileB]) scores.set(c.fileB, (scores.get(c.fileA) || 1) * CF);
-        if (direct.has(c.fileB) && !scores.has(c.fileA) && g.files[c.fileA]) scores.set(c.fileA, (scores.get(c.fileB) || 1) * CF);
+        if (!couplingMap.has(c.fileA)) couplingMap.set(c.fileA, []);
+        couplingMap.get(c.fileA).push(c.fileB);
+        if (!couplingMap.has(c.fileB)) couplingMap.set(c.fileB, []);
+        couplingMap.get(c.fileB).push(c.fileA);
+      }
+      const MAX_HOPS = 3;
+      for (let hop = 1; hop <= MAX_HOPS; hop++) {
+        const decay = hop === 1 ? 1.0 : Math.pow(0.5, hop - 1);
+        const newScores = new Map();
+        for (const [f, sc] of scores) {
+          if (!direct.has(f) && hop === 1) continue;
+          if (sc <= 0) continue;
+          for (const imp of (importers.get(f) || [])) {
+            if (!g.files[imp]) continue;
+            const boost = sc * IE * decay;
+            if (boost > (newScores.get(imp) || 0)) newScores.set(imp, boost);
+          }
+          for (const dep of (imports.get(f) || [])) {
+            if (!g.files[dep]) continue;
+            const boost = sc * IM * decay;
+            if (boost > (newScores.get(dep) || 0)) newScores.set(dep, boost);
+          }
+          for (const partner of (couplingMap.get(f) || [])) {
+            if (!g.files[partner]) continue;
+            const boost = sc * CF * decay;
+            if (boost > (newScores.get(partner) || 0)) newScores.set(partner, boost);
+          }
+        }
+        for (const [f, sc] of newScores) {
+          if (sc > (scores.get(f) || 0)) scores.set(f, sc);
+        }
       }
 
       const iTargets = new Set((g.edges || []).map(e => e.to));
@@ -574,10 +613,80 @@ if (existsSync(graphPath)) {
         "Based on dependency graph analysis, these files are most likely to need editing.",
         "Key symbols are listed so you can navigate directly without a broad search.", "",
       ];
+      // Symbol-level BM25+ corpus stats (S1)
+      const SYM_K1 = 1.2, SYM_B = 0.4, SYM_DELTA = 1.0;
+      const NAME_W = 0.5, AUTH_W = 0.3;
+      let symN = 0;
+      const symDf = new Map();
+      let totalBodyLen = 0;
+      for (const f of Object.keys(graph.files)) {
+        const bt = graph.files[f]?.symbolBodyTokens;
+        if (!bt) continue;
+        for (const toks of Object.values(bt)) {
+          symN++;
+          totalBodyLen += toks.length;
+          const seen = new Set(toks);
+          for (const t of seen) symDf.set(t, (symDf.get(t) || 0) + 1);
+        }
+      }
+      const avgBL = symN > 0 ? totalBodyLen / symN : 1;
+      const symQueryBase = tokQSym(prompt);
+      // S2: synonym expansion for symbol scoring
+      const symSynonyms = [];
+      for (const t of symQueryBase) {
+        const syns = SYN_MAP.get(t);
+        if (syns) for (const s of syns) if (!symQueryBase.includes(s)) symSynonyms.push(s);
+      }
+      const SYN_D = 0.3;
+      // BM25+ scoring function with delta for short docs
+      function symBM25(tokens, terms, discount) {
+        let sc = 0;
+        for (const t of terms) {
+          const tf = tokens.filter(tok => tok === t).length;
+          if (tf === 0) continue;
+          const df = symDf.get(t) || 1;
+          const idf = Math.log((symN - df + 0.5) / (df + 0.5) + 1);
+          const normTf = tf / (1 - SYM_B + SYM_B * tokens.length / Math.max(avgBL, 1));
+          sc += (discount || 1) * idf * ((normTf * (SYM_K1 + 1)) / (normTf + SYM_K1) + SYM_DELTA);
+        }
+        return sc;
+      }
+
+      const predictedSymbols = {};
       for (const fp of targets) {
         lines.push("## " + fp);
-        const syms = ((graph.files[fp] && graph.files[fp].symbolNames) || []).slice(0, 8);
+        const allSyms = (graph.files[fp]?.symbolNames) || [];
+        const bodyToks = graph.files[fp]?.symbolBodyTokens || {};
+        const symAuth = graph.files[fp]?.symbolAuthority || {};
+        const symLines = graph.files[fp]?.symbolStartLines || {};
+        const intraCalls = graph.files[fp]?.intraFileCalls || [];
+        const scoredSyms = allSyms.map(s => {
+          const bt = bodyToks[s] || [];
+          const bodyScore = symBM25(bt, symQueryBase, 1) + symBM25(bt, symSynonyms, SYN_D);
+          const nt = tokQSym(s);
+          const nameScore = symBM25(nt, symQueryBase, 1) + symBM25(nt, symSynonyms, SYN_D);
+          const auth = symAuth[s] || 0;
+          const score = bodyScore + NAME_W * nameScore + AUTH_W * auth;
+          return { s, score, line: symLines[s] || 0 };
+        });
+        scoredSyms.sort((a, b) => b.score - a.score);
+        const topSyms = scoredSyms.slice(0, 3).filter(x => x.score > 0);
+        // Annotated display with caller/callee chains
+        let symParts = topSyms.map(x => x.line ? x.s + " (L" + x.line + ")" : x.s);
+        for (const [caller, callee] of intraCalls) {
+          const ci = topSyms.findIndex(x => x.s === caller);
+          const di = topSyms.findIndex(x => x.s === callee);
+          if (ci >= 0 && di >= 0) {
+            const c = topSyms[ci], d = topSyms[di];
+            const chain = c.s + " (L" + c.line + ") -> " + d.s + " (L" + d.line + ")";
+            const rest = topSyms.filter((_, i) => i !== ci && i !== di).map(x => x.line ? x.s + " (L" + x.line + ")" : x.s);
+            symParts = [chain, ...rest];
+            break;
+          }
+        }
+        const syms = symParts;
         if (syms.length) lines.push("Key symbols: " + syms.join(", "));
+        predictedSymbols[fp] = topSyms.map(x => x.s);
         // Relationship hints: show connections to other target files
         const relatedImporters = (fileImporters.get(fp) || []).filter(f => targetSet.has(f));
         const relatedImports = (fileImports.get(fp) || []).filter(f => targetSet.has(f));
@@ -585,7 +694,10 @@ if (existsSync(graphPath)) {
         if (relatedImports.length) lines.push("Imports from: " + relatedImports.join(", "));
         // Test file paths from testMapping (saves a Glob call)
         const tests = (graph.testMapping && graph.testMapping[fp]) || [];
-        if (tests.length) lines.push("Tests: " + tests.slice(0, 3).join(", "));
+        if (tests.length) {
+          lines.push("Tests: " + tests.slice(0, 3).join(", "));
+          lines.push("When writing tests, update these existing test files rather than creating new ones.");
+        }
         lines.push("");
       }
       // Negative guidance: warn about runners-up with same basename as a target (decoys)
@@ -607,7 +719,7 @@ if (existsSync(graphPath)) {
       // Log prediction for feedback loop (precision/recall measurement over time)
       try {
         mkdirSync(STATE_DIR, { recursive: true });
-        const prediction = { timestamp: new Date().toISOString(), query: prompt.slice(0, 500), targets };
+        const prediction = { timestamp: new Date().toISOString(), query: prompt.slice(0, 500), targets, symbols: predictedSymbols };
         writeFileSync(resolve(STATE_DIR, "predictions.json"), JSON.stringify(prediction));
       } catch {}
       process.exit(0);

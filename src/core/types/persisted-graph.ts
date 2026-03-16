@@ -43,6 +43,14 @@ export interface FileRecord {
   communityId: number | null;
   /** All function/method/class names defined in this file, for BM25 symbol indexing */
   symbolNames?: string[];
+  /** Deduped body tokens per symbol, for symbol-level BM25 scoring */
+  symbolBodyTokens?: Record<string, string[]>;
+  /** 1-based start line per symbol, for navigation hints */
+  symbolStartLines?: Record<string, number>;
+  /** Per-symbol authority score [0,1] from weighted in-degree (cross-file imports + intra-file callers) */
+  symbolAuthority?: Record<string, number>;
+  /** Intra-file caller→callee edges as compact [caller, callee] tuples */
+  intraFileCalls?: Array<[string, string]>;
 }
 
 export interface EdgeRecord {
