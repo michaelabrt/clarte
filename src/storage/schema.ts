@@ -2,12 +2,14 @@
  * SQLite schema DDL for the clarte graph database.
  * All tables, indexes, virtual tables and pragmas defined here.
  *
- * Schema version: 1
+ * Schema version: 2
+ *   v1 -> v2: added symbols.is_exported, symbol_edges.confidence,
+ *             FTS5 column rename (name -> symbol_name), dropped content-sync.
  */
 
 import type { DatabaseAdapter } from "./db-adapter.js";
 
-export const SCHEMA_VERSION = "1";
+export const SCHEMA_VERSION = "2";
 
 /**
  * Initialize the database schema within a single transaction.
@@ -24,7 +26,7 @@ export function initSchema(db: DatabaseAdapter): void {
   db.exec("PRAGMA cache_size = -64000");
 
   // Check schema version before applying DDL
-  checkSchemaVersion(db);
+  const currentVersion = getSchemaVersion(db);
 
   const createAll = db.transaction(() => {
     db.exec(`
@@ -63,9 +65,10 @@ export function initSchema(db: DatabaseAdapter): void {
         end_line     INTEGER,
         authority    REAL,
         body_hash    TEXT,
-        -- Stored here for FTS5 content-sync and steer module reconstruction
+        -- Stored here for FTS5 and steer module reconstruction
         body_tokens  TEXT,
         import_names TEXT,
+        is_exported  INTEGER DEFAULT 0,
         UNIQUE(file_path, name, start_line)
       )
     `);
@@ -92,6 +95,8 @@ export function initSchema(db: DatabaseAdapter): void {
         to_symbol_id    INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,
         kind            TEXT    NOT NULL,
         line            INTEGER,
+        ordinal         INTEGER,
+        confidence      REAL,
         PRIMARY KEY (from_symbol_id, to_symbol_id, kind)
       )
     `);
@@ -140,27 +145,43 @@ export function initSchema(db: DatabaseAdapter): void {
     `);
 
     // FTS5 virtual table for symbol full-text search.
-    // Column names match symbols table columns for content-sync to work.
+    // Standalone (no content-sync) so column names are independent of the symbols table.
     tryCreateFts5(db);
 
     // vec0 virtual table for semantic search (optional, requires sqlite-vec extension).
     tryCreateVec0(db);
 
-    // Write schema version on first creation
+    // Regular table for embedding BLOB storage (always available, no extensions needed).
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS symbol_embeddings (
+        symbol_id INTEGER PRIMARY KEY REFERENCES symbols(id) ON DELETE CASCADE,
+        embedding BLOB NOT NULL,
+        body_hash TEXT
+      )
+    `);
+
+    // Write schema version on first creation (OR IGNORE keeps existing value)
     db.exec(`INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`);
     db.exec(`INSERT OR IGNORE INTO meta (key, value) VALUES ('created_at', '${new Date().toISOString()}')`);
   });
 
   createAll();
+
+  // Migrate existing v1 databases to v2
+  if (currentVersion === 1) {
+    migrateV1toV2(db);
+  }
 }
 
-function checkSchemaVersion(db: DatabaseAdapter): void {
-  // If meta table doesn't exist yet, schema hasn't been applied - skip check
+/**
+ * Read the current schema version from the meta table.
+ * Returns undefined for a fresh database with no meta table.
+ * Throws if the database was created by a newer version of clarte.
+ */
+function getSchemaVersion(db: DatabaseAdapter): number | undefined {
   try {
-    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get<{
-      value: string;
-    }>();
-    if (!row) return; // fresh database
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get<{ value: string }>();
+    if (!row) return undefined;
 
     const dbVersion = parseInt(row.value, 10);
     const codeVersion = parseInt(SCHEMA_VERSION, 10);
@@ -171,11 +192,55 @@ function checkSchemaVersion(db: DatabaseAdapter): void {
           `This installation supports schema v${SCHEMA_VERSION}. Upgrade clarte to open this database.`,
       );
     }
+
+    return dbVersion;
   } catch (err) {
     const msg = (err as Error).message;
     // "no such table: meta" means fresh DB - that's fine
-    if (msg.includes("no such table")) return;
+    if (msg.includes("no such table")) return undefined;
     throw err;
+  }
+}
+
+/**
+ * Migrate a v1 database to v2:
+ * - Add symbols.is_exported column
+ * - Add symbol_edges.confidence column
+ * - Recreate FTS5 table (column rename name -> symbol_name, drop content-sync)
+ * - Repopulate FTS from existing symbols
+ */
+function migrateV1toV2(db: DatabaseAdapter): void {
+  tryAddColumn(db, "symbols", "is_exported INTEGER DEFAULT 0");
+  tryAddColumn(db, "symbol_edges", "confidence REAL");
+
+  // Recreate FTS5: drop old content-sync table, create standalone with renamed column
+  try {
+    db.exec("DROP TABLE IF EXISTS fts_symbols");
+  } catch {
+    // FTS5 not available or table didn't exist
+  }
+  tryCreateFts5(db);
+
+  // Repopulate FTS from existing symbols
+  try {
+    db.exec(`
+      INSERT INTO fts_symbols(rowid, file_path, symbol_name, body_tokens, import_names)
+      SELECT id, file_path, name, COALESCE(body_tokens, ''), COALESCE(import_names, '')
+      FROM symbols
+    `);
+  } catch {
+    // FTS5 not available
+  }
+
+  // Stamp the new version
+  db.exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`);
+}
+
+function tryAddColumn(db: DatabaseAdapter, table: string, columnDef: string): void {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
+  } catch {
+    // Column already exists (fresh DB) or other issue - safe to ignore
   }
 }
 
@@ -184,11 +249,9 @@ function tryCreateFts5(db: DatabaseAdapter): void {
     db.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS fts_symbols USING fts5(
         file_path,
-        name,
+        symbol_name,
         body_tokens,
         import_names,
-        content=symbols,
-        content_rowid=id,
         tokenize='porter unicode61'
       )
     `);
