@@ -113,7 +113,6 @@ const STOP_WORDS = new Set([
  * When a query contains any term in a group, all other terms in that group
  * are added as expansion terms with reduced weight (via IDF dilution).
  */
-// SYNC: generate-hooks.ts PROMPT_SCRIPT SYN_GROUPS (S3: split overly broad groups)
 const SYNONYM_GROUPS: string[][] = [
   ["auth", "authenticate", "authentication", "authenticator", "authorize", "authorization"],
   ["jwt", "jsonwebtoken", "token"],
@@ -511,10 +510,14 @@ function applyTestProxy(
   }
 }
 
+const MAX_EXPANSION_HOPS = 3;
+
 /**
- * Expand scores to 1-hop import neighbors with directional asymmetry.
- * Importers (consumers) get a larger boost than imports (providers).
- * Also adds co-change coupling partners of direct matches.
+ * Spreading activation expansion: propagate scores through import and coupling edges
+ * with exponential decay per hop. Replaces 1-hop fixed-factor expansion.
+ *
+ * Hop 1 = direct neighbors (equivalent to old behavior), hops 2-3 capture transitive
+ * dependencies at 0.5^(hop-1) decay. Coupling edges are included at every hop.
  */
 function expandNeighbors(scores: Map<string, number>, directMatches: Set<string>, graph: PersistedGraph): void {
   const importers = new Map<string, string[]>();
@@ -525,39 +528,41 @@ function expandNeighbors(scores: Map<string, number>, directMatches: Set<string>
     if (!imports.has(edge.from)) imports.set(edge.from, []);
     imports.get(edge.from)?.push(edge.to);
   }
-  for (const [file, score] of [...scores.entries()]) {
-    if (!directMatches.has(file)) continue;
-    const importerScore = score * IMPORTER_EXPANSION;
-    for (const importer of importers.get(file) ?? []) {
-      if (importerScore > (scores.get(importer) ?? 0)) {
-        scores.set(importer, importerScore);
-      }
-    }
-    const importScore = score * IMPORT_EXPANSION;
-    for (const imp of imports.get(file) ?? []) {
-      if (importScore > (scores.get(imp) ?? 0)) {
-        scores.set(imp, importScore);
-      }
-    }
+
+  const couplingMap = new Map<string, Array<{ file: string; confidence: number }>>();
+  for (const c of graph.changeCoupling) {
+    if (c.confidence < MIN_COUPLING_CONFIDENCE) continue;
+    if (!couplingMap.has(c.fileA)) couplingMap.set(c.fileA, []);
+    couplingMap.get(c.fileA)?.push({ file: c.fileB, confidence: c.confidence });
+    if (!couplingMap.has(c.fileB)) couplingMap.set(c.fileB, []);
+    couplingMap.get(c.fileB)?.push({ file: c.fileA, confidence: c.confidence });
   }
 
-  // Co-change coupling: scale factor by confidence (0.5 -> 0.2x, 0.9 -> 0.36x, 1.0 -> 0.4x).
-  // Uses max-update pattern (matching import expansion above) so coupling can boost
-  // files that already have a weak BM25 score rather than only adding new ones.
-  for (const coupling of graph.changeCoupling) {
-    if (coupling.confidence < MIN_COUPLING_CONFIDENCE) continue;
-    const scaledFactor = COUPLING_FACTOR * coupling.confidence;
-    if (directMatches.has(coupling.fileA) && graph.files[coupling.fileB]) {
-      const couplingScore = (scores.get(coupling.fileA) ?? 1) * scaledFactor;
-      if (couplingScore > (scores.get(coupling.fileB) ?? 0)) {
-        scores.set(coupling.fileB, couplingScore);
+  for (let hop = 1; hop <= MAX_EXPANSION_HOPS; hop++) {
+    const decay = hop === 1 ? 1.0 : 0.5 ** (hop - 1);
+    const newScores = new Map<string, number>();
+    for (const [file, score] of scores) {
+      if (!directMatches.has(file) && hop === 1) continue;
+      if (score <= 0) continue;
+
+      for (const importer of importers.get(file) ?? []) {
+        if (!graph.files[importer]) continue;
+        const boost = score * IMPORTER_EXPANSION * decay;
+        if (boost > (newScores.get(importer) ?? 0)) newScores.set(importer, boost);
+      }
+      for (const dep of imports.get(file) ?? []) {
+        if (!graph.files[dep]) continue;
+        const boost = score * IMPORT_EXPANSION * decay;
+        if (boost > (newScores.get(dep) ?? 0)) newScores.set(dep, boost);
+      }
+      for (const { file: partner, confidence } of couplingMap.get(file) ?? []) {
+        if (!graph.files[partner]) continue;
+        const boost = score * COUPLING_FACTOR * confidence * decay;
+        if (boost > (newScores.get(partner) ?? 0)) newScores.set(partner, boost);
       }
     }
-    if (directMatches.has(coupling.fileB) && graph.files[coupling.fileA]) {
-      const couplingScore = (scores.get(coupling.fileB) ?? 1) * scaledFactor;
-      if (couplingScore > (scores.get(coupling.fileA) ?? 0)) {
-        scores.set(coupling.fileA, couplingScore);
-      }
+    for (const [f, sc] of newScores) {
+      if (sc > (scores.get(f) ?? 0)) scores.set(f, sc);
     }
   }
 }
@@ -730,9 +735,223 @@ export function resolveEditTargetsWithMeta(
 }
 
 /**
+ * Check whether a prompt mentions a file, using basename matching and ./prefix matching.
+ * Returns true if the file path (or its basename without extension for names >3 chars)
+ * appears in the prompt without negation in the preceding 30 characters.
+ */
+function mentionsFile(prompt: string, filePath: string): boolean {
+  if (prompt.includes(filePath)) return true;
+  const base = filePath
+    .split("/")
+    .pop()
+    ?.replace(/\.[^.]+$/, "");
+  if (base && base.length > 3 && prompt.includes(base)) return true;
+  if (prompt.includes(`./${filePath}`)) return true;
+  return false;
+}
+
+const NEGATION_RE = /\b(?:not|don't|do not|isn't|never|without|except|excluding|outside)\b/i;
+
+/**
  * Check whether the prompt already mentions any of the resolved targets.
  * When true, the agent can self-localize and pre-flight adds no value.
+ *
+ * Uses basename matching (without extension for names >3 chars) and negation detection:
+ * mentions preceded by negation words within 30 chars are not counted.
  */
 export function promptMentionsTargets(query: string, targets: string[]): boolean {
-  return targets.some((t) => query.includes(t));
+  return targets.some((t) => {
+    if (!mentionsFile(query, t)) return false;
+    const idx = query.indexOf(t);
+    if (idx < 0) return true; // matched via basename, skip negation check
+    const before = query.slice(Math.max(0, idx - 30), idx).toLowerCase();
+    return !NEGATION_RE.test(before);
+  });
+}
+
+/** Natural-language-only stop words for symbol-level BM25+. Keeps programming terms. */
+const NL_STOP = new Set([
+  "a",
+  "an",
+  "the",
+  "in",
+  "on",
+  "at",
+  "to",
+  "for",
+  "of",
+  "and",
+  "or",
+  "is",
+  "it",
+  "be",
+  "are",
+  "was",
+  "has",
+  "have",
+  "do",
+  "does",
+  "did",
+  "will",
+  "can",
+  "if",
+  "so",
+  "no",
+  "as",
+  "by",
+  "that",
+  "this",
+  "with",
+  "from",
+  "not",
+  "but",
+  "should",
+  "when",
+  "what",
+  "how",
+  "why",
+  "like",
+  "also",
+  "only",
+  "each",
+  "more",
+  "some",
+  "just",
+  "into",
+]);
+
+/**
+ * Tokenize a query for symbol-level matching. Uses NL-only stop list (keeps programming
+ * terms like "test", "config", "type" that are discriminative for symbol names).
+ */
+export function tokenizeQueryForSymbols(query: string): string[] {
+  const parts = query.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  const tokens: string[] = [];
+  for (const p of parts) {
+    const cc = splitCamelCase(p)
+      .map((t) => t.toLowerCase())
+      .filter((t) => t.length >= 2 && !NL_STOP.has(t));
+    tokens.push(...cc);
+  }
+  return [...new Set(tokens)];
+}
+
+const SYM_K1 = 1.2;
+const SYM_B = 0.4;
+const SYM_DELTA = 1.0;
+const NAME_W = 0.5;
+const AUTH_W = 0.3;
+const SYM_SYN_DISCOUNT = 0.3;
+
+/** BM25+ score for a single symbol's body tokens against query terms. */
+function scoreBM25Plus(
+  tokens: string[],
+  terms: string[],
+  df: Map<string, number>,
+  N: number,
+  avgdl: number,
+  discount = 1,
+): number {
+  let score = 0;
+  for (const t of terms) {
+    const tf = tokens.filter((tok) => tok === t).length;
+    if (tf === 0) continue;
+    const docFreq = df.get(t) ?? 1;
+    const idf = Math.log((N - docFreq + 0.5) / (docFreq + 0.5) + 1);
+    const normTf = tf / (1 - SYM_B + (SYM_B * tokens.length) / Math.max(avgdl, 1));
+    score += discount * idf * ((normTf * (SYM_K1 + 1)) / (normTf + SYM_K1) + SYM_DELTA);
+  }
+  return score;
+}
+
+export interface SymbolMatch {
+  name: string;
+  score: number;
+  line: number;
+}
+
+/**
+ * Rank symbols within target files by BM25+ scoring against the query.
+ * Combines body-token matching, name matching and authority weighting.
+ * Returns top 3 symbols per file (score > 0).
+ */
+export function rankSymbols(targetFiles: string[], graph: PersistedGraph, query: string): Map<string, SymbolMatch[]> {
+  // Build corpus stats across all files (not just targets)
+  let symN = 0;
+  const symDf = new Map<string, number>();
+  let totalBodyLen = 0;
+  for (const f of Object.keys(graph.files)) {
+    const bt = graph.files[f]?.symbolBodyTokens;
+    if (!bt) continue;
+    for (const toks of Object.values(bt)) {
+      symN++;
+      totalBodyLen += toks.length;
+      const seen = new Set(toks);
+      for (const t of seen) symDf.set(t, (symDf.get(t) ?? 0) + 1);
+    }
+  }
+  const avgBL = symN > 0 ? totalBodyLen / symN : 1;
+
+  const queryBase = tokenizeQueryForSymbols(query);
+  const synTerms: string[] = [];
+  for (const t of queryBase) {
+    const syns = SYNONYM_MAP.get(t);
+    if (syns) {
+      for (const s of syns) {
+        if (!queryBase.includes(s)) synTerms.push(s);
+      }
+    }
+  }
+  const uSyn = [...new Set(synTerms)];
+
+  const result = new Map<string, SymbolMatch[]>();
+  for (const fp of targetFiles) {
+    const fileData = graph.files[fp];
+    if (!fileData) continue;
+    const allSyms = fileData.symbolNames ?? [];
+    const bodyToks = fileData.symbolBodyTokens ?? {};
+    const symAuth = fileData.symbolAuthority ?? {};
+    const symLines = fileData.symbolStartLines ?? {};
+
+    const scored = allSyms.map((s) => {
+      const bt = bodyToks[s] ?? [];
+      const bodyScore =
+        scoreBM25Plus(bt, queryBase, symDf, symN, avgBL) +
+        scoreBM25Plus(bt, uSyn, symDf, symN, avgBL, SYM_SYN_DISCOUNT);
+      const nt = tokenizeQueryForSymbols(s);
+      const nameScore =
+        scoreBM25Plus(nt, queryBase, symDf, symN, avgBL) +
+        scoreBM25Plus(nt, uSyn, symDf, symN, avgBL, SYM_SYN_DISCOUNT);
+      const auth = symAuth[s] ?? 0;
+      const score = bodyScore + NAME_W * nameScore + AUTH_W * auth;
+      return { name: s, score, line: symLines[s] ?? 0 };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    result.set(
+      fp,
+      scored.slice(0, 3).filter((x) => x.score > 0),
+    );
+  }
+  return result;
+}
+
+const TRIVIAL_PROMPTS = new Set([
+  "yes",
+  "no",
+  "ok",
+  "okay",
+  "sure",
+  "continue",
+  "looks good",
+  "lgtm",
+  "go ahead",
+  "proceed",
+]);
+
+/**
+ * Check whether a prompt is too short or trivial for pre-flight analysis.
+ */
+export function shouldSkipPreFlight(prompt: string): boolean {
+  if (!prompt || prompt.length < 10) return true;
+  return TRIVIAL_PROMPTS.has(prompt.trim().toLowerCase());
 }

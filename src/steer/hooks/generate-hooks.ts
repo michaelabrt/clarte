@@ -1,7 +1,7 @@
-import { readdir, unlink } from "node:fs/promises";
+import { readdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { readJsonFile, writeFileSafe } from "../../core/utils.js";
-import type { PersistedGraph } from "../../core/types/persisted-graph.js";
 // context-map.ts retained for documentation but no longer generated at runtime (R.12 vestige)
 import { CLARTE_DIR } from "../../core/config/config.js";
 import { PRE_FLIGHT_AGENT_CONTENT } from "../context/pre-flight-agent.js";
@@ -275,6 +275,8 @@ const PROMPT_SCRIPT = `#!/usr/bin/env node
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, copyFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { resolve } from "node:path";
+import { resolveEditTargets, rankSymbols, shouldSkipPreFlight, promptMentionsTargets,
+         renderTaskContext, renderFallbackContext, resolveTargetsFromHistory } from "./bm25f.mjs";
 
 if (process.env.CLARTE_HOOKS_DISABLED) process.exit(0);
 const _debug = !!process.env.CLARTE_DEBUG;
@@ -282,564 +284,70 @@ function _dbg(msg) { if (_debug) process.stderr.write("[clarte] " + msg + "\\n")
 
 ${PARSE_STDIN}
 const prompt = input.prompt;
-if (!prompt || prompt.length < 10) process.exit(0);
-
-const trimmed = prompt.trim().toLowerCase();
-const TRIVIAL = new Set(["yes", "no", "ok", "okay", "sure", "continue", "looks good", "lgtm", "go ahead", "proceed"]);
-if (TRIVIAL.has(trimmed)) process.exit(0);
+if (shouldSkipPreFlight(prompt)) process.exit(0);
 
 const root = process.cwd();
 const STATE_DIR = resolve(root, ".clarte/hooks/.state");
-
-// Clean up stale task-context.md and agent copy from a previous prompt so the
-// pre-flight agent only fires when the current prompt is opaque enough to benefit.
 const tcPath = resolve(root, ".clarte/task-context.md");
 const agentSrc = resolve(root, ".clarte/agents/clarte-pre-flight.md");
 const agentDst = resolve(root, ".claude/agents/clarte-pre-flight.md");
-try { unlinkSync(tcPath); } catch (e) { _dbg("cleanup task-context: " + e.message); }
-try { unlinkSync(agentDst); } catch (e) { _dbg("cleanup agent copy: " + e.message); }
+try { unlinkSync(tcPath); } catch (e) { _dbg("cleanup: " + e.message); }
+try { unlinkSync(agentDst); } catch (e) { _dbg("cleanup: " + e.message); }
 
-// ── Primary: BM25F graph-based target resolution ──────────────────────────────
-// Uses persisted import graph + AST symbol names. Falls through to git history if no graph.
 const graphPath = resolve(root, ".clarte/graph.json");
 if (existsSync(graphPath)) {
   let graph;
-  try { graph = JSON.parse(readFileSync(graphPath, "utf-8")); } catch (e) { _dbg("graph parse: " + e.message); }
+  try { graph = JSON.parse(readFileSync(graphPath, "utf-8")); } catch (e) { _dbg("graph: " + e.message); }
   if (graph) {
-    // Stop words: common words that match too many files and add no retrieval signal.
-    // Verbs that are also discriminative function-name stems (parse, read, write) are
-    // left to IDF rather than hard-stopped.
-    const STOP = new Set([
-      "a","an","the","in","on","at","to","for","of","and","or","is","it","be","are","was","has",
-      "have","do","does","did","will","can","if","so","no","as","by","fix","bug","add","update",
-      "change","make","set","get","use","run","call","that","this","with","from",
-      "not","but","should","when","what","how","why","like","also","only","each","more","some",
-      "just","into","true","false","null","type","values","value","default","string","strings",
-      "array","arrays","number","object","function","class","file","files","test","tests",
-      "column","columns","options","config","index","generated","stored","against","individual",
-      "quoted","numeric","serialized","deserialized","validated","validates","generation","three","bugs",
-      "comma-joined","comma-separated","commas",
-    ]);
-    const TEST_RE = /(?:^|\\/)(?:test|spec|__tests__|__mocks__)\\/|\\.(?:test|spec)\\.[jt]sx?$/;
-    // SYNC: targets-resolve.ts -- BM25F tuning constants
-    const K1 = 1.2;   // BM25 saturation parameter
-    const BP = 0.3;    // path field b (very short docs)
-    const BS = 0.4;    // symbol field b (medium docs)
-    const BI = 0.5;    // import field b (longer docs)
-    const PW = 2.0;    // path field weight
-    const SW = 1.0;    // symbol field weight
-    const IW = 0.5;    // import field weight
-    const IE = 0.4;    // importer (consumer) expansion factor
-    const IM = 0.2;    // import (provider) expansion factor
-    const CF = 0.4;    // co-change coupling factor
-    const TP = 0.6;    // test-proxy transfer factor
-    const MC = 0.5;    // minimum coupling confidence
-    const IC = 0.5;    // import-only ceiling fraction
-
-    // SYNC: targets-resolve.ts -- tokenizeIdentifier
-    function splitCC(s) { return s.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").split(" ").filter(Boolean); }
-    function tokId(id) {
-      const result = [];
-      for (const part of id.split(/[^a-zA-Z0-9]+/)) {
-        const cp = splitCC(part);
-        const low = cp.map(t => t.toLowerCase());
-        const valid = low.filter(t => t.length >= 2);
-        const filt = valid.filter(t => !STOP.has(t));
-        result.push(...filt);
-        if (cp.length > 1 && filt.length < valid.length) {
-          const comp = part.toLowerCase();
-          if (comp.length >= 4 && !STOP.has(comp)) result.push(comp);
-        }
-      }
-      return result;
-    }
-    function tokQ(q) { return [...new Set(tokId(q))]; }
-    // Symbol-level query tokenizer: NL-only stop list, keeps programming terms (I2)
-    const NL_STOP = new Set([
-      "a","an","the","in","on","at","to","for","of","and","or","is","it","be","are","was","has",
-      "have","do","does","did","will","can","if","so","no","as","by","that","this","with","from",
-      "not","but","should","when","what","how","why","like","also","only","each","more","some",
-      "just","into",
-    ]);
-    function tokQSym(q) {
-      const parts = q.split(/[^a-zA-Z0-9]+/).filter(Boolean);
-      const tokens = [];
-      for (const p of parts) {
-        const cc = splitCC(p).map(t => t.toLowerCase()).filter(t => t.length >= 2 && !NL_STOP.has(t));
-        tokens.push(...cc);
-      }
-      return [...new Set(tokens)];
-    }
-    function buildDoc(fp, syms, impPaths, impNames) {
-      const pt = fp.split(/[/.]+/).flatMap(s => tokId(s));
-      const st = syms.flatMap(n => tokId(n));
-      const it = [...(impPaths || []).flatMap(p => p.split(/[/.]+/).flatMap(s => tokId(s))), ...(impNames || []).flatMap(n => tokId(n))];
-      const ptf = new Map(), stf = new Map(), itf = new Map();
-      for (const t of pt) ptf.set(t, (ptf.get(t) || 0) + 1);
-      for (const t of st) stf.set(t, (stf.get(t) || 0) + 1);
-      for (const t of it) itf.set(t, (itf.get(t) || 0) + 1);
-      return { pt, st, it, ptf, stf, itf, all: new Set([...ptf.keys(), ...stf.keys()]) };
-    }
-    // SYNC: targets-resolve.ts -- scoreBM25F
-    function scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, useImports) {
-      let sc = 0;
-      for (const term of terms) {
-        const dfc = df.get(term) || 1;
-        const idf = Math.log((N - dfc + 0.5) / (dfc + 0.5) + 1);
-        const tfP = doc.ptf.get(term) || 0, tfS = doc.stf.get(term) || 0;
-        let ptf = 0;
-        if (tfP > 0) ptf += PW * tfP / (1 - BP + BP * doc.pt.length / aPL);
-        if (tfS > 0) ptf += SW * tfS / (1 - BS + BS * doc.st.length / aSL);
-        if (useImports) { const tfI = doc.itf.get(term) || 0; if (tfI > 0) ptf += IW * tfI / (1 - BI + BI * doc.it.length / aIL); }
-        if (ptf > 0) sc += idf * (ptf * (K1 + 1)) / (ptf + K1);
-      }
-      return sc;
-    }
-
-    // SYNC: targets-resolve.ts -- synonym groups (S3: split overly broad groups)
-    const SYN_GROUPS = [
-      ["auth","authenticate","authentication","authenticator","authorize","authorization"],
-      ["jwt","jsonwebtoken","token"],
-      ["session","cookie","credential"],["db","database"],["datastore","persistence"],
-      ["sql","sqlite","postgres","mysql","mariadb"],["orm","repository","entity","migration"],
-      ["api","endpoint"],["route","handler","middleware"],["http","request","response","fetch"],
-      ["ws","websocket","socket"],["msg","message"],["event","signal"],
-      ["err","error","exception","fault"],["log","logger","logging"],
-      ["cache","memoize","memo"],["queue","worker","job"],
-      ["pub","publish"],["subscribe","subscription","subscriber"],
-      ["env","environment","dotenv"],["cfg","config","configure","configuration","settings"],
-      ["cmd","command","cli"],["fs","filesystem","directory"],
-      ["fmt","format","formatter"],["lint","linter","eslint"],
-      ["pkg","package","module"],["dep","dependency","dependencies"],
-      ["tpl","template"],["render","renderer"],["jsx","tsx","component","react"],
-      ["css","style","stylesheet","tailwind"],["nav","navigation"],["router","routing"],
-      ["i18n","locale","translation","intl"],["tz","timezone","datetime"],
-      ["url","uri","href","link"],["regex","regexp","pattern"],
-      ["json","serialize","serialization","serializer","deserialize","deserialization","marshal"],
-      ["schema","validate","validation","validator"],
-      ["interceptor","guard","filter"],
-      ["mock","stub","fake","spy"],
-      ["async","promise","await"],
-      ["stream","pipe","transform"],["readable","writable"],
-      ["crypto","encrypt","decrypt"],["hash","hmac"],["cert","certificate","tls","ssl"],
-      ["verify","verification"],
-      ["param","parameter","arg","argument"],
-      ["init","initialize","initialization","initializer","bootstrap"],
-      ["delete","remove","destroy"],["send","emit","dispatch"],
-      ["retry","backoff"],["timeout","deadline"],
-      ["throttle","debounce","ratelimit"],["hook","callback","listener"],
-      ["plugin","extension","addon"],["permission","access","acl"],
-      ["parse","parser","parsing"],["upload","download","transfer"],
-      ["cron","schedule","timer"],
-      ["compile","compilation","compiler"],["generate","generation","generator"],
-      ["migrate","migration"],["connect","connection"],
-      ["execute","execution","executor"],["resolve","resolution","resolver"],
-      ["register","registration"],
-    ];
-    const SYN_MAP = new Map();
-    for (const grp of SYN_GROUPS) for (const t of grp) {
-      const o = SYN_MAP.get(t) || []; SYN_MAP.set(t, [...new Set([...o, ...grp.filter(x => x !== t)])]);
-    }
-    const SYNONYM_DISCOUNT = 0.3; // SYNC: targets-resolve.ts
-
-    function resolveTargets(q, g) {
-      const terms = tokQ(q);
-      if (!terms.length) return [];
-      const fps = Object.keys(g.files || {}).filter(fp => !TEST_RE.test(fp));
-      if (!fps.length) return [];
-
-      // Collect exported symbol names and import edges per file
-      const exported = new Map();
-      const fImportPaths = new Map(), fImportNames = new Map();
-      for (const e of (g.edges || [])) {
-        if (!exported.has(e.to)) exported.set(e.to, []);
-        exported.get(e.to).push(...(e.importedNames || []));
-        if (!fImportPaths.has(e.from)) fImportPaths.set(e.from, []);
-        fImportPaths.get(e.from).push(e.to);
-        if (!fImportNames.has(e.from)) fImportNames.set(e.from, []);
-        fImportNames.get(e.from).push(...(e.importedNames || []));
-      }
-
-      // Build BM25F documents: path + symbols + imports fields (deduped)
-      const docs = new Map();
-      for (const fp of fps) {
-        const syms = [...new Set([...(exported.get(fp) || []), ...((g.files[fp] && g.files[fp].symbolNames) || [])])];
-        docs.set(fp, buildDoc(fp, syms, fImportPaths.get(fp) || [], fImportNames.get(fp) || []));
-      }
-
-      // Per-field avgdl for BM25F normalization
-      const N = docs.size;
-      const dv = [...docs.values()];
-      const aPL = Math.max(1, dv.reduce((s, d) => s + d.pt.length, 0) / N);
-      const sdocs = dv.filter(d => d.st.length > 0);
-      const aSL = sdocs.length ? Math.max(5, sdocs.reduce((s, d) => s + d.st.length, 0) / sdocs.length) : 5;
-      const idocs = dv.filter(d => d.it.length > 0);
-      const aIL = idocs.length ? Math.max(5, idocs.reduce((s, d) => s + d.it.length, 0) / idocs.length) : 5;
-
-      // Unified IDF: term counts once per document regardless of which field it appears in
-      const df = new Map();
-      for (const doc of docs.values()) for (const t of doc.all) df.set(t, (df.get(t) || 0) + 1);
-
-      const synTerms = [];
-      for (const t of terms) { for (const s of (SYN_MAP.get(t) || [])) if (!terms.includes(s) && !STOP.has(s)) synTerms.push(s); }
-      const uSyn = [...new Set(synTerms)];
-      // SYNC: targets-resolve.ts -- imports always contribute (3.7); IMPORT_CEILING prevents dominance
-      const scores = new Map();
-      const impOnly = new Set();
-      for (const [fp, doc] of docs) {
-        let sc = scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, true);
-        if (uSyn.length) sc += SYNONYM_DISCOUNT * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL, true);
-        if (sc > 0) {
-          const hasPS = terms.some(t => (doc.ptf.get(t) || 0) > 0 || (doc.stf.get(t) || 0) > 0)
-            || (uSyn.length && uSyn.some(t => (doc.ptf.get(t) || 0) > 0 || (doc.stf.get(t) || 0) > 0));
-          if (!hasPS) impOnly.add(fp);
-          scores.set(fp, sc);
-        }
-      }
-      // Ceiling: scale import-only scores below all path/symbol matches
-      if (impOnly.size > 0) {
-        const psScores = [];
-        for (const [fp, s] of scores) if (!impOnly.has(fp)) psScores.push(s);
-        if (psScores.length > 0) {
-          const minD = Math.min(...psScores);
-          let maxI = 0;
-          for (const fp of impOnly) { const s = scores.get(fp) || 0; if (s > maxI) maxI = s; }
-          const ceil = IC * minD;
-          if (maxI > ceil) {
-            const sc2 = ceil / maxI;
-            for (const fp of impOnly) scores.set(fp, (scores.get(fp) || 0) * sc2);
-          }
-        }
-      }
-
-      // Test-file proxy: score test files, transfer to their source files
-      const tm = g.testMapping || {};
-      const tmEntries = Object.entries(tm);
-      if (tmEntries.length > 0) {
-        const t2s = new Map();
-        for (const [src, tests] of tmEntries) {
-          for (const t of tests) {
-            if (!t2s.has(t)) t2s.set(t, []);
-            t2s.get(t).push(src);
-          }
-        }
-        for (const [tfp, srcs] of t2s) {
-          if (!g.files[tfp]) continue;
-          const syms = [...new Set([...(exported.get(tfp) || []), ...((g.files[tfp] && g.files[tfp].symbolNames) || [])])];
-          const tDoc = buildDoc(tfp, syms, fImportPaths.get(tfp) || [], fImportNames.get(tfp) || []);
-          let tSc = scoreBM25F(tDoc, terms, df, N, aPL, aSL, aIL, false);
-          if (tSc === 0) tSc = scoreBM25F(tDoc, terms, df, N, aPL, aSL, aIL, true);
-          if (tSc > 0) {
-            const proxy = tSc * TP;
-            for (const src of srcs) if (proxy > (scores.get(src) || 0)) scores.set(src, proxy);
-          }
-        }
-      }
-
-      if (!scores.size) return [];
-
-      // Spreading activation expansion (S11): replaces 1-hop fixed-factor
-      // Hop 1 = current behavior, hops 2-3 capture transitive dependencies at decay
-      const direct = new Set(scores.keys());
-      const importers = new Map(), imports = new Map();
-      for (const e of (g.edges || [])) {
-        if (!importers.has(e.to)) importers.set(e.to, []);
-        importers.get(e.to).push(e.from);
-        if (!imports.has(e.from)) imports.set(e.from, []);
-        imports.get(e.from).push(e.to);
-      }
-      const couplingMap = new Map();
-      for (const c of (g.changeCoupling || [])) {
-        if (c.confidence < MC) continue;
-        if (!couplingMap.has(c.fileA)) couplingMap.set(c.fileA, []);
-        couplingMap.get(c.fileA).push({ file: c.fileB, confidence: c.confidence });
-        if (!couplingMap.has(c.fileB)) couplingMap.set(c.fileB, []);
-        couplingMap.get(c.fileB).push({ file: c.fileA, confidence: c.confidence });
-      }
-      const MAX_HOPS = 3;
-      for (let hop = 1; hop <= MAX_HOPS; hop++) {
-        const decay = hop === 1 ? 1.0 : Math.pow(0.5, hop - 1);
-        const newScores = new Map();
-        for (const [f, sc] of scores) {
-          if (!direct.has(f) && hop === 1) continue;
-          if (sc <= 0) continue;
-          for (const imp of (importers.get(f) || [])) {
-            if (!g.files[imp]) continue;
-            const boost = sc * IE * decay;
-            if (boost > (newScores.get(imp) || 0)) newScores.set(imp, boost);
-          }
-          for (const dep of (imports.get(f) || [])) {
-            if (!g.files[dep]) continue;
-            const boost = sc * IM * decay;
-            if (boost > (newScores.get(dep) || 0)) newScores.set(dep, boost);
-          }
-          for (const { file: partner, confidence: conf } of (couplingMap.get(f) || [])) {
-            if (!g.files[partner]) continue;
-            const boost = sc * CF * conf * decay;
-            if (boost > (newScores.get(partner) || 0)) newScores.set(partner, boost);
-          }
-        }
-        for (const [f, sc] of newScores) {
-          if (sc > (scores.get(f) || 0)) scores.set(f, sc);
-        }
-      }
-
-      const iTargets = new Set((g.edges || []).map(e => e.to));
-      const iSources = new Set((g.edges || []).map(e => e.from));
-      return [...scores.entries()].sort((a, b) => {
-        const d = b[1] - a[1]; if (d !== 0) return d;
-        const aD = (iSources.has(a[0]) ? 1 : 0) - (iTargets.has(a[0]) ? 1 : 0);
-        const bD = (iSources.has(b[0]) ? 1 : 0) - (iTargets.has(b[0]) ? 1 : 0);
-        if (aD !== bD) return bD - aD;
-        const aB = (g.files[a[0]] && g.files[a[0]].betweenness) || 0;
-        const bB = (g.files[b[0]] && g.files[b[0]].betweenness) || 0;
-        if (aB !== bB) return bB - aB;
-        const aIB = (g.files[a[0]] && g.files[a[0]].importedByCount) || 0;
-        const bIB = (g.files[b[0]] && g.files[b[0]].importedByCount) || 0;
-        if (aIB !== bIB) return bIB - aIB;
-        return a[0].localeCompare(b[0]);
-      }).slice(0, 10).map(([fp]) => fp);
-    }
-
-    const allCandidates = resolveTargets(prompt, graph);
+    const allCandidates = resolveEditTargets(prompt, graph, 10);
     const targets = allCandidates.slice(0, 5);
     const runnersUp = allCandidates.slice(5);
     if (targets.length > 0) {
-      // Skip when the prompt already names a target file (agent can self-localize).
-      // Negation detection: "NOT in src/foo.ts" or "don't edit src/foo.ts" should not trigger bailout.
-      const negRe = /\\b(?:not|don't|do not|isn't|never|without|except|excluding|outside)\\b/i;
-      function mentionsFile(p, f) {
-        if (p.includes(f)) return true;
-        // Match basename without extension (e.g., "auth" matches "src/services/auth.ts")
-        const base = f.split("/").pop()?.replace(/\\.[^.]+$/, "");
-        if (base && base.length > 3 && p.includes(base)) return true;
-        // Match with ./ prefix
-        if (p.includes("./" + f)) return true;
-        return false;
-      }
-      const mentioned = targets.filter(t => {
-        if (!mentionsFile(prompt, t)) return false;
-        const idx = prompt.indexOf(t);
-        if (idx < 0) return true; // matched via basename, skip negation check
-        // Check 30 chars before the mention for negation
-        const before = prompt.slice(Math.max(0, idx - 30), idx).toLowerCase();
-        return !negRe.test(before);
-      });
-      if (mentioned.length > 0) process.exit(0);
+      if (promptMentionsTargets(prompt, targets)) process.exit(0);
 
-      // Build importer/import lookup for relationship hints
-      const fileImporters = new Map();
-      const fileImports = new Map();
-      for (const e of (graph.edges || [])) {
-        if (!fileImporters.has(e.to)) fileImporters.set(e.to, []);
-        fileImporters.get(e.to).push(e.from);
-        if (!fileImports.has(e.from)) fileImports.set(e.from, []);
-        fileImports.get(e.from).push(e.to);
-      }
-      const targetSet = new Set(targets);
-      const lines = [
-        "# Edit targets (clarte)", "",
-        "Based on dependency graph analysis, these files are most likely to need editing.",
-        "Key symbols are listed so you can navigate directly without a broad search.", "",
-      ];
-      // Symbol-level BM25+ corpus stats (S1)
-      const SYM_K1 = 1.2, SYM_B = 0.4, SYM_DELTA = 1.0;
-      const NAME_W = 0.5, AUTH_W = 0.3;
-      let symN = 0;
-      const symDf = new Map();
-      let totalBodyLen = 0;
-      for (const f of Object.keys(graph.files)) {
-        const bt = graph.files[f]?.symbolBodyTokens;
-        if (!bt) continue;
-        for (const toks of Object.values(bt)) {
-          symN++;
-          totalBodyLen += toks.length;
-          const seen = new Set(toks);
-          for (const t of seen) symDf.set(t, (symDf.get(t) || 0) + 1);
-        }
-      }
-      const avgBL = symN > 0 ? totalBodyLen / symN : 1;
-      const symQueryBase = tokQSym(prompt);
-      // S2: synonym expansion for symbol scoring
-      const symSynonyms = [];
-      for (const t of symQueryBase) {
-        const syns = SYN_MAP.get(t);
-        if (syns) for (const s of syns) if (!symQueryBase.includes(s)) symSynonyms.push(s);
-      }
-      const SYN_D = 0.3;
-      // BM25+ scoring function with delta for short docs
-      function symBM25(tokens, terms, discount) {
-        let sc = 0;
-        for (const t of terms) {
-          const tf = tokens.filter(tok => tok === t).length;
-          if (tf === 0) continue;
-          const df = symDf.get(t) || 1;
-          const idf = Math.log((symN - df + 0.5) / (df + 0.5) + 1);
-          const normTf = tf / (1 - SYM_B + SYM_B * tokens.length / Math.max(avgBL, 1));
-          sc += (discount || 1) * idf * ((normTf * (SYM_K1 + 1)) / (normTf + SYM_K1) + SYM_DELTA);
-        }
-        return sc;
+      const lastMod = new Map();
+      for (const fp of targets) {
+        try {
+          const age = execSync("git log -1 --format='%cr' -- " + JSON.stringify(fp),
+            { cwd: root, encoding: "utf-8", timeout: 1000 }).trim();
+          if (age) lastMod.set(fp, age);
+        } catch (e) { _dbg("git: " + e.message); }
       }
 
-      // Last-modified metadata for each target (lightweight: one git call per file, 1s timeout)
-      const lastModified = new Map();
-      try {
-        for (const fp of targets) {
-          try {
-            const age = execSync("git log -1 --format='%cr' -- " + JSON.stringify(fp), { cwd: root, encoding: "utf-8", timeout: 1000 }).trim();
-            if (age) lastModified.set(fp, age);
-          } catch (e) { _dbg("git log " + fp + ": " + e.message); }
-        }
-      } catch (e) { _dbg("git log loop: " + e.message); }
+      const symbols = rankSymbols(targets, graph, prompt);
+      const content = renderTaskContext(targets, runnersUp, graph, symbols, lastMod);
 
-      const predictedSymbols = {};
-      for (let i = 0; i < targets.length; i++) {
-        const fp = targets[i];
-        const ageSuffix = lastModified.get(fp) ? ", modified " + lastModified.get(fp) : "";
-        lines.push("## " + fp + " [rank " + (i + 1) + ageSuffix + "]");
-        const allSyms = (graph.files[fp]?.symbolNames) || [];
-        const bodyToks = graph.files[fp]?.symbolBodyTokens || {};
-        const symAuth = graph.files[fp]?.symbolAuthority || {};
-        const symLines = graph.files[fp]?.symbolStartLines || {};
-        const intraCalls = graph.files[fp]?.intraFileCalls || [];
-        const scoredSyms = allSyms.map(s => {
-          const bt = bodyToks[s] || [];
-          const bodyScore = symBM25(bt, symQueryBase, 1) + symBM25(bt, symSynonyms, SYN_D);
-          const nt = tokQSym(s);
-          const nameScore = symBM25(nt, symQueryBase, 1) + symBM25(nt, symSynonyms, SYN_D);
-          const auth = symAuth[s] || 0;
-          const score = bodyScore + NAME_W * nameScore + AUTH_W * auth;
-          return { s, score, line: symLines[s] || 0 };
-        });
-        scoredSyms.sort((a, b) => b.score - a.score);
-        const topSyms = scoredSyms.slice(0, 3).filter(x => x.score > 0);
-        // Annotated display with caller/callee chains
-        let symParts = topSyms.map(x => x.line ? x.s + " (L" + x.line + ")" : x.s);
-        for (const [caller, callee] of intraCalls) {
-          const ci = topSyms.findIndex(x => x.s === caller);
-          const di = topSyms.findIndex(x => x.s === callee);
-          if (ci >= 0 && di >= 0) {
-            const c = topSyms[ci], d = topSyms[di];
-            const chain = c.s + " (L" + c.line + ") -> " + d.s + " (L" + d.line + ")";
-            const rest = topSyms.filter((_, i) => i !== ci && i !== di).map(x => x.line ? x.s + " (L" + x.line + ")" : x.s);
-            symParts = [chain, ...rest];
-            break;
-          }
-        }
-        const syms = symParts;
-        if (syms.length) lines.push("Key symbols: " + syms.join(", "));
-        predictedSymbols[fp] = topSyms.map(x => x.s);
-        // Relationship hints: show connections to other target files
-        const relatedImporters = (fileImporters.get(fp) || []).filter(f => targetSet.has(f));
-        const relatedImports = (fileImports.get(fp) || []).filter(f => targetSet.has(f));
-        if (relatedImporters.length) lines.push("Imported by: " + relatedImporters.join(", "));
-        if (relatedImports.length) lines.push("Imports from: " + relatedImports.join(", "));
-        // Test file paths from testMapping (saves a Glob call)
-        const tests = (graph.testMapping && graph.testMapping[fp]) || [];
-        if (tests.length) {
-          lines.push("Tests: " + tests.slice(0, 3).join(", "));
-          lines.push("When writing tests, update these existing test files rather than creating new ones.");
-        }
-        lines.push("");
-      }
-      // Negative guidance: warn about runners-up with same basename as a target (decoys)
-      if (runnersUp.length > 0) {
-        const targetBasenames = new Set(targets.map(t => t.split("/").pop()));
-        const decoys = runnersUp.filter(r => targetBasenames.has(r.split("/").pop()));
-        if (decoys.length > 0) {
-          lines.push("## Do NOT edit these files");
-          lines.push("These scored similarly but are in different paths. They are likely not the right target:");
-          for (const d of decoys) lines.push("- " + d);
-          lines.push("");
-        }
-      }
       try {
         mkdirSync(resolve(root, ".clarte"), { recursive: true });
-        writeFileSync(resolve(root, ".clarte/task-context.md"), lines.join("\\n"));
-        if (existsSync(agentSrc)) { mkdirSync(resolve(root, ".claude/agents"), { recursive: true }); copyFileSync(agentSrc, agentDst); }
-      } catch (e) { _dbg("task-context write: " + e.message); }
-      // Log prediction for feedback loop (precision/recall measurement over time)
+        writeFileSync(tcPath, content);
+        if (existsSync(agentSrc)) {
+          mkdirSync(resolve(root, ".claude/agents"), { recursive: true });
+          copyFileSync(agentSrc, agentDst);
+        }
+      } catch (e) { _dbg("write: " + e.message); }
+
       try {
         mkdirSync(STATE_DIR, { recursive: true });
-        const prediction = { timestamp: new Date().toISOString(), query: prompt.slice(0, 500), targets, symbols: predictedSymbols };
-        writeFileSync(resolve(STATE_DIR, "predictions.json"), JSON.stringify(prediction));
-      } catch (e) { _dbg("prediction log: " + e.message); }
+        writeFileSync(resolve(STATE_DIR, "predictions.json"),
+          JSON.stringify({ timestamp: new Date().toISOString(), query: prompt.slice(0, 500), targets, symbols: Object.fromEntries(symbols) }));
+      } catch (e) { _dbg("predict: " + e.message); }
       process.exit(0);
     }
   }
 }
 
-// ── Fallback: git commit history BM25 ────────────────────────────────────────
-// When no graph is available, find the most similar past commit by prompt similarity
-// and surface the files it touched as candidates.
-function tokenize(text) {
-  return text.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 3);
+// Fallback: git history BM25 (no graph available)
+const fallback = resolveTargetsFromHistory(prompt, root, 5);
+if (fallback) {
+  try {
+    mkdirSync(resolve(root, ".clarte"), { recursive: true });
+    writeFileSync(tcPath, renderFallbackContext(fallback.files, fallback.commitMessage));
+    if (existsSync(agentSrc)) {
+      mkdirSync(resolve(root, ".claude/agents"), { recursive: true });
+      copyFileSync(agentSrc, agentDst);
+    }
+  } catch (e) { _dbg("fallback: " + e.message); }
 }
-
-const K1 = 1.5, B = 0.75;
-let logOutput;
-try {
-  logOutput = execSync("git log --format=%H|%s --max-count=500", {
-    cwd: root, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"],
-  });
-} catch { process.exit(0); }
-
-const commits = logOutput.trim().split("\\n").filter(Boolean).map(line => {
-  const sep = line.indexOf("|");
-  return sep === -1 ? null : { sha: line.slice(0, sep), message: line.slice(sep + 1) };
-}).filter(Boolean);
-
-if (commits.length === 0) process.exit(0);
-
-const docs = commits.map(c => tokenize(c.message));
-const avgdl = docs.reduce((s, d) => s + d.length, 0) / docs.length || 1;
-const df = new Map();
-for (const doc of docs) for (const t of new Set(doc)) df.set(t, (df.get(t) ?? 0) + 1);
-
-const query = tokenize(prompt);
-const N = docs.length;
-
-let bestScore = 0, bestCommit = null;
-commits.forEach((c, i) => {
-  const doc = docs[i], dl = doc.length;
-  const tf = new Map();
-  for (const t of doc) tf.set(t, (tf.get(t) ?? 0) + 1);
-  let score = 0;
-  for (const term of query) {
-    const f = tf.get(term) ?? 0;
-    if (!f) continue;
-    const dfv = df.get(term) ?? 0;
-    const idf = Math.log((N - dfv + 0.5) / (dfv + 0.5) + 1);
-    score += idf * (f * (K1 + 1)) / (f + K1 * (1 - B + B * dl / avgdl));
-  }
-  if (score > bestScore) { bestScore = score; bestCommit = c; }
-});
-
-if (!bestCommit || bestScore === 0) process.exit(0);
-
-let diffOutput;
-try {
-  diffOutput = execSync("git diff-tree --no-commit-id -r --name-only " + bestCommit.sha, {
-    cwd: root, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"],
-  });
-} catch { process.exit(0); }
-
-const files = diffOutput.trim().split("\\n").filter(Boolean).filter(f => {
-  const parts = f.split("/");
-  const isTest = parts.some(p => p === "test" || p === "tests" || p === "spec" || p === "__tests__" || p === "fixtures");
-  return !isTest && existsSync(resolve(root, f));
-});
-
-if (files.length === 0) process.exit(0);
-
-const fileList = files.slice(0, 5).map(f => "- " + f).join("\\n");
-const content = "# Edit targets (clarte)\\n\\nBased on past fixes to similar issues, these files are most likely to need editing:\\n\\n" + fileList + "\\n\\nMatched commit: " + bestCommit.message + "\\n";
-
-try {
-  mkdirSync(resolve(root, ".clarte"), { recursive: true });
-  writeFileSync(resolve(root, ".clarte/task-context.md"), content);
-  if (existsSync(agentSrc)) { mkdirSync(resolve(root, ".claude/agents"), { recursive: true }); copyFileSync(agentSrc, agentDst); }
-} catch (e) { _dbg("fallback task-context write: " + e.message); }
 `;
 
 const HOOK_DEFS: HookDef[] = [
@@ -861,16 +369,21 @@ const ALL_HOOK_EVENTS = ["SessionStart", "PreToolUse", "PostToolUse", "SubagentS
 
 /**
  * Generate hook script files in .clarte/hooks/.
- * graph/enriched/directives retained in signature for caller compatibility
- * (context-map.json generation was removed as it was never consumed).
+ * Copies the pre-built scoring bundle (bm25f.mjs) and writes all hook scripts.
  */
-export async function generateHookFiles(
-  rootDir: string,
-  _graph: PersistedGraph,
-  _enriched?: boolean,
-  _directives?: string[],
-): Promise<void> {
+export async function generateHookFiles(rootDir: string): Promise<void> {
   const hooksDir = path.join(rootDir, HOOKS_DIR);
+
+  // Copy pre-built scoring bundle from dist/
+  const thisDir = path.dirname(fileURLToPath(import.meta.url));
+  const bundleSrc = path.join(thisDir, "../../hook-entry.mjs");
+  try {
+    const bundleContent = await readFile(bundleSrc, "utf-8");
+    await writeFileSafe(path.join(hooksDir, "bm25f.mjs"), bundleContent);
+  } catch {
+    // Bundle may not exist in dev mode; hooks will fail gracefully at runtime
+  }
+
   for (const def of HOOK_DEFS) {
     await writeFileSafe(path.join(hooksDir, def.file), def.script);
   }

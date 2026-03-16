@@ -21,4 +21,16 @@ export default defineConfig((options) => [
       PKG_DESCRIPTION: JSON.stringify(pkg.description),
     },
   },
+  {
+    entry: { "hook-entry": "src/steer/hook-entry.ts" },
+    format: ["esm"],
+    target: "node20",
+    outDir: "dist",
+    outExtension: () => ({ js: ".mjs" }),
+    clean: false,
+    splitting: false,
+    sourcemap: false,
+    dts: false,
+    noExternal: [/.*/],
+  },
 ]);

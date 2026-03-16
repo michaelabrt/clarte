@@ -217,10 +217,10 @@ describe("directional expansion - exact 2:1 ratio between importer and provider"
     expect(targets).toContain("src/app/router.ts");
   });
 
-  it("three-level chain: file 3 hops from seed does not appear when intermediate imports are unrelated", () => {
+  it("three-level chain: file 3 hops from seed appears with decayed score via spreading activation", () => {
     // router imports controller (with unrelated name "handle"), controller imports
     // service (with "authenticate"). app.ts imports router with unrelated name "routes".
-    // app.ts has no query-relevant tokens in any field, so it stays out.
+    // With 3-hop spreading activation, app.ts receives a heavily decayed score.
     const graph = makePersistedGraph({
       files: {
         "src/auth/service.ts": makeFileRecord({ role: null, symbolNames: ["authenticate"] }),
@@ -235,11 +235,12 @@ describe("directional expansion - exact 2:1 ratio between importer and provider"
       ],
     });
     const targets = resolveEditTargets("authenticate", graph, 10);
-    // router.ts gets expansion from controller.ts (import field match), but router's
-    // import field only has "handler" - no "authenticate". So app.ts doesn't expand from router.
+    // 3-hop spreading activation reaches app.ts, but service.ts still ranks highest
     expect(targets).toContain("src/auth/service.ts");
     expect(targets).toContain("src/app/controller.ts");
-    expect(targets).not.toContain("src/app.ts");
+    expect(targets[0]).toBe("src/auth/service.ts");
+    // app.ts now reachable via 3-hop decay
+    expect(targets).toContain("src/app.ts");
   });
 });
 
