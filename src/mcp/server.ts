@@ -18,29 +18,69 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod/v4";
 import path from "node:path";
-import { createReadonlyDatabase } from "../storage/db-adapter.js";
-import { executeCallers } from "./tools/callers.js";
-import { executeImpact } from "./tools/impact.js";
-import { executeFind } from "./tools/find.js";
-import type { DatabaseAdapter } from "../storage/db-adapter.js";
+import { availableParallelism } from "node:os";
+import { createReadonlyDatabase } from "../storage/db-adapter";
+import { executeCallers } from "./tools/callers";
+import { executeImpact } from "./tools/impact";
+import { executeFind } from "./tools/find";
+import { executeSafe } from "./tools/safe";
+import type { DatabaseAdapter } from "../storage/db-adapter";
+
+// ── Connection pool (Dean & Stonebraker) ─────────────────────────────────────
+
+/**
+ * [Dean & Stonebraker] Read-only connection pool scaled to CPU core count (RFC §4.1).
+ * Each connection is an independent SQLite handle in read-only mode.
+ * WAL allows concurrent readers; the pool prepares for async transports (SSE/WS)
+ * while functioning as a round-robin singleton under serial STDIO.
+ */
+class ReadPool {
+  private connections: DatabaseAdapter[] = [];
+  private nextIdx = 0;
+
+  get size(): number {
+    return this.connections.length;
+  }
+
+  static async create(dbPath: string): Promise<ReadPool> {
+    const pool = new ReadPool();
+    // Cap at 4: SQLite WAL readers share a single file lock; beyond 4,
+    // page cache thrashing outweighs concurrency gains.
+    const size = Math.min(availableParallelism(), 4);
+    for (let i = 0; i < size; i++) {
+      pool.connections.push(await createReadonlyDatabase(dbPath));
+    }
+    return pool;
+  }
+
+  /** Round-robin acquire. Callers do not need to release. */
+  acquire(): DatabaseAdapter {
+    const conn = this.connections[this.nextIdx % this.connections.length];
+    this.nextIdx++;
+    return conn;
+  }
+
+  close(): void {
+    for (const conn of this.connections) conn.close();
+    this.connections = [];
+  }
+}
 
 // ── Database lifecycle ───────────────────────────────────────────────────────
 
-let db: DatabaseAdapter | null = null;
+let pool: ReadPool | null = null;
 
 /**
- * Open the graph database for the current project in read-only mode.
- * F.5: No initSchema call - the DB must already exist and be initialized
- * by a prior `clarte init` or `clarte refresh` run.
+ * [Dean & Stonebraker] Acquire a read-only connection from the pool.
+ * Pool is lazily initialized on first call, sized to min(cpuCount, 4).
  */
 async function openDb(): Promise<DatabaseAdapter> {
-  if (db) return db;
-
-  const rootDir = process.env.CLARTE_ROOT ?? process.cwd();
-  const dbPath = path.join(rootDir, ".clarte", "graph.db");
-
-  db = await createReadonlyDatabase(dbPath);
-  return db;
+  if (!pool) {
+    const rootDir = process.env.CLARTE_ROOT ?? process.cwd();
+    const dbPath = path.join(rootDir, ".clarte", "graph.db");
+    pool = await ReadPool.create(dbPath);
+  }
+  return pool.acquire();
 }
 
 // ── Server setup ─────────────────────────────────────────────────────────────
@@ -81,12 +121,20 @@ server.registerTool(
       "Analyze the blast radius of changing a file. Returns three categories: WILL BREAK (direct runtime dependents), LIKELY AFFECTED (2-hop dependents), and TEST (test files to run). Use before making changes to understand downstream effects.",
     inputSchema: {
       file: z.string().describe("The file path to analyze impact for (e.g. 'src/auth/session.ts')"),
+      max_results: z
+        .number()
+        .optional()
+        .describe("Cap per category (default: unlimited). Use to prevent token overflow in large repos."),
+      summary: z
+        .boolean()
+        .optional()
+        .describe("When true, returns file paths and counts only (no rationale detail). Default: false."),
     },
     annotations: { readOnlyHint: true },
   },
-  async ({ file }) => {
+  async ({ file, max_results, summary }) => {
     const database = await openDb();
-    const result = executeImpact(database, { file });
+    const result = executeImpact(database, { file, maxResults: max_results, summary });
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };
@@ -108,6 +156,33 @@ server.registerTool(
   async ({ query }) => {
     const database = await openDb();
     const result = await executeFind(database, { query });
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  },
+);
+
+// ── Tool: clarte_safe ──────────────────────────────────────────────────────
+
+server.registerTool(
+  "clarte_safe",
+  {
+    description:
+      "Verify whether a proposed change is safe. Given a symbol, its file, and the type of change (signature/body/delete), returns a verified impact proof classifying each dependent as BREAKS, COMPATIBLE, or UNKNOWN with evidence citations (line numbers, edge types, confidence scores). Use before modifying a function to know exactly what will break.",
+    inputSchema: {
+      symbol: z.string().describe("The symbol name to analyze (e.g. 'validateSession')"),
+      file: z.string().describe("The file containing the symbol (e.g. 'src/auth/session.ts')"),
+      change: z
+        .enum(["signature", "body", "delete"])
+        .describe(
+          "Type of change: 'signature' (parameters/return type), 'body' (internal logic), or 'delete' (remove entirely)",
+        ),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ symbol, file, change }) => {
+    const database = await openDb();
+    const result = executeSafe(database, { symbol, file, change });
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };
@@ -138,7 +213,7 @@ if (isMain) {
 // Cleanup on exit
 process.on("exit", () => {
   try {
-    db?.close();
+    pool?.close();
   } catch {
     // ignore
   }

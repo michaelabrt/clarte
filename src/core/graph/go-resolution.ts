@@ -7,9 +7,9 @@
  * - A type satisfies an interface if its method set is a superset of the interface's.
  */
 
-import type { ImportBinding, SymbolIndex } from "./symbol-resolution.js";
-import type { FileGraphResult, ResolvedSymbolEdge } from "./symbol-types.js";
-import { RESOLUTION_CONFIDENCE } from "./symbol-types.js";
+import type { ImportBinding, SymbolIndex } from "./symbol-resolution";
+import type { FileGraphResult, ResolvedSymbolEdge, SemanticEdge } from "./symbol-types";
+import { RESOLUTION_CONFIDENCE } from "./symbol-types";
 
 // ── Method index types ────────────────────────────────────────────────────────
 
@@ -188,67 +188,84 @@ export function computePromotedMethods(
 // ── Implicit interface satisfaction ───────────────────────────────────────────
 
 /**
- * Find all interfaces that a concrete type implicitly satisfies.
- * Only matches exported interfaces within the project.
+ * [Hejlsberg] Find all interfaces that a concrete type implicitly satisfies (RFC §2.13).
+ * Distinguishes value (T) vs pointer (*T) method sets for compiler-accurate satisfaction.
+ *
+ * Go spec:
+ *   - Method set of T  = value-receiver methods only
+ *   - Method set of *T = value-receiver + pointer-receiver methods
+ *
+ * Returns receiverKind: "value" when T alone satisfies (both T and *T work),
+ * "pointer" when only *T satisfies (requires pointer receiver).
  */
 export function findSatisfiedInterfaces(
   typeKey: string,
   typeMethodSets: Map<string, TypeMethodSet>,
   embeddingMap: Map<string, Array<{ embeddedType: string; filePath: string }>>,
   interfaces: Map<string, InterfaceMethodSet>,
-): Array<{ interfaceKey: string; filePath: string; name: string }> {
+): Array<{ interfaceKey: string; filePath: string; name: string; receiverKind: "value" | "pointer" }> {
   const methodSet = typeMethodSets.get(typeKey);
   if (!methodSet) return [];
 
-  // Combine direct + promoted methods
-  const allMethods = new Set(methodSet.direct);
   const promoted = computePromotedMethods(typeKey, embeddingMap, typeMethodSets);
+
+  // [Hejlsberg] Build separate method sets for T (value) and *T (pointer)
+  // Value method set: only value-receiver direct methods + promoted methods
+  const valueMethods = new Set<string>();
+  for (const method of methodSet.direct) {
+    if (!methodSet.pointerMethods.has(method)) {
+      valueMethods.add(method);
+    }
+  }
   for (const method of promoted.keys()) {
-    allMethods.add(method);
+    valueMethods.add(method);
   }
 
-  if (allMethods.size === 0) return [];
+  // Pointer method set: all direct methods (value + pointer) + promoted
+  const pointerMethods = new Set(methodSet.direct);
+  for (const method of promoted.keys()) {
+    pointerMethods.add(method);
+  }
+
+  if (pointerMethods.size === 0) return [];
 
   const satisfied: Array<{
     interfaceKey: string;
     filePath: string;
     name: string;
+    receiverKind: "value" | "pointer";
   }> = [];
-
-  // F4: Determine if the type has any pointer-receiver methods.
-  // A value type T only has value-receiver methods in its method set.
-  // A pointer type *T has both pointer and value-receiver methods.
-  // For implicit satisfaction, assume the common case (*T) - if the type has
-  // any pointer-receiver methods, all methods are available (pointer type).
-  // If all methods are value-receiver, both T and *T satisfy.
-  const hasPointerMethods = methodSet.pointerMethods.size > 0;
 
   for (const [ifaceKey, iface] of interfaces) {
     if (iface.methods.size === 0) continue;
     if (ifaceKey === typeKey) continue;
-    // F4: Only match exported interfaces (RFC §2.13 scope limitation)
     if (!iface.isExported) continue;
 
-    let allMatch = true;
+    // Check if *T satisfies (pointer method set = value + pointer receivers)
+    let pointerSatisfies = true;
     for (const method of iface.methods) {
-      if (!allMethods.has(method)) {
-        allMatch = false;
+      if (!pointerMethods.has(method)) {
+        pointerSatisfies = false;
         break;
       }
     }
-    // F4: If the interface requires methods that are only on the pointer receiver,
-    // but the type has no pointer methods, it doesn't satisfy as a value type.
-    // We record the edge for the pointer type case (most common Go pattern).
-    if (allMatch && !hasPointerMethods) {
-      // All methods are value receivers - both T and *T satisfy. OK.
+    if (!pointerSatisfies) continue;
+
+    // Check if T alone satisfies (value method set = value receivers only)
+    let valueSatisfies = true;
+    for (const method of iface.methods) {
+      if (!valueMethods.has(method)) {
+        valueSatisfies = false;
+        break;
+      }
     }
-    if (allMatch) {
-      satisfied.push({
-        interfaceKey: ifaceKey,
-        filePath: iface.filePath,
-        name: iface.name,
-      });
-    }
+
+    satisfied.push({
+      interfaceKey: ifaceKey,
+      filePath: iface.filePath,
+      name: iface.name,
+      receiverKind: valueSatisfies ? "value" : "pointer",
+    });
   }
 
   return satisfied;
@@ -264,9 +281,10 @@ export function resolveGoStructuralEdges(
   fileGraphs: Map<string, FileGraphResult>,
   symbolIndex: SymbolIndex,
   importMaps: Map<string, Map<string, ImportBinding>>,
-): ResolvedSymbolEdge[] {
+): { edges: ResolvedSymbolEdge[]; semanticEdges: SemanticEdge[] } {
   const { typeMethodSets, interfaces, embeddingMap } = buildGoTypeIndex(fileGraphs, symbolIndex, importMaps);
   const edges: ResolvedSymbolEdge[] = [];
+  const semanticEdges: SemanticEdge[] = [];
 
   // Embeds edges: struct -> embedded type
   for (const [filePath, result] of fileGraphs) {
@@ -300,14 +318,34 @@ export function resolveGoStructuralEdges(
 
     const satisfied = findSatisfiedInterfaces(typeKey, typeMethodSets, embeddingMap, interfaces);
     for (const iface of satisfied) {
+      // [Hejlsberg] Value-receiver satisfaction (T and *T both work) gets direct confidence.
+      // Pointer-only satisfaction (*T required) gets member-tier confidence (0.9) since
+      // the concrete variable type (T vs *T) cannot be determined from static analysis alone.
+      const confidence =
+        iface.receiverKind === "value" ? RESOLUTION_CONFIDENCE.TIER_1_DIRECT : RESOLUTION_CONFIDENCE.TIER_2_MEMBER;
       edges.push({
         fromFile: typeFile,
         fromSymbol: typeName,
         toFile: iface.filePath,
         toSymbol: iface.name,
         kind: "satisfies",
-        line: 0, // structural relationship, no specific line
-        confidence: RESOLUTION_CONFIDENCE.TIER_2_MEMBER,
+        line: 0,
+        confidence,
+      });
+
+      // Audit Shift 3: Emit semantic edge with T vs *T distinction
+      semanticEdges.push({
+        fromFile: typeFile,
+        fromSymbol: typeName,
+        toFile: iface.filePath,
+        toSymbol: iface.name,
+        kind: iface.receiverKind === "pointer" ? "go:implicit_iface_pointer_only" : "go:implicit_iface",
+        line: 0,
+        confidence,
+        reason:
+          iface.receiverKind === "pointer"
+            ? `${typeName} implicitly satisfies ${iface.name} via *${typeName} only (pointer receiver methods required)`
+            : `${typeName} implicitly satisfies ${iface.name} (value and pointer receivers both work)`,
       });
     }
   }
@@ -371,5 +409,5 @@ export function resolveGoStructuralEdges(
     }
   }
 
-  return edges;
+  return { edges, semanticEdges };
 }

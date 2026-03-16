@@ -1,16 +1,16 @@
 /**
  * 4-tier symbol resolution engine (RFC §2.4-2.7).
  *
- * Tier 1: Direct import match (calleeName in import map).
+ * Tier 1: Same-file symbol (local scope wins) then direct import match.
  * Tier 2: Member expression on imported binding (obj.method() where obj is imported).
- * Tier 3: Constructor + method (new Class(); instance.method()).
+ * Tier 3: Constructor + method (const svc = new Class(); svc.method()).
  * Tier 4: Re-export chain (barrel routing, verified through file_edges).
  *
  * Includes LRU cache for symbol ID lookups and language-specific heritage resolution.
  */
 
-import type { FileGraphResult, RawCallSite, ResolvedSymbolEdge, ConstructorBinding } from "./symbol-types.js";
-import { RESOLUTION_CONFIDENCE } from "./symbol-types.js";
+import type { ConstructorBinding, FileGraphResult, RawCallSite, ResolvedSymbolEdge } from "./symbol-types";
+import { RESOLUTION_CONFIDENCE, barrelAdjustedConfidence } from "./symbol-types";
 
 // ── LRU cache for symbol ID lookups ───────────────────────────────────────────
 
@@ -65,7 +65,12 @@ export interface ImportBinding {
 /** Build import map from file edges for a single source file. */
 export function buildImportMap(
   filePath: string,
-  fileEdges: Array<{ fromPath: string; toPath: string; importedNames: string[]; isBarrelRouted: boolean }>,
+  fileEdges: Array<{
+    fromPath: string;
+    toPath: string;
+    importedNames: string[];
+    isBarrelRouted: boolean;
+  }>,
 ): Map<string, ImportBinding> {
   const importMap = new Map<string, ImportBinding>();
 
@@ -73,17 +78,6 @@ export function buildImportMap(
     if (edge.fromPath !== filePath) continue;
 
     for (const name of edge.importedNames) {
-      if (name === "*") {
-        // Namespace import - stored specially, matched by objectName in Tier 2
-        importMap.set(`*:${edge.toPath}`, {
-          localName: "*",
-          sourceFile: edge.toPath,
-          isNamespace: true,
-          isDefault: false,
-          isBarrelRouted: edge.isBarrelRouted,
-        });
-        continue;
-      }
       if (name === "default") {
         importMap.set(name, {
           localName: name,
@@ -94,6 +88,36 @@ export function buildImportMap(
         });
         continue;
       }
+
+      if (name.startsWith("* as ")) {
+        // Namespace import with alias: "* as ns" → key by alias "ns"
+        // so Tier 2 can match callSite.objectName === "ns"
+        const alias = name.slice(5).trim();
+        if (alias) {
+          importMap.set(alias, {
+            localName: alias,
+            sourceFile: edge.toPath,
+            isNamespace: true,
+            isDefault: false,
+            isBarrelRouted: edge.isBarrelRouted,
+          });
+        }
+        continue;
+      }
+
+      if (name === "*") {
+        // Legacy format (no alias info) — store by path key as fallback.
+        // Cannot be matched by objectName lookup; will not cause false positives.
+        importMap.set(`*:${edge.toPath}`, {
+          localName: "*",
+          sourceFile: edge.toPath,
+          isNamespace: true,
+          isDefault: false,
+          isBarrelRouted: edge.isBarrelRouted,
+        });
+        continue;
+      }
+
       importMap.set(name, {
         localName: name,
         sourceFile: edge.toPath,
@@ -125,13 +149,25 @@ export interface SymbolIndex {
 }
 
 export function buildSymbolIndex(
-  symbols: Array<{ id: number; filePath: string; name: string; kind: string; startLine: number }>,
+  symbols: Array<{
+    id: number;
+    filePath: string;
+    name: string;
+    kind: string;
+    startLine: number;
+  }>,
 ): SymbolIndex {
   const byFileAndName = new Map<string, SymbolEntry[]>();
   const byFile = new Map<string, SymbolEntry[]>();
 
   for (const s of symbols) {
-    const entry: SymbolEntry = { id: s.id, filePath: s.filePath, name: s.name, kind: s.kind, startLine: s.startLine };
+    const entry: SymbolEntry = {
+      id: s.id,
+      filePath: s.filePath,
+      name: s.name,
+      kind: s.kind,
+      startLine: s.startLine,
+    };
 
     const fnKey = `${s.filePath}::${s.name}`;
     let entries = byFileAndName.get(fnKey);
@@ -254,11 +290,18 @@ export interface ResolutionContext {
   /** File graph results per file path */
   fileGraphs: Map<string, FileGraphResult>;
   /** File edges for import map building: { fromPath, toPath, importedNames, isBarrelRouted } */
-  fileEdges: Array<{ fromPath: string; toPath: string; importedNames: string[]; isBarrelRouted: boolean }>;
+  fileEdges: Array<{
+    fromPath: string;
+    toPath: string;
+    importedNames: string[];
+    isBarrelRouted: boolean;
+  }>;
   /** Symbol index (populated after symbols are stored in DB) */
   symbolIndex: SymbolIndex;
   /** LRU cache for symbol ID lookups */
   cache: LRUCache<string, number | null>;
+  /** Type alias map for transparent resolution (RFC §2.15). Optional for backward compat. */
+  aliasMap?: Map<string, { targetKey: string }>;
 }
 
 /**
@@ -270,30 +313,16 @@ export function resolveAllSymbolEdges(ctx: ResolutionContext): ResolvedSymbolEdg
 
   // Pre-build import maps per file
   const importMaps = new Map<string, Map<string, ImportBinding>>();
-  // Also build a reverse map: importedName -> (sourceFile, binding) for namespace lookups
-  const namespaceImports = new Map<string, Array<{ localName: string; sourceFile: string }>>();
 
   for (const [filePath] of ctx.fileGraphs) {
     const importMap = buildImportMap(filePath, ctx.fileEdges);
     importMaps.set(filePath, importMap);
-
-    // Collect namespace imports for this file
-    for (const [, binding] of importMap) {
-      if (binding.isNamespace) {
-        let ns = namespaceImports.get(filePath);
-        if (!ns) {
-          ns = [];
-          namespaceImports.set(filePath, ns);
-        }
-        ns.push({ localName: binding.localName, sourceFile: binding.sourceFile });
-      }
-    }
   }
 
   for (const [filePath, result] of ctx.fileGraphs) {
     const importMap = importMaps.get(filePath) ?? new Map<string, ImportBinding>();
 
-    // Build constructor binding map for Tier 3 (scope-local)
+    // Build constructor binding map for Tier 3 (scope-local, keyed by variable name)
     const constructorBindings = buildConstructorBindings(result, importMap);
 
     // Resolve call sites (Tier 1-3)
@@ -350,7 +379,9 @@ function resolveTier1(
     toSymbol: calleeName,
     kind: "calls",
     line,
-    confidence: binding.isBarrelRouted ? RESOLUTION_CONFIDENCE.TIER_4_REEXPORT : RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
+    confidence: binding.isBarrelRouted
+      ? barrelAdjustedConfidence(RESOLUTION_CONFIDENCE.TIER_1_DIRECT)
+      : RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
   };
 }
 
@@ -364,38 +395,11 @@ function resolveTier2(
 ): ResolvedSymbolEdge | null {
   if (!callSite.objectName) return null;
 
-  // Check if objectName is a known import
+  // Check if objectName is a known import (includes namespace imports keyed by alias)
   const binding = importMap.get(callSite.objectName);
-  if (!binding) {
-    // Check namespace imports: import * as ns; ns.method()
-    for (const [key, b] of importMap) {
-      if (key.startsWith("*:") && b.isNamespace) {
-        // We can't know the local alias from the edge data alone,
-        // so we try to resolve the method in the namespace's source file
-        const targetId = lookupSymbolIdByKind(
-          b.sourceFile,
-          callSite.calleeName,
-          ["function", "method", "variable"],
-          ctx.symbolIndex,
-          ctx.cache,
-        );
-        if (targetId !== null) {
-          return {
-            fromFile: filePath,
-            fromSymbol: callSite.callerFn ?? "",
-            toFile: b.sourceFile,
-            toSymbol: callSite.calleeName,
-            kind: "calls",
-            line: callSite.line,
-            confidence: RESOLUTION_CONFIDENCE.TIER_2_MEMBER,
-          };
-        }
-      }
-    }
-    return null;
-  }
+  if (!binding) return null;
 
-  // Look up method in the source file
+  // Look up method/function in the source file
   const targetId = lookupSymbolIdByKind(
     binding.sourceFile,
     callSite.calleeName,
@@ -434,32 +438,36 @@ function resolveTier2(
 
 // ── Tier 3: Constructor + method call ─────────────────────────────────────────
 
+/**
+ * Build constructor bindings keyed by variable name (RFC §2.6).
+ * Uses ConstructorAssignment records extracted from the AST, which carry the
+ * actual variable name (e.g. "svc" from `const svc = new UserService()`).
+ * Only assignments where the class is a known import are recorded.
+ */
 function buildConstructorBindings(
   result: FileGraphResult,
   importMap: Map<string, ImportBinding>,
 ): Map<string, ConstructorBinding> {
   const bindings = new Map<string, ConstructorBinding>();
 
-  // Find all constructor call sites (new Class())
-  for (const callSite of result.callSites) {
-    if (!callSite.isConstructor) continue;
-
-    const binding = importMap.get(callSite.calleeName);
+  for (const assignment of result.constructorAssignments) {
+    const binding = importMap.get(assignment.className);
     if (!binding) continue;
 
-    // Find the variable assignment: const svc = new Class()
-    // We track by caller function scope
-    // The call site's callerFn defines the scope
-    // Look for variable names bound to this constructor in the symbols
-    // For simplicity in the AST-extracted data, we track constructor
-    // class names and their source files. The variable name tracking
-    // happens at resolution time by scanning call sites.
-    // We store as className -> binding so Tier 3 can check objectName.
-    bindings.set(callSite.calleeName, {
-      variableName: callSite.calleeName,
+    const ctorBinding: ConstructorBinding = {
+      variableName: assignment.variableName,
       sourceFile: binding.sourceFile,
-      className: callSite.calleeName,
-    });
+      className: assignment.className,
+      pattern: assignment.pattern ?? "new",
+    };
+
+    // Scope key includes callerFn to prevent cross-function leakage (RFC §2.6, F9 fix)
+    if (assignment.callerFn) {
+      bindings.set(`${assignment.callerFn}::${assignment.variableName}`, ctorBinding);
+    } else {
+      // Top-level (module scope) — accessible from any function
+      bindings.set(assignment.variableName, ctorBinding);
+    }
   }
 
   return bindings;
@@ -473,38 +481,33 @@ function resolveTier3(
 ): ResolvedSymbolEdge | null {
   if (!callSite.objectName || !callSite.isMemberExpression) return null;
 
-  // Check if objectName matches a local variable bound to a constructor
-  // This requires the extraction to have tracked variable assignments.
-  // Since we track constructor calls by class name, we check if the
-  // objectName matches any known constructor-bound class.
-  // In practice: const svc = new UserService(); svc.method() -
-  // objectName="svc", but we only know UserService was constructed.
-  // So we scan all constructor bindings in this file's scope and
-  // try to match by looking at all class imports that were constructed.
+  // Try scoped key first (same function), then unscoped (top-level assignments) (F9 fix)
+  const scopedKey = callSite.callerFn ? `${callSite.callerFn}::${callSite.objectName}` : callSite.objectName;
+  const binding = constructorBindings.get(scopedKey) ?? constructorBindings.get(callSite.objectName);
+  if (!binding) return null;
 
-  for (const [, binding] of constructorBindings) {
-    // Try resolving the method in the constructor's source file
-    const targetId = lookupSymbolIdByKind(
-      binding.sourceFile,
-      callSite.calleeName,
-      ["method", "function"],
-      ctx.symbolIndex,
-      ctx.cache,
-    );
-    if (targetId !== null) {
-      return {
-        fromFile: filePath,
-        fromSymbol: callSite.callerFn ?? "",
-        toFile: binding.sourceFile,
-        toSymbol: callSite.calleeName,
-        kind: "calls",
-        line: callSite.line,
-        confidence: RESOLUTION_CONFIDENCE.TIER_3_CONSTRUCTOR,
-      };
-    }
-  }
+  const targetId = lookupSymbolIdByKind(
+    binding.sourceFile,
+    callSite.calleeName,
+    ["method", "function"],
+    ctx.symbolIndex,
+    ctx.cache,
+  );
+  if (targetId === null) return null;
 
-  return null;
+  // Audit F2: pattern-aware confidence for Tier 3
+  const tier3Confidence =
+    binding.pattern === "call" ? RESOLUTION_CONFIDENCE.TIER_3_FACTORY : RESOLUTION_CONFIDENCE.TIER_3_NEW;
+
+  return {
+    fromFile: filePath,
+    fromSymbol: callSite.callerFn ?? "",
+    toFile: binding.sourceFile,
+    toSymbol: callSite.calleeName,
+    kind: "calls",
+    line: callSite.line,
+    confidence: tier3Confidence,
+  };
 }
 
 // ── Combined call site resolution ─────────────────────────────────────────────
@@ -516,22 +519,19 @@ function resolveCallSite(
   constructorBindings: Map<string, ConstructorBinding>,
   ctx: ResolutionContext,
 ): ResolvedSymbolEdge | null {
-  // Constructor calls resolve directly to the class
+  // Constructor calls: same-file first (F10 fix: local scope takes precedence)
   if (callSite.isConstructor) {
-    return resolveTier1(filePath, callSite.calleeName, callSite.callerFn, callSite.line, importMap, ctx);
-  }
-
-  if (!callSite.isMemberExpression) {
-    // Tier 1: direct import match
-    const tier1 = resolveTier1(filePath, callSite.calleeName, callSite.callerFn, callSite.line, importMap, ctx);
-    if (tier1) return tier1;
-
-    // Same-file call: check if callee is defined in the same file
-    const sameFileId = lookupSymbolId(filePath, callSite.calleeName, ctx.symbolIndex, ctx.cache);
-    if (sameFileId !== null && callSite.callerFn) {
+    const sameFileId = lookupSymbolIdByKind(
+      filePath,
+      callSite.calleeName,
+      ["class", "struct"],
+      ctx.symbolIndex,
+      ctx.cache,
+    );
+    if (sameFileId !== null) {
       return {
         fromFile: filePath,
-        fromSymbol: callSite.callerFn,
+        fromSymbol: callSite.callerFn ?? "",
         toFile: filePath,
         toSymbol: callSite.calleeName,
         kind: "calls",
@@ -540,45 +540,85 @@ function resolveCallSite(
       };
     }
 
+    const tier1 = resolveTier1(filePath, callSite.calleeName, callSite.callerFn, callSite.line, importMap, ctx);
+    if (tier1) return tier1;
+
     return null;
   }
 
-  // Member expression: try Tier 2, then Tier 3
+  if (!callSite.isMemberExpression) {
+    // Same-file first: local scope takes precedence over imports in JS/TS/Python
+    const sameFileId = lookupSymbolId(filePath, callSite.calleeName, ctx.symbolIndex, ctx.cache);
+    if (sameFileId !== null) {
+      return {
+        fromFile: filePath,
+        fromSymbol: callSite.callerFn ?? "",
+        toFile: filePath,
+        toSymbol: callSite.calleeName,
+        kind: "calls",
+        line: callSite.line,
+        confidence: RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
+      };
+    }
+
+    // Tier 1: direct import match
+    return resolveTier1(filePath, callSite.calleeName, callSite.callerFn, callSite.line, importMap, ctx);
+  }
+
+  // Member expression: Tier 2, then Tier 3
   const tier2 = resolveTier2(filePath, callSite, importMap, ctx);
   if (tier2) return tier2;
 
-  const tier3 = resolveTier3(filePath, callSite, constructorBindings, ctx);
-  if (tier3) return tier3;
+  return resolveTier3(filePath, callSite, constructorBindings, ctx);
+}
 
-  return null;
+// ── Type alias resolution (RFC §2.15) ──────────────────────────────────────────
+
+/**
+ * Resolve a symbol through the alias map. If the symbol at filePath::name
+ * is a type alias, follow the chain to find the concrete type.
+ * Returns the resolved { file, name } or the original if not an alias.
+ */
+function resolveViaAlias(filePath: string, name: string, ctx: ResolutionContext): { filePath: string; name: string } {
+  if (!ctx.aliasMap) return { filePath, name };
+  const key = `${filePath}::${name}`;
+  const alias = ctx.aliasMap.get(key);
+  if (!alias) return { filePath, name };
+
+  // Follow chain (max depth 5, cycle detection)
+  let current = alias.targetKey;
+  const visited = new Set([key]);
+  for (let depth = 0; depth < 5; depth++) {
+    if (visited.has(current)) break;
+    visited.add(current);
+    const next = ctx.aliasMap.get(current);
+    if (!next) break;
+    current = next.targetKey;
+  }
+
+  const sepIdx = current.indexOf("::");
+  if (sepIdx === -1) return { filePath, name };
+  return {
+    filePath: current.slice(0, sepIdx),
+    name: current.slice(sepIdx + 2),
+  };
 }
 
 // ── Heritage resolution ───────────────────────────────────────────────────────
 
 function resolveHeritage(
   filePath: string,
-  heritage: { className: string; kind: "extends" | "implements"; target: string; line: number },
+  heritage: {
+    className: string;
+    kind: "extends" | "implements";
+    target: string;
+    line: number;
+    ordinal?: number;
+  },
   importMap: Map<string, ImportBinding>,
   ctx: ResolutionContext,
 ): ResolvedSymbolEdge | null {
-  // First check imports
-  const binding = importMap.get(heritage.target);
-  if (binding) {
-    const targetId = lookupSymbolId(binding.sourceFile, heritage.target, ctx.symbolIndex, ctx.cache);
-    if (targetId !== null) {
-      return {
-        fromFile: filePath,
-        fromSymbol: heritage.className,
-        toFile: binding.sourceFile,
-        toSymbol: heritage.target,
-        kind: heritage.kind,
-        line: heritage.line,
-        confidence: RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
-      };
-    }
-  }
-
-  // Same-file resolution
+  // Same-file first: local scope takes precedence (F8 fix)
   const sameFileId = lookupSymbolId(filePath, heritage.target, ctx.symbolIndex, ctx.cache);
   if (sameFileId !== null) {
     return {
@@ -589,7 +629,30 @@ function resolveHeritage(
       kind: heritage.kind,
       line: heritage.line,
       confidence: RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
+      ordinal: heritage.ordinal,
     };
+  }
+
+  // Then check imports
+  const binding = importMap.get(heritage.target);
+  if (binding) {
+    // Resolve through aliases if the target is a type alias (RFC §2.15)
+    const resolved = resolveViaAlias(binding.sourceFile, heritage.target, ctx);
+    const targetId = lookupSymbolId(resolved.filePath, resolved.name, ctx.symbolIndex, ctx.cache);
+    if (targetId !== null) {
+      return {
+        fromFile: filePath,
+        fromSymbol: heritage.className,
+        toFile: resolved.filePath,
+        toSymbol: resolved.name,
+        kind: heritage.kind,
+        line: heritage.line,
+        confidence: binding.isBarrelRouted
+          ? barrelAdjustedConfidence(RESOLUTION_CONFIDENCE.TIER_1_DIRECT)
+          : RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
+        ordinal: heritage.ordinal,
+      };
+    }
   }
 
   return null;
@@ -603,6 +666,21 @@ function resolveDecorator(
   importMap: Map<string, ImportBinding>,
   ctx: ResolutionContext,
 ): ResolvedSymbolEdge | null {
+  // Same-file first (F8 fix)
+  const sameFileId = lookupSymbolId(filePath, dec.decorator, ctx.symbolIndex, ctx.cache);
+  if (sameFileId !== null) {
+    return {
+      fromFile: filePath,
+      fromSymbol: dec.decorator,
+      toFile: filePath,
+      toSymbol: dec.target,
+      kind: "decorates",
+      line: dec.line,
+      confidence: RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
+    };
+  }
+
+  // Then check imports
   const binding = importMap.get(dec.decorator);
   if (binding) {
     const targetId = lookupSymbolId(binding.sourceFile, dec.decorator, ctx.symbolIndex, ctx.cache);
@@ -619,20 +697,6 @@ function resolveDecorator(
     }
   }
 
-  // Same-file decorator
-  const sameFileId = lookupSymbolId(filePath, dec.decorator, ctx.symbolIndex, ctx.cache);
-  if (sameFileId !== null) {
-    return {
-      fromFile: filePath,
-      fromSymbol: dec.decorator,
-      toFile: filePath,
-      toSymbol: dec.target,
-      kind: "decorates",
-      line: dec.line,
-      confidence: RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
-    };
-  }
-
   return null;
 }
 
@@ -644,23 +708,7 @@ function resolveTypeUsage(
   importMap: Map<string, ImportBinding>,
   ctx: ResolutionContext,
 ): ResolvedSymbolEdge | null {
-  const binding = importMap.get(usage.typeName);
-  if (binding) {
-    const targetId = lookupSymbolId(binding.sourceFile, usage.typeName, ctx.symbolIndex, ctx.cache);
-    if (targetId !== null) {
-      return {
-        fromFile: filePath,
-        fromSymbol: usage.symbolName,
-        toFile: binding.sourceFile,
-        toSymbol: usage.typeName,
-        kind: "uses_type",
-        line: usage.line,
-        confidence: RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
-      };
-    }
-  }
-
-  // Same-file type
+  // Same-file first (F8 fix)
   const sameFileId = lookupSymbolId(filePath, usage.typeName, ctx.symbolIndex, ctx.cache);
   if (sameFileId !== null) {
     return {
@@ -672,6 +720,24 @@ function resolveTypeUsage(
       line: usage.line,
       confidence: RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
     };
+  }
+
+  // Then check imports, resolving through aliases (RFC §2.15)
+  const binding = importMap.get(usage.typeName);
+  if (binding) {
+    const resolved = resolveViaAlias(binding.sourceFile, usage.typeName, ctx);
+    const targetId = lookupSymbolId(resolved.filePath, resolved.name, ctx.symbolIndex, ctx.cache);
+    if (targetId !== null) {
+      return {
+        fromFile: filePath,
+        fromSymbol: usage.symbolName,
+        toFile: resolved.filePath,
+        toSymbol: resolved.name,
+        kind: "uses_type",
+        line: usage.line,
+        confidence: RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
+      };
+    }
   }
 
   return null;

@@ -9,7 +9,7 @@
  * Source: IMPLEMENTATION_RFC001.md §5.1, §5.2, §5.3, §5.4
  */
 
-import type { Community, ImportGraph } from "../types.js";
+import type { Community, ImportGraph } from "../types";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -79,7 +79,7 @@ export function computeCohesion(communityNodes: string[], adj: Map<string, Set<s
  * Partition-agnostic: only cares about which pairs of nodes share a cluster.
  * Returns value in [-1, 1]; 1 = identical clusterings.
  */
-function computeARI(files: string[], labelingA: Map<string, number>, getLabelB: (file: string) => number): number {
+export function computeARI(files: string[], labelingA: Map<string, number>, getLabelB: (file: string) => number): number {
   const n = files.length;
   if (n < 2) return 1;
 
@@ -122,7 +122,7 @@ function computeARI(files: string[], labelingA: Map<string, number>, getLabelB: 
  * Build undirected adjacency from import edges, filtering externals.
  * Returns adjacency map and sorted file list.
  */
-function buildUndirectedAdj(graph: ImportGraph): {
+export function buildUndirectedAdj(graph: ImportGraph): {
   adj: Map<string, Set<string>>;
   files: string[];
 } {
@@ -147,7 +147,7 @@ function buildUndirectedAdj(graph: ImportGraph): {
  * Get the deepest directory for a file path.
  * e.g. "src/components/Button.tsx" -> "src/components"
  */
-function getDeepestDir(filePath: string): string {
+export function getDeepestDir(filePath: string): string {
   const parts = filePath.split("/");
   return parts.length > 1 ? parts.slice(0, -1).join("/") : ".";
 }
@@ -184,7 +184,7 @@ function deriveLabel(files: string[]): string {
 /**
  * Group files by their community label.
  */
-function groupByCommunity(fileToCommunity: Map<string, number>): Map<number, string[]> {
+export function groupByCommunity(fileToCommunity: Map<string, number>): Map<number, string[]> {
   const groups = new Map<number, string[]>();
   for (const [file, label] of fileToCommunity) {
     const group = groups.get(label) ?? [];

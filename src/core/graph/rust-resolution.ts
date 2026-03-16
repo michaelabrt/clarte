@@ -8,9 +8,9 @@
  * - Deref coercion: `impl Deref for Wrapper { type Target = Inner }` — method fallback chain
  */
 
-import type { ImportBinding, SymbolIndex } from "./symbol-resolution.js";
-import type { FileGraphResult, ResolvedSymbolEdge } from "./symbol-types.js";
-import { RESOLUTION_CONFIDENCE } from "./symbol-types.js";
+import type { ImportBinding, SymbolIndex } from "./symbol-resolution";
+import type { FileGraphResult, ResolvedSymbolEdge, SemanticEdge } from "./symbol-types";
+import { RESOLUTION_CONFIDENCE } from "./symbol-types";
 
 // ── Method index types ────────────────────────────────────────────────────────
 
@@ -159,18 +159,11 @@ export function resolveRustTraitEdges(
   const index = buildRustMethodIndex(fileGraphs);
   const edges: ResolvedSymbolEdge[] = [];
 
-  // Generate implements edges from trait impls (these are already in heritageChains,
-  // but we can enrich the resolution here if needed in the future)
-
   // Resolve method calls using the index
   for (const [filePath, result] of fileGraphs) {
     for (const callSite of result.callSites) {
       if (!callSite.isMemberExpression || !callSite.objectName) continue;
 
-      // Try to determine the type of the object
-      // For Rust, objectName is often a variable; we need constructor bindings
-      // or type annotations to resolve it. For now, check if objectName matches
-      // a known type name (common for Type::method() patterns).
       if (callSite.objectName) {
         const resolved = resolveRustMethod(callSite.objectName, callSite.calleeName, filePath, index, importMaps);
         if (resolved) {
@@ -192,4 +185,33 @@ export function resolveRustTraitEdges(
   }
 
   return edges;
+}
+
+/**
+ * Audit Shift 3: Extract semantic edges for Rust deref coercion chains.
+ * Surfaces the Deref relationships as explicit semantic edges so that
+ * impact analysis can trace method calls through coercion boundaries.
+ */
+export function extractRustSemanticEdges(fileGraphs: Map<string, FileGraphResult>): SemanticEdge[] {
+  const index = buildRustMethodIndex(fileGraphs);
+  const semanticEdges: SemanticEdge[] = [];
+
+  for (const [wrapperType, targetType] of index.derefMap) {
+    const wrapperFile = index.typeFiles.get(wrapperType);
+    const targetFile = index.typeFiles.get(targetType);
+    if (!wrapperFile || !targetFile) continue;
+
+    semanticEdges.push({
+      fromFile: wrapperFile,
+      fromSymbol: wrapperType,
+      toFile: targetFile,
+      toSymbol: targetType,
+      kind: "rust:deref_coercion",
+      line: 0,
+      confidence: RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
+      reason: `${wrapperType} implements Deref<Target = ${targetType}>; method calls on ${wrapperType} may resolve to ${targetType} methods`,
+    });
+  }
+
+  return semanticEdges;
 }

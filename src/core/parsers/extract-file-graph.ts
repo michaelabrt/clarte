@@ -9,18 +9,23 @@
 
 import { createHash } from "node:crypto";
 import type { Node } from "web-tree-sitter";
-import type { Language } from "../types/detection.js";
 import type {
+  ConstructorAssignment,
+  DecoratorEdge,
+  EmbeddingEdge,
   FileGraphResult,
+  HeritageEdge,
+  ImplBlock,
+  RawCallSite,
   SymbolDefinition,
   SymbolKind,
-  RawCallSite,
-  HeritageEdge,
-  DecoratorEdge,
+  SemanticEdge,
+  TypeAlias,
   TypeUsageEdge,
-} from "../graph/symbol-types.js";
-import { parseImportsAstFromRoot } from "./parse-imports.js";
-import { tokenizeBody } from "./extract-symbols.js";
+} from "../graph/symbol-types";
+import type { Language } from "../types/detection";
+import { tokenizeBody } from "./extract-symbols";
+import { parseImportsAstFromRoot } from "./parse-imports";
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -40,7 +45,19 @@ export function extractFileGraph(root: Node, language: Language): FileGraphResul
     case "rust":
       return { imports, ...extractRustFileGraph(root) };
     default:
-      return { imports, symbols: [], callSites: [], heritageChains: [], decorators: [], typeUsages: [] };
+      return {
+        imports,
+        symbols: [],
+        callSites: [],
+        heritageChains: [],
+        decorators: [],
+        typeUsages: [],
+        constructorAssignments: [],
+        embeddings: [],
+        implBlocks: [],
+        typeAliases: [],
+        semanticEdges: [],
+      };
   }
 }
 
@@ -83,6 +100,11 @@ interface TsExtraction {
   heritageChains: HeritageEdge[];
   decorators: DecoratorEdge[];
   typeUsages: TypeUsageEdge[];
+  constructorAssignments: ConstructorAssignment[];
+  embeddings: EmbeddingEdge[];
+  implBlocks: ImplBlock[];
+  typeAliases: TypeAlias[];
+  semanticEdges: SemanticEdge[];
 }
 
 function extractTsFileGraph(root: Node): TsExtraction {
@@ -102,7 +124,44 @@ function extractTsFileGraph(root: Node): TsExtraction {
   // Extract call sites with member expression info
   extractTsCallSites(root, callSites);
 
-  return { symbols, callSites, heritageChains, decorators, typeUsages };
+  // Extract constructor assignments for Tier 3 resolution (RFC §2.6)
+  const constructorAssignments = extractTsConstructorAssignments(root);
+
+  // Extract type aliases (RFC §2.15): type Foo = Bar
+  const typeAliases: TypeAlias[] = [];
+  for (const node of root.descendantsOfType(["type_alias_declaration"])) {
+    const nameNode = node.childForFieldName("name");
+    const valueNode = node.childForFieldName("value");
+    if (!nameNode || !valueNode) continue;
+    const aliasName = nameNode.text;
+    // Only follow aliases to identifiers (project-internal types), not complex types
+    const target =
+      valueNode.type === "type_identifier"
+        ? valueNode.text
+        : valueNode.type === "generic_type"
+          ? (valueNode.childForFieldName("name")?.text ?? null)
+          : null;
+    if (aliasName && target && target.length > 1) {
+      typeAliases.push({
+        name: aliasName,
+        target,
+        line: node.startPosition.row + 1,
+      });
+    }
+  }
+
+  return {
+    symbols,
+    callSites,
+    heritageChains,
+    decorators,
+    typeUsages,
+    constructorAssignments,
+    embeddings: [],
+    implBlocks: [],
+    typeAliases,
+    semanticEdges: [],
+  };
 }
 
 function collectTsExportedNames(root: Node): Set<string> {
@@ -290,7 +349,12 @@ function extractTsHeritage(classNode: Node, className: string, out: HeritageEdge
         for (const typeNode of clause.namedChildren) {
           const target = extractTypeName(typeNode);
           if (target) {
-            out.push({ className, kind, target, line: clause.startPosition.row + 1 });
+            out.push({
+              className,
+              kind,
+              target,
+              line: clause.startPosition.row + 1,
+            });
           }
         }
       }
@@ -300,13 +364,25 @@ function extractTsHeritage(classNode: Node, className: string, out: HeritageEdge
     if (child.type === "extends_clause") {
       for (const typeNode of child.namedChildren) {
         const target = extractTypeName(typeNode);
-        if (target) out.push({ className, kind: "extends", target, line: child.startPosition.row + 1 });
+        if (target)
+          out.push({
+            className,
+            kind: "extends",
+            target,
+            line: child.startPosition.row + 1,
+          });
       }
     }
     if (child.type === "implements_clause") {
       for (const typeNode of child.namedChildren) {
         const target = extractTypeName(typeNode);
-        if (target) out.push({ className, kind: "implements", target, line: child.startPosition.row + 1 });
+        if (target)
+          out.push({
+            className,
+            kind: "implements",
+            target,
+            line: child.startPosition.row + 1,
+          });
       }
     }
   }
@@ -318,7 +394,13 @@ function extractTsInterfaceHeritage(ifaceNode: Node, name: string, out: Heritage
     if (child.type === "extends_type_clause" || child.type === "extends_clause") {
       for (const typeNode of child.namedChildren) {
         const target = extractTypeName(typeNode);
-        if (target) out.push({ className: name, kind: "extends", target, line: child.startPosition.row + 1 });
+        if (target)
+          out.push({
+            className: name,
+            kind: "extends",
+            target,
+            line: child.startPosition.row + 1,
+          });
       }
     }
   }
@@ -358,7 +440,11 @@ function extractTsClassDecorators(classNode: Node, className: string, out: Decor
       if (child.type === "decorator") {
         const decoratorName = extractDecoratorName(child);
         if (decoratorName) {
-          out.push({ target: methodName, decorator: decoratorName, line: child.startPosition.row + 1 });
+          out.push({
+            target: methodName,
+            decorator: decoratorName,
+            line: child.startPosition.row + 1,
+          });
         }
       }
     }
@@ -370,7 +456,11 @@ function extractDecoratorsFromSiblings(node: Node, targetName: string, out: Deco
     if (child.type === "decorator") {
       const decoratorName = extractDecoratorName(child);
       if (decoratorName) {
-        out.push({ target: targetName, decorator: decoratorName, line: child.startPosition.row + 1 });
+        out.push({
+          target: targetName,
+          decorator: decoratorName,
+          line: child.startPosition.row + 1,
+        });
       }
     }
   }
@@ -446,6 +536,58 @@ function extractTsCallSites(root: Node, out: RawCallSite[]): void {
       isConstructor: true,
     });
   }
+}
+
+/**
+ * Extract variable-to-constructor assignments for Tier 3 resolution (RFC §2.6).
+ * Detects `const svc = new UserService()` and `svc = new UserService()` patterns.
+ * Keyed by variable name so the resolution engine can match callSite.objectName.
+ */
+function extractTsConstructorAssignments(root: Node): ConstructorAssignment[] {
+  const assignments: ConstructorAssignment[] = [];
+
+  for (const newExpr of root.descendantsOfType("new_expression")) {
+    const ctorNode = newExpr.childForFieldName("constructor");
+    if (!ctorNode || ctorNode.type !== "identifier") continue;
+    const className = ctorNode.text;
+    if (!className || className.length <= 1) continue;
+
+    const line = newExpr.startPosition.row + 1;
+    const callerFn = getEnclosingFn(newExpr);
+    const parent = newExpr.parent;
+
+    if (parent?.type === "variable_declarator") {
+      // const svc = new UserService()
+      const nameNode = parent.childForFieldName("name");
+      if (nameNode?.type === "identifier") {
+        const varName = nameNode.text;
+        if (varName && varName.length > 1) {
+          assignments.push({
+            variableName: varName,
+            className,
+            callerFn,
+            line,
+          });
+        }
+      }
+    } else if (parent?.type === "assignment_expression") {
+      // svc = new UserService()
+      const left = parent.childForFieldName("left");
+      if (left?.type === "identifier") {
+        const varName = left.text;
+        if (varName && varName.length > 1) {
+          assignments.push({
+            variableName: varName,
+            className,
+            callerFn,
+            line,
+          });
+        }
+      }
+    }
+  }
+
+  return assignments;
 }
 
 function parseTsCallExpression(fnNode: Node, callNode: Node): RawCallSite | null {
@@ -556,9 +698,16 @@ function extractPythonFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
       isExported: !name.startsWith("_"),
     });
 
-    // Python heritage: class Foo(Bar, Baz)
+    // Python heritage: class Foo(Bar, Baz, metaclass=Meta)
     if (actual.type === "class_definition") {
-      extractPythonHeritage(actual, name, heritageChains);
+      const { bases, metaclass } = extractPythonHeritage(actual, name, heritageChains);
+      if (bases.length > 0) {
+        symbols[symbols.length - 1].bases = bases;
+      }
+      // [Hejlsberg] Separate metaclass from standard bases (RFC §2.12)
+      if (metaclass) {
+        symbols[symbols.length - 1].metaclass = metaclass;
+      }
     }
 
     // Decorators
@@ -588,19 +737,101 @@ function extractPythonFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
       const obj = fnNode.childForFieldName("object");
       const attr = fnNode.childForFieldName("attribute");
       if (attr && obj) {
+        // Detect super().method() pattern
+        const isSuperCall = obj.type === "call" && obj.childForFieldName("function")?.text === "super";
         callSites.push({
           callerFn: getPythonEnclosingFn(call),
           calleeName: attr.text,
           line: call.startPosition.row + 1,
           isMemberExpression: true,
-          objectName: obj.type === "identifier" ? obj.text : undefined,
+          objectName: isSuperCall ? "super" : obj.type === "identifier" ? obj.text : undefined,
           isConstructor: false,
+          isSuperCall,
         });
       }
     }
   }
 
-  return { symbols, callSites, heritageChains, decorators, typeUsages };
+  // Python constructor assignments: obj = ClassName() (no `new` keyword)
+  // Detect assignments where the RHS is a call to a capitalized name (class convention)
+  const constructorAssignments: ConstructorAssignment[] = [];
+  for (const node of root.descendantsOfType(["assignment", "expression_statement"])) {
+    const assign = node.type === "assignment" ? node : null;
+    if (!assign) continue;
+    const left = assign.childForFieldName("left");
+    const right = assign.childForFieldName("right");
+    if (!left || !right || left.type !== "identifier" || right.type !== "call") continue;
+    const fn = right.childForFieldName("function");
+    if (!fn || fn.type !== "identifier") continue;
+    const className = fn.text;
+    const varName = left.text;
+    // Python convention: class names are capitalized
+    if (
+      !className ||
+      !varName ||
+      className[0] !== className[0].toUpperCase() ||
+      className[0] === className[0].toLowerCase()
+    )
+      continue;
+    constructorAssignments.push({
+      variableName: varName,
+      className,
+      callerFn: getPythonEnclosingFn(node),
+      line: node.startPosition.row + 1,
+    });
+  }
+
+  // F5: Python type alias extraction
+  // Supports: type Foo = Bar (3.12+ type_alias_statement) and Foo: TypeAlias = Bar
+  const typeAliases: TypeAlias[] = [];
+  // Python 3.12+ syntax: type Foo = Bar
+  for (const node of root.descendantsOfType(["type_alias_statement"])) {
+    const nameNode = node.childForFieldName("name");
+    const valueNode = node.childForFieldName("value");
+    if (!nameNode || !valueNode) continue;
+    const aliasName = nameNode.text;
+    const target = valueNode.type === "identifier" ? valueNode.text : null;
+    if (aliasName && target && target.length > 1) {
+      typeAliases.push({
+        name: aliasName,
+        target,
+        line: node.startPosition.row + 1,
+      });
+    }
+  }
+  // Pre-3.12 syntax: Foo: TypeAlias = Bar (annotated assignment at module scope)
+  for (const node of root.descendantsOfType(["assignment"])) {
+    // Must have a type annotation containing "TypeAlias"
+    const left = node.childForFieldName("left");
+    const right = node.childForFieldName("right");
+    const typeAnnotation = node.childForFieldName("type");
+    if (!left || !right || !typeAnnotation) continue;
+    if (left.type !== "identifier" || right.type !== "identifier") continue;
+    // Check if annotation text contains TypeAlias
+    if (!typeAnnotation.text.includes("TypeAlias")) continue;
+    const aliasName = left.text;
+    const target = right.text;
+    if (aliasName && target && target.length > 1) {
+      typeAliases.push({
+        name: aliasName,
+        target,
+        line: node.startPosition.row + 1,
+      });
+    }
+  }
+
+  return {
+    symbols,
+    callSites,
+    heritageChains,
+    decorators,
+    typeUsages,
+    constructorAssignments,
+    embeddings: [],
+    implBlocks: [],
+    typeAliases,
+    semanticEdges: [],
+  };
 }
 
 function unwrapDecorated(node: Node): Node | null {
@@ -628,19 +859,46 @@ function isInsidePythonClass(node: Node): boolean {
  * class Foo(Bar, Baz, metaclass=Meta) - extracts Bar and Baz as extends.
  * Multiple base classes reflect Python's multiple inheritance with C3 linearization.
  */
-function extractPythonHeritage(classNode: Node, className: string, out: HeritageEdge[]): void {
+/**
+ * [Hejlsberg] Python heritage extraction with metaclass separation (RFC §2.12).
+ * class Foo(Bar, Baz, metaclass=Meta) extracts Bar and Baz as extends,
+ * metaclass as a separate field to prevent C3 linearization false-positives.
+ */
+function extractPythonHeritage(
+  classNode: Node,
+  className: string,
+  out: HeritageEdge[],
+): { bases: string[]; metaclass: string | undefined } {
   const args = classNode.childForFieldName("superclasses");
-  if (!args) return;
+  if (!args) return { bases: [], metaclass: undefined };
 
+  const bases: string[] = [];
+  let metaclass: string | undefined;
+  let ordinal = 0;
   for (const arg of args.namedChildren) {
-    // Skip keyword arguments like metaclass=Meta
-    if (arg.type === "keyword_argument") continue;
+    if (arg.type === "keyword_argument") {
+      // [Hejlsberg] Extract metaclass keyword argument separately
+      const key = arg.childForFieldName("name");
+      const value = arg.childForFieldName("value");
+      if (key?.text === "metaclass" && value) {
+        metaclass = value.type === "identifier" ? value.text : value.text;
+      }
+      continue;
+    }
     const target = arg.type === "identifier" ? arg.text : arg.type === "attribute" ? arg.text : null;
     if (target && target.length > 1 && target !== "object") {
-      // Python uses extends for all base classes (C3 linearization order matters)
-      out.push({ className, kind: "extends", target, line: arg.startPosition.row + 1 });
+      out.push({
+        className,
+        kind: "extends",
+        target,
+        line: arg.startPosition.row + 1,
+        ordinal,
+      });
+      bases.push(target);
+      ordinal++;
     }
   }
+  return { bases, metaclass };
 }
 
 function extractPythonDecorators(decoratedNode: Node, targetName: string, out: DecoratorEdge[]): void {
@@ -658,7 +916,12 @@ function extractPythonDecorators(decoratedNode: Node, targetName: string, out: D
     } else if (inner.type === "attribute") {
       name = inner.childForFieldName("attribute")?.text ?? null;
     }
-    if (name) out.push({ target: targetName, decorator: name, line: child.startPosition.row + 1 });
+    if (name)
+      out.push({
+        target: targetName,
+        decorator: name,
+        line: child.startPosition.row + 1,
+      });
   }
 }
 
@@ -682,6 +945,7 @@ function extractGoFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
   const symbols: SymbolDefinition[] = [];
   const callSites: RawCallSite[] = [];
   const heritageChains: HeritageEdge[] = [];
+  const embeddings: EmbeddingEdge[] = [];
   const seenSymbols = new Set<string>();
 
   // Functions
@@ -694,6 +958,25 @@ function extractGoFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
     seenSymbols.add(key);
 
     const kind: SymbolKind = node.type === "method_declaration" ? "method" : "function";
+    let receiverType: string | undefined;
+    let isPointerReceiver: boolean | undefined;
+    if (node.type === "method_declaration") {
+      const params = node.childForFieldName("parameters");
+      if (params) {
+        // Receiver is the first parameter_declaration in the parameters
+        const recvParam = params.namedChildren.find((c) => c.type === "parameter_declaration");
+        if (recvParam) {
+          const typeChild = recvParam.childForFieldName("type");
+          if (typeChild) {
+            // F4: Track pointer vs value receiver. Pointer receivers
+            // satisfy interfaces for *T only; value receivers satisfy for both.
+            isPointerReceiver = typeChild.type === "pointer_type";
+            receiverType =
+              typeChild.type === "pointer_type" ? (typeChild.namedChildren[0]?.text ?? typeChild.text) : typeChild.text;
+          }
+        }
+      }
+    }
     const body = node.childForFieldName("body");
     const bodyText = body ? getNodeText(body) : getNodeText(node);
     const tokens = bodyTokenString(body ?? node, GO_BODY_IDENT_TYPES);
@@ -708,6 +991,8 @@ function extractGoFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
       bodyTokens: tokens,
       bodyHash: hashBody(bodyText),
       isExported,
+      receiverType,
+      isPointerReceiver,
     });
   }
 
@@ -722,7 +1007,8 @@ function extractGoFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
 
     const typeNode = node.childForFieldName("type");
     const isInterface = typeNode?.type === "interface_type";
-    const kind: SymbolKind = isInterface ? "interface" : "type";
+    const isStruct = typeNode?.type === "struct_type";
+    const kind: SymbolKind = isInterface ? "interface" : isStruct ? "struct" : "type";
     const bodyText = getNodeText(node);
     const tokens = bodyTokenString(node, GO_BODY_IDENT_TYPES);
     const isExported = name[0] === name[0].toUpperCase() && name[0] !== name[0].toLowerCase();
@@ -740,6 +1026,9 @@ function extractGoFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
     // Go interface embedding: type MyInterface interface { OtherInterface; ... }
     if (isInterface && typeNode) {
       extractGoInterfaceEmbedding(typeNode, name, heritageChains);
+    }
+    if (isStruct && typeNode) {
+      extractGoStructEmbeddings(typeNode, name, embeddings);
     }
   }
 
@@ -776,7 +1065,89 @@ function extractGoFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
     }
   }
 
-  return { symbols, callSites, heritageChains, decorators: [], typeUsages: [] };
+  // Go type aliases: type Foo = Bar (with =, tree-sitter node type_alias)
+  // NOT type Foo Bar (new type, tree-sitter node type_spec) -- RFC §2.15
+  const typeAliases: TypeAlias[] = [];
+  for (const node of root.descendantsOfType(["type_alias"])) {
+    const name = node.childForFieldName("name")?.text;
+    const typeNode = node.childForFieldName("type");
+    const target = typeNode?.type === "type_identifier" ? typeNode.text : null;
+    if (name && target) {
+      typeAliases.push({ name, target, line: node.startPosition.row + 1 });
+    }
+  }
+
+  // F14: Go type usages from function signatures
+  const typeUsages: TypeUsageEdge[] = [];
+  for (const sym of symbols) {
+    if (sym.kind !== "function" && sym.kind !== "method") continue;
+    // Find the AST node for this symbol to extract type refs from parameters/result
+    const fnNodes = root.descendantsOfType(["function_declaration", "method_declaration"]);
+    for (const fn of fnNodes) {
+      const fnName = fn.childForFieldName("name")?.text;
+      if (fnName !== sym.name) continue;
+      if (fn.startPosition.row + 1 !== sym.startLine) continue;
+      extractGoTypeUsages(fn, sym.name, typeUsages);
+      break;
+    }
+  }
+
+  // F15: Go struct literal assignments for Tier 3 resolution
+  // Detect svc := &Server{} or svc := Server{} patterns
+  const constructorAssignments: ConstructorAssignment[] = [];
+  for (const node of root.descendantsOfType(["short_var_declaration"])) {
+    const left = node.childForFieldName("left");
+    const right = node.childForFieldName("right");
+    if (!left || !right) continue;
+    // Left side: identifier (the variable name)
+    const varName =
+      left.type === "expression_list"
+        ? left.namedChildren[0]?.text
+        : left.type === "identifier"
+          ? left.text
+          : undefined;
+    if (!varName || varName.length <= 1) continue;
+    // Right side: composite_literal or unary_expression(&Struct{})
+    const literal = extractGoCompositeLiteral(right);
+    if (literal) {
+      constructorAssignments.push({
+        variableName: varName,
+        className: literal,
+        callerFn: getGoEnclosingFn(node),
+        line: node.startPosition.row + 1,
+      });
+    }
+  }
+  // Also handle var svc = Server{} (var_declaration)
+  for (const node of root.descendantsOfType(["var_spec"])) {
+    const nameNode = node.childForFieldName("name");
+    const value = node.childForFieldName("value");
+    if (!nameNode || !value) continue;
+    const varName = nameNode.text;
+    if (!varName || varName.length <= 1) continue;
+    const literal = extractGoCompositeLiteral(value);
+    if (literal) {
+      constructorAssignments.push({
+        variableName: varName,
+        className: literal,
+        callerFn: getGoEnclosingFn(node),
+        line: node.startPosition.row + 1,
+      });
+    }
+  }
+
+  return {
+    symbols,
+    callSites,
+    heritageChains,
+    decorators: [],
+    typeUsages,
+    constructorAssignments,
+    embeddings,
+    implBlocks: [],
+    typeAliases,
+    semanticEdges: [],
+  };
 }
 
 function extractGoInterfaceEmbedding(ifaceBody: Node, ifaceName: string, out: HeritageEdge[]): void {
@@ -785,10 +1156,117 @@ function extractGoInterfaceEmbedding(ifaceBody: Node, ifaceName: string, out: He
     if (child.type === "type_identifier" || child.type === "qualified_type") {
       const target = child.type === "type_identifier" ? child.text : (child.childForFieldName("name")?.text ?? null);
       if (target) {
-        out.push({ className: ifaceName, kind: "extends", target, line: child.startPosition.row + 1 });
+        out.push({
+          className: ifaceName,
+          kind: "extends",
+          target,
+          line: child.startPosition.row + 1,
+        });
       }
     }
   }
+}
+
+function extractGoStructEmbeddings(typeNode: Node, structName: string, out: EmbeddingEdge[]): void {
+  // In struct_type, fields without explicit names are embedded types
+  for (const child of typeNode.namedChildren) {
+    if (child.type !== "field_declaration_list") continue;
+    for (const field of child.namedChildren) {
+      if (field.type !== "field_declaration") continue;
+      // Embedded field: has a type but no field name
+      const fieldNames = field.namedChildren.filter((c) => c.type === "field_identifier");
+      if (fieldNames.length > 0) continue; // has explicit name, not embedded
+
+      const typeChild = field.namedChildren.find(
+        (c) => c.type === "type_identifier" || c.type === "qualified_type" || c.type === "pointer_type",
+      );
+      if (!typeChild) continue;
+
+      let embeddedType = typeChild.text;
+      if (typeChild.type === "pointer_type") {
+        const inner = typeChild.namedChildren[0];
+        if (inner) embeddedType = inner.text;
+      }
+
+      out.push({ structName, embeddedType, line: field.startPosition.row + 1 });
+    }
+  }
+}
+
+/**
+ * F14: Extract type usages from Go function signatures.
+ * Scans parameter_list and result for type_identifier nodes.
+ */
+function extractGoTypeUsages(fnNode: Node, symbolName: string, out: TypeUsageEdge[]): void {
+  const params = fnNode.childForFieldName("parameters");
+  const result = fnNode.childForFieldName("result");
+
+  const typeNodes: Node[] = [];
+  if (params) typeNodes.push(...params.descendantsOfType(["type_identifier"]));
+  if (result) typeNodes.push(...result.descendantsOfType(["type_identifier"]));
+
+  const seen = new Set<string>();
+  for (const tn of typeNodes) {
+    const typeName = tn.text;
+    if (!typeName || typeName.length <= 1 || seen.has(typeName)) continue;
+    if (isGoPrimitiveType(typeName)) continue;
+    seen.add(typeName);
+    out.push({ symbolName, typeName, line: tn.startPosition.row + 1 });
+  }
+}
+
+const GO_PRIMITIVE_TYPES = new Set([
+  "int",
+  "int8",
+  "int16",
+  "int32",
+  "int64",
+  "uint",
+  "uint8",
+  "uint16",
+  "uint32",
+  "uint64",
+  "float32",
+  "float64",
+  "complex64",
+  "complex128",
+  "string",
+  "bool",
+  "byte",
+  "rune",
+  "error",
+  "uintptr",
+  "any",
+]);
+
+function isGoPrimitiveType(name: string): boolean {
+  return GO_PRIMITIVE_TYPES.has(name);
+}
+
+/**
+ * F15: Extract struct type name from a Go composite literal or &Struct{} expression.
+ * Returns the type name if it's a capitalized identifier (struct convention), null otherwise.
+ */
+function extractGoCompositeLiteral(node: Node): string | null {
+  // &Server{} → unary_expression → composite_literal
+  let target = node;
+  if (target.type === "expression_list") {
+    target = target.namedChildren[0] ?? target;
+  }
+  if (target.type === "unary_expression") {
+    const operand = target.namedChildren[0];
+    if (operand) target = operand;
+  }
+  if (target.type === "composite_literal") {
+    const typeNode = target.childForFieldName("type");
+    if (typeNode?.type === "type_identifier") {
+      const name = typeNode.text;
+      if (name && name[0] === name[0].toUpperCase() && name[0] !== name[0].toLowerCase()) {
+        return name;
+      }
+    }
+  }
+  return null;
 }
 
 function getGoEnclosingFn(node: Node): string | undefined {
@@ -815,8 +1293,8 @@ function extractJavaFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
   const typeUsages: TypeUsageEdge[] = [];
   const seenSymbols = new Set<string>();
 
-  // Classes and interfaces
-  for (const node of root.descendantsOfType(["class_declaration", "interface_declaration"])) {
+  // F6/F7: Classes, interfaces and enums
+  for (const node of root.descendantsOfType(["class_declaration", "interface_declaration", "enum_declaration"])) {
     const name = node.childForFieldName("name")?.text;
     if (!name || name.length <= 1) continue;
 
@@ -824,7 +1302,8 @@ function extractJavaFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
     if (seenSymbols.has(key)) continue;
     seenSymbols.add(key);
 
-    const kind: SymbolKind = node.type === "interface_declaration" ? "interface" : "class";
+    const kind: SymbolKind =
+      node.type === "interface_declaration" ? "interface" : node.type === "enum_declaration" ? "enum" : "class";
     const body = node.childForFieldName("body");
     const bodyText = body ? getNodeText(body) : getNodeText(node);
     const tokens = bodyTokenString(body ?? node, JAVA_BODY_IDENT_TYPES);
@@ -857,6 +1336,18 @@ function extractJavaFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
     const bodyText = body ? getNodeText(body) : getNodeText(node);
     const tokens = bodyTokenString(body ?? node, JAVA_BODY_IDENT_TYPES);
 
+    // Java default method detection (RFC §2.1): method with a body inside an interface
+    const isInsideInterface = (() => {
+      let p = node.parent;
+      while (p) {
+        if (p.type === "interface_declaration") return true;
+        if (p.type === "class_declaration") return false;
+        p = p.parent;
+      }
+      return false;
+    })();
+    const hasBody = !!node.childForFieldName("body");
+
     symbols.push({
       name,
       kind: "method",
@@ -865,6 +1356,7 @@ function extractJavaFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
       bodyTokens: tokens,
       bodyHash: hashBody(bodyText),
       isExported: hasJavaModifier(node, "public"),
+      isDefault: isInsideInterface && hasBody ? true : undefined,
     });
 
     extractTsTypeUsages(node, name, typeUsages);
@@ -905,7 +1397,19 @@ function extractJavaFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
     }
   }
 
-  return { symbols, callSites, heritageChains, decorators, typeUsages };
+  const constructorAssignments = extractJavaConstructorAssignments(root);
+  return {
+    symbols,
+    callSites,
+    heritageChains,
+    decorators,
+    typeUsages,
+    constructorAssignments,
+    embeddings: [],
+    implBlocks: [],
+    typeAliases: [],
+    semanticEdges: [],
+  };
 }
 
 /**
@@ -917,7 +1421,13 @@ function extractJavaHeritage(node: Node, className: string, out: HeritageEdge[])
   const superclass = node.childForFieldName("superclass");
   if (superclass) {
     const target = superclass.type === "type_identifier" ? superclass.text : null;
-    if (target) out.push({ className, kind: "extends", target, line: superclass.startPosition.row + 1 });
+    if (target)
+      out.push({
+        className,
+        kind: "extends",
+        target,
+        line: superclass.startPosition.row + 1,
+      });
   }
 
   // interfaces (implements)
@@ -925,7 +1435,13 @@ function extractJavaHeritage(node: Node, className: string, out: HeritageEdge[])
   if (interfaces) {
     for (const iface of interfaces.namedChildren) {
       const target = iface.type === "type_identifier" ? iface.text : (iface.childForFieldName("name")?.text ?? null);
-      if (target) out.push({ className, kind: "implements", target, line: iface.startPosition.row + 1 });
+      if (target)
+        out.push({
+          className,
+          kind: "implements",
+          target,
+          line: iface.startPosition.row + 1,
+        });
     }
   }
 
@@ -935,17 +1451,62 @@ function extractJavaHeritage(node: Node, className: string, out: HeritageEdge[])
     if (extClause) {
       for (const iface of extClause.namedChildren) {
         const target = iface.type === "type_identifier" ? iface.text : null;
-        if (target) out.push({ className, kind: "extends", target, line: iface.startPosition.row + 1 });
+        if (target)
+          out.push({
+            className,
+            kind: "extends",
+            target,
+            line: iface.startPosition.row + 1,
+          });
       }
     }
   }
+}
+
+/**
+ * Extract variable-to-constructor assignments from Java code (RFC §2.6).
+ * Detects `UserService svc = new UserService()` patterns.
+ */
+function extractJavaConstructorAssignments(root: Node): ConstructorAssignment[] {
+  const assignments: ConstructorAssignment[] = [];
+
+  for (const newExpr of root.descendantsOfType("object_creation_expression")) {
+    const typeNode = newExpr.childForFieldName("type");
+    if (!typeNode) continue;
+    const className =
+      typeNode.type === "type_identifier" ? typeNode.text : (typeNode.childForFieldName("name")?.text ?? null);
+    if (!className || className.length <= 1) continue;
+
+    const parent = newExpr.parent;
+    if (parent?.type === "variable_declarator") {
+      const nameNode = parent.childForFieldName("name");
+      if (nameNode?.type === "identifier") {
+        const varName = nameNode.text;
+        if (varName && varName.length > 1) {
+          assignments.push({
+            variableName: varName,
+            className,
+            callerFn: getJavaEnclosingFn(newExpr),
+            line: newExpr.startPosition.row + 1,
+          });
+        }
+      }
+    }
+  }
+
+  return assignments;
 }
 
 function extractJavaAnnotations(node: Node, targetName: string, out: DecoratorEdge[]): void {
   for (const child of node.namedChildren) {
     if (child.type === "marker_annotation" || child.type === "annotation") {
       const name = child.childForFieldName("name")?.text;
-      if (name) out.push({ target: targetName, decorator: name, line: child.startPosition.row + 1 });
+      if (name)
+        out.push({
+          target: targetName,
+          decorator: name,
+          line: child.startPosition.row + 1,
+        });
     }
   }
 }
@@ -976,6 +1537,7 @@ function extractRustFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
   const symbols: SymbolDefinition[] = [];
   const callSites: RawCallSite[] = [];
   const heritageChains: HeritageEdge[] = [];
+  const implBlocks: ImplBlock[] = [];
   const seenSymbols = new Set<string>();
 
   // Functions
@@ -1012,7 +1574,7 @@ function extractRustFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
     if (seenSymbols.has(key)) continue;
     seenSymbols.add(key);
 
-    const kind: SymbolKind = node.type === "trait_item" ? "interface" : node.type === "enum_item" ? "type" : "class";
+    const kind: SymbolKind = node.type === "trait_item" ? "trait" : node.type === "enum_item" ? "enum" : "struct";
     const bodyText = getNodeText(node);
     const tokens = bodyTokenString(node, RUST_BODY_IDENT_TYPES);
     const isExported = isRustPub(node);
@@ -1038,25 +1600,29 @@ function extractRustFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
     const traitNode = node.childForFieldName("trait");
     const typeNode = node.childForFieldName("type");
 
-    if (traitNode && typeNode) {
-      const traitName = traitNode.type === "type_identifier" ? traitNode.text : null;
-      const typeName = typeNode.type === "type_identifier" ? typeNode.text : null;
-      if (traitName && typeName) {
-        heritageChains.push({
-          className: typeName,
-          kind: "implements",
-          target: traitName,
-          line: node.startPosition.row + 1,
-        });
-      }
+    const typeName = typeNode?.type === "type_identifier" ? typeNode.text : null;
+    const traitName = traitNode?.type === "type_identifier" ? traitNode.text : null;
+
+    if (traitName && typeName) {
+      heritageChains.push({
+        className: typeName,
+        kind: "implements",
+        target: traitName,
+        line: node.startPosition.row + 1,
+      });
     }
 
-    // Methods inside impl blocks
+    // Collect methods and detect Deref target
     const body = node.childForFieldName("body");
+    const methods: string[] = [];
+    let derefTarget: string | undefined;
+
     if (body) {
       for (const fn of body.descendantsOfType(["function_item"])) {
         const name = fn.childForFieldName("name")?.text;
         if (!name || name.length < 2 || name.startsWith("_")) continue;
+
+        methods.push(name);
 
         const key = `${name}:${fn.startPosition.row}`;
         if (seenSymbols.has(key)) continue;
@@ -1074,8 +1640,30 @@ function extractRustFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
           bodyTokens: tokens,
           bodyHash: hashBody(bodyText),
           isExported: isRustPub(fn),
+          receiverType: typeName ?? undefined,
         });
       }
+
+      // Detect Deref target: type Target = Inner inside impl Deref for Wrapper
+      if (traitName === "Deref" || traitName === "std::ops::Deref") {
+        for (const typeItem of body.descendantsOfType(["type_item"])) {
+          const aliasName = typeItem.childForFieldName("name")?.text;
+          if (aliasName === "Target") {
+            const aliasType = typeItem.childForFieldName("type");
+            if (aliasType) derefTarget = aliasType.text;
+          }
+        }
+      }
+    }
+
+    if (typeName) {
+      implBlocks.push({
+        targetType: typeName,
+        traitName: traitName ?? undefined,
+        methods,
+        derefTarget,
+        filePath: "", // filled by caller
+      });
     }
   }
 
@@ -1125,7 +1713,162 @@ function extractRustFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
     }
   }
 
-  return { symbols, callSites, heritageChains, decorators: [], typeUsages: [] };
+  // Rust derive macros and attribute macros → decorates edges (RFC §2.8 AC9)
+  const decorators: DecoratorEdge[] = [];
+  for (const node of root.descendantsOfType(["attribute_item"])) {
+    // #[derive(Debug, Clone)] or #[tokio::main]
+    const inner = node.namedChildren[0]; // the attribute content
+    if (!inner) continue;
+
+    // Find the decorated item (next sibling that is a struct/enum/function/impl)
+    const parent = node.parent;
+    if (!parent) continue;
+
+    const siblings = parent.namedChildren;
+    const nodeIdx = siblings.indexOf(node);
+    let targetName: string | null = null;
+    for (let i = nodeIdx + 1; i < siblings.length; i++) {
+      const sib = siblings[i];
+      if (sib.type === "attribute_item") continue; // skip chained attributes
+      targetName = sib.childForFieldName("name")?.text ?? null;
+      break;
+    }
+    if (!targetName) continue;
+
+    // Parse derive: #[derive(Debug, Clone)]
+    if (inner.type === "attribute" || inner.type === "meta_item") {
+      const attrName = inner.childForFieldName("name")?.text ?? inner.namedChildren[0]?.text;
+      if (attrName === "derive") {
+        const args = inner.childForFieldName("arguments") ?? inner.namedChildren.find((c) => c.type === "token_tree");
+        if (args) {
+          for (const arg of args.namedChildren) {
+            if (arg.type === "identifier" || arg.type === "meta_item") {
+              decorators.push({
+                target: targetName,
+                decorator: arg.text,
+                line: node.startPosition.row + 1,
+              });
+            }
+          }
+        }
+      } else if (attrName) {
+        decorators.push({
+          target: targetName,
+          decorator: attrName,
+          line: node.startPosition.row + 1,
+        });
+      }
+    }
+  }
+
+  // Rust type aliases: type Foo = Bar (RFC §2.15)
+  const typeAliases: TypeAlias[] = [];
+  for (const node of root.descendantsOfType(["type_item"])) {
+    // Skip type items inside impl blocks (associated types like type Target = Inner)
+    let insideImpl = false;
+    let p = node.parent;
+    while (p) {
+      if (p.type === "impl_item") {
+        insideImpl = true;
+        break;
+      }
+      p = p.parent;
+    }
+    if (insideImpl) continue;
+
+    const name = node.childForFieldName("name")?.text;
+    const typeNode = node.childForFieldName("type");
+    if (!name || !typeNode) continue;
+    const target =
+      typeNode.type === "type_identifier"
+        ? typeNode.text
+        : typeNode.type === "generic_type"
+          ? (typeNode.childForFieldName("type")?.text ?? typeNode.namedChildren[0]?.text ?? null)
+          : null;
+    if (target) {
+      typeAliases.push({ name, target, line: node.startPosition.row + 1 });
+    }
+  }
+
+  // F13: Rust type usages from function signatures
+  const typeUsages: TypeUsageEdge[] = [];
+  for (const sym of symbols) {
+    if (sym.kind !== "function" && sym.kind !== "method") continue;
+    // Find the AST node for this symbol to extract type refs
+    const fnNodes = root.descendantsOfType(["function_item"]);
+    for (const fn of fnNodes) {
+      const fnName = fn.childForFieldName("name")?.text;
+      if (fnName !== sym.name) continue;
+      if (fn.startPosition.row + 1 !== sym.startLine) continue;
+      extractRustTypeUsages(fn, sym.name, typeUsages);
+      break;
+    }
+  }
+
+  return {
+    symbols,
+    callSites,
+    heritageChains,
+    decorators,
+    typeUsages,
+    constructorAssignments: [],
+    embeddings: [],
+    implBlocks,
+    typeAliases,
+    semanticEdges: [],
+  };
+}
+
+/**
+ * F13: Extract type usages from Rust function signatures.
+ * Scans parameters and return_type for type_identifier nodes.
+ */
+function extractRustTypeUsages(fnNode: Node, symbolName: string, out: TypeUsageEdge[]): void {
+  const params = fnNode.childForFieldName("parameters");
+  const retType = fnNode.childForFieldName("return_type");
+
+  const typeNodes: Node[] = [];
+  if (params) typeNodes.push(...params.descendantsOfType(["type_identifier"]));
+  if (retType) typeNodes.push(...retType.descendantsOfType(["type_identifier"]));
+
+  const seen = new Set<string>();
+  for (const tn of typeNodes) {
+    const typeName = tn.text;
+    if (!typeName || typeName.length <= 1 || seen.has(typeName)) continue;
+    if (isRustPrimitiveType(typeName)) continue;
+    seen.add(typeName);
+    out.push({ symbolName, typeName, line: tn.startPosition.row + 1 });
+  }
+}
+
+const RUST_PRIMITIVE_TYPES = new Set([
+  "i8",
+  "i16",
+  "i32",
+  "i64",
+  "i128",
+  "isize",
+  "u8",
+  "u16",
+  "u32",
+  "u64",
+  "u128",
+  "usize",
+  "f32",
+  "f64",
+  "bool",
+  "char",
+  "str",
+  "String",
+  "Self",
+  "Option",
+  "Result",
+  "Vec",
+  "Box",
+]);
+
+function isRustPrimitiveType(name: string): boolean {
+  return RUST_PRIMITIVE_TYPES.has(name);
 }
 
 /**
@@ -1137,7 +1880,13 @@ function extractRustTraitBounds(traitNode: Node, traitName: string, out: Heritag
   if (!bounds) return;
   for (const bound of bounds.namedChildren) {
     const target = bound.type === "type_identifier" ? bound.text : null;
-    if (target) out.push({ className: traitName, kind: "extends", target, line: bound.startPosition.row + 1 });
+    if (target)
+      out.push({
+        className: traitName,
+        kind: "extends",
+        target,
+        line: bound.startPosition.row + 1,
+      });
   }
 }
 
