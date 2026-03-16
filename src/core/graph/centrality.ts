@@ -1,6 +1,6 @@
-import type { FileRole, ImportEdge, ImportGraph } from "../types.js";
-import { buildAdjacency } from "../utils.js";
-import { HITS, ROLE_THRESHOLDS } from "../config/thresholds.js";
+import type { FileRole, ImportEdge, ImportGraph } from "../types";
+import { buildAdjacency } from "../utils";
+import { HITS, ROLE_THRESHOLDS } from "../config/thresholds";
 
 /**
  * Compute HITS authority and hub scores for all files.
@@ -245,6 +245,8 @@ export function computeBetweenness(
   k?: number,
   /** §5.7: Restrict source sampling to 2-hop neighborhood of changed files. */
   changedFiles?: Set<string>,
+  /** Audit F3: Leiden community assignments for stratified sampling. */
+  communities?: Map<string, number>,
 ): Map<string, number> {
   // Build directed adjacency from internal edges.
   // We follow the actual import direction (importer -> imported) so betweenness
@@ -260,7 +262,14 @@ export function computeBetweenness(
   // §5.9: Quantized k = ceil(max(50, ceil(sqrt(V)*2)) / 10) * 10
   // Prevents spurious cache invalidation when file count changes by 1.
   const rawK = k ?? Math.max(50, Math.ceil(Math.sqrt(n) * 2));
-  const effectiveK = Math.ceil(rawK / 10) * 10;
+  let effectiveK = Math.ceil(rawK / 10) * 10;
+
+  // Audit F3: Double k for dense graphs (avg_degree > 10) to reduce
+  // sampling variance in highly-connected topologies.
+  let totalDegree = 0;
+  for (const neighbors of adj.values()) totalDegree += neighbors.size;
+  const avgDegree = n > 0 ? totalDegree / n : 0;
+  if (avgDegree > 10) effectiveK *= 2;
 
   const betweenness = new Map<string, number>();
   for (const f of files) betweenness.set(f, 0);
@@ -297,26 +306,10 @@ export function computeBetweenness(
   if (sampleSize >= candidateCount) {
     sources = candidateFiles;
   } else {
-    // Degree-proportional sampling: high-degree nodes produce more representative
-    // shortest-path trees, reducing variance in the betweenness estimator.
-    const shuffled = [...candidateFiles];
-    for (let i = 0; i < sampleSize; i++) {
-      let totalWeight = 0;
-      for (let j = i; j < candidateCount; j++) {
-        totalWeight += (adj.get(shuffled[j])?.size ?? 0) + 1;
-      }
-      let target = rng() * totalWeight;
-      let chosen = i;
-      for (let j = i; j < candidateCount; j++) {
-        target -= (adj.get(shuffled[j])?.size ?? 0) + 1;
-        if (target <= 0) {
-          chosen = j;
-          break;
-        }
-      }
-      [shuffled[i], shuffled[chosen]] = [shuffled[chosen], shuffled[i]];
-    }
-    sources = shuffled.slice(0, sampleSize);
+    // Audit F3: Stratified sampling by Leiden community.
+    // Guarantee at least 1 source from each community to eliminate blind spots.
+    const stratifiedSources = stratifiedSample(candidateFiles, sampleSize, adj, rng, communities);
+    sources = stratifiedSources;
   }
 
   // Brandes single-source BFS for each sampled source
@@ -383,4 +376,97 @@ export function computeBetweenness(
   }
 
   return betweenness;
+}
+
+// ── Stratified sampling (audit F3) ──────────────────────────────────────────
+
+/**
+ * Select source nodes with community-stratified sampling.
+ * Guarantees at least 1 source from each Leiden community to eliminate
+ * blind spots in sparsely-sampled regions. Remaining budget filled with
+ * degree-proportional selection from all candidates.
+ */
+function stratifiedSample(
+  candidateFiles: string[],
+  sampleSize: number,
+  adj: Map<string, Set<string>>,
+  rng: () => number,
+  communities?: Map<string, number>,
+): string[] {
+  if (!communities || communities.size === 0) {
+    return degreeProportionalSample(candidateFiles, sampleSize, adj, rng);
+  }
+
+  // Group candidates by community
+  const byCommunity = new Map<number, string[]>();
+  for (const file of candidateFiles) {
+    const cid = communities.get(file);
+    if (cid === undefined) continue;
+    let group = byCommunity.get(cid);
+    if (!group) {
+      group = [];
+      byCommunity.set(cid, group);
+    }
+    group.push(file);
+  }
+
+  const selected = new Set<string>();
+
+  // Phase 1: Pick 1 representative per community (highest degree in community)
+  for (const members of byCommunity.values()) {
+    if (selected.size >= sampleSize) break;
+    let bestFile = members[0];
+    let bestDegree = adj.get(bestFile)?.size ?? 0;
+    for (let i = 1; i < members.length; i++) {
+      const d = adj.get(members[i])?.size ?? 0;
+      if (d > bestDegree) {
+        bestDegree = d;
+        bestFile = members[i];
+      }
+    }
+    selected.add(bestFile);
+  }
+
+  // Phase 2: Fill remaining budget with degree-proportional from all candidates
+  if (selected.size < sampleSize) {
+    const remaining = candidateFiles.filter((f) => !selected.has(f));
+    const extraNeeded = sampleSize - selected.size;
+    const extra = degreeProportionalSample(remaining, extraNeeded, adj, rng);
+    for (const f of extra) selected.add(f);
+  }
+
+  return [...selected];
+}
+
+/**
+ * Degree-proportional sampling (original algorithm, extracted for reuse).
+ */
+function degreeProportionalSample(
+  candidates: string[],
+  sampleSize: number,
+  adj: Map<string, Set<string>>,
+  rng: () => number,
+): string[] {
+  const count = candidates.length;
+  const actual = Math.min(sampleSize, count);
+  if (actual >= count) return [...candidates];
+
+  const shuffled = [...candidates];
+  for (let i = 0; i < actual; i++) {
+    let totalWeight = 0;
+    for (let j = i; j < count; j++) {
+      totalWeight += (adj.get(shuffled[j])?.size ?? 0) + 1;
+    }
+    let target = rng() * totalWeight;
+    let chosen = i;
+    for (let j = i; j < count; j++) {
+      target -= (adj.get(shuffled[j])?.size ?? 0) + 1;
+      if (target <= 0) {
+        chosen = j;
+        break;
+      }
+    }
+    [shuffled[i], shuffled[chosen]] = [shuffled[chosen], shuffled[i]];
+  }
+  return shuffled.slice(0, actual);
 }

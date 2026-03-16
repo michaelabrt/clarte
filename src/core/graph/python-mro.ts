@@ -6,9 +6,9 @@
  * method calls on classes with multiple inheritance and super() chains.
  */
 
-import type { ImportBinding, SymbolIndex } from "./symbol-resolution.js";
-import type { FileGraphResult, ResolvedSymbolEdge } from "./symbol-types.js";
-import { RESOLUTION_CONFIDENCE } from "./symbol-types.js";
+import type { ImportBinding, SymbolIndex } from "./symbol-resolution";
+import type { FileGraphResult, ResolvedSymbolEdge } from "./symbol-types";
+import { RESOLUTION_CONFIDENCE } from "./symbol-types";
 
 // ── Class hierarchy types ─────────────────────────────────────────────────────
 
@@ -209,19 +209,24 @@ export function resolvePythonSuper(
 // ── Resolve all Python MRO edges ──────────────────────────────────────────────
 
 /**
- * Generate resolved symbol edges for Python MRO-dependent call sites.
- * This is called from the main resolution pipeline for Python files.
+ * [Hejlsberg] Generate resolved symbol edges for Python MRO-dependent call sites
+ * and metaclass relationships (RFC §2.12).
+ * Metaclass edges use "uses_type" to prevent false-positives in C3 linearization
+ * while preserving the dependency link for impact analysis.
  */
 export function resolvePythonMROEdges(
   fileGraphs: Map<string, FileGraphResult>,
   symbolIndex: SymbolIndex,
   importMaps: Map<string, Map<string, ImportBinding>>,
 ): ResolvedSymbolEdge[] {
+  // [Hejlsberg] Generate metaclass edges independently of MRO hierarchy
+  const metaclassEdges = resolveMetaclassEdges(fileGraphs, symbolIndex, importMaps);
+
   const hierarchy = buildPythonClassHierarchy(fileGraphs, symbolIndex, importMaps);
-  if (hierarchy.size === 0) return [];
+  if (hierarchy.size === 0) return metaclassEdges;
 
   const mroMemo = new Map<string, string[] | null>();
-  const edges: ResolvedSymbolEdge[] = [];
+  const edges: ResolvedSymbolEdge[] = [...metaclassEdges];
 
   // Build a map of class names to their hierarchy keys per file
   const classKeysByFile = new Map<string, Map<string, string>>();
@@ -278,7 +283,7 @@ export function resolvePythonMROEdges(
             toSymbol: resolved.symbolName,
             kind: "calls",
             line: callSite.line,
-            confidence: RESOLUTION_CONFIDENCE.TIER_3_CONSTRUCTOR,
+            confidence: RESOLUTION_CONFIDENCE.TIER_3_NEW,
           });
         }
         continue;
@@ -302,7 +307,7 @@ export function resolvePythonMROEdges(
             toSymbol: resolved.symbolName,
             kind: "calls",
             line: callSite.line,
-            confidence: RESOLUTION_CONFIDENCE.TIER_3_CONSTRUCTOR,
+            confidence: RESOLUTION_CONFIDENCE.TIER_3_NEW,
           });
         }
       }
@@ -316,11 +321,9 @@ export function resolvePythonMROEdges(
  * Find the class that contains a given method name in a file's symbols.
  */
 function findEnclosingClass(result: FileGraphResult, methodName: string): string | null {
-  // Find the method symbol
   const methodSym = result.symbols.find((s) => s.name === methodName && s.kind === "method");
   if (!methodSym) return null;
 
-  // Find the class whose range contains this method
   for (const sym of result.symbols) {
     if (sym.kind !== "class") continue;
     if (sym.startLine <= methodSym.startLine && sym.endLine && sym.endLine >= methodSym.startLine) {
@@ -329,4 +332,65 @@ function findEnclosingClass(result: FileGraphResult, methodName: string): string
   }
 
   return null;
+}
+
+// ── Metaclass edge resolution ──────────────────────────────────────────────
+
+/**
+ * [Hejlsberg] Generate "uses_type" edges for Python metaclass relationships (RFC §2.12).
+ * Metaclass is NOT a base class for C3 linearization; it controls class creation behavior.
+ * We emit a separate "uses_type" edge so that:
+ *   - Impact analysis correctly flags classes when their metaclass changes
+ *   - C3 linearization is not polluted by metaclass entries
+ */
+function resolveMetaclassEdges(
+  fileGraphs: Map<string, FileGraphResult>,
+  symbolIndex: SymbolIndex,
+  importMaps: Map<string, Map<string, ImportBinding>>,
+): ResolvedSymbolEdge[] {
+  const edges: ResolvedSymbolEdge[] = [];
+
+  for (const [filePath, result] of fileGraphs) {
+    const importMap = importMaps.get(filePath) ?? new Map<string, ImportBinding>();
+
+    for (const sym of result.symbols) {
+      if (sym.kind !== "class" || !sym.metaclass) continue;
+
+      const metaclassName = sym.metaclass;
+
+      // Resolve metaclass via imports
+      const binding = importMap.get(metaclassName);
+      if (binding) {
+        const entries = symbolIndex.byFileAndName.get(`${binding.sourceFile}::${metaclassName}`);
+        if (entries && entries.length > 0) {
+          edges.push({
+            fromFile: filePath,
+            fromSymbol: sym.name,
+            toFile: binding.sourceFile,
+            toSymbol: metaclassName,
+            kind: "uses_type",
+            line: sym.startLine,
+            confidence: RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
+          });
+          continue;
+        }
+      }
+
+      // Same-file metaclass
+      const sameFileEntries = symbolIndex.byFileAndName.get(`${filePath}::${metaclassName}`);
+      if (sameFileEntries && sameFileEntries.length > 0) {
+        edges.push({
+          fromFile: filePath,
+          fromSymbol: sym.name,
+          toFile: filePath,
+          toSymbol: metaclassName,
+          kind: "uses_type",
+          line: sym.startLine,
+          confidence: RESOLUTION_CONFIDENCE.TIER_1_DIRECT,
+        });
+      }
+    }
+  }
+
+  return edges;
 }

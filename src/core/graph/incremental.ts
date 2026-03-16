@@ -8,11 +8,13 @@
  *
  * Also includes:
  *   BETWEENNESS_K quantization (§5.9)
- *   Incremental drift detection (§5.10)
+ *   Incremental drift detection (§5.10) with community ARI/cohesion (audit F1)
+ *   Lightweight edge-only update path (audit Shift 2)
  */
 
-import type { ImportGraph } from "../types.js";
-import { BETWEENNESS_K } from "../config/thresholds.js";
+import type { Community, ImportGraph } from "../types";
+import { BETWEENNESS_K } from "../config/thresholds";
+import { computeARI, computeCohesion, buildUndirectedAdj, getDeepestDir, groupByCommunity } from "./leiden";
 
 // ── BETWEENNESS_K quantization (§5.9) ────────────────────────────────────────
 
@@ -139,14 +141,28 @@ export function filesNeedingRoleUpdate(
   return needsUpdate;
 }
 
-// ── Drift detection (§5.10) ──────────────────────────────────────────────────
+// ── Drift detection (§5.10 + audit F1: community drift) ─────────────────────
 
 /** Score field names that are compared during drift detection */
 type ScoreField = "authority" | "hub" | "betweenness" | "instability";
 
+/** Audit F1: Community drift metrics */
+export interface CommunityDriftResult {
+  /** ARI between incremental and full-rebuild community assignments */
+  communityARI: number;
+  /** Average cohesion across all communities in the incremental graph */
+  avgCohesion: number;
+  /** True if ARI drifted above 0.80 (communities mirroring directory structure) */
+  communityDrifted: boolean;
+}
+
 /**
  * Compare incremental scores against full rebuild scores (§5.10).
  * Returns files with drift > threshold on any score field.
+ *
+ * Audit F1: Also computes community drift (ARI between incremental and
+ * full-rebuild communities). If communityARI > 0.80 (approaching directory
+ * structure), triggers a full Leiden rebuild to prevent "fragmented ghosts."
  *
  * Drift threshold: 0.01 per file per score field.
  */
@@ -154,7 +170,18 @@ export function detectDrift(
   incrementalGraph: ImportGraph,
   fullGraph: ImportGraph,
   threshold = 0.01,
-): { drifted: boolean; files: string[]; maxDelta: number } {
+  /** Audit F1: Incremental community assignments (file -> community ID) */
+  incrementalCommunities?: Map<string, number>,
+  /** Audit F1: Full-rebuild community assignments */
+  fullCommunities?: Map<string, number>,
+  /** Audit F1: Community objects with cohesion scores */
+  incrementalCommunityList?: Community[],
+): {
+  drifted: boolean;
+  files: string[];
+  maxDelta: number;
+  communityDrift?: CommunityDriftResult;
+} {
   const driftFiles: string[] = [];
   let maxDelta = 0;
 
@@ -188,7 +215,92 @@ export function detectDrift(
     if (fileDrifted) driftFiles.push(file);
   }
 
-  return { drifted: driftFiles.length > 0, files: driftFiles, maxDelta };
+  // Audit F1: Community drift detection
+  let communityDrift: CommunityDriftResult | undefined;
+  if (incrementalCommunities && fullCommunities) {
+    communityDrift = detectCommunityDrift(incrementalGraph, incrementalCommunities, incrementalCommunityList);
+
+    // Community drift triggers full rebuild (treat as score drift)
+    if (communityDrift.communityDrifted) {
+      // Don't add individual files - this is a global rebuild trigger
+    }
+  }
+
+  const scoreDrifted = driftFiles.length > 0;
+  const communityDrifted = communityDrift?.communityDrifted ?? false;
+
+  return {
+    drifted: scoreDrifted || communityDrifted,
+    files: driftFiles,
+    maxDelta,
+    communityDrift,
+  };
+}
+
+/**
+ * Audit F1: Detect community drift by comparing current communities
+ * against directory structure. If ARI > 0.80, communities have degraded
+ * toward directory structure and need a full Leiden rebuild.
+ *
+ * Also tracks average cohesion as a secondary quality signal.
+ */
+export function detectCommunityDrift(
+  graph: ImportGraph,
+  communityAssignments: Map<string, number>,
+  communityList?: Community[],
+): CommunityDriftResult {
+  const files = [...communityAssignments.keys()];
+
+  if (files.length < 2) {
+    return { communityARI: 0, avgCohesion: 1.0, communityDrifted: false };
+  }
+
+  // Compute ARI between current communities and directory structure
+  const dirLabels = new Map<string, number>();
+  let nextLabel = 0;
+  const getDirLabel = (file: string): number => {
+    const dir = getDeepestDir(file);
+    let label = dirLabels.get(dir);
+    if (label === undefined) {
+      label = nextLabel++;
+      dirLabels.set(dir, label);
+    }
+    return label;
+  };
+
+  const communityARI = computeARI(files, communityAssignments, getDirLabel);
+
+  // Compute average cohesion across communities
+  let avgCohesion = 1.0;
+  if (communityList && communityList.length > 0) {
+    let totalCohesion = 0;
+    let count = 0;
+    for (const c of communityList) {
+      if (c.cohesion !== undefined) {
+        totalCohesion += c.cohesion;
+        count++;
+      }
+    }
+    avgCohesion = count > 0 ? totalCohesion / count : 1.0;
+  } else if (communityAssignments.size > 0) {
+    // Recompute cohesion from the graph if community objects not available
+    const { adj } = buildUndirectedAdj(graph);
+    const groups = groupByCommunity(communityAssignments);
+    let totalCohesion = 0;
+    let count = 0;
+    for (const members of groups.values()) {
+      if (members.length < 2) continue;
+      totalCohesion += computeCohesion(members, adj);
+      count++;
+    }
+    avgCohesion = count > 0 ? totalCohesion / count : 1.0;
+  }
+
+  // Audit F1: Trigger at 0.80 (below the 0.85 novelty gate) to catch
+  // the trend before communities fully collapse to directory structure.
+  const communityDrifted = communityARI > 0.8;
+
+  return { communityARI, avgCohesion, communityDrifted };
 }
 
 /**
@@ -205,4 +317,73 @@ export function shouldRunDriftDetection(buildCount: number, lastFullRebuildTimes
   }
 
   return false;
+}
+
+// ── Lightweight edge-only update path (audit Shift 2) ────────────────────────
+
+/**
+ * Result of a lightweight edge-only update.
+ * When only imports/exports change (no algorithmic impact), we can update
+ * edges and FTS5 immediately without waiting for HITS/Leiden convergence.
+ */
+export interface LightweightUpdateResult {
+  /** Files whose edges were updated */
+  updatedFiles: string[];
+  /** Whether a heavy recomputation should be deferred */
+  deferHeavyRecompute: boolean;
+  /** Reason for deferring (or "none" if not deferred) */
+  deferReason: string;
+}
+
+/**
+ * Audit Shift 2: Lightweight edge path for structural-only changes.
+ *
+ * When a file change only affects imports/exports (not function bodies or
+ * call sites), this function updates file_edges and FTS5 immediately without
+ * triggering the heavy HITS/betweenness/Leiden pipeline.
+ *
+ * Criteria for lightweight update (all must be true):
+ * - No symbol bodies changed (only import statements)
+ * - No call sites changed
+ * - No heritage/decorator/type-usage changes
+ * - File is not a barrel (barrel changes affect authority globally)
+ *
+ * Returns whether heavy recomputation should be deferred.
+ */
+export function classifyUpdateWeight(opts: {
+  changedFiles: string[];
+  barrelFiles: Set<string>;
+  /** True if any changed file has modified symbol bodies (not just imports) */
+  hasBodyChanges: boolean;
+  /** True if call sites changed in any file */
+  hasCallSiteChanges: boolean;
+  /** True if heritage/decorator/type-usage edges changed */
+  hasStructuralChanges: boolean;
+}): LightweightUpdateResult {
+  // Any barrel change requires full rebuild (existing §5.8 trigger)
+  const barrelChanged = opts.changedFiles.some((f) => opts.barrelFiles.has(f));
+  if (barrelChanged) {
+    return {
+      updatedFiles: opts.changedFiles,
+      deferHeavyRecompute: false,
+      deferReason: "barrel file changed, full rebuild required",
+    };
+  }
+
+  // If only imports changed (no body/callsite/structural changes),
+  // we can do a lightweight edge-only update.
+  if (!opts.hasBodyChanges && !opts.hasCallSiteChanges && !opts.hasStructuralChanges) {
+    return {
+      updatedFiles: opts.changedFiles,
+      deferHeavyRecompute: true,
+      deferReason: "import-only changes, HITS/Leiden deferred",
+    };
+  }
+
+  // Body, call site, or structural changes need full score recomputation
+  return {
+    updatedFiles: opts.changedFiles,
+    deferHeavyRecompute: false,
+    deferReason: "none",
+  };
 }

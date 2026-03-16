@@ -1,5 +1,5 @@
-import type { GraphStore } from "../../storage/graph-store.js";
-import { buildPersistedGraphFromStore, openGraphStore } from "../../storage/loader.js";
+import type { GraphStore } from "../../storage/graph-store";
+import { buildPersistedGraphFromStore, openGraphStore } from "../../storage/loader";
 import type {
   ChangeCouplingRecord,
   CommunityRecord,
@@ -7,21 +7,21 @@ import type {
   FileRecord,
   SymbolEdgeRecord,
   SymbolRecord,
-} from "../../storage/types.js";
-import { CLARTE_DIR } from "../config/config.js";
-import { gitExecSafe } from "../git/git.js";
-import { PERSISTED_GRAPH_VERSION, type PersistedGraph } from "../types/persisted-graph.js";
-import type { ContextAnalysis, ImportGraph } from "../types.js";
-import { deriveRole } from "./centrality.js";
-import { resolveGoStructuralEdges } from "./go-resolution.js";
-import { computeAllInstabilities } from "./instability.js";
-import { computeSymbolAuthority } from "./persist-helpers.js";
-import { resolvePythonMROEdges } from "./python-mro.js";
-import { resolveRustTraitEdges } from "./rust-resolution.js";
-import { aggregateToFileLevel, computeSymbolHITS, type SymbolNode } from "./symbol-hits.js";
-import { buildImportMap, buildSymbolIndex, LRUCache, resolveAllSymbolEdges } from "./symbol-resolution.js";
-import type { FileGraphResult, ResolvedSymbolEdge } from "./symbol-types.js";
-import { buildAliasMap } from "./type-aliases.js";
+} from "../../storage/types";
+import { CLARTE_DIR } from "../config/config";
+import { gitExecSafe } from "../git/git";
+import { PERSISTED_GRAPH_VERSION, type PersistedGraph } from "../types/persisted-graph";
+import type { ContextAnalysis, ImportGraph } from "../types";
+import { deriveRole } from "./centrality";
+import { resolveGoStructuralEdges } from "./go-resolution";
+import { computeAllInstabilities } from "./instability";
+import { computeSymbolAuthority } from "./persist-helpers";
+import { resolvePythonMROEdges } from "./python-mro";
+import { resolveRustTraitEdges } from "./rust-resolution";
+import { aggregateToFileLevel, computeSymbolHITS, type SymbolNode } from "./symbol-hits";
+import { buildImportMap, buildSymbolIndex, LRUCache, resolveAllSymbolEdges } from "./symbol-resolution";
+import type { FileGraphResult, ResolvedSymbolEdge } from "./symbol-types";
+import { buildAliasMap } from "./type-aliases";
 
 /**
  * Persist the analysis graph to .clarte/graph.db.
@@ -385,11 +385,11 @@ function runSymbolPipeline(
 
   // 4d. Language-specific resolution (Python MRO, Go structural, Rust traits)
   const pythonMROEdges = resolvePythonMROEdges(fileGraphResults, symbolIndex, importMaps);
-  const goStructuralEdges = resolveGoStructuralEdges(fileGraphResults, symbolIndex, importMaps);
+  const goResult = resolveGoStructuralEdges(fileGraphResults, symbolIndex, importMaps);
   const rustTraitEdges = resolveRustTraitEdges(fileGraphResults, symbolIndex, importMaps);
 
   // Merge all resolved edges
-  const allResolvedEdges = [...resolvedEdges, ...pythonMROEdges, ...goStructuralEdges, ...rustTraitEdges];
+  const allResolvedEdges = [...resolvedEdges, ...pythonMROEdges, ...goResult.edges, ...rustTraitEdges];
 
   // 5. Convert to DB records and store
   const symbolEdgeRecords = resolvedEdgesToRecords(allResolvedEdges, symbolIndex, cache);
@@ -521,6 +521,6 @@ function resolvedEdgesToRecords(
   return records;
 }
 
-export { computeSymbolAuthority } from "./persist-helpers.js";
+export { computeSymbolAuthority } from "./persist-helpers";
 // Re-export for test compatibility
 export { CLARTE_DIR, PERSISTED_GRAPH_VERSION };
