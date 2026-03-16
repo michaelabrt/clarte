@@ -182,6 +182,22 @@ vi.mock("../cli/hooks.js", () => ({
   initPreCommitHook: vi.fn(),
 }));
 
+// GraphStore mock
+const mockStore = vi.hoisted(() => ({
+  close: vi.fn(),
+  getCache: vi.fn().mockReturnValue(undefined),
+  setCache: vi.fn(),
+}));
+vi.mock("../storage/loader.js", () => ({
+  openGraphStore: vi.fn().mockResolvedValue(mockStore),
+}));
+
+vi.mock("../core/graph/persist.js", () => ({
+  persistGraph: vi.fn().mockResolvedValue(undefined),
+  loadPersistedGraph: vi.fn().mockResolvedValue(null),
+  CLARTE_DIR: ".clarte",
+}));
+
 // Serialize/directives mocks
 const mockSerializeAnalysis = vi.fn().mockReturnValue({ detected: {}, analysis: {} });
 vi.mock("../core/analysis/serialize.js", () => ({

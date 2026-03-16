@@ -32,8 +32,8 @@ vi.mock("../core/graph/cache.js", () => ({
 
 // Project cache mocks
 const mockComputeProjectCacheKey = vi.fn().mockResolvedValue("project-cache-key-456");
-const mockLoadProjectCache = vi.fn().mockResolvedValue(null);
-const mockSaveProjectCache = vi.fn().mockResolvedValue(undefined);
+const mockLoadProjectCache = vi.fn().mockReturnValue(null);
+const mockSaveProjectCache = vi.fn();
 
 vi.mock("../core/project-cache.js", () => ({
   computeProjectCacheKey: (...args: unknown[]) => mockComputeProjectCacheKey(...args),
@@ -51,8 +51,8 @@ vi.mock("../core/project-cache.js", () => ({
 
 // Git cache mocks
 const mockComputeGitCacheKey = vi.fn().mockReturnValue("git-cache-key-789");
-const mockLoadGitCache = vi.fn().mockResolvedValue(null);
-const mockSaveGitCache = vi.fn().mockResolvedValue(undefined);
+const mockLoadGitCache = vi.fn().mockReturnValue(null);
+const mockSaveGitCache = vi.fn();
 
 vi.mock("../core/git-cache.js", () => ({
   computeGitCacheKey: (...args: unknown[]) => mockComputeGitCacheKey(...args),
@@ -101,8 +101,8 @@ const mockInferConventions = vi.fn().mockResolvedValue(null);
 const mockBuildTestMapping = vi.fn().mockReturnValue(null);
 const mockPredictChangeImpact = vi.fn().mockReturnValue([]);
 const mockExtractSnapshot = vi.fn().mockReturnValue({});
-const mockLoadPreviousSnapshot = vi.fn().mockResolvedValue(null);
-const mockSaveSnapshot = vi.fn().mockResolvedValue(undefined);
+const mockLoadPreviousSnapshot = vi.fn().mockReturnValue(null);
+const mockSaveSnapshot = vi.fn();
 const mockComputeDelta = vi.fn().mockReturnValue({});
 const mockIsDeltaEmpty = vi.fn().mockReturnValue(true);
 const mockRenderDeltaSection = vi.fn().mockReturnValue(null);
@@ -198,8 +198,8 @@ const noopProgress = () => {};
 beforeEach(() => {
   vi.clearAllMocks();
   mockLoadAnalysisCache.mockResolvedValue(null);
-  mockLoadProjectCache.mockResolvedValue(null);
-  mockLoadGitCache.mockResolvedValue(null);
+  mockLoadProjectCache.mockReturnValue(null);
+  mockLoadGitCache.mockReturnValue(null);
   mockComputeGitCacheKey.mockReturnValue("git-cache-key-789");
   mockAnalyzeGitActivity.mockResolvedValue({
     hotFiles: [{ path: "src/index.ts", commits: 10, lastChanged: "1d ago" }],
@@ -208,6 +208,9 @@ beforeEach(() => {
     commitCounts: new Map(),
   });
 });
+
+// Minimal mock store to enable cache-dependent code paths
+const mockStore = {} as never;
 
 describe("runAnalysis", () => {
   it("returns a complete ContextAnalysis on cache miss", async () => {
@@ -220,6 +223,7 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(analysis.hubFiles).toBeDefined();
@@ -235,7 +239,17 @@ describe("runAnalysis", () => {
   });
 
   it("calls all analysis functions on cache miss", async () => {
-    await runAnalysis("/tmp/test", makeGraph(), makeDetected(), null, false, true, noopProgress, noopProgress);
+    await runAnalysis(
+      "/tmp/test",
+      makeGraph(),
+      makeDetected(),
+      null,
+      false,
+      true,
+      noopProgress,
+      noopProgress,
+      mockStore,
+    );
 
     expect(mockGetHubFiles).toHaveBeenCalled();
     expect(mockFindCircularDeps).toHaveBeenCalled();
@@ -277,6 +291,7 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     // Should use cached values
@@ -300,6 +315,7 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(mockAnalyzeGitActivity).toHaveBeenCalledWith("/tmp/test", expect.any(Function), 90);
@@ -315,6 +331,7 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(mockAnalyzeGitActivity).not.toHaveBeenCalled();
@@ -342,6 +359,7 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(analysis.gitActivity?.hotFiles).toHaveLength(1);
@@ -351,8 +369,8 @@ describe("runAnalysis", () => {
 
   it("calls monorepo analysis when monorepo is detected", async () => {
     const monorepo = {
-      type: "npm" as const,
-      packages: [{ name: "core", path: "packages/core" }],
+      type: "npm-workspaces" as const,
+      packages: [{ name: "core", path: "packages/core", dependencies: [], frameworks: [] }],
     };
 
     await runAnalysis(
@@ -364,6 +382,7 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(mockAnalyzeMonorepoGraph).toHaveBeenCalled();
@@ -380,13 +399,24 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(mockAnalyzeMonorepoGraph).not.toHaveBeenCalled();
   });
 
   it("saves analysis cache on cache miss", async () => {
-    await runAnalysis("/tmp/test", makeGraph(), makeDetected(), null, false, true, noopProgress, noopProgress);
+    await runAnalysis(
+      "/tmp/test",
+      makeGraph(),
+      makeDetected(),
+      null,
+      false,
+      true,
+      noopProgress,
+      noopProgress,
+      mockStore,
+    );
 
     expect(mockSaveAnalysisCache).toHaveBeenCalledWith(
       "/tmp/test",
@@ -412,7 +442,17 @@ describe("runAnalysis", () => {
       graphTopology: { isFragmented: false, componentCount: 1, componentSizes: [5], approximateDiameter: 2 },
     });
 
-    await runAnalysis("/tmp/test", makeGraph(), makeDetected(), null, false, true, noopProgress, noopProgress);
+    await runAnalysis(
+      "/tmp/test",
+      makeGraph(),
+      makeDetected(),
+      null,
+      false,
+      true,
+      noopProgress,
+      noopProgress,
+      mockStore,
+    );
 
     expect(mockSaveAnalysisCache).not.toHaveBeenCalled();
   });
@@ -421,7 +461,7 @@ describe("runAnalysis", () => {
     mockSaveAnalysisCache.mockRejectedValue(new Error("disk full"));
 
     await expect(
-      runAnalysis("/tmp/test", makeGraph(), makeDetected(), null, false, true, noopProgress, noopProgress),
+      runAnalysis("/tmp/test", makeGraph(), makeDetected(), null, false, true, noopProgress, noopProgress, mockStore),
     ).resolves.toBeDefined();
   });
 
@@ -435,13 +475,14 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(mockAnalyzeGitActivity).toHaveBeenCalledWith("/tmp/test", expect.any(Function), 30);
   });
 
   it("returns delta section when previous snapshot exists and delta is non-empty", async () => {
-    mockLoadPreviousSnapshot.mockResolvedValue({ some: "snapshot" });
+    mockLoadPreviousSnapshot.mockReturnValue({ some: "snapshot" });
     mockIsDeltaEmpty.mockReturnValue(false);
     mockRenderDeltaSection.mockReturnValue("- Added 2 hub files\n- Removed 1 cycle");
 
@@ -454,6 +495,7 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(deltaSection).toContain("Added 2 hub files");
@@ -461,7 +503,7 @@ describe("runAnalysis", () => {
   });
 
   it("returns null delta when no previous snapshot", async () => {
-    mockLoadPreviousSnapshot.mockResolvedValue(null);
+    mockLoadPreviousSnapshot.mockReturnValue(null);
 
     const { deltaSection } = await runAnalysis(
       "/tmp/test",
@@ -472,13 +514,14 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(deltaSection).toBeNull();
   });
 
   it("git cache hit skips analyzeGitActivity", async () => {
-    mockLoadGitCache.mockResolvedValue({
+    mockLoadGitCache.mockReturnValue({
       version: 1,
       cacheKey: "git-cache-key-789",
       commitCounts: [],
@@ -496,13 +539,14 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(mockAnalyzeGitActivity).not.toHaveBeenCalled();
   });
 
   it("git cache hit still produces gitActivity data via hydration", async () => {
-    mockLoadGitCache.mockResolvedValue({
+    mockLoadGitCache.mockReturnValue({
       version: 1,
       cacheKey: "git-cache-key-789",
       commitCounts: [],
@@ -520,6 +564,7 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(analysis.gitActivity).not.toBeNull();
@@ -536,6 +581,7 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(mockAnalyzeGitActivity).toHaveBeenCalled();
@@ -551,13 +597,14 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(mockSaveGitCache).toHaveBeenCalled();
   });
 
   it("timing.gitCacheHit is true on git cache hit", async () => {
-    mockLoadGitCache.mockResolvedValue({
+    mockLoadGitCache.mockReturnValue({
       version: 1,
       cacheKey: "git-cache-key-789",
       commitCounts: [],
@@ -574,6 +621,7 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(timing.gitCacheHit).toBe(true);
@@ -589,6 +637,7 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(timing.gitCacheHit).toBe(false);
@@ -606,6 +655,7 @@ describe("runAnalysis", () => {
       true,
       noopProgress,
       noopProgress,
+      mockStore,
     );
 
     expect(mockSaveGitCache).not.toHaveBeenCalled();

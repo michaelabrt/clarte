@@ -7,19 +7,19 @@
 
 import type { DatabaseAdapter, StatementAdapter } from "./db-adapter.js";
 import type {
-  FileRecord,
-  SymbolRecord,
-  FileEdgeRecord,
-  SymbolEdgeRecord,
   CallSiteRecord,
-  CommunityRecord,
   ChangeCouplingRecord,
+  CommunityRecord,
+  FileEdgeRecord,
+  FileRecord,
+  InMemoryEdge,
   InMemoryFileGraph,
   InMemoryFileNode,
-  InMemoryEdge,
   InMemorySymbolGraph,
   InMemorySymbolNode,
   InMemorySymEdge,
+  SymbolEdgeRecord,
+  SymbolRecord,
 } from "./types.js";
 
 // ── Row types returned by SQL queries ─────────────────────────────────────────
@@ -66,6 +66,7 @@ interface SymbolRow {
   authority: number | null;
   body_hash: string | null;
   body_tokens: string | null;
+  is_exported: number;
 }
 
 interface SymEdgeRow {
@@ -73,6 +74,8 @@ interface SymEdgeRow {
   to_symbol_id: number;
   kind: string;
   line: number | null;
+  ordinal: number | null;
+  confidence: number | null;
 }
 
 export interface CallSiteRow {
@@ -86,6 +89,12 @@ export interface CallSiteRow {
 
 interface MetaRow {
   value: string;
+}
+
+interface KvCacheRow {
+  key: string;
+  value: string;
+  expires_at: number | null;
 }
 
 interface HashRow {
@@ -129,6 +138,11 @@ export class GraphStore {
   private readonly stmtLoadChangeCoupling: StatementAdapter;
   private readonly stmtLoadAllCallSites: StatementAdapter;
 
+  // KV cache statements
+  private readonly stmtGetCache: StatementAdapter;
+  private readonly stmtSetCache: StatementAdapter;
+  private readonly stmtDeleteCache: StatementAdapter;
+
   // Write statements
   private readonly stmtUpsertFile: StatementAdapter;
   private readonly stmtUpsertSymbol: StatementAdapter;
@@ -137,6 +151,7 @@ export class GraphStore {
   private readonly stmtUpsertSymbolEdge: StatementAdapter;
   private readonly stmtInsertCallSite: StatementAdapter;
   private readonly stmtDeleteCallSitesByFile: StatementAdapter;
+  private readonly stmtDeleteFtsByRowid: StatementAdapter;
   private readonly stmtDeleteFtsByFile: StatementAdapter;
   private readonly stmtDeleteFile: StatementAdapter;
   private readonly stmtUpsertCommunity: StatementAdapter;
@@ -165,12 +180,13 @@ export class GraphStore {
     `);
 
     this.stmtSelectSymbols = db.prepare(`
-      SELECT id, file_path, name, kind, start_line, end_line, authority, body_hash, body_tokens
+      SELECT id, file_path, name, kind, start_line, end_line, authority,
+             body_hash, body_tokens, is_exported
       FROM symbols
     `);
 
     this.stmtSelectSymEdges = db.prepare(`
-      SELECT from_symbol_id, to_symbol_id, kind, line
+      SELECT from_symbol_id, to_symbol_id, kind, line, ordinal, confidence
       FROM symbol_edges
     `);
 
@@ -199,6 +215,19 @@ export class GraphStore {
       SELECT id, caller_file, caller_fn, callee_name, callee_file, line FROM call_sites
     `);
 
+    // ── KV cache statements ───────────────────────────────────────────────────
+    this.stmtGetCache = db.prepare(`
+      SELECT value FROM kv_cache WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)
+    `);
+
+    this.stmtSetCache = db.prepare(`
+      INSERT OR REPLACE INTO kv_cache (key, value, expires_at) VALUES (?, ?, ?)
+    `);
+
+    this.stmtDeleteCache = db.prepare(`
+      DELETE FROM kv_cache WHERE key = ?
+    `);
+
     // ── Write statements ──────────────────────────────────────────────────────
     this.stmtUpsertFile = db.prepare(`
       INSERT OR REPLACE INTO files (
@@ -212,8 +241,8 @@ export class GraphStore {
     this.stmtUpsertSymbol = db.prepare(`
       INSERT OR REPLACE INTO symbols (
         file_path, name, kind, start_line, end_line, authority, body_hash,
-        body_tokens, import_names
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        body_tokens, import_names, is_exported
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.stmtSelectSymbolId = db.prepare(`
@@ -228,8 +257,9 @@ export class GraphStore {
     `);
 
     this.stmtUpsertSymbolEdge = db.prepare(`
-      INSERT OR REPLACE INTO symbol_edges (from_symbol_id, to_symbol_id, kind, line)
-      VALUES (?, ?, ?, ?)
+      INSERT OR REPLACE INTO symbol_edges (
+        from_symbol_id, to_symbol_id, kind, line, ordinal, confidence
+      ) VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     this.stmtInsertCallSite = db.prepare(`
@@ -241,10 +271,14 @@ export class GraphStore {
       DELETE FROM call_sites WHERE caller_file = ?
     `);
 
-    // FTS5 delete via the 'delete' command
+    // F20: Regular DELETE on standalone FTS5 table (no content-sync mismatch)
+    this.stmtDeleteFtsByRowid = db.prepare(`
+      DELETE FROM fts_symbols WHERE rowid = ?
+    `);
+
+    // F20: Delete all FTS entries for a file via symbol ID subquery
     this.stmtDeleteFtsByFile = db.prepare(`
-      INSERT INTO fts_symbols(fts_symbols, rowid, file_path, name, body_tokens, import_names)
-      SELECT 'delete', id, file_path, name, '', '' FROM symbols WHERE file_path = ?
+      DELETE FROM fts_symbols WHERE rowid IN (SELECT id FROM symbols WHERE file_path = ?)
     `);
 
     this.stmtDeleteFile = db.prepare(`
@@ -272,8 +306,9 @@ export class GraphStore {
       INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)
     `);
 
+    // F1: FTS column is symbol_name (RFC-aligned), not name
     this.stmtFtsInsert = db.prepare(`
-      INSERT INTO fts_symbols(rowid, file_path, name, body_tokens, import_names)
+      INSERT INTO fts_symbols(rowid, file_path, symbol_name, body_tokens, import_names)
       VALUES (?, ?, ?, ?, ?)
     `);
   }
@@ -339,6 +374,7 @@ export class GraphStore {
         authority: row.authority,
         bodyHash: row.body_hash,
         bodyTokens: row.body_tokens,
+        isExported: row.is_exported === 1,
       };
       symbols.set(row.id, node);
 
@@ -359,6 +395,8 @@ export class GraphStore {
         toSymbolId: row.to_symbol_id,
         kind: row.kind,
         line: row.line,
+        ordinal: row.ordinal,
+        confidence: row.confidence,
       };
 
       let fwd = forward.get(row.from_symbol_id);
@@ -423,9 +461,6 @@ export class GraphStore {
   }
 
   /**
-   * Get all stored file hashes.
-   */
-  /**
    * Get all stored file hashes, excluding stub files (hash="").
    */
   getAllHashes(): Map<string, string> {
@@ -457,6 +492,33 @@ export class GraphStore {
    */
   loadChangeCoupling(): ChangeCouplingRow[] {
     return this.stmtLoadChangeCoupling.all<ChangeCouplingRow>();
+  }
+
+  // ── KV cache interface ──────────────────────────────────────────────────────
+
+  /**
+   * Read a value from the kv_cache table.
+   * Returns undefined if the key does not exist or has expired.
+   */
+  getCache(key: string): string | undefined {
+    const now = Math.floor(Date.now() / 1000);
+    const row = this.stmtGetCache.get<KvCacheRow>(key, now);
+    return row?.value;
+  }
+
+  /**
+   * Write a value to the kv_cache table.
+   * Optional expiresAt is a Unix timestamp (seconds).
+   */
+  setCache(key: string, value: string, expiresAt?: number): void {
+    this.stmtSetCache.run(key, value, expiresAt ?? null);
+  }
+
+  /**
+   * Delete a key from the kv_cache table.
+   */
+  deleteCache(key: string): void {
+    this.stmtDeleteCache.run(key);
   }
 
   // ── Write interface ─────────────────────────────────────────────────────────
@@ -497,13 +559,27 @@ export class GraphStore {
 
   /**
    * Upsert symbol records. Returns inserted row IDs.
-   * Also updates the FTS5 index.
+   * F21: Deletes old FTS entries before re-inserting to prevent index bloat.
+   * F3: Persists is_exported.
    */
   upsertSymbols(symbols: SymbolRecord[]): number[] {
     const ids: number[] = [];
 
     const run = this.db.transaction(() => {
       for (const s of symbols) {
+        // F21: Delete old FTS entry before upsert (prevents duplicates).
+        // INSERT OR REPLACE deletes the old row (triggering a new AUTOINCREMENT id),
+        // so the old FTS entry would become orphaned without this cleanup.
+        const existingRow = this.stmtSelectSymbolId.get<InsertIdRow>(s.file_path, s.name, s.start_line);
+        if (existingRow?.id) {
+          try {
+            this.stmtDeleteFtsByRowid.run(existingRow.id);
+          } catch {
+            // FTS5 not available
+          }
+        }
+
+        // F3: Persist is_exported (10th parameter)
         this.stmtUpsertSymbol.run(
           s.file_path,
           s.name,
@@ -514,6 +590,7 @@ export class GraphStore {
           s.body_hash ?? null,
           s.body_tokens ?? null,
           s.import_names ?? null,
+          s.is_exported ?? 0,
         );
 
         const idRow = this.stmtSelectSymbolId.get<InsertIdRow>(s.file_path, s.name, s.start_line);
@@ -556,11 +633,19 @@ export class GraphStore {
 
   /**
    * Upsert symbol-level dependency edges.
+   * F19: Persists confidence.
    */
   upsertSymbolEdges(edges: SymbolEdgeRecord[]): void {
     const run = this.db.transaction(() => {
       for (const e of edges) {
-        this.stmtUpsertSymbolEdge.run(e.from_symbol_id, e.to_symbol_id, e.kind, e.line ?? null);
+        this.stmtUpsertSymbolEdge.run(
+          e.from_symbol_id,
+          e.to_symbol_id,
+          e.kind,
+          e.line ?? null,
+          e.ordinal ?? null,
+          e.confidence ?? null,
+        );
       }
     });
     run();
@@ -628,7 +713,7 @@ export class GraphStore {
 
   /**
    * Delete a file and cascade to its symbols, edges and call sites.
-   * Also removes FTS5 index entries.
+   * F20: Removes FTS5 entries via regular DELETE (no content-sync mismatch).
    */
   deleteFile(filePath: string): void {
     const run = this.db.transaction(() => {
@@ -670,14 +755,11 @@ export class GraphStore {
   /**
    * Compute and store BM25F corpus statistics for the symbols table.
    * Writes three meta keys: bm25f_avg_field_lengths, bm25f_doc_count, bm25f_doc_freqs.
+   *
+   * F10: Field lengths are token counts (via tokenizeBm25f / space-split),
+   * not raw character LENGTH().
    */
   refreshBm25fStats(): void {
-    interface AvgRow {
-      avg_file_path: number | null;
-      avg_symbol_name: number | null;
-      avg_body_tokens: number | null;
-      avg_import_names: number | null;
-    }
     interface CountRow {
       count: number;
     }
@@ -685,43 +767,55 @@ export class GraphStore {
       file_path: string;
       name: string;
       body_tokens: string | null;
+      import_names: string | null;
     }
 
-    const avgRow = this.db
-      .prepare(`SELECT
-        AVG(COALESCE(LENGTH(file_path), 0)) as avg_file_path,
-        AVG(COALESCE(LENGTH(name), 0)) as avg_symbol_name,
-        AVG(COALESCE(LENGTH(body_tokens), 0)) as avg_body_tokens,
-        AVG(COALESCE(LENGTH(import_names), 0)) as avg_import_names
-      FROM symbols`)
-      .get<AvgRow>();
-
-    this.stmtSetMeta.run(
-      "bm25f_avg_field_lengths",
-      JSON.stringify({
-        file_path: avgRow?.avg_file_path ?? 0,
-        symbol_name: avgRow?.avg_symbol_name ?? 0,
-        body_tokens: avgRow?.avg_body_tokens ?? 0,
-        import_names: avgRow?.avg_import_names ?? 0,
-      }),
-    );
-
     const countRow = this.db.prepare("SELECT COUNT(*) as count FROM symbols").get<CountRow>();
-    this.stmtSetMeta.run("bm25f_doc_count", String(countRow?.count ?? 0));
+    const docCount = countRow?.count ?? 0;
+    this.stmtSetMeta.run("bm25f_doc_count", String(docCount));
 
-    const symbolRows = this.db.prepare("SELECT file_path, name, body_tokens FROM symbols").all<SymbolTokenRow>();
+    const symbolRows = this.db
+      .prepare("SELECT file_path, name, body_tokens, import_names FROM symbols")
+      .all<SymbolTokenRow>();
+
+    // F10: Compute average field lengths as token counts, not character lengths.
+    // tokenizeBm25f splits on camelCase/separators matching BM25F query tokenization.
+    // body_tokens are already space-separated; count terms directly.
+    // import_names is a JSON array; count elements as tokens.
+    let totalFilePathTokens = 0;
+    let totalNameTokens = 0;
+    let totalBodyTokens = 0;
+    let totalImportTokens = 0;
 
     const df = new Map<string, number>();
+
     for (const row of symbolRows) {
-      const terms = new Set<string>([
-        ...tokenizeBm25f(row.file_path),
-        ...tokenizeBm25f(row.name),
-        ...(row.body_tokens ? row.body_tokens.split(/\s+/).filter((t) => t.length > 1) : []),
-      ]);
+      const fpTokens = tokenizeBm25f(row.file_path);
+      const nameTokens = tokenizeBm25f(row.name);
+      const bodyTokens = row.body_tokens ? row.body_tokens.split(/\s+/).filter((t) => t.length > 1) : [];
+      const importTokenCount = countJsonArrayElements(row.import_names);
+
+      totalFilePathTokens += fpTokens.length;
+      totalNameTokens += nameTokens.length;
+      totalBodyTokens += bodyTokens.length;
+      totalImportTokens += importTokenCount;
+
+      // Document frequency: unique terms per document
+      const terms = new Set<string>([...fpTokens, ...nameTokens, ...bodyTokens]);
       for (const term of terms) {
         df.set(term, (df.get(term) ?? 0) + 1);
       }
     }
+
+    this.stmtSetMeta.run(
+      "bm25f_avg_field_lengths",
+      JSON.stringify({
+        file_path: docCount > 0 ? totalFilePathTokens / docCount : 0,
+        symbol_name: docCount > 0 ? totalNameTokens / docCount : 0,
+        body_tokens: docCount > 0 ? totalBodyTokens / docCount : 0,
+        import_names: docCount > 0 ? totalImportTokens / docCount : 0,
+      }),
+    );
 
     const filteredDf = new Map<string, number>();
     for (const [term, count] of df) {
@@ -812,4 +906,18 @@ function tokenizeBm25f(text: string): string[] {
     .toLowerCase()
     .split(/\s+/)
     .filter((t) => t.length > 1);
+}
+
+/**
+ * Count elements in a JSON array string (e.g., '["foo","bar"]' -> 2).
+ * Each import name is roughly one token for BM25F field length purposes.
+ */
+function countJsonArrayElements(value: string | null | undefined): number {
+  if (!value) return 0;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
 }

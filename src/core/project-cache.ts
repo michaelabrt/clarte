@@ -11,9 +11,9 @@ import type {
   TestMapping,
   TestType,
 } from "./types.js";
-import { CLARTE_DIR } from "./config/config.js";
+import type { GraphStore } from "../storage/graph-store.js";
 
-const PROJECT_CACHE_FILE = "project-cache.json";
+const KV_KEY = "project_cache";
 
 export const PROJECT_CACHE_VERSION = 1;
 
@@ -156,10 +156,10 @@ function deserializeMonorepoAnalysis(s: SerializedMonorepoAnalysis): MonorepoAna
 
 // ── Load / Save ──────────────────────────────────────────────────────
 
-export async function loadProjectCache(rootDir: string): Promise<ProjectCacheData | null> {
-  const cachePath = path.join(rootDir, CLARTE_DIR, PROJECT_CACHE_FILE);
+export function loadProjectCache(store: GraphStore): ProjectCacheData | null {
   try {
-    const raw = await fs.readFile(cachePath, "utf-8");
+    const raw = store.getCache(KV_KEY);
+    if (!raw) return null;
     const data = JSON.parse(raw) as ProjectCacheData;
     if (data.version !== PROJECT_CACHE_VERSION) return null;
     return data;
@@ -168,11 +168,8 @@ export async function loadProjectCache(rootDir: string): Promise<ProjectCacheDat
   }
 }
 
-export async function saveProjectCache(rootDir: string, data: ProjectCacheData): Promise<void> {
-  const dir = path.join(rootDir, CLARTE_DIR);
-  await fs.mkdir(dir, { recursive: true });
-  const cachePath = path.join(dir, PROJECT_CACHE_FILE);
-  await fs.writeFile(cachePath, JSON.stringify(data), "utf-8");
+export function saveProjectCache(store: GraphStore, data: ProjectCacheData): void {
+  store.setCache(KV_KEY, JSON.stringify(data));
 }
 
 /**

@@ -48,6 +48,7 @@ import {
   hydrateGitCache,
   type GitCacheData,
 } from "./git-cache.js";
+import type { GraphStore } from "../storage/graph-store.js";
 import type {
   ConfigConstraints,
   ContextAnalysis,
@@ -96,6 +97,7 @@ export async function runAnalysis(
   jsonMode: boolean,
   verboseLog: ProgressCallback,
   noopProgress: ProgressCallback,
+  store?: GraphStore,
 ): Promise<AnalysisResult> {
   const totalStart = performance.now();
   const analysisDays = savedConfig?.analysisDays ?? 90;
@@ -112,11 +114,9 @@ export async function runAnalysis(
 
   // Load project cache + git cache key
   const projectCacheKey = await computeProjectCacheKey(rootDir, graph, detected);
-  const [projectCache, gitCacheKey, gitCache] = await Promise.all([
-    loadProjectCache(rootDir),
-    Promise.resolve(computeGitCacheKey(rootDir, analysisDays)),
-    loadGitCache(rootDir),
-  ]);
+  const gitCacheKey = computeGitCacheKey(rootDir, analysisDays);
+  const projectCache = store ? loadProjectCache(store) : null;
+  const gitCache = store ? loadGitCache(store) : null;
   const useProjectCache = projectCache !== null && projectCache.cacheKey === projectCacheKey;
   const validGitCache = gitCacheKey && gitCache && gitCache.cacheKey === gitCacheKey ? gitCache : null;
 
@@ -131,6 +131,7 @@ export async function runAnalysis(
     log,
     gitCacheKey,
     validGitCache,
+    store,
   );
   const projectPromise = runCacheableProjectPhase(rootDir, graph, detected, useProjectCache ? projectCache : null, log);
 
@@ -159,10 +160,10 @@ export async function runAnalysis(
   };
 
   // Save project cache on miss
-  if (!useProjectCache) {
+  if (!useProjectCache && store) {
     try {
-      await saveProjectCache(
-        rootDir,
+      saveProjectCache(
+        store,
         buildProjectCachePayload(
           projectCacheKey,
           cacheableProject.configConstraints,
@@ -207,7 +208,7 @@ export async function runAnalysis(
   }
 
   const deltaStart = performance.now();
-  const deltaSection = await runDeltaPhase(rootDir, analysis, log);
+  const deltaSection = store ? runDeltaPhase(store, analysis, log) : null;
   const deltaPhaseMs = performance.now() - deltaStart;
 
   const totalMs = performance.now() - totalStart;
@@ -315,6 +316,7 @@ async function runGitPhase(
   log: LogCtx,
   gitCacheKey: string | null,
   gitCache: GitCacheData | null,
+  store?: GraphStore,
 ): Promise<{ gitActivity: ContextAnalysis["gitActivity"]; gitCacheHit: boolean }> {
   let gitActivity: ContextAnalysis["gitActivity"];
   let gitCacheHit = false;
@@ -327,9 +329,9 @@ async function runGitPhase(
   }
 
   // Save unfiltered result on cache miss before filterAlive mutates it
-  if (!gitCacheHit && gitActivity && gitCacheKey) {
+  if (!gitCacheHit && gitActivity && gitCacheKey && store) {
     try {
-      await saveGitCache(rootDir, buildGitCachePayload(gitCacheKey, gitActivity));
+      saveGitCache(store, buildGitCachePayload(gitCacheKey, gitActivity));
     } catch {
       // Non-fatal: cache save failure should not block analysis
     }
@@ -468,9 +470,9 @@ function computePackageHubFiles(
 // Phase 4: Delta detection
 // ---------------------------------------------------------------------------
 
-async function runDeltaPhase(rootDir: string, analysis: ContextAnalysis, log: LogCtx): Promise<string | null> {
+function runDeltaPhase(store: GraphStore, analysis: ContextAnalysis, log: LogCtx): string | null {
   const currentAnalysisSnapshot = extractSnapshot(analysis);
-  const prevSnapshot = await loadPreviousSnapshot(rootDir);
+  const prevSnapshot = loadPreviousSnapshot(store);
   let deltaSection: string | null = null;
 
   if (prevSnapshot) {
@@ -482,7 +484,7 @@ async function runDeltaPhase(rootDir: string, analysis: ContextAnalysis, log: Lo
   }
 
   try {
-    await saveSnapshot(rootDir, currentAnalysisSnapshot);
+    saveSnapshot(store, currentAnalysisSnapshot);
   } catch (err) {
     if (!log.jsonMode && log.verbose) console.error(`[clarte] snapshot save failed: ${errorMessage(err)}`);
   }
