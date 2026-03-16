@@ -224,9 +224,8 @@ describe("generateHookFiles", () => {
 
   it("generates on-fail-fast.mjs", async () => {
     tmpDir = await makeTmpDir();
-    const graph = makePersistedGraph({ files: {} });
 
-    await generateHookFiles(tmpDir, graph);
+    await generateHookFiles(tmpDir);
 
     const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-fail-fast.mjs"), "utf-8");
     expect(script).toContain("permissionDecision");
@@ -237,13 +236,8 @@ describe("generateHookFiles", () => {
 
   it("does not generate context-map.json (removed: R.12 vestige)", async () => {
     tmpDir = await makeTmpDir();
-    const graph = makePersistedGraph({
-      files: {
-        "src/utils.ts": makeFileRecord({ role: "Foundation", betweenness: 0.85 }),
-      },
-    });
 
-    await generateHookFiles(tmpDir, graph);
+    await generateHookFiles(tmpDir);
 
     const exists = await fs.access(path.join(tmpDir, ".clarte/hooks/context-map.json")).then(
       () => true,
@@ -254,9 +248,8 @@ describe("generateHookFiles", () => {
 
   it("generates on-session-start.mjs with model gate and state cleanup", async () => {
     tmpDir = await makeTmpDir();
-    const graph = makePersistedGraph({ files: {} });
 
-    await generateHookFiles(tmpDir, graph);
+    await generateHookFiles(tmpDir);
 
     const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-session-start.mjs"), "utf-8");
     expect(script).toContain("CLAUDE_ENV_FILE");
@@ -269,9 +262,8 @@ describe("generateHookFiles", () => {
 
   it("on-session-start.mjs always clears fail-fast.json", async () => {
     tmpDir = await makeTmpDir();
-    const graph = makePersistedGraph({ files: {} });
 
-    await generateHookFiles(tmpDir, graph);
+    await generateHookFiles(tmpDir);
 
     const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-session-start.mjs"), "utf-8");
     expect(script).toContain("fail-fast.json");
@@ -279,9 +271,8 @@ describe("generateHookFiles", () => {
 
   it("on-session-start.mjs uses resolve() for all paths", async () => {
     tmpDir = await makeTmpDir();
-    const graph = makePersistedGraph({ files: {} });
 
-    await generateHookFiles(tmpDir, graph);
+    await generateHookFiles(tmpDir);
 
     const script = await fs.readFile(path.join(tmpDir, ".clarte/hooks/on-session-start.mjs"), "utf-8");
     expect(script).toContain("resolve(");
@@ -440,191 +431,54 @@ describe("configureClaudeHooks", () => {
   });
 });
 
-// ── PROMPT_SCRIPT: BM25F sync ────────────────────────────────────────────────
+// ── PROMPT_SCRIPT: thin I/O shell ────────────────────────────────────────────
 
-describe("PROMPT_SCRIPT BM25F sync", () => {
-  let script: string;
-
-  afterEach(async () => {
-    // no-op: script is read once, no tmp dirs needed
-  });
-
+describe("PROMPT_SCRIPT thin shell", () => {
   async function getScript(tmpDir: string): Promise<string> {
-    const graph = makePersistedGraph({ files: {} });
-    await generateHookFiles(tmpDir, graph);
+    await generateHookFiles(tmpDir);
     return fs.readFile(path.join(tmpDir, ".clarte/hooks/on-prompt.mjs"), "utf-8");
   }
 
-  it("uses directional expansion: IE=0.4 for importers", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-bm25-"));
-    try {
-      script = await getScript(tmp);
-      expect(script).toContain("IE = 0.4");
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
-  });
-
-  it("uses directional expansion: IM=0.2 for providers", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-bm25-"));
-    try {
-      script = await getScript(tmp);
-      expect(script).toContain("IM = 0.2");
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
-  });
-
-  it("does not use symmetric EF=0.3 expansion from before the directional change", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-bm25-"));
-    try {
-      script = await getScript(tmp);
-      expect(script).not.toContain("EF = 0.3");
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
-  });
-
-  it("includes verify/verification synonym group", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-bm25-"));
-    try {
-      script = await getScript(tmp);
-      expect(script).toContain('"verify"');
-      expect(script).toContain('"verification"');
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
-  });
-
-  it("includes comma-related stop words", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-bm25-"));
-    try {
-      script = await getScript(tmp);
-      expect(script).toContain('"comma-joined"');
-      expect(script).toContain('"comma-separated"');
-      expect(script).toContain('"commas"');
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
-  });
-
-  it("preserves compound tokens in tokId when a stop word filters a part", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-bm25-"));
-    try {
-      script = await getScript(tmp);
-      // The compound token preservation block: pushes the full lowercased part when
-      // a stop word filtered out one of the camelCase sub-parts.
-      expect(script).toContain("filt.length < valid.length");
-      expect(script).toContain("comp.length >= 4");
-      expect(script).toContain("result.push(comp)");
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
-  });
-});
-
-// ── PROMPT_SCRIPT: negation detection ───────────────────────────────────────
-
-describe("PROMPT_SCRIPT negation detection", () => {
-  async function getScript(tmpDir: string): Promise<string> {
-    const graph = makePersistedGraph({ files: {} });
-    await generateHookFiles(tmpDir, graph);
-    return fs.readFile(path.join(tmpDir, ".clarte/hooks/on-prompt.mjs"), "utf-8");
-  }
-
-  it("checks for negation words before a file mention", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-neg-"));
+  it("imports scoring library from ./bm25f.mjs", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-shell-"));
     try {
       const script = await getScript(tmp);
-      // The negation regex must be present
-      expect(script).toContain("negRe");
-      expect(script).toContain("not");
-      expect(script).toContain("don't");
-      expect(script).toContain("isn't");
+      expect(script).toContain('from "./bm25f.mjs"');
     } finally {
       await fs.rm(tmp, { recursive: true, force: true });
     }
   });
 
-  it("looks back 30 chars before the file mention", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-neg-"));
+  it("imports resolveEditTargets, rankSymbols, shouldSkipPreFlight", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-shell-"));
     try {
       const script = await getScript(tmp);
-      // Must slice up to 30 chars before the index
-      expect(script).toContain("idx - 30");
+      expect(script).toContain("resolveEditTargets");
+      expect(script).toContain("rankSymbols");
+      expect(script).toContain("shouldSkipPreFlight");
+      expect(script).toContain("promptMentionsTargets");
+      expect(script).toContain("renderTaskContext");
+      expect(script).toContain("resolveTargetsFromHistory");
     } finally {
       await fs.rm(tmp, { recursive: true, force: true });
     }
   });
 
-  it("only skips bailout when negation is absent (no false negatives)", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-neg-"));
+  it("contains no inlined BM25F scoring logic", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-shell-"));
     try {
       const script = await getScript(tmp);
-      // The filter returns false (suppresses bailout) when negRe matches
-      expect(script).toContain("!negRe.test(before)");
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
-  });
-});
-
-// ── PROMPT_SCRIPT: task-context.md relationship hints ───────────────────────
-
-describe("PROMPT_SCRIPT task-context relationship hints", () => {
-  async function getScript(tmpDir: string): Promise<string> {
-    const graph = makePersistedGraph({ files: {} });
-    await generateHookFiles(tmpDir, graph);
-    return fs.readFile(path.join(tmpDir, ".clarte/hooks/on-prompt.mjs"), "utf-8");
-  }
-
-  it("emits Imported by: line for files with importing targets", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-hints-"));
-    try {
-      const script = await getScript(tmp);
-      expect(script).toContain('"Imported by: "');
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
-  });
-
-  it("emits Imports from: line for files importing other targets", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-hints-"));
-    try {
-      const script = await getScript(tmp);
-      expect(script).toContain('"Imports from: "');
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
-  });
-
-  it("emits Tests: line from testMapping", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-hints-"));
-    try {
-      const script = await getScript(tmp);
-      expect(script).toContain('"Tests: "');
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
-  });
-
-  it("caps test paths at 3 entries", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-hints-"));
-    try {
-      const script = await getScript(tmp);
-      // slice(0, 3) prevents emitting more than 3 test paths
-      expect(script).toContain("slice(0, 3)");
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
-  });
-
-  it("filters relationship hints to only other target files", async () => {
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-hints-"));
-    try {
-      const script = await getScript(tmp);
-      // Must filter importers/imports by targetSet membership
-      expect(script).toContain("targetSet.has(f)");
+      // No inlined scoring functions
+      expect(script).not.toContain("function scoreBM25F");
+      expect(script).not.toContain("function buildDoc");
+      expect(script).not.toContain("function tokId");
+      expect(script).not.toContain("function resolveTargets");
+      // No SYNC markers
+      expect(script).not.toContain("// SYNC:");
+      // No BM25 constants
+      expect(script).not.toContain("const K1 =");
+      expect(script).not.toContain("const STOP =");
+      expect(script).not.toContain("SYN_GROUPS");
     } finally {
       await fs.rm(tmp, { recursive: true, force: true });
     }

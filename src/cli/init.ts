@@ -421,7 +421,7 @@ async function runPostGenerationTasks(opts: PostGenerationOptions): Promise<void
       const { generateHookFiles, configureClaudeHooks, generatePreFlightAgentFile } = await import(
         "../steer/hooks/generate-hooks.js"
       );
-      await generateHookFiles(rootDir, persistedGraph, savedConfig?.delivery?.enrichedHooks);
+      await generateHookFiles(rootDir);
       await configureClaudeHooks(rootDir);
       await generatePreFlightAgentFile(rootDir);
     } catch (err) {
