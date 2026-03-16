@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { findSCCs, findCircularDeps, findFeedbackEdges } from "../core/graph/cycles.js";
 import { getHubFiles } from "../core/graph/hub-files.js";
 import { computeHITS, deriveRole, computeBetweenness } from "../core/graph/centrality.js";
-import { detectCommunities } from "../core/graph/communities.js";
+import { detectCommunitiesLeiden, computeAdaptiveGamma, computeCohesion } from "../core/graph/leiden.js";
+import {
+  quantizeBetweennessK,
+  checkRebuildTriggers,
+  shouldRunDriftDetection,
+  collectNHopNeighborhood,
+  filesNeedingRoleUpdate,
+} from "../core/graph/incremental.js";
 import { findStructuralTemporalMismatches } from "../core/graph/mismatches.js";
 import { findTightCouplings } from "../core/graph/tight-coupling.js";
 import { checkArchitecturalFitness } from "../core/graph/fitness.js";
@@ -1100,125 +1107,360 @@ describe("checkArchitecturalFitness", () => {
   });
 });
 
-// ── §3.4 Community detection Louvain refinement ───────────────────────
+// ── §5.1 Leiden community detection ───────────────────────────────────
 
-describe("detectCommunities Louvain refinement", () => {
+describe("detectCommunitiesLeiden", () => {
   it("returns empty for empty graph", () => {
     const graph = makeGraph([], []);
-    expect(detectCommunities(graph)).toEqual([]);
+    expect(detectCommunitiesLeiden(graph)).toEqual([]);
   });
 
-  it("returns empty when communities perfectly mirror directory structure (ARI > threshold)", () => {
-    // Tight directory-based clustering; Louvain should not break novelty check
-    // All files in the same directory, densely connected - ARI will be high
+  it("two cliques connected by a bridge produce two communities (§5.1 acceptance 1)", () => {
+    // Two cliques spread across MIXED directories so Leiden must discover
+    // the real communities (ARI with directory structure will be low).
+    // Clique A: mix of src/core and src/util files, densely connected
+    // Clique B: mix of src/api and src/util files, densely connected
+    // Bridge: single edge between cliques
     const files = [
-      "src/auth/login.ts",
-      "src/auth/logout.ts",
-      "src/auth/token.ts",
-      "src/data/fetch.ts",
-      "src/data/parse.ts",
-      "src/data/cache.ts",
+      "src/core/a1.ts", "src/util/a2.ts", "src/core/a3.ts", "src/util/a4.ts",
+      "src/api/b1.ts", "src/util/b2.ts", "src/api/b3.ts", "src/core/b4.ts",
     ];
     const edges = [
-      // auth cluster: all connected to each other
+      // Clique A (cross-directory)
+      edge("src/core/a1.ts", "src/util/a2.ts"), edge("src/core/a1.ts", "src/core/a3.ts"),
+      edge("src/core/a1.ts", "src/util/a4.ts"), edge("src/util/a2.ts", "src/core/a3.ts"),
+      edge("src/util/a2.ts", "src/util/a4.ts"), edge("src/core/a3.ts", "src/util/a4.ts"),
+      // Clique B (cross-directory)
+      edge("src/api/b1.ts", "src/util/b2.ts"), edge("src/api/b1.ts", "src/api/b3.ts"),
+      edge("src/api/b1.ts", "src/core/b4.ts"), edge("src/util/b2.ts", "src/api/b3.ts"),
+      edge("src/util/b2.ts", "src/core/b4.ts"), edge("src/api/b3.ts", "src/core/b4.ts"),
+      // Bridge
+      edge("src/core/a1.ts", "src/api/b1.ts"),
+    ];
+    const graph = makeGraph(files, edges);
+    const communities = detectCommunitiesLeiden(graph);
+
+    // Leiden should find 2 communities (one per clique, not per directory)
+    expect(communities.length).toBe(2);
+
+    // Each community is internally connected (§5.1 acceptance 2)
+    for (const c of communities) {
+      expect(c.files.length).toBe(4);
+    }
+  });
+
+  it("each community is internally connected (no disconnected sub-clusters)", () => {
+    // Three separate cliques across mixed directories
+    const files = [
+      "api/auth.ts", "api/user.ts", "api/session.ts",
+      "db/query.ts", "db/pool.ts", "db/migrate.ts",
+      "util/log.ts", "util/fmt.ts", "util/hash.ts",
+    ];
+    const edges = [
+      // api cluster
+      edge("api/auth.ts", "api/user.ts"), edge("api/auth.ts", "api/session.ts"),
+      edge("api/user.ts", "api/session.ts"),
+      // db cluster
+      edge("db/query.ts", "db/pool.ts"), edge("db/query.ts", "db/migrate.ts"),
+      edge("db/pool.ts", "db/migrate.ts"),
+      // util cluster
+      edge("util/log.ts", "util/fmt.ts"), edge("util/log.ts", "util/hash.ts"),
+      edge("util/fmt.ts", "util/hash.ts"),
+    ];
+    const graph = makeGraph(files, edges);
+    const communities = detectCommunitiesLeiden(graph);
+
+    // If communities are returned (ARI check may filter them), verify connectivity
+    for (const c of communities) {
+      // BFS from first node should reach all nodes in the community
+      const adj = new Map<string, Set<string>>();
+      for (const e of edges) {
+        if (!adj.has(e.from)) adj.set(e.from, new Set());
+        if (!adj.has(e.to)) adj.set(e.to, new Set());
+        adj.get(e.from)!.add(e.to);
+        adj.get(e.to)!.add(e.from);
+      }
+      const memberSet = new Set(c.files);
+      const visited = new Set<string>();
+      const queue = [c.files[0]];
+      visited.add(c.files[0]);
+      while (queue.length > 0) {
+        const node = queue.shift()!;
+        for (const neighbor of adj.get(node) ?? []) {
+          if (memberSet.has(neighbor) && !visited.has(neighbor)) {
+            visited.add(neighbor);
+            queue.push(neighbor);
+          }
+        }
+      }
+      expect(visited.size).toBe(c.files.length);
+    }
+  });
+
+  it("returns empty when communities mirror directory structure (ARI > threshold, §5.5)", () => {
+    const files = [
+      "src/auth/login.ts", "src/auth/logout.ts", "src/auth/token.ts",
+      "src/data/fetch.ts", "src/data/parse.ts", "src/data/cache.ts",
+    ];
+    const edges = [
       edge("src/auth/login.ts", "src/auth/token.ts"),
       edge("src/auth/logout.ts", "src/auth/token.ts"),
       edge("src/auth/login.ts", "src/auth/logout.ts"),
-      // data cluster: all connected to each other
       edge("src/data/fetch.ts", "src/data/cache.ts"),
       edge("src/data/parse.ts", "src/data/cache.ts"),
       edge("src/data/fetch.ts", "src/data/parse.ts"),
     ];
     const graph = makeGraph(files, edges);
-    // When communities exactly mirror directories, should return []
-    const communities = detectCommunities(graph);
-    // This test documents the ARI novelty filter; communities may or may not be empty
-    // but must never produce files not in the graph
-    for (const community of communities) {
-      for (const file of community.files) {
+    const communities = detectCommunitiesLeiden(graph);
+    // ARI novelty filter: communities must not leak files from outside the graph
+    for (const c of communities) {
+      for (const file of c.files) {
         expect(files).toContain(file);
       }
     }
   });
 
-  it("cross-directory connections trigger Louvain to reassign files", () => {
-    // Two directory groups but with strong cross-directory edges
-    // worker files connect more to shared/ than to their own directory
+  it("cross-directory connections trigger Leiden to reassign files", () => {
     const files = [
-      "worker/job-a.ts",
-      "worker/job-b.ts",
-      "worker/job-c.ts",
-      "shared/queue.ts",
-      "shared/config.ts",
-      "shared/logger.ts",
-      "infra/monitor.ts",
-      "infra/health.ts",
-      "infra/metrics.ts",
+      "worker/job-a.ts", "worker/job-b.ts", "worker/job-c.ts",
+      "shared/queue.ts", "shared/config.ts", "shared/logger.ts",
+      "infra/monitor.ts", "infra/health.ts", "infra/metrics.ts",
     ];
     const edges = [
-      // worker connects densely to shared
       edge("worker/job-a.ts", "shared/queue.ts"),
       edge("worker/job-b.ts", "shared/queue.ts"),
       edge("worker/job-c.ts", "shared/queue.ts"),
       edge("worker/job-a.ts", "shared/config.ts"),
       edge("worker/job-b.ts", "shared/config.ts"),
       edge("worker/job-c.ts", "shared/logger.ts"),
-      // shared is internally connected
       edge("shared/queue.ts", "shared/config.ts"),
       edge("shared/logger.ts", "shared/config.ts"),
-      // infra is isolated
       edge("infra/monitor.ts", "infra/health.ts"),
       edge("infra/monitor.ts", "infra/metrics.ts"),
       edge("infra/health.ts", "infra/metrics.ts"),
     ];
     const graph = makeGraph(files, edges);
-    const communities = detectCommunities(graph);
+    const communities = detectCommunitiesLeiden(graph);
 
-    // Results must be valid
-    for (const community of communities) {
-      expect(community.files.length).toBeGreaterThanOrEqual(3);
-      for (const file of community.files) {
+    for (const c of communities) {
+      expect(c.files.length).toBeGreaterThanOrEqual(2);
+      for (const file of c.files) {
         expect(files).toContain(file);
       }
     }
-    // IDs are unique and labels are non-empty
     const ids = communities.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
-    for (const community of communities) {
-      expect(community.label.length).toBeGreaterThan(0);
+    for (const c of communities) {
+      expect(c.label.length).toBeGreaterThan(0);
     }
   });
 
-  it("Louvain does not change communities when directory structure already matches optimal modularity Q", () => {
-    // Two perfectly isolated clusters with no cross-edges
-    // Phase 3.5 delta Q will be negative for any move; no reassignments should occur
+  it("produces communities with cohesion scores (§5.4)", () => {
+    // Mixed-directory cliques so Leiden discovers non-trivial communities
     const files = [
-      "module-a/core.ts",
-      "module-a/helper.ts",
-      "module-a/types.ts",
-      "module-b/core.ts",
-      "module-b/helper.ts",
-      "module-b/types.ts",
+      "src/core/a1.ts", "src/util/a2.ts", "src/core/a3.ts", "src/util/a4.ts",
+      "src/api/b1.ts", "src/util/b2.ts", "src/api/b3.ts", "src/core/b4.ts",
     ];
     const edges = [
-      edge("module-a/core.ts", "module-a/helper.ts"),
-      edge("module-a/core.ts", "module-a/types.ts"),
-      edge("module-a/helper.ts", "module-a/types.ts"),
-      edge("module-b/core.ts", "module-b/helper.ts"),
-      edge("module-b/core.ts", "module-b/types.ts"),
-      edge("module-b/helper.ts", "module-b/types.ts"),
+      edge("src/core/a1.ts", "src/util/a2.ts"), edge("src/core/a1.ts", "src/core/a3.ts"),
+      edge("src/core/a1.ts", "src/util/a4.ts"), edge("src/util/a2.ts", "src/core/a3.ts"),
+      edge("src/util/a2.ts", "src/util/a4.ts"), edge("src/core/a3.ts", "src/util/a4.ts"),
+      edge("src/api/b1.ts", "src/util/b2.ts"), edge("src/api/b1.ts", "src/api/b3.ts"),
+      edge("src/api/b1.ts", "src/core/b4.ts"), edge("src/util/b2.ts", "src/api/b3.ts"),
+      edge("src/util/b2.ts", "src/core/b4.ts"), edge("src/api/b3.ts", "src/core/b4.ts"),
+      edge("src/core/a1.ts", "src/api/b1.ts"),
     ];
     const graph = makeGraph(files, edges);
+    const communities = detectCommunitiesLeiden(graph);
 
-    // With perfect isolation, ARI with directory structure = 1; return empty (novelty filter)
-    // OR communities are returned; either way no file leaks across clusters
-    const communities = detectCommunities(graph);
-    if (communities.length > 0) {
-      // If novelty filter passes, each community must be entirely within one module-X prefix
-      for (const community of communities) {
-        const prefixes = new Set(community.files.map((f) => f.split("/")[0]));
-        expect(prefixes.size).toBe(1);
-      }
+    for (const c of communities) {
+      expect(c.cohesion).toBeDefined();
+      expect(c.cohesion).toBeGreaterThanOrEqual(0);
+      expect(c.cohesion).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+// ── §5.2 Adaptive gamma ─────────────────────────────────────────────
+
+describe("computeAdaptiveGamma (§5.2)", () => {
+  it("returns 0.5 for 100 files", () => {
+    expect(computeAdaptiveGamma(100)).toBe(0.5);
+  });
+
+  it("returns 1.0 for 1000 files", () => {
+    expect(computeAdaptiveGamma(1000)).toBeCloseTo(1.0);
+  });
+
+  it("returns 2.0 for 10000 files", () => {
+    expect(computeAdaptiveGamma(10000)).toBeCloseTo(2.0);
+  });
+
+  it("clamps to [0.5, 3.0]", () => {
+    expect(computeAdaptiveGamma(1)).toBe(0.5);
+    expect(computeAdaptiveGamma(1_000_000)).toBe(3.0);
+  });
+});
+
+// ── §5.4 Per-cluster cohesion ───────────────────────────────────────
+
+describe("computeCohesion (§5.4)", () => {
+  it("clique of 4 has cohesion 1.0", () => {
+    const adj = new Map<string, Set<string>>();
+    const nodes = ["a", "b", "c", "d"];
+    for (const n of nodes) adj.set(n, new Set(nodes.filter((x) => x !== n)));
+    expect(computeCohesion(nodes, adj)).toBeCloseTo(1.0);
+  });
+
+  it("star graph (1 center + 3 leaves) has cohesion 0.5", () => {
+    const adj = new Map<string, Set<string>>();
+    adj.set("center", new Set(["a", "b", "c"]));
+    adj.set("a", new Set(["center"]));
+    adj.set("b", new Set(["center"]));
+    adj.set("c", new Set(["center"]));
+    expect(computeCohesion(["center", "a", "b", "c"], adj)).toBeCloseTo(0.5);
+  });
+
+  it("two disconnected nodes have cohesion 0.0", () => {
+    const adj = new Map<string, Set<string>>();
+    adj.set("a", new Set());
+    adj.set("b", new Set());
+    expect(computeCohesion(["a", "b"], adj)).toBeCloseTo(0.0);
+  });
+
+  it("single node has cohesion 1.0", () => {
+    const adj = new Map<string, Set<string>>();
+    adj.set("a", new Set());
+    expect(computeCohesion(["a"], adj)).toBeCloseTo(1.0);
+  });
+});
+
+// ── §5.9 BETWEENNESS_K quantization ─────────────────────────────────
+
+describe("quantizeBetweennessK (§5.9)", () => {
+  it("V=100 -> effectiveK=50", () => {
+    expect(quantizeBetweennessK(100)).toBe(50);
+  });
+
+  it("V=101 -> effectiveK=50 (stable)", () => {
+    expect(quantizeBetweennessK(101)).toBe(50);
+  });
+
+  it("V=700 -> effectiveK=60", () => {
+    expect(quantizeBetweennessK(700)).toBe(60);
+  });
+
+  it("V=710 -> effectiveK=60 (stable)", () => {
+    expect(quantizeBetweennessK(710)).toBe(60);
+  });
+
+  it("effectiveK is always a multiple of 10", () => {
+    for (const v of [50, 100, 300, 500, 700, 1000, 2500, 10000]) {
+      expect(quantizeBetweennessK(v) % 10).toBe(0);
+    }
+  });
+
+  it("effectiveK is always >= 50", () => {
+    for (const v of [1, 10, 50, 100]) {
+      expect(quantizeBetweennessK(v)).toBeGreaterThanOrEqual(50);
+    }
+  });
+});
+
+// ── §5.8 Level 3 full rebuild triggers ──────────────────────────────
+
+describe("checkRebuildTriggers (§5.8)", () => {
+  it(">50% changed files triggers rebuild", () => {
+    const result = checkRebuildTriggers({
+      staleFiles: Array.from({ length: 60 }, (_, i) => `f${i}.ts`),
+      totalFiles: 100,
+    });
+    expect(result.triggered).toBe(true);
+    expect(result.reason).toContain("60%");
+  });
+
+  it("<50% changed files does not trigger", () => {
+    const result = checkRebuildTriggers({
+      staleFiles: ["a.ts", "b.ts"],
+      totalFiles: 100,
+    });
+    expect(result.triggered).toBe(false);
+  });
+
+  it("--force flag always triggers", () => {
+    const result = checkRebuildTriggers({
+      staleFiles: [],
+      totalFiles: 100,
+      force: true,
+    });
+    expect(result.triggered).toBe(true);
+  });
+
+  it("schema version mismatch triggers", () => {
+    const result = checkRebuildTriggers({
+      staleFiles: [],
+      totalFiles: 100,
+      schemaVersionMismatch: true,
+    });
+    expect(result.triggered).toBe(true);
+  });
+
+  it("barrel file change triggers", () => {
+    const result = checkRebuildTriggers({
+      staleFiles: ["index.ts"],
+      totalFiles: 100,
+      barrelFileChanged: true,
+    });
+    expect(result.triggered).toBe(true);
+  });
+});
+
+// ── §5.10 Drift detection triggers ──────────────────────────────────
+
+describe("shouldRunDriftDetection (§5.10)", () => {
+  it("triggers at 100 builds", () => {
+    expect(shouldRunDriftDetection(100, undefined)).toBe(true);
+  });
+
+  it("does not trigger below 100 builds with recent rebuild", () => {
+    expect(shouldRunDriftDetection(50, new Date().toISOString())).toBe(false);
+  });
+
+  it("triggers after 1 week", () => {
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+    expect(shouldRunDriftDetection(5, eightDaysAgo)).toBe(true);
+  });
+});
+
+// ── §5.7 Level 2 incremental helpers ────────────────────────────────
+
+describe("collectNHopNeighborhood (§5.7)", () => {
+  it("collects 2-hop neighborhood", () => {
+    const adj = new Map<string, Set<string>>();
+    adj.set("a", new Set(["b"]));
+    adj.set("b", new Set(["a", "c"]));
+    adj.set("c", new Set(["b", "d"]));
+    adj.set("d", new Set(["c"]));
+    adj.set("e", new Set([]));
+
+    const result = collectNHopNeighborhood(new Set(["a"]), adj, 2);
+    expect(result).toContain("a");
+    expect(result).toContain("b");
+    expect(result).toContain("c");
+    expect(result).not.toContain("d"); // 3 hops away
+    expect(result).not.toContain("e"); // disconnected
+  });
+});
+
+describe("filesNeedingRoleUpdate (§5.7)", () => {
+  it("identifies files with score delta > 0.05", () => {
+    const oldAuth = new Map([["a", 0.5], ["b", 0.3]]);
+    const newAuth = new Map([["a", 0.57], ["b", 0.3]]);
+    const oldHub = new Map([["a", 0.2], ["b", 0.2]]);
+    const newHub = new Map([["a", 0.2], ["b", 0.2]]);
+
+    const result = filesNeedingRoleUpdate(oldAuth, newAuth, oldHub, newHub);
+    expect(result).toContain("a");
+    expect(result).not.toContain("b");
   });
 });

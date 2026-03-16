@@ -102,6 +102,8 @@ export interface Community {
   files: string[];
   /** Auto-derived label from common directory prefix */
   label: string;
+  /** Internal edge density (Leiden metric, §5.4). 0.0 = no internal edges, 1.0 = complete clique. */
+  cohesion?: number;
 }
 
 /** A directed edge between two architectural layers */

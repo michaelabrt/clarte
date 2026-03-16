@@ -11,7 +11,7 @@ import { computeBetweenness } from "../core/graph/centrality.js";
 import { findChokepoints } from "../core/graph/chokepoints.js";
 import { computeLayerConsistency } from "../core/graph/layers.js";
 import { findFeedbackEdges } from "../core/graph/cycles.js";
-import { detectCommunities } from "../core/graph/communities.js";
+import { detectCommunitiesLeiden as detectCommunities } from "../core/graph/leiden.js";
 import type { ArchitecturalLayer, CircularDependency, LayerEdge } from "../core/types.js";
 import type { PersistedGraph } from "../core/types/persisted-graph.js";
 import { PERSISTED_GRAPH_VERSION } from "../core/types/persisted-graph.js";

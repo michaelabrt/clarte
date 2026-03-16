@@ -49,12 +49,20 @@
         "app/routes/products.py",
         "app/routes/users.py"
       ],
-      "dependsOn": ["services"]
+      "dependsOn": [
+        "services"
+      ]
     },
     {
       "name": "services",
-      "files": ["app/services/auth.py", "app/services/product_service.py", "app/services/user_service.py"],
-      "dependsOn": ["pages"]
+      "files": [
+        "app/services/auth.py",
+        "app/services/product_service.py",
+        "app/services/user_service.py"
+      ],
+      "dependsOn": [
+        "pages"
+      ]
     }
   ],
   "layerEdges": [
@@ -68,20 +76,27 @@
     }
   ],
   "instabilities": [],
-  "communityCount": 1,
+  "communityCount": 2,
   "communityFiles": [
     [
       "app/__init__.py",
-      "app/models/product.py",
       "app/models/user.py",
-      "app/routes/products.py",
       "app/routes/users.py",
       "app/services/auth.py",
-      "app/services/product_service.py",
       "app/services/user_service.py"
+    ],
+    [
+      "app/models/product.py",
+      "app/routes/products.py",
+      "app/services/product_service.py"
     ]
   ],
-  "deadFiles": ["app/__init__.py", "app/config.py", "app/models/__init__.py", "app/routes/__init__.py"],
+  "deadFiles": [
+    "app/__init__.py",
+    "app/config.py",
+    "app/models/__init__.py",
+    "app/routes/__init__.py"
+  ],
   "crossCuttingFiles": [
     {
       "file": "app/services/auth.py",
@@ -135,7 +150,9 @@
   ],
   "graphTopology": {
     "componentCount": 1,
-    "componentSizes": [8],
+    "componentSizes": [
+      8
+    ],
     "approximateDiameter": 4,
     "reachability": 1,
     "isFragmented": false

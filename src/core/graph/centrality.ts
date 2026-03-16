@@ -23,6 +23,8 @@ export function computeHITS(
   /** Rationale: 1e-6 precision catches meaningful score differences while avoiding float noise. */
   epsilon = 1e-6,
   barrelFiles?: Set<string>,
+  /** §5.7: Optional initial scores for warm-start from near-correct state (5 iterations vs 30). */
+  initialScores?: { authority: Map<string, number>; hub: Map<string, number> },
 ): { authority: Map<string, number>; hub: Map<string, number> } {
   const n = files.length;
   if (n === 0) return { authority: new Map(), hub: new Map() };
@@ -82,10 +84,21 @@ export function computeHITS(
     reverse.get(edge.to)?.push({ from: edge.from, weight });
   }
 
-  let auth = new Float64Array(n).fill(1);
-  let hub = new Float64Array(n).fill(1);
   const fileIndex = new Map<string, number>();
   for (let i = 0; i < n; i++) fileIndex.set(files[i], i);
+
+  // §5.7: Warm-start from provided initial scores, or start uniform
+  let auth = new Float64Array(n);
+  let hub = new Float64Array(n);
+  if (initialScores) {
+    for (let i = 0; i < n; i++) {
+      auth[i] = initialScores.authority.get(files[i]) ?? 1;
+      hub[i] = initialScores.hub.get(files[i]) ?? 1;
+    }
+  } else {
+    auth.fill(1);
+    hub.fill(1);
+  }
 
   for (let iter = 0; iter < maxIterations; iter++) {
     const newAuth = new Float64Array(n);
@@ -230,6 +243,8 @@ export function computeBetweenness(
   graph: ImportGraph,
   /** When omitted, k adapts to graph size: max(50, 2*sqrt(V)) for <5% error at typical scales. */
   k?: number,
+  /** §5.7: Restrict source sampling to 2-hop neighborhood of changed files. */
+  changedFiles?: Set<string>,
 ): Map<string, number> {
   // Build directed adjacency from internal edges.
   // We follow the actual import direction (importer -> imported) so betweenness
@@ -242,9 +257,10 @@ export function computeBetweenness(
   const n = files.length;
   if (n === 0) return new Map();
 
-  // Adaptive sample size: max(50, 2*sqrt(V)). At V=100 → k=50, V=1000 → k=63,
-  // V=5000 → k=141. Based on Bader & Madduri (2006) k=O(sqrt(V/epsilon)).
-  const effectiveK = k ?? Math.min(n, Math.max(50, Math.ceil(Math.sqrt(n) * 2)));
+  // §5.9: Quantized k = ceil(max(50, ceil(sqrt(V)*2)) / 10) * 10
+  // Prevents spurious cache invalidation when file count changes by 1.
+  const rawK = k ?? Math.max(50, Math.ceil(Math.sqrt(n) * 2));
+  const effectiveK = Math.ceil(rawK / 10) * 10;
 
   const betweenness = new Map<string, number>();
   for (const f of files) betweenness.set(f, 0);
@@ -253,23 +269,45 @@ export function computeBetweenness(
   const seedStr = files.join(",");
   const rng = seededRandom(simpleHash(seedStr));
 
-  const sampleSize = Math.min(effectiveK, n);
+  // §5.7: If changedFiles provided, restrict sources to 2-hop neighborhood
+  let candidateFiles = files;
+  if (changedFiles && changedFiles.size > 0) {
+    const neighborhood = new Set<string>(changedFiles);
+    let frontier = new Set<string>(changedFiles);
+    for (let hop = 0; hop < 2; hop++) {
+      const nextFrontier = new Set<string>();
+      for (const node of frontier) {
+        for (const neighbor of adj.get(node) ?? []) {
+          if (!neighborhood.has(neighbor)) {
+            neighborhood.add(neighbor);
+            nextFrontier.add(neighbor);
+          }
+        }
+      }
+      frontier = nextFrontier;
+      if (frontier.size === 0) break;
+    }
+    candidateFiles = files.filter((f) => neighborhood.has(f));
+  }
+
+  const candidateCount = candidateFiles.length;
+  const sampleSize = Math.min(effectiveK, candidateCount);
   let sources: string[];
 
-  if (sampleSize >= n) {
-    sources = files;
+  if (sampleSize >= candidateCount) {
+    sources = candidateFiles;
   } else {
     // Degree-proportional sampling: high-degree nodes produce more representative
     // shortest-path trees, reducing variance in the betweenness estimator.
-    const shuffled = [...files];
+    const shuffled = [...candidateFiles];
     for (let i = 0; i < sampleSize; i++) {
       let totalWeight = 0;
-      for (let j = i; j < n; j++) {
+      for (let j = i; j < candidateCount; j++) {
         totalWeight += (adj.get(shuffled[j])?.size ?? 0) + 1;
       }
       let target = rng() * totalWeight;
       let chosen = i;
-      for (let j = i; j < n; j++) {
+      for (let j = i; j < candidateCount; j++) {
         target -= (adj.get(shuffled[j])?.size ?? 0) + 1;
         if (target <= 0) {
           chosen = j;

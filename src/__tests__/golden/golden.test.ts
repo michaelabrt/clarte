@@ -17,7 +17,7 @@ import { getHubFiles } from "../../core/graph/hub-files.js";
 import { findCircularDeps } from "../../core/graph/cycles.js";
 import { detectArchitecturalLayers, computeLayerConsistency } from "../../core/graph/layers.js";
 import { computeInstability } from "../../core/graph/instability.js";
-import { detectCommunities } from "../../core/graph/communities.js";
+import { detectCommunitiesLeiden as detectCommunities } from "../../core/graph/leiden.js";
 import { findDeadFiles } from "../../core/graph/dead-files.js";
 import { findCrossCuttingFiles } from "../../core/graph/cross-cutting.js";
 import { findChokepoints } from "../../core/graph/chokepoints.js";
