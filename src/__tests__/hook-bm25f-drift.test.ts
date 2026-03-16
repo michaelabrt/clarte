@@ -154,9 +154,7 @@ describe("Hook BM25F drift detection", () => {
         { from: "src/auth/login.ts", to: "src/utils/hash.ts", importedNames: ["hashPassword"] },
         { from: "src/auth/session.ts", to: "src/auth/login.ts", importedNames: ["authenticate"] },
       ],
-      changeCoupling: [
-        { fileA: "src/auth/login.ts", fileB: "src/auth/session.ts", confidence: 0.9, coChangeCount: 8 },
-      ],
+      changeCoupling: [{ fileA: "src/auth/login.ts", fileB: "src/auth/session.ts", confidence: 0.9, coChangeCount: 8 }],
     });
 
     const targets = resolveEditTargets("auth login token", graph, 5);

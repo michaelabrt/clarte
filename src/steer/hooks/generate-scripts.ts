@@ -66,6 +66,9 @@ function buildCheckTestsScript(testCmd: string, framework?: string): string {
 # Usage: .clarte/scripts/check-tests.sh [extra-args...]
 set -o pipefail
 
+# Package scripts expect node_modules/.bin on PATH
+export PATH="./node_modules/.bin:$PATH"
+
 ${resolveCmd}
 EXTRA_ARGS="$*"
 CMD="$BASE_CMD\${EXTRA_ARGS:+ $EXTRA_ARGS}"
@@ -319,9 +322,16 @@ async function detectCompileStep(
       };
       const rawTest = pkg.scripts?.test ?? "";
       if (SLOW_COMPILE_RE.test(rawTest)) {
-        const scripts = pkg.scripts ?? {};
-        const compileKey = ["compile", "build"].find((k) => scripts[k]);
-        return { compileCmd: compileKey ? `${runPrefix} ${compileKey}` : null, testsFromCompiled: true };
+        // tsc --noEmit is type-checking only; tests don't depend on its output.
+        // Only treat it as a real compile step when at least one segment emits files.
+        const segments = rawTest.split("&&").map((p) => p.trim());
+        const compileSegments = segments.filter((p) => COMPILE_SEGMENT_RE.test(p));
+        const emitsFiles = compileSegments.some((p) => !(/\btsc\b/.test(p) && /--noEmit\b/.test(p)));
+        if (emitsFiles) {
+          const scripts = pkg.scripts ?? {};
+          const compileKey = ["compile", "build"].find((k) => scripts[k]);
+          return { compileCmd: compileKey ? `${runPrefix} ${compileKey}` : null, testsFromCompiled: true };
+        }
       }
     } catch {}
   }
@@ -423,6 +433,9 @@ echo ""
 # Usage: .clarte/scripts/run-tests.sh '<pattern>'
 # Example: .clarte/scripts/run-tests.sh 'simple enum'
 set -euo pipefail
+
+# Package scripts expect node_modules/.bin on PATH
+export PATH="./node_modules/.bin:$PATH"
 
 if [ $# -eq 0 ]; then
   echo "Usage: .clarte/scripts/run-tests.sh '<pattern>'"

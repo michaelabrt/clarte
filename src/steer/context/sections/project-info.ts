@@ -118,26 +118,16 @@ export async function renderProjectInfoSections(
 
   // Key Files (proven -19pp pass rate when removed)
   if (analysis?.hubFiles && analysis.hubFiles.length > 0) {
-    const instabilityMap = new Map<string, number>();
-    if (analysis.instabilities) {
-      for (const inst of analysis.instabilities) {
-        instabilityMap.set(inst.path, inst.instability);
-      }
-    }
     const keyLines: string[] = [];
     keyLines.push("## Key Files");
     keyLines.push("");
     keyLines.push("Most interconnected files. Read these first for architectural understanding.");
     keyLines.push("");
-    keyLines.push("| File | Imported By | I |");
-    keyLines.push("|------|-------------|---|");
+    keyLines.push("| File | Coupling |");
+    keyLines.push("|------|----------|");
     for (const hub of analysis.hubFiles) {
-      const inst = instabilityMap.get(hub.path);
-      const stabilityCell = inst == null ? "stable" : `I=${(inst * 100).toFixed(0)}%`;
       const roleTag = hub.role !== "Leaf" ? ` (${hub.role})` : "";
-      keyLines.push(
-        `| \`${hub.path}\`${roleTag} | ${hub.importedBy} file${hub.importedBy === 1 ? "" : "s"} | ${stabilityCell} |`,
-      );
+      keyLines.push(`| \`${hub.path}\`${roleTag} | ${hub.importedBy} in, ${hub.imports} out |`);
     }
     const keyContent = keyLines.join("\n");
     // Priority 1: proven -19pp pass rate when removed but not always needed. Budget can shed this.

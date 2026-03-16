@@ -277,6 +277,28 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
     expect(chainedCSite).toBeUndefined();
   });
 
+  it("namespace.ts: namespace import (import * as ns) resolves callee to target file", async () => {
+    const graph = makeImportGraph(
+      [
+        {
+          from: "src/__tests__/fixtures/call-graph/namespace.ts",
+          to: "src/__tests__/fixtures/call-graph/helper.ts",
+          isExternal: false,
+          specifier: "./helper.js",
+          importedNames: ["*"],
+        },
+      ],
+      ["src/__tests__/fixtures/call-graph/namespace.ts", "src/__tests__/fixtures/call-graph/helper.ts"],
+    );
+    const files = ["src/__tests__/fixtures/call-graph/namespace.ts"];
+
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+
+    const site = callGraph.sites.find((s) => s.callee === "doThing" && s.callerFn === "useNamespace");
+    expect(site).toBeDefined();
+    expect(site?.calleeFile).toBe("src/__tests__/fixtures/call-graph/helper.ts");
+  });
+
   it("barrel-calls.ts: callThroughBarrel resolves calleeFile to barrel.ts (not helper.ts)", async () => {
     const graph = makeImportGraph(
       [

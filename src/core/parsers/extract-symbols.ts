@@ -157,7 +157,10 @@ export function extractSymbolNames(content: string, language: Language, filePath
 export function tokenizeBody(id: string): string[] {
   const tokens: string[] = [];
   for (const part of id.split(/[^a-zA-Z0-9]+/).filter(Boolean)) {
-    for (const seg of part.replace(/([a-z])([A-Z])/g, "$1\0$2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1\0$2").split("\0")) {
+    for (const seg of part
+      .replace(/([a-z])([A-Z])/g, "$1\0$2")
+      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1\0$2")
+      .split("\0")) {
       const lower = seg.toLowerCase();
       if (lower.length >= 2) tokens.push(lower);
     }

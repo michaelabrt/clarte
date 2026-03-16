@@ -316,7 +316,9 @@ export async function generateSnapshot(
         for (let si = 0; si < secFiles.length; si += chunkSize) {
           const secChunk = secFiles.slice(si, si + chunkSize);
           const secResults = await Promise.all(
-            secChunk.map((file) => cfg.extractor(path.join(ctx.rootDir, file), file).catch(() => [] as SnapshotEntry[])),
+            secChunk.map((file) =>
+              cfg.extractor(path.join(ctx.rootDir, file), file).catch(() => [] as SnapshotEntry[]),
+            ),
           );
           for (const entries of secResults) allEntries.push(...entries);
         }

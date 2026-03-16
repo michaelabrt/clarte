@@ -14,10 +14,7 @@ export interface AdjacencyOptions {
  * Returns Map<source, Map<target, weight>> where weight is summed across
  * duplicate edges (multiple imports from A to B).
  */
-export function buildAdjacencyMap(
-  edges: ImportEdge[],
-  opts?: AdjacencyOptions,
-): Map<string, Map<string, number>> {
+export function buildAdjacencyMap(edges: ImportEdge[], opts?: AdjacencyOptions): Map<string, Map<string, number>> {
   const directed = opts?.directed ?? true;
   const includeExternal = opts?.includeExternal ?? false;
   const weightFn = opts?.weightFn ?? (() => 1);

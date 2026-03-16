@@ -183,4 +183,13 @@ describe("generateRunTestScript", () => {
     expect(script).toContain("npm run build");
     expect(script).toContain("Compiling");
   });
+
+  it("skips compile step when test script only has tsc --noEmit (type-check only)", async () => {
+    await setupTmpDir({ scripts: { test: "tsc --noEmit && vitest --run", build: "bun ./build.ts" } });
+    const result = await generateRunTestScript(tmpDir, makeCtx({ rootDir: tmpDir, testFramework: "Vitest" }));
+    expect(result).toBe(".clarte/scripts/run-tests.sh");
+    const script = await readScript();
+    expect(script).not.toContain("Compiling");
+    expect(script).toContain("-t '$1'");
+  });
 });

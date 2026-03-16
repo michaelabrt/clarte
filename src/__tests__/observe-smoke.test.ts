@@ -25,7 +25,6 @@ const findFirstSession = (): string | null => {
 const sessionFile = findFirstSession();
 
 describe.skipIf(!sessionFile)("observe smoke test", () => {
-  // biome-ignore lint: sessionFile is guaranteed non-null by skipIf above
   const file = sessionFile as string;
 
   it("parses a real session log", () => {

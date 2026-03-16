@@ -283,6 +283,7 @@ export async function buildGraphWithCache(
   rootDir: string,
   language: Language,
   onProgress?: ProgressCallback,
+  extraAliases?: Array<{ prefix: string; replacement: string }>,
 ): Promise<ImportGraph> {
   await initForLanguage(language);
 
@@ -422,7 +423,7 @@ export async function buildGraphWithCache(
 
   // 4. Full rebuild (no cache, language changed, >10% changed, or barrel changed)
   onProgress?.("Full graph rebuild...");
-  const graph = await buildImportGraph(rootDir, language, onProgress);
+  const graph = await buildImportGraph(rootDir, language, onProgress, extraAliases);
   await persistCacheData(rootDir, language, currentHashes, graph, onProgress);
   return graph;
 }

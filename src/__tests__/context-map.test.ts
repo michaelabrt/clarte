@@ -245,7 +245,10 @@ describe("generateHookFiles", () => {
 
     await generateHookFiles(tmpDir, graph);
 
-    const exists = await fs.access(path.join(tmpDir, ".clarte/hooks/context-map.json")).then(() => true, () => false);
+    const exists = await fs.access(path.join(tmpDir, ".clarte/hooks/context-map.json")).then(
+      () => true,
+      () => false,
+    );
     expect(exists).toBe(false);
   });
 

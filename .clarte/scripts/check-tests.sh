@@ -4,6 +4,9 @@
 # Usage: .clarte/scripts/check-tests.sh [extra-args...]
 set -o pipefail
 
+# Package scripts expect node_modules/.bin on PATH
+export PATH="./node_modules/.bin:$PATH"
+
 if command -v bun >/dev/null 2>&1; then BASE_CMD="bun run test"; else BASE_CMD="npm run test"; fi
 EXTRA_ARGS="$*"
 CMD="$BASE_CMD${EXTRA_ARGS:+ $EXTRA_ARGS}"

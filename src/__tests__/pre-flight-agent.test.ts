@@ -10,7 +10,9 @@ import { PRE_FLIGHT_AGENT_CONTENT } from "../steer/context/pre-flight-agent.js";
 describe("Pre-flight agent prompt - 3-tier task classification", () => {
   it("contains bug fix tier with FILE/LINE/FIX format reference", () => {
     expect(PRE_FLIGHT_AGENT_CONTENT).toMatch(/bug fix.*targeted code change/i);
-    expect(PRE_FLIGHT_AGENT_CONTENT).toContain("FILE/LINE");
+    expect(PRE_FLIGHT_AGENT_CONTENT).toContain("FILE: <relative path>");
+    expect(PRE_FLIGHT_AGENT_CONTENT).toContain("LINE: <line number>");
+    expect(PRE_FLIGHT_AGENT_CONTENT).toContain("FIX:");
   });
 
   it("contains targeted feature tier with GUIDE format reference", () => {
