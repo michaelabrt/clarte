@@ -294,10 +294,28 @@ const agentDst = resolve(root, ".claude/agents/clarte-pre-flight.md");
 try { unlinkSync(tcPath); } catch (e) { _dbg("cleanup: " + e.message); }
 try { unlinkSync(agentDst); } catch (e) { _dbg("cleanup: " + e.message); }
 
-const graphPath = resolve(root, ".clarte/graph.json");
-if (existsSync(graphPath)) {
+const dbPath = resolve(root, ".clarte/graph.db");
+if (existsSync(dbPath)) {
   let graph;
-  try { graph = JSON.parse(readFileSync(graphPath, "utf-8")); } catch (e) { _dbg("graph: " + e.message); }
+  try {
+    // Load graph from SQLite. Try bun:sqlite first (Bun built-in), then better-sqlite3.
+    let db;
+    try {
+      const bsq = await import("bun:sqlite");
+      db = new bsq.Database(dbPath, { readonly: true });
+    } catch {
+      try {
+        const { createRequire } = await import("node:module");
+        const req = createRequire(import.meta.url);
+        const Bsq = req("better-sqlite3");
+        db = new Bsq(dbPath, { readonly: true });
+      } catch { _dbg("no SQLite binding available"); }
+    }
+    if (db) {
+      graph = loadGraphFromDb(db);
+      try { db.close(); } catch {}
+    }
+  } catch (e) { _dbg("graph: " + e.message); }
   if (graph) {
     const allCandidates = resolveEditTargets(prompt, graph, 10);
     const targets = allCandidates.slice(0, 5);
@@ -334,6 +352,89 @@ if (existsSync(graphPath)) {
       process.exit(0);
     }
   }
+}
+
+function loadGraphFromDb(db) {
+  const fileRows = db.prepare("SELECT path, hash, role, authority, hub_score, betweenness, instability, community_id, is_chokepoint, separates_components, is_cross_cutting, layer_spread, has_tests, layers, test_files, intra_file_calls FROM files").all();
+  const edgeRows = db.prepare("SELECT from_path, to_path, imported_names, is_type_only, is_dynamic, is_barrel_routed FROM file_edges").all();
+  const communities = db.prepare("SELECT id, label FROM communities").all();
+  const changeCoupling = db.prepare("SELECT file_a, file_b, co_changes, confidence FROM change_coupling").all();
+  const symbolRows = db.prepare("SELECT file_path, name, kind, start_line, authority, body_tokens FROM symbols").all();
+
+  const files = {};
+  const reverseEdges = {};
+  for (const row of fileRows) {
+    const layers = row.layers ? JSON.parse(row.layers) : [];
+    const testFiles = row.test_files ? JSON.parse(row.test_files) : [];
+    const intraFileCalls = row.intra_file_calls ? JSON.parse(row.intra_file_calls) : [];
+    files[row.path] = {
+      role: row.role || null,
+      authority: row.authority || 0,
+      hubScore: row.hub_score || 0,
+      betweenness: row.betweenness || 0,
+      instability: row.instability !== null ? row.instability : null,
+      importedByCount: 0,
+      isChokepoint: row.is_chokepoint === 1,
+      separatesComponents: row.separates_components || 0,
+      isCrossCutting: row.is_cross_cutting === 1,
+      layerSpread: row.layer_spread || 0,
+      layers,
+      hasTests: row.has_tests === 1,
+      testFiles,
+      communityId: row.community_id !== null ? row.community_id : null,
+      intraFileCalls,
+    };
+    reverseEdges[row.path] = [];
+  }
+
+  const edges = [];
+  for (const row of edgeRows) {
+    const importedNames = row.imported_names ? JSON.parse(row.imported_names) : [];
+    edges.push({ from: row.from_path, to: row.to_path, importedNames, isTypeOnly: row.is_type_only === 1, isDynamic: row.is_dynamic === 1, isBarrelRouted: row.is_barrel_routed === 1 });
+    if (files[row.to_path]) files[row.to_path].importedByCount++;
+    if (!reverseEdges[row.to_path]) reverseEdges[row.to_path] = [];
+    reverseEdges[row.to_path].push(row.from_path);
+  }
+
+  // Attach symbol data
+  for (const sym of symbolRows) {
+    const f = files[sym.file_path];
+    if (!f) continue;
+    if (!f.symbolNames) f.symbolNames = [];
+    f.symbolNames.push(sym.name);
+    if (sym.body_tokens) {
+      if (!f.symbolBodyTokens) f.symbolBodyTokens = {};
+      f.symbolBodyTokens[sym.name] = sym.body_tokens.split(" ").filter(Boolean);
+    }
+    if (sym.start_line > 0) {
+      if (!f.symbolStartLines) f.symbolStartLines = {};
+      f.symbolStartLines[sym.name] = sym.start_line;
+    }
+    if (sym.authority !== null) {
+      if (!f.symbolAuthority) f.symbolAuthority = {};
+      f.symbolAuthority[sym.name] = sym.authority;
+    }
+  }
+
+  const communityFiles = {};
+  for (const row of fileRows) {
+    if (row.community_id !== null) {
+      if (!communityFiles[row.community_id]) communityFiles[row.community_id] = [];
+      communityFiles[row.community_id].push(row.path);
+    }
+  }
+
+  return {
+    version: 1,
+    timestamp: new Date().toISOString(),
+    files,
+    edges,
+    communities: communities.map(c => ({ id: c.id, files: communityFiles[c.id] || [], label: c.label || String(c.id) })),
+    changeCoupling: changeCoupling.map(c => ({ fileA: c.file_a, fileB: c.file_b, confidence: c.confidence, coChangeCount: c.co_changes })),
+    structuralMismatches: [],
+    testMapping: {},
+    lagCouplings: [],
+  };
 }
 
 // Fallback: git history BM25 (no graph available)

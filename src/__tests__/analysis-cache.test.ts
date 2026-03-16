@@ -121,33 +121,30 @@ describe("computeAnalysisCacheKey", () => {
 // ── loadAnalysisCache ─────────────────────────────────────────────────
 
 describe("loadAnalysisCache", () => {
-  it("returns null when cache file does not exist", async () => {
+  it("returns null when no database exists", async () => {
     expect(await loadAnalysisCache(TMP)).toBeNull();
   });
 
   it("returns null for wrong version number", async () => {
-    await fs.mkdir(path.join(TMP, ".clarte"), { recursive: true });
-    const cachePath = path.join(TMP, ".clarte", "analysis-cache.json");
-    await fs.writeFile(cachePath, JSON.stringify({ ...makeCacheData(), version: ANALYSIS_CACHE_VERSION - 1 }));
+    // Save with wrong version via the store directly
+    const { openGraphStore } = await import("../storage/loader.js");
+    const store = await openGraphStore(TMP);
+    try {
+      store.setMeta("analysis_cache_key", "some-key");
+      store.setMeta("analysis_cache_data", JSON.stringify({ ...makeCacheData(), version: ANALYSIS_CACHE_VERSION - 1 }));
+    } finally {
+      store.close();
+    }
     expect(await loadAnalysisCache(TMP)).toBeNull();
   });
 
-  it("returns parsed data for correct version", async () => {
-    await fs.mkdir(path.join(TMP, ".clarte"), { recursive: true });
-    const cachePath = path.join(TMP, ".clarte", "analysis-cache.json");
+  it("returns parsed data for correct version via save+load", async () => {
     const data = makeCacheData({ cacheKey: "test-abc" });
-    await fs.writeFile(cachePath, JSON.stringify(data));
+    await saveAnalysisCache(TMP, data);
     const loaded = await loadAnalysisCache(TMP);
     expect(loaded).not.toBeNull();
     expect(loaded?.cacheKey).toBe("test-abc");
     expect(loaded?.version).toBe(ANALYSIS_CACHE_VERSION);
-  });
-
-  it("returns null for corrupted JSON without throwing", async () => {
-    await fs.mkdir(path.join(TMP, ".clarte"), { recursive: true });
-    const cachePath = path.join(TMP, ".clarte", "analysis-cache.json");
-    await fs.writeFile(cachePath, "{ this is not valid json ]]]");
-    expect(await loadAnalysisCache(TMP)).toBeNull();
   });
 });
 
@@ -157,9 +154,8 @@ describe("saveAnalysisCache", () => {
   it("creates the .clarte directory if it does not exist", async () => {
     const data = makeCacheData({ cacheKey: "new-key" });
     await saveAnalysisCache(TMP, data);
-    const cachePath = path.join(TMP, ".clarte", "analysis-cache.json");
-    const raw = await fs.readFile(cachePath, "utf-8");
-    expect(JSON.parse(raw).cacheKey).toBe("new-key");
+    const loaded = await loadAnalysisCache(TMP);
+    expect(loaded?.cacheKey).toBe("new-key");
   });
 
   it("round-trips data correctly (save then load)", async () => {

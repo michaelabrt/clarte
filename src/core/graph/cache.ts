@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { glob } from "tinyglobby";
 import { computeHITS, computeBetweenness } from "./centrality.js";
@@ -28,10 +27,13 @@ import { errorMessage, readFileOr } from "../utils.js";
 import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "../types.js";
 import { HASH_CONCURRENCY } from "../config/thresholds.js";
 import { CLARTE_DIR } from "../config/config.js";
+import { openGraphStore } from "../../storage/loader.js";
+import type { GraphStore } from "../../storage/graph-store.js";
+import type { FileRecord, FileEdgeRecord, SymbolRecord } from "../../storage/types.js";
 
-const CACHE_VERSION = 3;
-const CACHE_DIR = CLARTE_DIR;
-const CACHE_FILE = "cache.json";
+export const CACHE_VERSION = 3;
+
+// ── CacheData type preserved for backward compatibility ────────────────────────
 
 interface SerializedEdge {
   from: string;
@@ -54,23 +56,156 @@ export interface CacheData {
   symbolNames?: Record<string, string[]>;
 }
 
+// ── SQLite-backed loadCache / saveCache ────────────────────────────────────────
+
+/**
+ * Load the graph cache from SQLite.
+ * Returns null if no database exists or the database is empty.
+ */
 export async function loadCache(rootDir: string): Promise<CacheData | null> {
-  const cachePath = path.join(rootDir, CACHE_DIR, CACHE_FILE);
+  let store: GraphStore | null = null;
   try {
-    const raw = await fs.readFile(cachePath, "utf-8");
-    const data = JSON.parse(raw) as CacheData;
-    if (data.version !== CACHE_VERSION) return null;
-    return data;
+    store = await openGraphStore(rootDir);
+    return loadCacheFromStore(store);
   } catch {
     return null;
+  } finally {
+    store?.close();
   }
 }
 
+/**
+ * Save the graph cache to SQLite.
+ */
 export async function saveCache(rootDir: string, data: CacheData): Promise<void> {
-  const dir = path.join(rootDir, CACHE_DIR);
-  await fs.mkdir(dir, { recursive: true });
-  const cachePath = path.join(dir, CACHE_FILE);
-  await fs.writeFile(cachePath, JSON.stringify(data), "utf-8");
+  const store = await openGraphStore(rootDir);
+  try {
+    saveCacheToStore(store, data);
+  } finally {
+    store.close();
+  }
+}
+
+// ── Store-level read/write helpers ─────────────────────────────────────────────
+
+function loadCacheFromStore(store: GraphStore): CacheData | null {
+  const hashes = store.getAllHashes();
+  if (hashes.size === 0) return null;
+
+  const language = store.getMeta("build_language") ?? "typescript";
+  const createdAt = store.getMeta("created_at") ?? new Date().toISOString();
+
+  // Reconstruct edges from file_edges table
+  const fileGraph = store.loadFileGraph();
+  const edges: SerializedEdge[] = [];
+  for (const edgeList of fileGraph.forward.values()) {
+    for (const e of edgeList) {
+      edges.push({
+        from: e.fromPath,
+        to: e.toPath,
+        isExternal: false,
+        specifier: e.toPath,
+        importedNames: e.importedNames,
+        isTypeOnly: e.isTypeOnly || undefined,
+        isDynamic: e.isDynamic || undefined,
+        isBarrelRouted: e.isBarrelRouted || undefined,
+      });
+    }
+  }
+
+  // Collect barrel files
+  const barrelFiles: string[] = [];
+  for (const [p, node] of fileGraph.nodes) {
+    if (node.isBarrel) barrelFiles.push(p);
+  }
+
+  // Collect symbol names from symbol graph
+  const symbolGraph = store.loadSymbolGraph();
+  const symbolNames: Record<string, string[]> = {};
+  for (const [filePath, ids] of symbolGraph.byFile) {
+    const names = ids.map((id) => symbolGraph.symbols.get(id)?.name).filter((n): n is string => typeof n === "string");
+    if (names.length > 0) symbolNames[filePath] = names;
+  }
+
+  // Exclude stub files (hash="" inserted purely for FK satisfaction)
+  const fileHashes: Record<string, string> = {};
+  for (const [p, h] of hashes) {
+    if (h !== "") fileHashes[p] = h;
+  }
+
+  return {
+    version: CACHE_VERSION,
+    createdAt,
+    language,
+    fileHashes,
+    edges,
+    barrelFiles,
+    symbolNames: Object.keys(symbolNames).length > 0 ? symbolNames : undefined,
+  };
+}
+
+function saveCacheToStore(store: GraphStore, data: CacheData): void {
+  const now = new Date().toISOString();
+  const barrelSet = new Set(data.barrelFiles ?? []);
+
+  // Collect all file paths referenced in edges but not in fileHashes
+  const knownFiles = new Set(Object.keys(data.fileHashes));
+  const extraPaths = new Set<string>();
+  for (const e of data.edges) {
+    if (!e.isExternal) {
+      if (!knownFiles.has(e.from)) extraPaths.add(e.from);
+      if (!knownFiles.has(e.to)) extraPaths.add(e.to);
+    }
+  }
+
+  // Build file records (hash files + stub records for edge targets not in hashes)
+  const fileRecords: FileRecord[] = [
+    ...Object.entries(data.fileHashes).map(([p, hash]) => ({
+      path: p,
+      hash,
+      is_barrel: barrelSet.has(p) ? 1 : 0,
+      updated_at: now,
+    })),
+    ...[...extraPaths].map((p) => ({
+      path: p,
+      hash: "",
+      is_barrel: barrelSet.has(p) ? 1 : 0,
+      updated_at: now,
+    })),
+  ];
+
+  // Build edge records (internal edges only)
+  const edgeRecords: FileEdgeRecord[] = data.edges
+    .filter((e) => !e.isExternal)
+    .map((e) => ({
+      from_path: e.from,
+      to_path: e.to,
+      imported_names: e.importedNames,
+      is_type_only: e.isTypeOnly ? 1 : 0,
+      is_dynamic: e.isDynamic ? 1 : 0,
+      is_barrel_routed: e.isBarrelRouted ? 1 : 0,
+    }));
+
+  // Build symbol records
+  const symbolRecords: SymbolRecord[] = [];
+  if (data.symbolNames) {
+    for (const [filePath, names] of Object.entries(data.symbolNames)) {
+      for (const name of names) {
+        symbolRecords.push({
+          file_path: filePath,
+          name,
+          kind: "unknown",
+          start_line: 0,
+        });
+      }
+    }
+  }
+
+  store.upsertFiles(fileRecords);
+  store.upsertFileEdges(edgeRecords);
+  if (symbolRecords.length > 0) store.upsertSymbols(symbolRecords);
+  store.setMeta("build_language", data.language);
+  store.setMeta("created_at", data.createdAt ?? now);
 }
 
 // Re-export analysis cache for backward compatibility
@@ -81,6 +216,8 @@ export {
   saveAnalysisCache,
   type AnalysisCacheData,
 } from "./analysis-cache.js";
+
+// ── File hashing ──────────────────────────────────────────────────────────────
 
 export async function computeFileHashes(rootDir: string, language: Language): Promise<Map<string, string>> {
   const globs = getSourceGlob(language);
@@ -105,7 +242,8 @@ export async function computeFileHashes(rootDir: string, language: Language): Pr
       chunk.map(async (file) => {
         const absPath = path.join(rootDir, file);
         try {
-          const content = await fs.readFile(absPath);
+          const { readFile } = await import("node:fs/promises");
+          const content = await readFile(absPath);
           const hash = createHash("sha256").update(content).digest("hex");
           return { file, hash } as const;
         } catch {
@@ -119,6 +257,8 @@ export async function computeFileHashes(rootDir: string, language: Language): Pr
   }
   return hashes;
 }
+
+// ── Graph building ────────────────────────────────────────────────────────────
 
 async function parseFileEdges(
   rootDir: string,
@@ -198,8 +338,6 @@ function rebuildGraph(
   for (const edge of edges) {
     if (!edge.isExternal) {
       inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1);
-      // Mirror build.ts: barrel-targeted edges only count when barrel-routed;
-      // side-effect imports to barrels (no isBarrelRouted) are excluded.
       const countsAsDirect = barrelFiles.has(edge.to)
         ? edge.isBarrelRouted && !barrelFiles.has(edge.from)
         : !barrelFiles.has(edge.from);
@@ -238,24 +376,12 @@ function rebuildGraph(
   };
 }
 
-function serializeEdges(edges: ImportEdge[]): SerializedEdge[] {
-  return edges.map((e) => ({
-    from: e.from,
-    to: e.to,
-    isExternal: e.isExternal,
-    specifier: e.specifier,
-    importedNames: [...e.importedNames],
-    isTypeOnly: e.isTypeOnly,
-    isDynamic: e.isDynamic,
-    isBarrelRouted: e.isBarrelRouted || undefined,
-  }));
-}
-
 async function persistCacheData(
   rootDir: string,
   language: Language,
   currentHashes: Map<string, string>,
   graph: ImportGraph,
+  store: GraphStore,
   onProgress?: ProgressCallback,
 ): Promise<void> {
   try {
@@ -265,23 +391,56 @@ async function persistCacheData(
     if (graph.symbolNames) {
       for (const [k, v] of graph.symbolNames) symbolRecord[k] = v;
     }
-    await saveCache(rootDir, {
+    saveCacheToStore(store, {
       version: CACHE_VERSION,
       createdAt: new Date().toISOString(),
       language,
       fileHashes: hashRecord,
-      edges: serializeEdges(graph.edges),
+      edges: graph.edges.map((e) => ({
+        from: e.from,
+        to: e.to,
+        isExternal: e.isExternal,
+        specifier: e.specifier,
+        importedNames: [...e.importedNames],
+        isTypeOnly: e.isTypeOnly,
+        isDynamic: e.isDynamic,
+        isBarrelRouted: e.isBarrelRouted || undefined,
+      })),
       barrelFiles: [...(graph.barrelFiles ?? [])],
       symbolNames: symbolRecord,
     });
+    void rootDir; // rootDir used for context only; store is already bound to this rootDir
   } catch (err) {
     onProgress?.(`Warning: cache save failed: ${errorMessage(err)}`);
   }
 }
 
+/**
+ * Build the import graph, using the SQLite cache for incremental updates.
+ * Creates or reuses the GraphStore for this rootDir.
+ */
 export async function buildGraphWithCache(
   rootDir: string,
   language: Language,
+  onProgress?: ProgressCallback,
+  extraAliases?: Array<{ prefix: string; replacement: string }>,
+  store?: GraphStore,
+): Promise<ImportGraph> {
+  // Open or reuse store
+  const ownStore = !store;
+  const activeStore = store ?? (await openGraphStore(rootDir));
+
+  try {
+    return await buildGraphWithStore(rootDir, language, activeStore, onProgress, extraAliases);
+  } finally {
+    if (ownStore) activeStore.close();
+  }
+}
+
+async function buildGraphWithStore(
+  rootDir: string,
+  language: Language,
+  store: GraphStore,
   onProgress?: ProgressCallback,
   extraAliases?: Array<{ prefix: string; replacement: string }>,
 ): Promise<ImportGraph> {
@@ -290,55 +449,96 @@ export async function buildGraphWithCache(
   onProgress?.("Computing file hashes...");
   const currentHashes = await computeFileHashes(rootDir, language);
 
-  const cache = await loadCache(rootDir);
+  const cachedHashes = store.getAllHashes();
+  const storedLanguage = store.getMeta("build_language");
 
-  if (cache && cache.language === language) {
-    const cachedHashes = new Map(Object.entries(cache.fileHashes));
-    const allCurrentFiles = new Set(currentHashes.keys());
+  // Classify changes
+  const changedFiles: string[] = [];
+  const newFiles: string[] = [];
+  const deletedFiles = new Set<string>();
 
-    const changedFiles: string[] = [];
-    const newFiles: string[] = [];
-    const deletedFiles = new Set<string>();
-
-    for (const [file, hash] of currentHashes) {
-      const cachedHash = cachedHashes.get(file);
-      if (!cachedHash) {
-        newFiles.push(file);
-      } else if (cachedHash !== hash) {
-        changedFiles.push(file);
-      }
+  for (const [file, hash] of currentHashes) {
+    const cachedHash = cachedHashes.get(file);
+    if (!cachedHash) {
+      newFiles.push(file);
+    } else if (cachedHash !== hash) {
+      changedFiles.push(file);
     }
-    for (const file of cachedHashes.keys()) {
-      if (!currentHashes.has(file)) {
-        deletedFiles.add(file);
-      }
+  }
+  for (const file of cachedHashes.keys()) {
+    if (!currentHashes.has(file)) {
+      deletedFiles.add(file);
     }
+  }
 
-    const totalChanged = changedFiles.length + newFiles.length + deletedFiles.size;
+  const totalChanged = changedFiles.length + newFiles.length + deletedFiles.size;
+
+  if (storedLanguage === language && cachedHashes.size > 0) {
     const changeRatio = totalChanged / Math.max(currentHashes.size, 1);
 
-    // Barrel file changes require full rebuild (re-exports affect many edges)
-    const barrelSet = new Set(cache.barrelFiles);
+    // Reconstruct stored graph data
+    const fileGraph = store.loadFileGraph();
+    const symbolGraph = store.loadSymbolGraph();
+    const barrelSet = new Set<string>();
+    for (const [p, node] of fileGraph.nodes) {
+      if (node.isBarrel) barrelSet.add(p);
+    }
+
     const barrelChanged = changedFiles.some((f) => barrelSet.has(f)) || [...deletedFiles].some((f) => barrelSet.has(f));
 
     if (totalChanged === 0) {
-      // Nothing changed; rebuild graph maps from cached edges
       onProgress?.("No files changed, using cached graph");
       const allFiles = [...currentHashes.keys()];
-      const barrels = new Set(cache.barrelFiles);
-      const cachedSymbols = cache.symbolNames ? new Map(Object.entries(cache.symbolNames)) : undefined;
-      return rebuildGraph(cache.edges, allFiles, barrels, cachedSymbols);
+      const cachedSymbols = new Map<string, string[]>();
+      for (const [fp, ids] of symbolGraph.byFile) {
+        const names = ids
+          .map((id) => symbolGraph.symbols.get(id)?.name)
+          .filter((n): n is string => typeof n === "string");
+        if (names.length > 0) cachedSymbols.set(fp, names);
+      }
+      // Reconstruct cached edges
+      const cachedEdges: ImportEdge[] = [];
+      for (const edgeList of fileGraph.forward.values()) {
+        for (const e of edgeList) {
+          cachedEdges.push({
+            from: e.fromPath,
+            to: e.toPath,
+            isExternal: false,
+            specifier: e.toPath,
+            importedNames: e.importedNames,
+            isTypeOnly: e.isTypeOnly,
+            isDynamic: e.isDynamic,
+            isBarrelRouted: e.isBarrelRouted,
+          });
+        }
+      }
+      return rebuildGraph(cachedEdges, allFiles, barrelSet, cachedSymbols);
     }
 
-    // Incremental rebuild up to 25% of files changed (raised from 10% which
-    // was overly conservative). The incremental path correctly re-parses changed
-    // files and reuses cached edges for unchanged files regardless of ratio.
-    // Barrel changes still force full rebuild (barrel routing affects all edges).
     if (!barrelChanged && changeRatio < 0.25) {
       onProgress?.(`Incremental rebuild: ${totalChanged} file${totalChanged === 1 ? "" : "s"} changed`);
 
+      const allCurrentFiles = new Set(currentHashes.keys());
       const staleFromFiles = new Set([...changedFiles, ...deletedFiles]);
-      const keptEdges: ImportEdge[] = cache.edges.filter((e) => !staleFromFiles.has(e.from) && !deletedFiles.has(e.to));
+
+      // Reconstruct kept edges from SQLite
+      const keptEdges: ImportEdge[] = [];
+      for (const edgeList of fileGraph.forward.values()) {
+        for (const e of edgeList) {
+          if (!staleFromFiles.has(e.fromPath) && !deletedFiles.has(e.toPath)) {
+            keptEdges.push({
+              from: e.fromPath,
+              to: e.toPath,
+              isExternal: false,
+              specifier: e.toPath,
+              importedNames: e.importedNames,
+              isTypeOnly: e.isTypeOnly,
+              isDynamic: e.isDynamic,
+              isBarrelRouted: e.isBarrelRouted,
+            });
+          }
+        }
+      }
 
       const isJsTs = language === "typescript" || language === "javascript";
       const pathAliases = isJsTs ? await loadTsconfigPaths(rootDir) : [];
@@ -355,8 +555,8 @@ export async function buildGraphWithCache(
         rawNewEdges.push(...edges);
       }
 
-      // Detect barrels for changed/new files, merge with cached set
-      const detectedBarrels = new Set(cache.barrelFiles);
+      // Update barrel set for changed/new files
+      const detectedBarrels = new Set(barrelSet);
       for (const f of deletedFiles) detectedBarrels.delete(f);
       for (const file of [...changedFiles, ...newFiles]) {
         const absPath = path.join(rootDir, file);
@@ -368,9 +568,7 @@ export async function buildGraphWithCache(
         }
       }
 
-      // Apply barrel routing to new edges so incremental matches full rebuild.
-      // Resolve barrel exports from the detected barrel set, then re-route edges
-      // that target barrel files to their actual source files.
+      // Apply barrel routing to new edges
       let barrelMap: BarrelExportMap = { namedExports: new Map(), starExports: new Map() };
       if (isJsTs && detectedBarrels.size > 0) {
         barrelMap = await resolveBarrelFiles(rootDir, allCurrentFiles, detectedBarrels);
@@ -382,7 +580,6 @@ export async function buildGraphWithCache(
           newEdges.push(edge);
           continue;
         }
-
         const routed = routeBarrelImport(edge, barrelMap);
         if (routed.length > 0) {
           newEdges.push(...routed);
@@ -391,11 +588,14 @@ export async function buildGraphWithCache(
         }
       }
 
-      // Merge symbol names: keep cached, re-extract for changed/new, drop deleted
+      // Merge symbol names
       const mergedSymbols = new Map<string, string[]>();
-      if (cache.symbolNames) {
-        for (const [fp, syms] of Object.entries(cache.symbolNames)) {
-          if (!deletedFiles.has(fp) && !changedFiles.includes(fp)) mergedSymbols.set(fp, syms);
+      for (const [fp, ids] of symbolGraph.byFile) {
+        if (!deletedFiles.has(fp) && !changedFiles.includes(fp)) {
+          const names = ids
+            .map((id) => symbolGraph.symbols.get(id)?.name)
+            .filter((n): n is string => typeof n === "string");
+          if (names.length > 0) mergedSymbols.set(fp, names);
         }
       }
       for (const file of [...changedFiles, ...newFiles]) {
@@ -412,18 +612,26 @@ export async function buildGraphWithCache(
         }
       }
 
+      // Delete stale files from SQLite, then save new state
+      if (deletedFiles.size > 0) {
+        store.deleteFiles([...deletedFiles]);
+      }
+
       const mergedEdges = [...keptEdges, ...newEdges];
       const allFiles = [...currentHashes.keys()];
 
       const graph = rebuildGraph(mergedEdges, allFiles, detectedBarrels, mergedSymbols);
-      await persistCacheData(rootDir, language, currentHashes, graph, onProgress);
+      await persistCacheData(rootDir, language, currentHashes, graph, store, onProgress);
       return graph;
     }
   }
 
-  // 4. Full rebuild (no cache, language changed, >10% changed, or barrel changed)
+  // Full rebuild
   onProgress?.("Full graph rebuild...");
   const graph = await buildImportGraph(rootDir, language, onProgress, extraAliases);
-  await persistCacheData(rootDir, language, currentHashes, graph, onProgress);
+  await persistCacheData(rootDir, language, currentHashes, graph, store, onProgress);
   return graph;
 }
+
+// Re-export for backward compat with tests
+export { CLARTE_DIR };

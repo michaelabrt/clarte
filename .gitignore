@@ -1,5 +1,9 @@
 node_modules/
 dist/
+# SQLite graph database (generated)
+.clarte/graph.db
+.clarte/graph.db-wal
+.clarte/graph.db-shm
 !action/dist/
 *.tsbuildinfo
 .npmrc

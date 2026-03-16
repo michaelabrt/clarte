@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
 import type {
   ArchitecturalLayer,
   Chokepoint,
@@ -18,11 +16,13 @@ import type {
 
 import { CLARTE_DIR } from "../config/config.js";
 import { BETWEENNESS_K } from "../config/thresholds.js";
-
-const CACHE_DIR = CLARTE_DIR;
-const ANALYSIS_CACHE_FILE = "analysis-cache.json";
+import { openGraphStore } from "../../storage/loader.js";
+import type { GraphStore } from "../../storage/graph-store.js";
 
 export const ANALYSIS_CACHE_VERSION = 4;
+
+const META_KEY = "analysis_cache_key";
+const META_DATA_KEY = "analysis_cache_data";
 
 /** Cached graph-derived analysis results (deterministic given edges + config) */
 export interface AnalysisCacheData {
@@ -48,7 +48,6 @@ export function computeAnalysisCacheKey(
   graph: ImportGraph,
   layersConfig?: Array<{ name: string; pattern: string }>,
 ): string {
-  // Sort edges deterministically, including properties that affect analysis
   const sortedEdges = graph.edges
     .filter((e) => !e.isExternal)
     .map((e) => {
@@ -58,22 +57,49 @@ export function computeAnalysisCacheKey(
     .sort()
     .join("|");
 
-  // Count external edges so adding a new npm dependency invalidates the cache
   const externalCount = graph.edges.filter((e) => e.isExternal).length;
-
   const layersPart = layersConfig ? JSON.stringify(layersConfig) : "";
 
-  // Include betweenness sample size so cache invalidates if the constant changes
   return createHash("sha256")
     .update(sortedEdges + `|ext:${externalCount}|bk:${BETWEENNESS_K}` + layersPart)
     .digest("hex");
 }
 
+/**
+ * Load the analysis cache from the meta table in graph.db.
+ * Returns null if not found or version mismatch.
+ */
 export async function loadAnalysisCache(rootDir: string): Promise<AnalysisCacheData | null> {
-  const cachePath = path.join(rootDir, CACHE_DIR, ANALYSIS_CACHE_FILE);
+  let store: GraphStore | null = null;
   try {
-    const raw = await fs.readFile(cachePath, "utf-8");
-    const data = JSON.parse(raw) as AnalysisCacheData;
+    store = await openGraphStore(rootDir);
+    return loadAnalysisCacheFromStore(store);
+  } catch {
+    return null;
+  } finally {
+    store?.close();
+  }
+}
+
+/**
+ * Save the analysis cache to the meta table in graph.db.
+ */
+export async function saveAnalysisCache(rootDir: string, data: AnalysisCacheData): Promise<void> {
+  const store = await openGraphStore(rootDir);
+  try {
+    saveAnalysisCacheToStore(store, data);
+  } finally {
+    store.close();
+  }
+}
+
+export function loadAnalysisCacheFromStore(store: GraphStore): AnalysisCacheData | null {
+  const cacheKey = store.getMeta(META_KEY);
+  const cacheDataStr = store.getMeta(META_DATA_KEY);
+  if (!cacheKey || !cacheDataStr) return null;
+
+  try {
+    const data = JSON.parse(cacheDataStr) as AnalysisCacheData;
     if (data.version !== ANALYSIS_CACHE_VERSION) return null;
     return data;
   } catch {
@@ -81,9 +107,10 @@ export async function loadAnalysisCache(rootDir: string): Promise<AnalysisCacheD
   }
 }
 
-export async function saveAnalysisCache(rootDir: string, data: AnalysisCacheData): Promise<void> {
-  const dir = path.join(rootDir, CACHE_DIR);
-  await fs.mkdir(dir, { recursive: true });
-  const cachePath = path.join(dir, ANALYSIS_CACHE_FILE);
-  await fs.writeFile(cachePath, JSON.stringify(data), "utf-8");
+export function saveAnalysisCacheToStore(store: GraphStore, data: AnalysisCacheData): void {
+  store.setMeta(META_KEY, data.cacheKey);
+  store.setMeta(META_DATA_KEY, JSON.stringify(data));
 }
+
+// Keep CLARTE_DIR export for any code that imports it from here
+export { CLARTE_DIR };

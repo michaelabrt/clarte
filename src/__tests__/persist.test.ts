@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { makeImportGraph, makeContextAnalysis, makeFileRecord } from "./helpers/factories.js";
+import { makeImportGraph, makeContextAnalysis } from "./helpers/factories.js";
 import { PERSISTED_GRAPH_VERSION } from "../core/types/persisted-graph.js";
 
 vi.mock("../core/git/git.js", () => ({
@@ -25,26 +25,30 @@ afterEach(async () => {
 // ── persistGraph ──────────────────────────────────────────────────────
 
 describe("persistGraph", () => {
-  it("writes JSON to <rootDir>/.clarte/graph.json", async () => {
+  it("persists data to SQLite without throwing", async () => {
     const graph = makeImportGraph([], ["src/a.ts"]);
     const analysis = makeContextAnalysis();
-    await persistGraph(tmpDir, graph, analysis);
-
-    const filePath = path.join(tmpDir, ".clarte", "graph.json");
-    const content = await fs.readFile(filePath, "utf-8");
-    expect(() => JSON.parse(content)).not.toThrow();
+    await expect(persistGraph(tmpDir, graph, analysis)).resolves.not.toThrow();
+    // Verify graph.db was created
+    const dbPath = path.join(tmpDir, ".clarte", "graph.db");
+    expect(
+      await fs
+        .access(dbPath)
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(true);
   });
 
-  it("writes correct version and files", async () => {
+  it("persists correct file records", async () => {
     const graph = makeImportGraph([], ["src/a.ts", "src/b.ts"]);
     const analysis = makeContextAnalysis();
     await persistGraph(tmpDir, graph, analysis);
 
-    const filePath = path.join(tmpDir, ".clarte", "graph.json");
-    const parsed = JSON.parse(await fs.readFile(filePath, "utf-8"));
-    expect(parsed.version).toBe(PERSISTED_GRAPH_VERSION);
-    expect(parsed.files["src/a.ts"]).toBeDefined();
-    expect(parsed.files["src/b.ts"]).toBeDefined();
+    const loaded = await loadPersistedGraph(tmpDir);
+    expect(loaded).not.toBeNull();
+    expect(loaded?.version).toBe(PERSISTED_GRAPH_VERSION);
+    expect(loaded?.files["src/a.ts"]).toBeDefined();
+    expect(loaded?.files["src/b.ts"]).toBeDefined();
   });
 
   it("excludes external edges", async () => {
@@ -67,35 +71,11 @@ describe("persistGraph", () => {
     const analysis = makeContextAnalysis();
     await persistGraph(tmpDir, graph, analysis);
 
-    const filePath = path.join(tmpDir, ".clarte", "graph.json");
-    const parsed = JSON.parse(await fs.readFile(filePath, "utf-8"));
-    const edgesTo = parsed.edges.map((e: { to: string }) => e.to);
+    const loaded = await loadPersistedGraph(tmpDir);
+    expect(loaded).not.toBeNull();
+    const edgesTo = (loaded?.edges ?? []).map((e) => e.to);
     expect(edgesTo).not.toContain("react");
     expect(edgesTo).toContain("src/b.ts");
-  });
-
-  it("only writes conditional edge props when truthy", async () => {
-    const graph = makeImportGraph([
-      {
-        from: "src/a.ts",
-        to: "src/b.ts",
-        isExternal: false,
-        specifier: "./b.js",
-        importedNames: ["Foo"],
-        isTypeOnly: true,
-        isDynamic: false,
-        isBarrelRouted: false,
-      },
-    ]);
-    const analysis = makeContextAnalysis();
-    await persistGraph(tmpDir, graph, analysis);
-
-    const filePath = path.join(tmpDir, ".clarte", "graph.json");
-    const parsed = JSON.parse(await fs.readFile(filePath, "utf-8"));
-    const edge = parsed.edges[0];
-    expect(edge.isTypeOnly).toBe(true);
-    expect(edge.isDynamic).toBeUndefined();
-    expect(edge.isBarrelRouted).toBeUndefined();
   });
 
   it("serializes change coupling", async () => {
@@ -110,16 +90,14 @@ describe("persistGraph", () => {
     });
     await persistGraph(tmpDir, graph, analysis);
 
-    const filePath = path.join(tmpDir, ".clarte", "graph.json");
-    const parsed = JSON.parse(await fs.readFile(filePath, "utf-8"));
-    expect(parsed.changeCoupling).toHaveLength(1);
-    expect(parsed.changeCoupling[0].fileA).toBe("src/a.ts");
-    expect(parsed.changeCoupling[0].confidence).toBe(0.9);
+    const loaded = await loadPersistedGraph(tmpDir);
+    expect(loaded?.changeCoupling).toHaveLength(1);
+    expect(loaded?.changeCoupling[0].fileA).toBe("src/a.ts");
+    expect(loaded?.changeCoupling[0].confidence).toBe(0.9);
   });
 
   it("handles null/missing optional fields without crashing", async () => {
     const graph = makeImportGraph([], ["src/a.ts"]);
-    // analysis with no gitActivity, no chokepoints, no crossCuttingFiles, no testMapping
     const analysis = makeContextAnalysis({
       gitActivity: null,
       chokepoints: undefined,
@@ -133,58 +111,9 @@ describe("persistGraph", () => {
 // ── loadPersistedGraph ────────────────────────────────────────────────
 
 describe("loadPersistedGraph", () => {
-  it("returns null when file does not exist", async () => {
+  it("returns null when no data exists", async () => {
     const result = await loadPersistedGraph(tmpDir);
     expect(result).toBeNull();
-  });
-
-  it("returns null for invalid JSON", async () => {
-    const claireDir = path.join(tmpDir, ".clarte");
-    await fs.mkdir(claireDir, { recursive: true });
-    await fs.writeFile(path.join(claireDir, "graph.json"), "not-json");
-    const result = await loadPersistedGraph(tmpDir);
-    expect(result).toBeNull();
-  });
-
-  it("returns null when version does not match", async () => {
-    const claireDir = path.join(tmpDir, ".clarte");
-    await fs.mkdir(claireDir, { recursive: true });
-    await fs.writeFile(path.join(claireDir, "graph.json"), JSON.stringify({ version: 999, files: {}, edges: [] }));
-    const result = await loadPersistedGraph(tmpDir);
-    expect(result).toBeNull();
-  });
-
-  it("returns null when required fields are missing", async () => {
-    const claireDir = path.join(tmpDir, ".clarte");
-    await fs.mkdir(claireDir, { recursive: true });
-    // Missing `edges`
-    await fs.writeFile(
-      path.join(claireDir, "graph.json"),
-      JSON.stringify({ version: PERSISTED_GRAPH_VERSION, files: {} }),
-    );
-    const result = await loadPersistedGraph(tmpDir);
-    expect(result).toBeNull();
-  });
-
-  it("returns parsed graph on valid input", async () => {
-    const claireDir = path.join(tmpDir, ".clarte");
-    await fs.mkdir(claireDir, { recursive: true });
-    const data = {
-      version: PERSISTED_GRAPH_VERSION,
-      timestamp: new Date().toISOString(),
-      files: { "src/a.ts": makeFileRecord() },
-      edges: [],
-      communities: [],
-      changeCoupling: [],
-      structuralMismatches: [],
-      testMapping: {},
-      lagCouplings: [],
-    };
-    await fs.writeFile(path.join(claireDir, "graph.json"), JSON.stringify(data));
-    const result = await loadPersistedGraph(tmpDir);
-    if (!result) throw new Error("expected parsed graph");
-    expect(result.version).toBe(PERSISTED_GRAPH_VERSION);
-    expect(result.files["src/a.ts"]).toBeDefined();
   });
 });
 

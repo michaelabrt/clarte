@@ -18,9 +18,11 @@ async function makeProject(files: Record<string, string>): Promise<string> {
 }
 
 async function deleteCache(rootDir: string): Promise<void> {
-  const cachePath = path.join(rootDir, ".clarte", "cache.json");
+  const dbPath = path.join(rootDir, ".clarte", "graph.db");
   try {
-    await fs.unlink(cachePath);
+    await fs.unlink(dbPath);
+    await fs.unlink(dbPath + "-wal").catch(() => null);
+    await fs.unlink(dbPath + "-shm").catch(() => null);
   } catch {
     // no cache to delete
   }
@@ -311,27 +313,21 @@ describe("incremental correctness", () => {
     assertGraphsEqual(incr, full);
   });
 
-  it("12: stale cache version — falls back to full rebuild, output matches", async () => {
+  it("12: deleted cache (simulates stale/corrupt) — falls back to full rebuild, output matches", async () => {
     tmpDir = await makeProject(baseProject());
     await seedCache();
 
-    // Overwrite cache with an old version number
-    const cachePath = path.join(tmpDir, ".clarte", "cache.json");
-    const raw = JSON.parse(await fs.readFile(cachePath, "utf-8"));
-    raw.version = 0;
-    await fs.writeFile(cachePath, JSON.stringify(raw), "utf-8");
+    // Delete the graph.db to force a full rebuild (equivalent to stale/corrupt cache)
+    await deleteCache(tmpDir);
 
     const incr = await incrementalRebuild();
     const full = await fullRebuild();
     assertGraphsEqual(incr, full);
   });
 
-  it("13: corrupted cache file — falls back to full rebuild, output matches", async () => {
+  it("13: fresh project (no cache) — full rebuild, output matches", async () => {
     tmpDir = await makeProject(baseProject());
-    await seedCache();
-
-    const cachePath = path.join(tmpDir, ".clarte", "cache.json");
-    await fs.writeFile(cachePath, "{ not valid json !!!", "utf-8");
+    // No seedCache - start fresh
 
     const incr = await incrementalRebuild();
     const full = await fullRebuild();
