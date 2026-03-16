@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { detectContext, enrichFrameworksWithUsage } from "../core/detect/detect.js";
 import { buildGraphWithCache } from "../core/graph/cache.js";
-import { buildImportGraph, mergeGraph } from "../core/graph/build.js";
+import { buildImportGraph, mergeGraph, recomputeScoresAfterMerge } from "../core/graph/build.js";
 import { runAnalysis } from "../core/run-analysis.js";
 import { loadConfig } from "../core/config/config.js";
 import { analyzeForCI, type CIAnalysisResult } from "../core/analysis/ci.js";
@@ -80,6 +80,7 @@ export async function runCiMode(
       const secGraph = await buildImportGraph(rootDir, secLang, verbose ? verboseLog : undefined);
       mergeGraph(graph, secGraph);
     }
+    recomputeScoresAfterMerge(graph);
   }
   detected.frameworks = enrichFrameworksWithUsage(detected.frameworks, graph.externalImportCounts);
 

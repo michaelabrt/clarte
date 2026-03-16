@@ -6,7 +6,7 @@ import { errorMessage } from "../utils.js";
 
 const languages = new Map<string, Language>();
 let parser: Parser | null = null;
-let parserInitPromise: Promise<void> | null = null;
+let parserReady: Promise<void> | null = null;
 
 const LANG_FILES: Record<string, string> = {
   typescript: "tree-sitter-typescript.wasm",
@@ -76,22 +76,32 @@ function getRequiredGrammars(lang: ClarteLanguage): string[] {
 }
 
 /**
+ * Ensure the WASM runtime and Parser singleton are initialized.
+ * Separated from grammar loading so initTreeSitter and initForLanguage
+ * share the parser without accidentally skipping grammar loads.
+ */
+async function ensureParser(): Promise<void> {
+  if (!parserReady) {
+    parserReady = (async () => {
+      // Parser.init() loads web-tree-sitter.wasm from its own node_modules dir.
+      // Language grammars (tree-sitter-*.wasm) are loaded from dist/wasm/ via
+      // ensureLanguage(). These are two different WASM binaries: the core runtime
+      // vs the language-specific grammars - so they use different paths.
+      await Parser.init();
+      parser = new Parser();
+    })();
+  }
+  return parserReady;
+}
+
+/**
  * Initialize the tree-sitter WASM runtime and load all language grammars.
  * Backward-compatible: loads ALL grammars eagerly.
  * Safe to call concurrently (deduplicates via shared promise).
  */
-export function initTreeSitter(): Promise<void> {
-  if (parserInitPromise) return parserInitPromise;
-
-  parserInitPromise = (async () => {
-    await Parser.init();
-    parser = new Parser();
-
-    // Load all grammars for backward compatibility
-    await Promise.all(Object.keys(LANG_FILES).map(ensureLanguage));
-  })();
-
-  return parserInitPromise;
+export async function initTreeSitter(): Promise<void> {
+  await ensureParser();
+  await Promise.all(Object.keys(LANG_FILES).map(ensureLanguage));
 }
 
 /**
@@ -99,20 +109,14 @@ export function initTreeSitter(): Promise<void> {
  * Preferred over initTreeSitter() to avoid loading unused grammars.
  */
 export async function initForLanguage(lang: ClarteLanguage): Promise<void> {
-  if (!parserInitPromise) {
-    parserInitPromise = (async () => {
-      await Parser.init();
-      parser = new Parser();
-    })();
-  }
-  await parserInitPromise;
+  await ensureParser();
   const grammars = getRequiredGrammars(lang);
   await Promise.all(grammars.map(ensureLanguage));
 }
 
 export function getLanguage(lang: ClarteLanguage, filePath?: string): Language {
   if (lang === "typescript" || lang === "javascript") {
-    const ext = filePath?.split(".").pop()?.toLowerCase();
+    const ext = filePath ? path.extname(filePath).slice(1).toLowerCase() : undefined;
     if (ext === "tsx" || ext === "jsx") return languages.get("tsx") as Language;
     if (ext === "js" || ext === "mjs" || ext === "cjs") return languages.get("javascript") as Language;
     return languages.get("typescript") as Language;
@@ -122,6 +126,32 @@ export function getLanguage(lang: ClarteLanguage, filePath?: string): Language {
   return tsLang;
 }
 
+/**
+ * Parse content and pass the root node to a callback. The tree's WASM memory
+ * is freed after the callback returns, making it structurally impossible to leak.
+ */
+export function withParsedTree<T>(
+  content: string,
+  lang: ClarteLanguage,
+  filePath: string | undefined,
+  fn: (root: Node) => T,
+): T {
+  if (!parser) throw new Error("Tree-sitter not initialized. Call initTreeSitter() first.");
+  parser.setLanguage(getLanguage(lang, filePath));
+  const tree = parser.parse(content);
+  if (!tree) throw new Error("Tree-sitter parse returned null");
+  try {
+    return fn(tree.rootNode);
+  } finally {
+    tree.delete();
+  }
+}
+
+/**
+ * @deprecated Use withParsedTree for proper WASM memory management.
+ * This function leaks tree-sitter Tree objects because tree.delete() cannot
+ * be called before returning rootNode (it would invalidate the node).
+ */
 export function parseSource(content: string, lang: ClarteLanguage, filePath?: string): Node {
   if (!parser) throw new Error("Tree-sitter not initialized. Call initTreeSitter() first.");
   parser.setLanguage(getLanguage(lang, filePath));

@@ -28,14 +28,13 @@ import type {
 import { saveConfig, configToAnswers, computeSnapshotHash } from "../core/config/config.js";
 import { initPreCommitHook } from "../cli/hooks.js";
 import { buildGraphWithCache } from "../core/graph/cache.js";
-import { buildImportGraph, mergeGraph } from "../core/graph/build.js";
-import { computeHITS, computeBetweenness } from "../core/graph/centrality.js";
+import { buildImportGraph, mergeGraph, recomputeScoresAfterMerge } from "../core/graph/build.js";
 import { getHubFiles } from "../core/graph/hub-files.js";
 import { startShimmer, NOOP_SHIMMER } from "../cli/animations.js";
 import { serializeAnalysis } from "../core/analysis/serialize.js";
 import { runAnalysis } from "../core/run-analysis.js";
 import { persistGraph, loadPersistedGraph } from "../core/graph/persist.js";
-import { HITS, SNAPSHOT_LANGUAGES } from "../core/config/thresholds.js";
+import { SNAPSHOT_LANGUAGES } from "../core/config/thresholds.js";
 
 export interface InitOptions {
   rootDir: string;
@@ -93,19 +92,7 @@ export async function runInitMode(opts: InitOptions): Promise<void> {
         const secGraph = await buildImportGraph(rootDir, secLang, verbose ? verboseLog : undefined);
         mergeGraph(graph, secGraph);
       }
-      // Recompute HITS and betweenness on merged graph (per-language scores are incommensurable)
-      const allFiles = [...graph.inDegree.keys()];
-      const { authority, hub } = computeHITS(
-        allFiles,
-        graph.edges,
-        HITS.MAX_ITERATIONS,
-        HITS.EPSILON,
-        graph.barrelFiles,
-      );
-      graph.authority = authority;
-      graph.hubScores = hub;
-      graph.centrality = authority;
-      graph.betweennessScores = computeBetweenness(graph);
+      recomputeScoresAfterMerge(graph);
     }
 
     topHub = getHubFiles(graph, 1)[0];

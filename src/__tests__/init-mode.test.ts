@@ -80,10 +80,7 @@ vi.mock("../core/graph/cache.js", () => ({
 vi.mock("../core/graph/build.js", () => ({
   buildImportGraph: (...args: unknown[]) => mockBuildImportGraph(...args),
   mergeGraph: (...args: unknown[]) => mockMergeGraph(...args),
-}));
-vi.mock("../core/graph/centrality.js", () => ({
-  computeHITS: () => ({ authority: new Map(), hub: new Map() }),
-  computeBetweenness: () => new Map(),
+  recomputeScoresAfterMerge: vi.fn(),
 }));
 
 const mockGetHubFiles = vi.fn().mockReturnValue([]);

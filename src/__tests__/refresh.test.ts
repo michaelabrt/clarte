@@ -32,6 +32,7 @@ const mockMergeGraph = vi.fn();
 vi.mock("../core/graph/build.js", () => ({
   buildImportGraph: (...args: unknown[]) => mockBuildImportGraph(...args),
   mergeGraph: (...args: unknown[]) => mockMergeGraph(...args),
+  recomputeScoresAfterMerge: vi.fn(),
 }));
 
 const mockGenerateSnapshot = vi.fn().mockResolvedValue({
