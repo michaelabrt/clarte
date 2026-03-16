@@ -11,6 +11,26 @@ function barrelLang(filePath?: string): Language {
   return ext === "jsx" || ext === "tsx" ? "typescript" : ext === "js" || ext === "mjs" || ext === "cjs" ? "javascript" : "typescript";
 }
 
+/** Check barrel status from a pre-parsed root node (avoids re-parsing). */
+export function detectBarrelFromRoot(root: import("web-tree-sitter").Node): boolean {
+  let reExportCount = 0;
+  let totalStatements = 0;
+  for (const node of root.namedChildren) {
+    if (node.type === "export_statement") {
+      totalStatements++;
+      if (node.childForFieldName("source")) reExportCount++;
+    } else if (
+      node.type === "import_statement" || node.type === "lexical_declaration" ||
+      node.type === "function_declaration" || node.type === "class_declaration" ||
+      node.type === "interface_declaration" || node.type === "type_alias_declaration" ||
+      node.type === "enum_declaration" || node.type === "expression_statement"
+    ) {
+      totalStatements++;
+    }
+  }
+  return totalStatements > 0 && reExportCount / totalStatements > BARREL_THRESHOLD;
+}
+
 /**
  * Detect if a file is a barrel file (index.ts that re-exports from other modules).
  */

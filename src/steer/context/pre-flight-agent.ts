@@ -54,7 +54,7 @@ After identifying a bug, scan the rest of the file for functions that handle the
 Start with a one-line summary:
 \`I read the target files and found [N] edit location(s). Here are the findings:\`
 
-Then one block per finding. Include the code surrounding the bug so it is visible without re-reading the file. **Never abbreviate with \`...\` or omit lines.** If the function exceeds 30 lines, include the 20 lines centered on the bug location instead.
+Then one block per finding. Include the code surrounding the bug so it is visible without re-reading the file. **Never abbreviate with \`...\` or omit lines.** If the function exceeds 30 lines, include the 20 lines centered on the bug location instead. Use the FILE/LINE/FIX format:
 
 \`\`\`
 FILE: <relative path>
