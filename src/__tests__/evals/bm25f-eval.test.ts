@@ -83,6 +83,25 @@ interface BenchmarkQuery {
   query: string;
   expected: string[];
   graph: PersistedGraph;
+  /** "train" queries are used during parameter tuning; "test" queries are held out for validation. */
+  purpose?: "train" | "test";
+}
+
+/** Bootstrap 95% confidence interval for MRR. */
+function bootstrapMRR(rrValues: number[], n = 1000): { mean: number; ci95: [number, number] } {
+  const means: number[] = [];
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    for (let j = 0; j < rrValues.length; j++) {
+      sum += rrValues[Math.floor(Math.random() * rrValues.length)];
+    }
+    means.push(sum / rrValues.length);
+  }
+  means.sort((a, b) => a - b);
+  return {
+    mean: rrValues.reduce((a, b) => a + b, 0) / rrValues.length,
+    ci95: [means[Math.floor(n * 0.025)], means[Math.floor(n * 0.975)]],
+  };
 }
 
 function buildBenchmarkQueries(): BenchmarkQuery[] {
@@ -320,6 +339,289 @@ function buildBenchmarkQueries(): BenchmarkQuery[] {
     }),
   });
 
+  // ── Q13-Q30: expanded queries for stable parameter validation ──
+
+  // Q13: Acronym handling — SQLiteDB should split to SQLite + DB
+  queries.push({
+    name: "acronym-sqlite",
+    query: "SQLite database connection pool",
+    expected: ["src/db/sqlite-pool.ts"],
+    graph: makeGraph({
+      files: {
+        "src/db/sqlite-pool.ts": file({ symbolNames: ["createPool", "getConnection"] }),
+        "src/db/postgres-pool.ts": file({ symbolNames: ["createPool", "getConnection"] }),
+        "src/config/database.ts": file({ symbolNames: ["loadDbConfig"] }),
+      },
+    }),
+  });
+
+  // Q14: Acronym — HTTP in path
+  queries.push({
+    name: "acronym-http-client",
+    query: "HTTP client timeout configuration",
+    expected: ["src/http/client.ts"],
+    graph: makeGraph({
+      files: {
+        "src/http/client.ts": file({ symbolNames: ["createClient", "setTimeout", "fetchJSON"] }),
+        "src/ws/client.ts": file({ symbolNames: ["connect", "onMessage"] }),
+        "src/config/timeouts.ts": file({ symbolNames: ["DEFAULT_TIMEOUT"] }),
+      },
+    }),
+  });
+
+  // Q15: Verb-noun bridging — "parsing" should match "parser" via synonyms
+  queries.push({
+    name: "verb-noun-parsing",
+    query: "fix the configuration parsing logic",
+    expected: ["src/config/parser.ts"],
+    graph: makeGraph({
+      files: {
+        "src/config/parser.ts": file({ symbolNames: ["parseConfig", "validateSchema"] }),
+        "src/config/defaults.ts": file({ symbolNames: ["getDefaults"] }),
+        "src/cli/args.ts": file({ symbolNames: ["parseArgs"] }),
+      },
+    }),
+  });
+
+  // Q16: Deep nesting — file 4+ directories deep
+  queries.push({
+    name: "deep-nesting",
+    query: "user avatar upload handler",
+    expected: ["src/modules/users/profile/avatar/upload.ts"],
+    graph: makeGraph({
+      files: {
+        "src/modules/users/profile/avatar/upload.ts": file({ symbolNames: ["handleUpload", "resizeAvatar"] }),
+        "src/modules/users/profile/settings.ts": file({ symbolNames: ["updateSettings"] }),
+        "src/storage/s3.ts": file({ symbolNames: ["uploadFile"] }),
+      },
+    }),
+  });
+
+  // Q17: Namespace collision — same filename in different dirs
+  queries.push({
+    name: "namespace-collision",
+    query: "fix validation in the API schema",
+    expected: ["src/api/schema/validation.ts"],
+    graph: makeGraph({
+      files: {
+        "src/api/schema/validation.ts": file({ symbolNames: ["validateRequest", "validateResponse"] }),
+        "src/forms/schema/validation.ts": file({ symbolNames: ["validateForm", "checkRequired"] }),
+        "src/api/routes.ts": file({ symbolNames: ["registerRoutes"] }),
+      },
+      edges: [
+        { from: "src/api/routes.ts", to: "src/api/schema/validation.ts", importedNames: ["validateRequest"] },
+      ],
+    }),
+  });
+
+  // Q18: Weak coupling — confidence just above threshold
+  queries.push({
+    name: "weak-coupling",
+    query: "fix the rate limiter middleware",
+    expected: ["src/middleware/rate-limiter.ts"],
+    graph: makeGraph({
+      files: {
+        "src/middleware/rate-limiter.ts": file({ symbolNames: ["rateLimiter", "checkQuota"] }),
+        "src/middleware/auth.ts": file({ symbolNames: ["authMiddleware"] }),
+        "src/config/limits.ts": file({ symbolNames: ["RATE_LIMIT"] }),
+      },
+      changeCoupling: [
+        { fileA: "src/middleware/rate-limiter.ts", fileB: "src/config/limits.ts", coChangeCount: 3, confidence: 0.52 },
+      ],
+    }),
+  });
+
+  // Q19: Strong coupling — confidence near 1.0
+  queries.push({
+    name: "strong-coupling",
+    query: "update the Redis cache TTL",
+    expected: ["src/cache/redis.ts"],
+    graph: makeGraph({
+      files: {
+        "src/cache/redis.ts": file({ symbolNames: ["getFromCache", "setCache", "invalidate"] }),
+        "src/cache/memory.ts": file({ symbolNames: ["memoryCache"] }),
+        "src/config/cache.ts": file({ symbolNames: ["CACHE_TTL"] }),
+      },
+      changeCoupling: [
+        { fileA: "src/cache/redis.ts", fileB: "src/config/cache.ts", coChangeCount: 12, confidence: 0.95 },
+      ],
+    }),
+  });
+
+  // Q20: Test proxy — test name doesn't match source
+  queries.push({
+    name: "test-proxy-mismatch",
+    query: "fix the order total calculation",
+    expected: ["src/orders/pricing.ts"],
+    graph: makeGraph({
+      files: {
+        "src/orders/pricing.ts": file({ symbolNames: ["calculateTotal", "applyDiscount"] }),
+        "src/orders/checkout.ts": file({ symbolNames: ["processCheckout"] }),
+      },
+      testMapping: {
+        "src/orders/pricing.ts": ["test/integration/order-flow.test.ts"],
+      },
+    }),
+  });
+
+  // Q21: Import-only match — file reachable only via imports field
+  queries.push({
+    name: "import-only-match",
+    query: "fix the logger transport configuration",
+    expected: ["src/logging/transports.ts"],
+    graph: makeGraph({
+      files: {
+        "src/logging/transports.ts": file({ symbolNames: ["createTransport"] }),
+        "src/logging/index.ts": file({ symbolNames: ["getLogger"] }),
+        "src/app.ts": file({ symbolNames: ["bootstrap"] }),
+      },
+      edges: [
+        { from: "src/logging/index.ts", to: "src/logging/transports.ts", importedNames: ["createTransport"] },
+        { from: "src/app.ts", to: "src/logging/index.ts", importedNames: ["getLogger"] },
+      ],
+    }),
+  });
+
+  // Q22: Multi-term query (4+ words)
+  queries.push({
+    name: "multi-term-long-query",
+    query: "the websocket connection drops when the server sends a large payload",
+    expected: ["src/ws/connection.ts"],
+    graph: makeGraph({
+      files: {
+        "src/ws/connection.ts": file({ symbolNames: ["handleMessage", "closeConnection", "sendPayload"] }),
+        "src/ws/server.ts": file({ symbolNames: ["createServer", "broadcast"] }),
+        "src/http/server.ts": file({ symbolNames: ["listen", "handleRequest"] }),
+      },
+    }),
+  });
+
+  // Q23: Single-word query
+  queries.push({
+    name: "single-word-query",
+    query: "middleware",
+    expected: ["src/middleware/index.ts"],
+    graph: makeGraph({
+      files: {
+        "src/middleware/index.ts": file({ symbolNames: ["applyMiddleware", "compose"] }),
+        "src/routes/index.ts": file({ symbolNames: ["registerRoutes"] }),
+        "src/middleware/cors.ts": file({ symbolNames: ["corsMiddleware"] }),
+      },
+    }),
+  });
+
+  // Q24: Coupling + BM25 interaction — weak BM25 but strong coupling should boost
+  queries.push({
+    name: "coupling-boosts-weak-bm25",
+    query: "fix the database migration runner",
+    expected: ["src/db/migrate.ts"],
+    graph: makeGraph({
+      files: {
+        "src/db/migrate.ts": file({ symbolNames: ["runMigrations", "rollback"] }),
+        "src/db/schema.ts": file({ symbolNames: ["createTable", "addColumn"] }),
+        "src/db/seed.ts": file({ symbolNames: ["seedData"] }),
+      },
+      changeCoupling: [
+        { fileA: "src/db/migrate.ts", fileB: "src/db/schema.ts", coChangeCount: 15, confidence: 0.88 },
+      ],
+    }),
+  });
+
+  // ── Held-out test set (Q25-Q30): not used during parameter tuning ──
+
+  // Q25: Verb-noun bridging — "compilation" should match "compile"
+  queries.push({
+    name: "verb-noun-compilation",
+    purpose: "test",
+    query: "compilation errors in the template engine",
+    expected: ["src/template/compiler.ts"],
+    graph: makeGraph({
+      files: {
+        "src/template/compiler.ts": file({ symbolNames: ["compileTemplate", "parseExpression"] }),
+        "src/template/runtime.ts": file({ symbolNames: ["renderTemplate"] }),
+        "src/template/cache.ts": file({ symbolNames: ["getCachedTemplate"] }),
+      },
+    }),
+  });
+
+  // Q26: Importer expansion — consumer should rank higher than provider
+  queries.push({
+    name: "importer-expansion",
+    purpose: "test",
+    query: "fix the payment validation",
+    expected: ["src/checkout/validate-payment.ts"],
+    graph: makeGraph({
+      files: {
+        "src/checkout/validate-payment.ts": file({ symbolNames: ["validateCard", "checkBalance"] }),
+        "src/payments/validator.ts": file({ symbolNames: ["validatePayment", "formatError"] }),
+        "src/payments/index.ts": file({ symbolNames: ["processPayment"] }),
+      },
+      edges: [
+        { from: "src/checkout/validate-payment.ts", to: "src/payments/validator.ts", importedNames: ["validatePayment"] },
+      ],
+    }),
+  });
+
+  // Q27: JSON-related query — tests serialize/deserialize synonym expansion
+  queries.push({
+    name: "json-serialization",
+    purpose: "test",
+    query: "JSON serialization strips null fields",
+    expected: ["src/utils/serializer.ts"],
+    graph: makeGraph({
+      files: {
+        "src/utils/serializer.ts": file({ symbolNames: ["serializeToJSON", "stripNulls"] }),
+        "src/utils/parser.ts": file({ symbolNames: ["parseJSON"] }),
+        "src/api/response.ts": file({ symbolNames: ["formatResponse"] }),
+      },
+    }),
+  });
+
+  // Q28: Mixed path + symbol match — both should contribute
+  queries.push({
+    name: "mixed-path-symbol",
+    purpose: "test",
+    query: "fix the error boundary component",
+    expected: ["src/components/error-boundary.tsx"],
+    graph: makeGraph({
+      files: {
+        "src/components/error-boundary.tsx": file({ symbolNames: ["ErrorBoundary", "FallbackUI"] }),
+        "src/utils/error-handler.ts": file({ symbolNames: ["handleError", "logError"] }),
+        "src/hooks/useErrorBoundary.ts": file({ symbolNames: ["useErrorBoundary"] }),
+      },
+    }),
+  });
+
+  // Q29: Connection query — tests "connect/connection" synonym bridging
+  queries.push({
+    name: "connection-synonym",
+    purpose: "test",
+    query: "database connection leak in pool cleanup",
+    expected: ["src/db/pool.ts"],
+    graph: makeGraph({
+      files: {
+        "src/db/pool.ts": file({ symbolNames: ["createPool", "cleanupConnections", "getConnection"] }),
+        "src/db/client.ts": file({ symbolNames: ["connect", "disconnect"] }),
+        "src/db/config.ts": file({ symbolNames: ["DATABASE_URL"] }),
+      },
+    }),
+  });
+
+  // Q30: Registration flow — tests "register/registration" synonym
+  queries.push({
+    name: "registration-synonym",
+    purpose: "test",
+    query: "user registration email not sent after signup",
+    expected: ["src/auth/register.ts"],
+    graph: makeGraph({
+      files: {
+        "src/auth/register.ts": file({ symbolNames: ["registerUser", "sendWelcomeEmail"] }),
+        "src/auth/login.ts": file({ symbolNames: ["loginUser", "verifyPassword"] }),
+        "src/email/templates.ts": file({ symbolNames: ["renderWelcome"] }),
+      },
+    }),
+  });
+
   return queries;
 }
 
@@ -366,6 +668,25 @@ describe("BM25F offline evaluation", () => {
     }
     const avgPrecision = totalPrecision / queries.length;
     expect(avgPrecision).toBeGreaterThanOrEqual(0.3);
+  });
+
+  // Held-out test set: verify that test-purpose queries also pass MRR threshold
+  it("held-out test set MRR >= 0.6", () => {
+    const testQueries = queries.filter((q) => q.purpose === "test");
+    if (testQueries.length === 0) return; // no test queries yet
+    const rrValues = testQueries.map((q) => reciprocalRank(resolveEditTargets(q.query, q.graph), q.expected));
+    const { mean, ci95 } = bootstrapMRR(rrValues);
+    // Lower threshold for held-out (0.6) since these queries weren't used for tuning
+    expect(mean).toBeGreaterThanOrEqual(0.6);
+    // Log CI for visibility
+    console.error(`Held-out MRR: ${mean.toFixed(3)} [${ci95[0].toFixed(3)}, ${ci95[1].toFixed(3)}] (n=${testQueries.length})`);
+  });
+
+  // Bootstrap confidence interval for full MRR
+  it("MRR 95% CI lower bound > 0.5", () => {
+    const rrValues = queries.map((q) => reciprocalRank(resolveEditTargets(q.query, q.graph), q.expected));
+    const { ci95 } = bootstrapMRR(rrValues);
+    expect(ci95[0]).toBeGreaterThan(0.5);
   });
 
   // Diagnostic: print full metrics (visible in verbose mode)
