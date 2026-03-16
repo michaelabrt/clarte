@@ -304,7 +304,7 @@ if (existsSync(graphPath)) {
     const STOP = new Set([
       "a","an","the","in","on","at","to","for","of","and","or","is","it","be","are","was","has",
       "have","do","does","did","will","can","if","so","no","as","by","fix","bug","add","update",
-      "change","make","set","get","use","run","call","join","split","that","this","with","from",
+      "change","make","set","get","use","run","call","that","this","with","from",
       "not","but","should","when","what","how","why","like","also","only","each","more","some",
       "just","into","true","false","null","type","values","value","default","string","strings",
       "array","arrays","number","object","function","class","file","files","test","tests",
@@ -315,7 +315,9 @@ if (existsSync(graphPath)) {
     const TEST_RE = /(?:^|\\/)(?:test|spec|__tests__|__mocks__)\\/|\\.(?:test|spec)\\.[jt]sx?$/;
     // SYNC: targets-resolve.ts -- BM25F tuning constants
     const K1 = 1.2;   // BM25 saturation parameter
-    const B = 0.4;     // BM25 length normalization (lowered for short docs)
+    const BP = 0.3;    // path field b (very short docs)
+    const BS = 0.4;    // symbol field b (medium docs)
+    const BI = 0.5;    // import field b (longer docs)
     const PW = 2.0;    // path field weight
     const SW = 1.0;    // symbol field weight
     const IW = 0.5;    // import field weight
@@ -327,7 +329,7 @@ if (existsSync(graphPath)) {
     const IC = 0.5;    // import-only ceiling fraction
 
     // SYNC: targets-resolve.ts -- tokenizeIdentifier
-    function splitCC(s) { return s.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ").filter(Boolean); }
+    function splitCC(s) { return s.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").split(" ").filter(Boolean); }
     function tokId(id) {
       const result = [];
       for (const part of id.split(/[^a-zA-Z0-9]+/)) {
@@ -378,9 +380,9 @@ if (existsSync(graphPath)) {
         const idf = Math.log((N - dfc + 0.5) / (dfc + 0.5) + 1);
         const tfP = doc.ptf.get(term) || 0, tfS = doc.stf.get(term) || 0;
         let ptf = 0;
-        if (tfP > 0) ptf += PW * tfP / (1 - B + B * doc.pt.length / aPL);
-        if (tfS > 0) ptf += SW * tfS / (1 - B + B * doc.st.length / aSL);
-        if (useImports) { const tfI = doc.itf.get(term) || 0; if (tfI > 0) ptf += IW * tfI / (1 - B + B * doc.it.length / aIL); }
+        if (tfP > 0) ptf += PW * tfP / (1 - BP + BP * doc.pt.length / aPL);
+        if (tfS > 0) ptf += SW * tfS / (1 - BS + BS * doc.st.length / aSL);
+        if (useImports) { const tfI = doc.itf.get(term) || 0; if (tfI > 0) ptf += IW * tfI / (1 - BI + BI * doc.it.length / aIL); }
         if (ptf > 0) sc += idf * (ptf * (K1 + 1)) / (ptf + K1);
       }
       return sc;
@@ -388,15 +390,16 @@ if (existsSync(graphPath)) {
 
     // SYNC: targets-resolve.ts -- synonym groups (S3: split overly broad groups)
     const SYN_GROUPS = [
-      ["auth","authentication","authorize","authorization"],["jwt","jsonwebtoken","token"],
+      ["auth","authenticate","authentication","authenticator","authorize","authorization"],
+      ["jwt","jsonwebtoken","token"],
       ["session","cookie","credential"],["db","database"],["datastore","persistence"],
       ["sql","sqlite","postgres","mysql","mariadb"],["orm","repository","entity","migration"],
       ["api","endpoint"],["route","handler","middleware"],["http","request","response","fetch"],
       ["ws","websocket","socket"],["msg","message"],["event","signal"],
       ["err","error","exception","fault"],["log","logger","logging"],
       ["cache","memoize","memo"],["queue","worker","job"],
-      ["pub","publish"],["subscribe","subscriber"],
-      ["env","environment","dotenv"],["cfg","config","configuration","settings"],
+      ["pub","publish"],["subscribe","subscription","subscriber"],
+      ["env","environment","dotenv"],["cfg","config","configure","configuration","settings"],
       ["cmd","command","cli"],["fs","filesystem","directory"],
       ["fmt","format","formatter"],["lint","linter","eslint"],
       ["pkg","package","module"],["dep","dependency","dependencies"],
@@ -404,21 +407,26 @@ if (existsSync(graphPath)) {
       ["css","style","stylesheet","tailwind"],["nav","navigation"],["router","routing"],
       ["i18n","locale","translation","intl"],["tz","timezone","datetime"],
       ["url","uri","href","link"],["regex","regexp","pattern"],
-      ["json","serialize","deserialize","marshal"],
-      ["schema","validate","validator","validation"],
+      ["json","serialize","serialization","serializer","deserialize","deserialization","marshal"],
+      ["schema","validate","validation","validator"],
       ["interceptor","guard","filter"],
       ["mock","stub","fake","spy"],
       ["async","promise","await"],
       ["stream","pipe","transform"],["readable","writable"],
       ["crypto","encrypt","decrypt"],["hash","hmac"],["cert","certificate","tls","ssl"],
       ["verify","verification"],
-      ["param","parameter","arg","argument"],["init","initialize","bootstrap"],
+      ["param","parameter","arg","argument"],
+      ["init","initialize","initialization","initializer","bootstrap"],
       ["delete","remove","destroy"],["send","emit","dispatch"],
       ["retry","backoff"],["timeout","deadline"],
       ["throttle","debounce","ratelimit"],["hook","callback","listener"],
       ["plugin","extension","addon"],["permission","access","acl"],
-      ["parse","parser"],["upload","download","transfer"],
+      ["parse","parser","parsing"],["upload","download","transfer"],
       ["cron","schedule","timer"],
+      ["compile","compilation","compiler"],["generate","generation","generator"],
+      ["migrate","migration"],["connect","connection"],
+      ["execute","execution","executor"],["resolve","resolution","resolver"],
+      ["register","registration"],
     ];
     const SYN_MAP = new Map();
     for (const grp of SYN_GROUPS) for (const t of grp) {
@@ -535,9 +543,9 @@ if (existsSync(graphPath)) {
       for (const c of (g.changeCoupling || [])) {
         if (c.confidence < MC) continue;
         if (!couplingMap.has(c.fileA)) couplingMap.set(c.fileA, []);
-        couplingMap.get(c.fileA).push(c.fileB);
+        couplingMap.get(c.fileA).push({ file: c.fileB, confidence: c.confidence });
         if (!couplingMap.has(c.fileB)) couplingMap.set(c.fileB, []);
-        couplingMap.get(c.fileB).push(c.fileA);
+        couplingMap.get(c.fileB).push({ file: c.fileA, confidence: c.confidence });
       }
       const MAX_HOPS = 3;
       for (let hop = 1; hop <= MAX_HOPS; hop++) {
@@ -556,9 +564,9 @@ if (existsSync(graphPath)) {
             const boost = sc * IM * decay;
             if (boost > (newScores.get(dep) || 0)) newScores.set(dep, boost);
           }
-          for (const partner of (couplingMap.get(f) || [])) {
+          for (const { file: partner, confidence: conf } of (couplingMap.get(f) || [])) {
             if (!g.files[partner]) continue;
-            const boost = sc * CF * decay;
+            const boost = sc * CF * conf * decay;
             if (boost > (newScores.get(partner) || 0)) newScores.set(partner, boost);
           }
         }
