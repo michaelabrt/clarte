@@ -44,9 +44,7 @@ const STOP_WORDS = new Set([
   "run",
   "call",
   // Verbs that also serve as discriminative function-name stems are left to
-  // IDF rather than hard-stopped (parse, read, write, wrap, skip removed).
-  "join",
-  "split",
+  // IDF rather than hard-stopped (parse, read, write, wrap, skip, split, join removed).
   // Pronouns and determiners
   "that",
   "this",
@@ -117,7 +115,7 @@ const STOP_WORDS = new Set([
  */
 // SYNC: generate-hooks.ts PROMPT_SCRIPT SYN_GROUPS (S3: split overly broad groups)
 const SYNONYM_GROUPS: string[][] = [
-  ["auth", "authentication", "authorize", "authorization"],
+  ["auth", "authenticate", "authentication", "authenticator", "authorize", "authorization"],
   ["jwt", "jsonwebtoken", "token"],
   ["session", "cookie", "credential"],
   ["db", "database"],
@@ -135,9 +133,9 @@ const SYNONYM_GROUPS: string[][] = [
   ["cache", "memoize", "memo"],
   ["queue", "worker", "job"],
   ["pub", "publish"],
-  ["subscribe", "subscriber"],
+  ["subscribe", "subscription", "subscriber"],
   ["env", "environment", "dotenv"],
-  ["cfg", "config", "configuration", "settings"],
+  ["cfg", "config", "configure", "configuration", "settings"],
   ["cmd", "command", "cli"],
   ["fs", "filesystem", "directory"],
   ["fmt", "format", "formatter"],
@@ -154,8 +152,8 @@ const SYNONYM_GROUPS: string[][] = [
   ["tz", "timezone", "datetime"],
   ["url", "uri", "href", "link"],
   ["regex", "regexp", "pattern"],
-  ["json", "serialize", "deserialize", "marshal"],
-  ["schema", "validate", "validator", "validation"],
+  ["json", "serialize", "serialization", "serializer", "deserialize", "deserialization", "marshal"],
+  ["schema", "validate", "validation", "validator"],
   ["interceptor", "guard", "filter"],
   ["mock", "stub", "fake", "spy"],
   ["async", "promise", "await"],
@@ -166,7 +164,7 @@ const SYNONYM_GROUPS: string[][] = [
   ["cert", "certificate", "tls", "ssl"],
   ["verify", "verification"],
   ["param", "parameter", "arg", "argument"],
-  ["init", "initialize", "bootstrap"],
+  ["init", "initialize", "initialization", "initializer", "bootstrap"],
   ["delete", "remove", "destroy"],
   ["send", "emit", "dispatch"],
   ["retry", "backoff"],
@@ -175,9 +173,17 @@ const SYNONYM_GROUPS: string[][] = [
   ["hook", "callback", "listener"],
   ["plugin", "extension", "addon"],
   ["permission", "access", "acl"],
-  ["parse", "parser"],
+  ["parse", "parser", "parsing"],
   ["upload", "download", "transfer"],
   ["cron", "schedule", "timer"],
+  // Verb/noun/agent triads for morphological bridging
+  ["compile", "compilation", "compiler"],
+  ["generate", "generation", "generator"],
+  ["migrate", "migration"],
+  ["connect", "connection"],
+  ["execute", "execution", "executor"],
+  ["resolve", "resolution", "resolver"],
+  ["register", "registration"],
 ];
 
 /** Build a lookup from term → expanded synonyms (excluding the term itself). */
@@ -211,10 +217,12 @@ function expandQuerySynonyms(terms: string[]): { original: string[]; expanded: s
 }
 
 const BM25_K1 = 1.2;
-// b=0.4: lowered from TREC default (0.75) for short documents. File paths are
-// 3-5 tokens and symbol lists 5-50 tokens; b=0.75 over-penalizes naturally short
-// docs. Literature (Clinchant & Gaussier 2010) recommends b=0.3-0.5 for this range.
-const BM25_B = 0.4;
+// Per-field b: different field lengths need different normalization strength.
+// Path tokens (3-5) barely need normalization; symbols (5-50) moderate; imports (10-100+) stronger.
+// Literature (Clinchant & Gaussier 2010) recommends b=0.3-0.5 for short docs.
+const BM25_B_PATH = 0.3;
+const BM25_B_SYMBOLS = 0.4;
+const BM25_B_IMPORTS = 0.5;
 // PATH_WEIGHT > SYMBOL_WEIGHT: path tokens have higher precision (3-5 tokens identify
 // file identity vs 50+ symbol tokens each less unique). Ratio 2:1 validated via grid
 // search across 12 synthetic + 4 integration benchmarks (MRR 0.917 -> 0.958, zero regressions).
@@ -230,14 +238,20 @@ const TEST_PROXY_FACTOR = 0.6;
 const SYNONYM_DISCOUNT = 0.3;
 const DEFAULT_MAX_TARGETS = 5;
 const MIN_COUPLING_CONFIDENCE = 0.5;
+// Minimum average document length for symbol/import fields. Prevents near-zero avgdl
+// when most files have few symbols, which would over-penalize files with moderate
+// symbol count via the BM25 length normalization term.
+const MIN_AVGDL = 5;
 
 /**
- * Split camelCase/PascalCase on lowercase→uppercase boundaries.
- * "AbstractSqlite" → ["Abstract", "Sqlite"], "SQLite" → ["SQLite"] (treated as one word).
+ * Split camelCase/PascalCase on lowercase-uppercase and UPPERCASE-Uppercase boundaries.
+ * "AbstractSqlite" -> ["Abstract", "Sqlite"], "SQLiteDB" -> ["SQLite", "DB"],
+ * "HTTPSServer" -> ["HTTPS", "Server"], "JSONValue" -> ["JSON", "Value"].
  */
 function splitCamelCase(s: string): string[] {
   return s
     .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
     .split(" ")
     .filter(Boolean);
 }
@@ -333,15 +347,18 @@ function scoreBM25F(
     // True BM25F: compute weighted pseudo-tf across fields, then apply saturation once
     let pseudoTf = 0;
     if (tfPath > 0) {
-      pseudoTf += (PATH_WEIGHT * tfPath) / (1 - BM25_B + BM25_B * (doc.path.tokens.length / avgdlPath));
+      pseudoTf +=
+        (PATH_WEIGHT * tfPath) / (1 - BM25_B_PATH + BM25_B_PATH * (doc.path.tokens.length / avgdlPath));
     }
     if (tfSymbol > 0) {
-      pseudoTf += (SYMBOL_WEIGHT * tfSymbol) / (1 - BM25_B + BM25_B * (doc.symbols.tokens.length / avgdlSymbols));
+      pseudoTf +=
+        (SYMBOL_WEIGHT * tfSymbol) / (1 - BM25_B_SYMBOLS + BM25_B_SYMBOLS * (doc.symbols.tokens.length / avgdlSymbols));
     }
     if (includeImports) {
       const tfImport = doc.imports.termFreq.get(term) ?? 0;
       if (tfImport > 0) {
-        pseudoTf += (IMPORT_WEIGHT * tfImport) / (1 - BM25_B + BM25_B * (doc.imports.tokens.length / avgdlImports));
+        pseudoTf +=
+          (IMPORT_WEIGHT * tfImport) / (1 - BM25_B_IMPORTS + BM25_B_IMPORTS * (doc.imports.tokens.length / avgdlImports));
       }
     }
 
@@ -403,13 +420,13 @@ function buildCorpus(filePaths: string[], graph: PersistedGraph, meta: EdgeMetad
   const symbolDocs = docValues.filter((d) => d.symbols.tokens.length > 0);
   const avgdlSymbols =
     symbolDocs.length > 0
-      ? Math.max(5, symbolDocs.reduce((s, d) => s + d.symbols.tokens.length, 0) / symbolDocs.length)
-      : 5;
+      ? Math.max(MIN_AVGDL, symbolDocs.reduce((s, d) => s + d.symbols.tokens.length, 0) / symbolDocs.length)
+      : MIN_AVGDL;
   const importDocs = docValues.filter((d) => d.imports.tokens.length > 0);
   const avgdlImports =
     importDocs.length > 0
-      ? Math.max(5, importDocs.reduce((s, d) => s + d.imports.tokens.length, 0) / importDocs.length)
-      : 5;
+      ? Math.max(MIN_AVGDL, importDocs.reduce((s, d) => s + d.imports.tokens.length, 0) / importDocs.length)
+      : MIN_AVGDL;
 
   const df = new Map<string, number>();
   for (const doc of docs.values()) {
@@ -526,13 +543,23 @@ function expandNeighbors(scores: Map<string, number>, directMatches: Set<string>
     }
   }
 
+  // Co-change coupling: scale factor by confidence (0.5 -> 0.2x, 0.9 -> 0.36x, 1.0 -> 0.4x).
+  // Uses max-update pattern (matching import expansion above) so coupling can boost
+  // files that already have a weak BM25 score rather than only adding new ones.
   for (const coupling of graph.changeCoupling) {
     if (coupling.confidence < MIN_COUPLING_CONFIDENCE) continue;
-    if (directMatches.has(coupling.fileA) && !scores.has(coupling.fileB) && graph.files[coupling.fileB]) {
-      scores.set(coupling.fileB, (scores.get(coupling.fileA) ?? 1) * COUPLING_FACTOR);
+    const scaledFactor = COUPLING_FACTOR * coupling.confidence;
+    if (directMatches.has(coupling.fileA) && graph.files[coupling.fileB]) {
+      const couplingScore = (scores.get(coupling.fileA) ?? 1) * scaledFactor;
+      if (couplingScore > (scores.get(coupling.fileB) ?? 0)) {
+        scores.set(coupling.fileB, couplingScore);
+      }
     }
-    if (directMatches.has(coupling.fileB) && !scores.has(coupling.fileA) && graph.files[coupling.fileA]) {
-      scores.set(coupling.fileA, (scores.get(coupling.fileB) ?? 1) * COUPLING_FACTOR);
+    if (directMatches.has(coupling.fileB) && graph.files[coupling.fileA]) {
+      const couplingScore = (scores.get(coupling.fileB) ?? 1) * scaledFactor;
+      if (couplingScore > (scores.get(coupling.fileA) ?? 0)) {
+        scores.set(coupling.fileA, couplingScore);
+      }
     }
   }
 }

@@ -38,7 +38,9 @@ describe("Hook BM25F drift detection", () => {
 
   it("BM25 parameters match", () => {
     expect(extractHookConst("K1")).toBe(extractConst("BM25_K1"));
-    expect(extractHookConst("B")).toBe(extractConst("BM25_B"));
+    expect(extractHookConst("BP")).toBe(extractConst("BM25_B_PATH"));
+    expect(extractHookConst("BS")).toBe(extractConst("BM25_B_SYMBOLS"));
+    expect(extractHookConst("BI")).toBe(extractConst("BM25_B_IMPORTS"));
   });
 
   it("field weights match", () => {
