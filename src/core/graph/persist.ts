@@ -147,6 +147,12 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
       is_cross_cutting: crossCutting ? 1 : 0,
       layer_spread: crossCutting?.layerSpread ?? 0,
       has_tests: tests.length > 0 ? 1 : 0,
+      // AC 1.9.2 exception: layers, test_files, intra_file_calls are JSON arrays stored in
+      // TEXT columns — the same pattern as imported_names (the AC's named exception).
+      // These are compatibility columns outside the RFC §5.2 schema, added so the steer
+      // module can reconstruct a PersistedGraph without a separate relational table per
+      // array. They are read back via parseJsonArray() in graph-store.ts, symmetric with
+      // edgeRowToEdge()'s imported_names parsing.
       layers: layers.length > 0 ? JSON.stringify(layers) : null,
       test_files: tests.length > 0 ? JSON.stringify(tests) : null,
       intra_file_calls: symData?.intraFileCalls?.length ? JSON.stringify(symData.intraFileCalls) : null,

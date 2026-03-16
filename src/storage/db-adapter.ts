@@ -141,9 +141,19 @@ interface SqlJsDatabase {
 function wrapSqlJs(db: SqlJsDatabase, dbPath: string): DatabaseAdapter {
   // sql.js needs explicit file saves after writes
   let pendingWrites = false;
+  const stmtCache = new Map<string, ReturnType<SqlJsDatabase["prepare"]>>();
+
+  const getOrPrepare = (sql: string): ReturnType<SqlJsDatabase["prepare"]> => {
+    let stmt = stmtCache.get(sql);
+    if (!stmt) {
+      stmt = db.prepare(sql);
+      stmtCache.set(sql, stmt);
+    }
+    return stmt;
+  };
 
   const saveToFile = (): void => {
-    if (!pendingWrites) return;
+    if (!pendingWrites || dbPath === ":memory:") return;
     try {
       const { writeFileSync } = await_require("node:fs");
       writeFileSync(dbPath, Buffer.from(db.export()));
@@ -168,11 +178,9 @@ function wrapSqlJs(db: SqlJsDatabase, dbPath: string): DatabaseAdapter {
       let lastInsertRowid = 0;
       let changes = 0;
       try {
-        const stmt = db.prepare(sql);
+        const stmt = getOrPrepare(sql);
+        stmt.reset();
         stmt.run(params);
-        stmt.free();
-        // sql.js has no direct way to get lastInsertRowid after run
-        // approximate: query sqlite_sequence or use a workaround
         const result = db.exec("SELECT last_insert_rowid(), changes()");
         if (result[0]) {
           lastInsertRowid = (result[0].values[0]?.[0] as number) ?? 0;
@@ -186,14 +194,13 @@ function wrapSqlJs(db: SqlJsDatabase, dbPath: string): DatabaseAdapter {
     },
     get<T>(...params: unknown[]): T | undefined {
       try {
-        const stmt = db.prepare(sql);
+        const stmt = getOrPrepare(sql);
+        stmt.reset();
         stmt.bind(params);
         if (stmt.step()) {
           const row = stmt.getAsObject() as T;
-          stmt.free();
           return row;
         }
-        stmt.free();
         return undefined;
       } catch {
         return undefined;
@@ -202,12 +209,12 @@ function wrapSqlJs(db: SqlJsDatabase, dbPath: string): DatabaseAdapter {
     all<T>(...params: unknown[]): T[] {
       const rows: T[] = [];
       try {
-        const stmt = db.prepare(sql);
+        const stmt = getOrPrepare(sql);
+        stmt.reset();
         stmt.bind(params);
         while (stmt.step()) {
           rows.push(stmt.getAsObject() as T);
         }
-        stmt.free();
       } catch {
         // ignore
       }
@@ -240,6 +247,14 @@ function wrapSqlJs(db: SqlJsDatabase, dbPath: string): DatabaseAdapter {
     },
     close(): void {
       saveToFile();
+      for (const stmt of stmtCache.values()) {
+        try {
+          stmt.free();
+        } catch {
+          // ignore
+        }
+      }
+      stmtCache.clear();
       db.close();
     },
   };
@@ -247,41 +262,51 @@ function wrapSqlJs(db: SqlJsDatabase, dbPath: string): DatabaseAdapter {
 
 // ── Factory function ───────────────────────────────────────────────────────────
 
-/**
- * Create a synchronous SQLite database connection.
- * Tries each binding tier in order and returns the first that succeeds.
- * Logs which tier was selected at debug level (CLARTE_DEBUG=1).
- */
-export async function createDatabase(dbPath: string): Promise<DatabaseAdapter> {
-  const debug = !!process.env.CLARTE_DEBUG;
-  const dbg = (msg: string): void => {
-    if (debug) process.stderr.write(`[clarte:db] ${msg}\n`);
-  };
+/** @internal - for testing only */
+export type TierLoader = (dbPath: string) => Promise<DatabaseAdapter | null>;
 
-  // Tier 1: better-sqlite3
+/** @internal - for testing only */
+export async function createDatabaseWithTiers(dbPath: string, tiers: TierLoader[]): Promise<DatabaseAdapter> {
+  for (const tier of tiers) {
+    const db = await tier(dbPath);
+    if (db) return db;
+  }
+  throw new Error(
+    "Could not load SQLite binding. Attempted: better-sqlite3, bun:sqlite, sql.js. " +
+      "Install better-sqlite3 (npm install better-sqlite3) or run under Bun.",
+  );
+}
+
+const tier1Loader: TierLoader = async (dbPath) => {
   try {
     const { createRequire } = await import("node:module");
     const req = createRequire(import.meta.url);
     const BetterSqlite3 = req("better-sqlite3") as new (path: string) => DatabaseLike;
     const db = new BetterSqlite3(dbPath);
-    dbg("using better-sqlite3");
+    if (process.env.CLARTE_DEBUG) process.stderr.write("[clarte:db] using better-sqlite3\n");
     return wrapBetterSqlite3(db);
   } catch {
-    dbg("better-sqlite3 unavailable, trying bun:sqlite");
+    if (process.env.CLARTE_DEBUG) process.stderr.write("[clarte:db] better-sqlite3 unavailable, trying bun:sqlite\n");
+    return null;
   }
+};
 
-  // Tier 2: bun:sqlite (Bun built-in)
+/** @internal - for testing: directly exercises the bun:sqlite binding */
+export const _bunSqliteTier: TierLoader = async (dbPath) => {
   try {
     // Dynamic import prevents bundlers from tree-shaking or failing on non-Bun
     const mod = (await import("bun:sqlite" as never as string)) as { Database: new (path: string) => DatabaseLike };
     const db = new mod.Database(dbPath);
-    dbg("using bun:sqlite");
+    if (process.env.CLARTE_DEBUG) process.stderr.write("[clarte:db] using bun:sqlite\n");
     return wrapBunSqlite(db);
   } catch {
-    dbg("bun:sqlite unavailable, trying sql.js");
+    if (process.env.CLARTE_DEBUG) process.stderr.write("[clarte:db] bun:sqlite unavailable, trying sql.js\n");
+    return null;
   }
+};
 
-  // Tier 3: sql.js (WASM fallback)
+/** @internal - for testing: directly exercises the sql.js WASM binding */
+export const _sqlJsTier: TierLoader = async (dbPath) => {
   try {
     const sqlJsMod = (await import("sql.js" as never as string)) as {
       default?: (opts: {
@@ -291,25 +316,36 @@ export async function createDatabase(dbPath: string): Promise<DatabaseAdapter> {
     };
     const initSqlJs = sqlJsMod.default ?? sqlJsMod;
 
-    // Load existing database file or create new in-memory DB
+    // Load existing database file or start fresh (for :memory: always start fresh)
     let initData: Buffer | undefined;
-    try {
-      const { readFileSync } = await import("node:fs");
-      initData = readFileSync(dbPath);
-    } catch {
-      // File doesn't exist yet - create fresh
+    if (dbPath !== ":memory:") {
+      try {
+        const { readFileSync } = await import("node:fs");
+        initData = readFileSync(dbPath);
+      } catch {
+        // File doesn't exist yet - create fresh
+      }
     }
 
-    const SQL = await initSqlJs({ locateFile: (file: string) => file });
+    // Resolve WASM file path relative to the sql.js package dist directory.
+    // Bare `locateFile: (f) => f` fails because it looks in CWD, not the package dir.
+    const sqlPkgUrl = import.meta.resolve("sql.js");
+    const sqlDistDir = new URL(".", sqlPkgUrl).pathname;
+    const SQL = await initSqlJs({ locateFile: (file: string) => `${sqlDistDir}${file}` });
     const db: SqlJsDatabase = initData ? new SQL.Database(initData) : new SQL.Database();
-    dbg("using sql.js (WASM)");
+    if (process.env.CLARTE_DEBUG) process.stderr.write("[clarte:db] using sql.js (WASM)\n");
     return wrapSqlJs(db, dbPath);
   } catch {
-    dbg("sql.js unavailable");
+    if (process.env.CLARTE_DEBUG) process.stderr.write("[clarte:db] sql.js unavailable\n");
+    return null;
   }
+};
 
-  throw new Error(
-    "Could not load SQLite binding. Attempted: better-sqlite3, bun:sqlite, sql.js. " +
-      "Install better-sqlite3 (npm install better-sqlite3) or run under Bun.",
-  );
+/**
+ * Create a synchronous SQLite database connection.
+ * Tries each binding tier in order and returns the first that succeeds.
+ * Logs which tier was selected at debug level (CLARTE_DEBUG=1).
+ */
+export async function createDatabase(dbPath: string): Promise<DatabaseAdapter> {
+  return createDatabaseWithTiers(dbPath, [tier1Loader, _bunSqliteTier, _sqlJsTier]);
 }

@@ -55,9 +55,7 @@ describe("GraphStore read interface", () => {
 
   it("imported_names round-trips correctly", () => {
     store.upsertFiles([makeFile("a.ts"), makeFile("b.ts")]);
-    store.upsertFileEdges([
-      { from_path: "a.ts", to_path: "b.ts", imported_names: ["foo", "bar"] },
-    ]);
+    store.upsertFileEdges([{ from_path: "a.ts", to_path: "b.ts", imported_names: ["foo", "bar"] }]);
     const g = store.loadFileGraph();
     expect(g.forward.get("a.ts")?.[0].importedNames).toEqual(["foo", "bar"]);
   });
@@ -243,5 +241,41 @@ describe("GraphStore FTS5", () => {
       .prepare("SELECT rowid FROM fts_symbols WHERE fts_symbols MATCH 'validateSession'")
       .all<{ rowid: number }>();
     expect(rows.length).toBe(0);
+  });
+
+  it("FTS5 MATCH 'validate' (stem root) returns row via body_tokens", () => {
+    if (!ftsAvailable) return;
+    store.upsertFiles([{ path: "src/auth.ts", hash: "abc", updated_at: NOW }]);
+    store.upsertSymbols([
+      {
+        file_path: "src/auth.ts",
+        name: "validateSession",
+        kind: "function",
+        start_line: 10,
+        body_tokens: "validate session token user",
+      },
+    ]);
+    const rows = db
+      .prepare("SELECT rowid FROM fts_symbols WHERE fts_symbols MATCH 'validate'")
+      .all<{ rowid: number }>();
+    expect(rows.length).toBeGreaterThan(0);
+  });
+
+  it("FTS5 porter stemming: MATCH 'validating' also matches via body_tokens", () => {
+    if (!ftsAvailable) return;
+    store.upsertFiles([{ path: "src/auth.ts", hash: "abc", updated_at: NOW }]);
+    store.upsertSymbols([
+      {
+        file_path: "src/auth.ts",
+        name: "validateSession",
+        kind: "function",
+        start_line: 10,
+        body_tokens: "validate session token user",
+      },
+    ]);
+    const rows = db
+      .prepare("SELECT rowid FROM fts_symbols WHERE fts_symbols MATCH 'validating'")
+      .all<{ rowid: number }>();
+    expect(rows.length).toBeGreaterThan(0);
   });
 });
