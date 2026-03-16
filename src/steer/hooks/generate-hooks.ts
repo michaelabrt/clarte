@@ -483,17 +483,18 @@ if (existsSync(graphPath)) {
       const synTerms = [];
       for (const t of terms) { for (const s of (SYN_MAP.get(t) || [])) if (!terms.includes(s) && !STOP.has(s)) synTerms.push(s); }
       const uSyn = [...new Set(synTerms)];
+      // SYNC: targets-resolve.ts -- imports always contribute (3.7); IMPORT_CEILING prevents dominance
       const scores = new Map();
       const impOnly = new Set();
       for (const [fp, doc] of docs) {
-        let sc = scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, false);
-        if (uSyn.length) sc += SYNONYM_DISCOUNT * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL, false);
-        if (sc === 0) {
-          sc = scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, true);
-          if (uSyn.length) sc += SYNONYM_DISCOUNT * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL, true);
-          if (sc > 0) impOnly.add(fp);
+        let sc = scoreBM25F(doc, terms, df, N, aPL, aSL, aIL, true);
+        if (uSyn.length) sc += SYNONYM_DISCOUNT * scoreBM25F(doc, uSyn, df, N, aPL, aSL, aIL, true);
+        if (sc > 0) {
+          const hasPS = terms.some(t => (doc.ptf.get(t) || 0) > 0 || (doc.stf.get(t) || 0) > 0)
+            || (uSyn.length && uSyn.some(t => (doc.ptf.get(t) || 0) > 0 || (doc.stf.get(t) || 0) > 0));
+          if (!hasPS) impOnly.add(fp);
+          scores.set(fp, sc);
         }
-        if (sc > 0) scores.set(fp, sc);
       }
       // Ceiling: scale import-only scores below all path/symbol matches
       if (impOnly.size > 0) {
