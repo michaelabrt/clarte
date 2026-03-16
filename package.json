@@ -4,7 +4,8 @@
   "description": "The starting point your agent is missing. Builds dependency graphs, predicts edit targets and steers the agent before it starts exploring.",
   "type": "module",
   "bin": {
-    "clarte": "dist/index.js"
+    "clarte": "dist/index.js",
+    "clarte-mcp": "dist/mcp-server.js"
   },
   "scripts": {
     "build": "tsup && node scripts/copy-wasm.js",
@@ -59,6 +60,7 @@
   ],
   "dependencies": {
     "@clack/prompts": "^1.0.1",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.8.0",
     "picocolors": "^1.1.1",
     "smol-toml": "^1.6.0",
@@ -66,7 +68,7 @@
     "web-tree-sitter": "^0.26.5"
   },
   "optionalDependencies": {
-    "@xenova/transformers": "^2.17.0",
+    "@huggingface/transformers": "^3.4.0",
     "sql.js": "^1.10.0"
   },
   "devDependencies": {
