@@ -4,6 +4,8 @@
  * "Who calls this function?" - BFS caller chain via recursive CTE on symbol_edges.
  * Max depth 5, branching factor 4 (highest authority per level).
  * Tags: DIRECT (depth 1), TRANSITIVE (2-3), DISTANT (4-5).
+ *
+ * F.1 fix: UNION (not UNION ALL) prevents exponential expansion on cyclic graphs.
  */
 
 import type { DatabaseAdapter } from "../../storage/db-adapter.js";
@@ -60,8 +62,9 @@ function depthTag(depth: number): "DIRECT" | "TRANSITIVE" | "DISTANT" {
  * Find all callers of a symbol, up to 5 levels deep.
  *
  * Uses a recursive CTE on symbol_edges to walk the caller chain backwards.
- * Limits branching to 4 callers per level (by authority) to prevent explosion
- * on utility functions.
+ * UNION deduplicates at each recursion level, preventing exponential expansion
+ * when cycles exist (e.g. A calls B calls A). The depth limit is a safety net.
+ * Branching factor limited to 4 per level (highest authority) in post-processing.
  */
 export function executeCallers(db: DatabaseAdapter, input: CallersInput): CallersOutput {
   const { symbol, file } = input;
@@ -81,16 +84,14 @@ export function executeCallers(db: DatabaseAdapter, input: CallersInput): Caller
 
   const targetId = targetRow.id;
 
-  // Recursive CTE: walk callers up to depth 5.
-  // The CTE returns all callers at all depths without branching limits.
-  // We apply the branching factor limit (4 per level) in post-processing
-  // to select callers with the highest authority at each depth.
+  // F.1: UNION (not UNION ALL) deduplicates at each recursion level,
+  // preventing O(N^depth) intermediate rows on cyclic graphs.
   const callersStmt = db.prepare(`
     WITH RECURSIVE callers(symbol_id, depth) AS (
       SELECT from_symbol_id, 1
       FROM symbol_edges
       WHERE to_symbol_id = ? AND kind IN ('calls', 'extends')
-      UNION ALL
+      UNION
       SELECT se.from_symbol_id, c.depth + 1
       FROM symbol_edges se
       JOIN callers c ON se.to_symbol_id = c.symbol_id

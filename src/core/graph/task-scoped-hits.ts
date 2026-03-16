@@ -5,6 +5,9 @@
  * Given a set of seed files (BM25F + semantic retrieval results), extract
  * a 2-hop neighborhood subgraph and run HITS on it. This produces
  * task-specific authority/hub scores that may differ from global scores.
+ *
+ * F.7 fix: Files with zero edges in the task subgraph are forced to "Leaf"
+ * instead of getting a misleading role from the flat-graph guard (0.5/0.5).
  */
 
 import type { InMemoryFileGraph, InMemoryEdge } from "../../storage/types.js";
@@ -62,17 +65,24 @@ export function extractTaskSubgraph(seeds: string[], fileGraph: InMemoryFileGrap
 /**
  * Filter an InMemoryFileGraph to only edges between files in the given set.
  * Converts to ImportEdge[] for use with computeHITS.
+ * Also returns the set of files that have at least one edge in the subgraph.
  */
-function filterEdges(fileGraph: InMemoryFileGraph, files: Set<string>): ImportEdge[] {
+function filterEdges(
+  fileGraph: InMemoryFileGraph,
+  files: Set<string>,
+): { edges: ImportEdge[]; connected: Set<string> } {
   const edges: ImportEdge[] = [];
+  const connected = new Set<string>();
   for (const edgeList of fileGraph.forward.values()) {
     for (const e of edgeList) {
       if (files.has(e.fromPath) && files.has(e.toPath)) {
         edges.push(inMemoryEdgeToImportEdge(e));
+        connected.add(e.fromPath);
+        connected.add(e.toPath);
       }
     }
   }
-  return edges;
+  return { edges, connected };
 }
 
 function inMemoryEdgeToImportEdge(e: InMemoryEdge): ImportEdge {
@@ -97,12 +107,12 @@ function inMemoryEdgeToImportEdge(e: InMemoryEdge): ImportEdge {
  * 1. BFS 2-hop from seeds to build the subgraph
  * 2. Filter edges to only those within the subgraph
  * 3. Run HITS on the subgraph
- * 4. Derive task-scoped roles
+ * 4. Derive task-scoped roles (F.7: isolated nodes forced to "Leaf")
  */
 export function computeTaskScopedHITS(seeds: string[], fileGraph: InMemoryFileGraph, maxHops = 2): TaskScopedResult {
   const subgraphFiles = extractTaskSubgraph(seeds, fileGraph, maxHops);
   const files = [...subgraphFiles];
-  const edges = filterEdges(fileGraph, subgraphFiles);
+  const { edges, connected } = filterEdges(fileGraph, subgraphFiles);
 
   // Identify barrels in the subgraph
   const barrelFiles = new Set<string>();
@@ -114,8 +124,15 @@ export function computeTaskScopedHITS(seeds: string[], fileGraph: InMemoryFileGr
   const { authority, hub } = computeHITS(files, edges, 30, 1e-6, barrelFiles);
 
   // Derive task-scoped roles
+  // F.7: Files with zero edges in the subgraph are forced to "Leaf".
+  // Without this, the flat-graph guard in computeHITS assigns them 0.5/0.5,
+  // which deriveRole would interpret as "Bridge" or "Utility".
   const roles = new Map<string, FileRole>();
   for (const file of files) {
+    if (!connected.has(file)) {
+      roles.set(file, "Leaf");
+      continue;
+    }
     const auth = authority.get(file) ?? 0;
     const hubScore = hub.get(file) ?? 0;
     const isBarrel = barrelFiles.has(file);

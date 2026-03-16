@@ -9,17 +9,16 @@
  *   clarte_impact  - "What breaks if I change this?"
  *   clarte_find    - "Where is the code that does X?"
  *
- * The server opens the SQLite database in read-only mode (WAL allows concurrent
- * reads while the main clarte process writes). BM25F corpus statistics are
- * loaded from the meta table on first clarte_find call and cached in-process.
+ * F.5: Opens the SQLite database in read-only mode (SQLITE_OPEN_READONLY).
+ * WAL mode allows concurrent reads while the main clarte process writes.
+ * No DDL or write PRAGMAs are executed.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod/v4";
 import path from "node:path";
-import { createDatabase } from "../storage/db-adapter.js";
-import { initSchema } from "../storage/schema.js";
+import { createReadonlyDatabase } from "../storage/db-adapter.js";
 import { executeCallers } from "./tools/callers.js";
 import { executeImpact } from "./tools/impact.js";
 import { executeFind } from "./tools/find.js";
@@ -30,8 +29,9 @@ import type { DatabaseAdapter } from "../storage/db-adapter.js";
 let db: DatabaseAdapter | null = null;
 
 /**
- * Open the graph database for the current project.
- * Resolves the project root from CWD or CLARTE_ROOT env var.
+ * Open the graph database for the current project in read-only mode.
+ * F.5: No initSchema call - the DB must already exist and be initialized
+ * by a prior `clarte init` or `clarte refresh` run.
  */
 async function openDb(): Promise<DatabaseAdapter> {
   if (db) return db;
@@ -39,8 +39,7 @@ async function openDb(): Promise<DatabaseAdapter> {
   const rootDir = process.env.CLARTE_ROOT ?? process.cwd();
   const dbPath = path.join(rootDir, ".clarte", "graph.db");
 
-  db = await createDatabase(dbPath);
-  initSchema(db);
+  db = await createReadonlyDatabase(dbPath);
   return db;
 }
 
