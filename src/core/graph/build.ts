@@ -2,7 +2,7 @@ import path from "node:path";
 import { glob } from "tinyglobby";
 import { readFileOr } from "../utils.js";
 import { initForLanguage, parseSource } from "../parsers/init.js";
-import { detectBarrelAst } from "../parsers/barrel.js";
+import { detectBarrelAst, detectBarrelFromRoot } from "../parsers/barrel.js";
 import { computeHITS, computeBetweenness } from "./centrality.js";
 import { HITS } from "../config/thresholds.js";
 import {
@@ -133,6 +133,9 @@ export async function buildImportGraph(
     }
   }
 
+  // Barrel detection runs as a pre-pass. Fusing with the main loop was evaluated (6.3)
+  // but requires separating edge construction from barrel routing, which would be a
+  // bigger restructuring. The pre-pass reads JS/TS files and checks re-export ratios.
   let detectedBarrels = new Set<string>();
   if (isJsTs) {
     detectedBarrels = await detectBarrelFiles(rootDir, fileSet);
@@ -150,7 +153,6 @@ export async function buildImportGraph(
     }
   }
 
-  // Build set of barrel file paths so we can exclude their outgoing edges from directInDegree
   const barrelFilePaths = new Set([...barrelMap.namedExports.keys(), ...barrelMap.starExports.keys()]);
 
   for (const file of files) {
