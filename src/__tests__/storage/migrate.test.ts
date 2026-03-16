@@ -113,18 +113,9 @@ const CALL_GRAPH_JSON = {
 
 describe("migrateFromJson", () => {
   it("migrates fixture JSON files to correct SQLite row counts", async () => {
-    await fs.writeFile(
-      path.join(tmpDir, ".clarte/cache.json"),
-      JSON.stringify(CACHE_JSON),
-    );
-    await fs.writeFile(
-      path.join(tmpDir, ".clarte/graph.json"),
-      JSON.stringify(GRAPH_JSON),
-    );
-    await fs.writeFile(
-      path.join(tmpDir, ".clarte/call-graph.json"),
-      JSON.stringify(CALL_GRAPH_JSON),
-    );
+    await fs.writeFile(path.join(tmpDir, ".clarte/cache.json"), JSON.stringify(CACHE_JSON));
+    await fs.writeFile(path.join(tmpDir, ".clarte/graph.json"), JSON.stringify(GRAPH_JSON));
+    await fs.writeFile(path.join(tmpDir, ".clarte/call-graph.json"), JSON.stringify(CALL_GRAPH_JSON));
 
     const store = await makeStore();
     const migrated = await migrateFromJson(tmpDir, store);
@@ -155,14 +146,8 @@ describe("migrateFromJson", () => {
   });
 
   it("produces same ImportGraph as original JSON data", async () => {
-    await fs.writeFile(
-      path.join(tmpDir, ".clarte/cache.json"),
-      JSON.stringify(CACHE_JSON),
-    );
-    await fs.writeFile(
-      path.join(tmpDir, ".clarte/graph.json"),
-      JSON.stringify(GRAPH_JSON),
-    );
+    await fs.writeFile(path.join(tmpDir, ".clarte/cache.json"), JSON.stringify(CACHE_JSON));
+    await fs.writeFile(path.join(tmpDir, ".clarte/graph.json"), JSON.stringify(GRAPH_JSON));
 
     const store = await makeStore();
     await migrateFromJson(tmpDir, store);
@@ -175,10 +160,7 @@ describe("migrateFromJson", () => {
   });
 
   it("is a no-op when called a second time (files already deleted)", async () => {
-    await fs.writeFile(
-      path.join(tmpDir, ".clarte/cache.json"),
-      JSON.stringify(CACHE_JSON),
-    );
+    await fs.writeFile(path.join(tmpDir, ".clarte/cache.json"), JSON.stringify(CACHE_JSON));
     const store = await makeStore();
     const first = await migrateFromJson(tmpDir, store);
     const second = await migrateFromJson(tmpDir, store);
@@ -188,10 +170,7 @@ describe("migrateFromJson", () => {
   });
 
   it("does not crash on corrupt JSON - logs warning and skips", async () => {
-    await fs.writeFile(
-      path.join(tmpDir, ".clarte/cache.json"),
-      "{ broken json!!!",
-    );
+    await fs.writeFile(path.join(tmpDir, ".clarte/cache.json"), "{ broken json!!!");
 
     const store = await makeStore();
     await expect(migrateFromJson(tmpDir, store)).resolves.not.toThrow();

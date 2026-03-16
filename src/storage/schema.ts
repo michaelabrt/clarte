@@ -96,6 +96,7 @@ export function initSchema(db: DatabaseAdapter): void {
       )
     `);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_sym_edges_to ON symbol_edges(to_symbol_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_files_community ON files(community_id)`);
 
     db.exec(`
       CREATE TABLE IF NOT EXISTS call_sites (

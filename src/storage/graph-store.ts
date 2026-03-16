@@ -678,8 +678,14 @@ export class GraphStore {
       avg_body_tokens: number | null;
       avg_import_names: number | null;
     }
-    interface CountRow { count: number; }
-    interface SymbolTokenRow { file_path: string; name: string; body_tokens: string | null; }
+    interface CountRow {
+      count: number;
+    }
+    interface SymbolTokenRow {
+      file_path: string;
+      name: string;
+      body_tokens: string | null;
+    }
 
     const avgRow = this.db
       .prepare(`SELECT
@@ -703,9 +709,7 @@ export class GraphStore {
     const countRow = this.db.prepare("SELECT COUNT(*) as count FROM symbols").get<CountRow>();
     this.stmtSetMeta.run("bm25f_doc_count", String(countRow?.count ?? 0));
 
-    const symbolRows = this.db
-      .prepare("SELECT file_path, name, body_tokens FROM symbols")
-      .all<SymbolTokenRow>();
+    const symbolRows = this.db.prepare("SELECT file_path, name, body_tokens FROM symbols").all<SymbolTokenRow>();
 
     const df = new Map<string, number>();
     for (const row of symbolRows) {
