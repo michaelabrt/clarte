@@ -4,6 +4,7 @@ import { readFileOr } from "../utils.js";
 import { initForLanguage, parseSource } from "../parsers/init.js";
 import { detectBarrelAst } from "../parsers/barrel.js";
 import { computeHITS, computeBetweenness } from "./centrality.js";
+import { HITS } from "../config/thresholds.js";
 import {
   extractSymbolNamesFromRoot,
   extractSymbolBodiesFromRoot,
@@ -336,4 +337,24 @@ export function mergeGraph(target: ImportGraph, source: ImportGraph): void {
   for (const [k, v] of source.hubScores) {
     if (!target.hubScores.has(k)) target.hubScores.set(k, v);
   }
+}
+
+/**
+ * Recompute HITS and betweenness on a merged multi-language graph.
+ * Per-language scores are incommensurable after merge; this re-runs
+ * the algorithms on the unified edge set.
+ */
+export function recomputeScoresAfterMerge(graph: ImportGraph): void {
+  const allFiles = [...graph.inDegree.keys()];
+  const { authority, hub } = computeHITS(
+    allFiles,
+    graph.edges,
+    HITS.MAX_ITERATIONS,
+    HITS.EPSILON,
+    graph.barrelFiles,
+  );
+  graph.authority = authority;
+  graph.hubScores = hub;
+  graph.centrality = authority;
+  graph.betweennessScores = computeBetweenness(graph);
 }

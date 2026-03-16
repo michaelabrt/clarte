@@ -17,6 +17,7 @@ vi.mock("../core/graph/cache.js", () => ({
 vi.mock("../core/graph/build.js", () => ({
   buildImportGraph: vi.fn(),
   mergeGraph: vi.fn(),
+  recomputeScoresAfterMerge: vi.fn(),
 }));
 
 vi.mock("../core/run-analysis.js", () => ({

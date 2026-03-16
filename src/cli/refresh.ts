@@ -5,7 +5,7 @@ import { theme as t } from "../core/theme.js";
 import { startShimmer } from "../cli/animations.js";
 import { detectContext } from "../core/detect/detect.js";
 import { generateSnapshot } from "../core/snapshot/snapshot.js";
-import { buildImportGraph, mergeGraph } from "../core/graph/build.js";
+import { buildImportGraph, mergeGraph, recomputeScoresAfterMerge } from "../core/graph/build.js";
 import { loadConfig, saveConfig, configToAnswers, computeSnapshotHash } from "../core/config/config.js";
 import { fileExists, readFileOr, writeFileSafe } from "../core/utils.js";
 
@@ -80,6 +80,7 @@ export async function refreshSnapshot(rootDir: string): Promise<void> {
       const secGraph = await buildImportGraph(rootDir, secLang, (msg) => shimmer.message(msg));
       mergeGraph(graph, secGraph);
     }
+    recomputeScoresAfterMerge(graph);
   }
 
   // Load snapshot paths from config if available
