@@ -42,15 +42,31 @@
   "circularDeps": [],
   "layers": [
     {
+      "name": "models",
+      "files": [
+        "src/models/mod.rs",
+        "src/models/product.rs",
+        "src/models/user.rs"
+      ],
+      "dependsOn": []
+    },
+    {
       "name": "pages",
       "files": [
         "src/routes/handlers.rs",
         "src/routes/mod.rs"
       ],
-      "dependsOn": []
+      "dependsOn": [
+        "models"
+      ]
     }
   ],
-  "layerEdges": [],
+  "layerEdges": [
+    {
+      "from": "pages",
+      "to": "models"
+    }
+  ],
   "instabilities": [],
   "communityCount": 1,
   "communityFiles": [
@@ -67,7 +83,12 @@
     ]
   ],
   "deadFiles": [],
-  "crossCuttingFiles": [],
+  "crossCuttingFiles": [
+    {
+      "file": "src/models/user.rs",
+      "layerSpread": 2
+    }
+  ],
   "layerConsistency": {
     "consistency": 1,
     "violationCount": 0

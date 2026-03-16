@@ -1,4 +1,4 @@
-import { parseSource } from "./init.js";
+import { withParsedTree } from "./init.js";
 import type { Language } from "../types/detection.js";
 import type { Node } from "web-tree-sitter";
 
@@ -91,7 +91,22 @@ function extractPythonSymbols(root: Node): string[] {
 
 function extractGoSymbols(root: Node): string[] {
   // Go allows single-char exported names (e.g., interface T, type R)
-  return collectNames(root, ["function_declaration", "method_declaration", "type_spec"], 1);
+  const names = collectNames(root, ["function_declaration", "method_declaration", "type_spec"], 1);
+  // Extract receiver types from method declarations
+  for (const node of root.descendantsOfType(["method_declaration"])) {
+    const params = node.childForFieldName("parameters");
+    if (params) {
+      const firstParam = params.namedChildren[0];
+      if (firstParam) {
+        const typeNode = firstParam.childForFieldName("type");
+        const typeName = typeNode?.type === "pointer_type" ? typeNode.namedChildren[0]?.text : typeNode?.text;
+        if (typeName && typeName.length >= 1 && !typeName.startsWith("_") && !names.includes(typeName)) {
+          names.push(typeName);
+        }
+      }
+    }
+  }
+  return names;
 }
 
 function extractRustSymbols(root: Node): string[] {
@@ -127,8 +142,7 @@ export function extractSymbolNamesFromRoot(root: Node, language: Language): stri
  */
 export function extractSymbolNames(content: string, language: Language, filePath?: string): string[] {
   try {
-    const root = parseSource(content, language, filePath);
-    return extractSymbolNamesFromRoot(root, language);
+    return withParsedTree(content, language, filePath, (root) => extractSymbolNamesFromRoot(root, language));
   } catch {
     return [];
   }

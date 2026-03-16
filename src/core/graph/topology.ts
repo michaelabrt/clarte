@@ -1,30 +1,28 @@
 import type { GraphTopology, ImportGraph } from "../types.js";
 import { findSCCsFromAdj } from "./scc.js";
 import { FRAGMENT_MIN_SIZE } from "../config/thresholds.js";
+import { buildAdjacencyMap } from "./adjacency.js";
 
 /**
  * Compute graph topology metrics: connected components, approximate diameter,
  * reachability, critical chain length and modularity Q.
  */
 export function computeGraphTopology(graph: ImportGraph): GraphTopology {
+  // Build undirected adjacency via shared builder (for components, diameter, modularity)
+  const undirectedWeighted = buildAdjacencyMap(graph.edges, { directed: false });
   const adj = new Map<string, Set<string>>();
-  const dirAdj = new Map<string, Set<string>>();
   const allFiles = new Set<string>();
+  for (const [file, neighbors] of undirectedWeighted) {
+    allFiles.add(file);
+    adj.set(file, new Set(neighbors.keys()));
+  }
 
-  for (const edge of graph.edges) {
-    if (edge.isExternal) continue;
-    allFiles.add(edge.from);
-    allFiles.add(edge.to);
-
-    // Undirected adjacency (for components, diameter, modularity)
-    if (!adj.has(edge.from)) adj.set(edge.from, new Set());
-    if (!adj.has(edge.to)) adj.set(edge.to, new Set());
-    adj.get(edge.from)?.add(edge.to);
-    adj.get(edge.to)?.add(edge.from);
-
-    // Directed adjacency (for critical chain)
-    if (!dirAdj.has(edge.from)) dirAdj.set(edge.from, new Set());
-    dirAdj.get(edge.from)?.add(edge.to);
+  // Directed adjacency (for critical chain)
+  const dirWeighted = buildAdjacencyMap(graph.edges, { directed: true });
+  const dirAdj = new Map<string, Set<string>>();
+  for (const [file, neighbors] of dirWeighted) {
+    allFiles.add(file);
+    dirAdj.set(file, new Set(neighbors.keys()));
   }
 
   const totalFiles = allFiles.size;

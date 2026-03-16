@@ -82,4 +82,19 @@ use crate::types::Config;
     const result = parseImportsAst(code, "rust");
     expect(result).toHaveLength(3);
   });
+
+  it("captures use declarations inside non-test inline mod blocks", () => {
+    const code = `
+mod utils {
+    use crate::types::Config;
+}
+mod tests {
+    use super::*;
+}
+`;
+    const result = parseImportsAst(code, "rust");
+    // Should capture crate::types::Config from mod utils, but NOT super::* from mod tests
+    expect(result.some((r) => r.specifier.includes("crate::types"))).toBe(true);
+    expect(result.some((r) => r.specifier.includes("super"))).toBe(false);
+  });
 });

@@ -1,7 +1,7 @@
 import type { Node } from "web-tree-sitter";
 import type { Language as ClarteLanguage } from "../types.js";
 import type { RawImport } from "../types/parser.js";
-import { parseSource } from "./init.js";
+import { withParsedTree } from "./init.js";
 import { parseJsImportsAst } from "./ts-imports.js";
 import { parsePythonImportsAst } from "./python-imports.js";
 import { parseGoImportsAst } from "./go-imports.js";
@@ -31,6 +31,5 @@ export function parseImportsAstFromRoot(root: Node, lang: ClarteLanguage): RawIm
  * Parse imports from source code using tree-sitter AST.
  */
 export function parseImportsAst(content: string, lang: ClarteLanguage, filePath?: string): RawImport[] {
-  const root = parseSource(content, lang, filePath);
-  return parseImportsAstFromRoot(root, lang);
+  return withParsedTree(content, lang, filePath, (root) => parseImportsAstFromRoot(root, lang));
 }

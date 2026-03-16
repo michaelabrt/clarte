@@ -35,16 +35,71 @@
   "layers": [
     {
       "name": "config",
-      "files": ["src/main/java/com/example/config/AppConfig.java"],
+      "files": [
+        "src/main/java/com/example/config/AppConfig.java"
+      ],
       "dependsOn": []
     },
     {
-      "name": "services",
-      "files": ["src/main/java/com/example/service/UserService.java"],
+      "name": "controllers",
+      "files": [
+        "src/main/java/com/example/controller/UserController.java"
+      ],
+      "dependsOn": [
+        "models",
+        "services"
+      ]
+    },
+    {
+      "name": "models",
+      "files": [
+        "src/main/java/com/example/model/Product.java",
+        "src/main/java/com/example/model/User.java"
+      ],
       "dependsOn": []
+    },
+    {
+      "name": "repositories",
+      "files": [
+        "src/main/java/com/example/repository/UserRepository.java"
+      ],
+      "dependsOn": [
+        "models"
+      ]
+    },
+    {
+      "name": "services",
+      "files": [
+        "src/main/java/com/example/service/UserService.java"
+      ],
+      "dependsOn": [
+        "models",
+        "repositories"
+      ]
     }
   ],
-  "layerEdges": [],
+  "layerEdges": [
+    {
+      "from": "controllers",
+      "to": "models"
+    },
+    {
+      "from": "controllers",
+      "to": "services"
+    },
+    {
+      "from": "repositories",
+      "to": "models"
+    },
+    {
+      "from": "services",
+      "to": "models"
+    },
+    {
+      "from": "services",
+      "to": "repositories"
+    }
+  ],
   "instabilities": [],
   "communityCount": 1,
   "communityFiles": [
@@ -58,8 +113,16 @@
       "src/main/java/com/example/service/UserService.java"
     ]
   ],
-  "deadFiles": ["src/main/java/com/example/App.java", "src/main/java/com/example/model/Product.java"],
-  "crossCuttingFiles": [],
+  "deadFiles": [
+    "src/main/java/com/example/App.java",
+    "src/main/java/com/example/model/Product.java"
+  ],
+  "crossCuttingFiles": [
+    {
+      "file": "src/main/java/com/example/model/User.java",
+      "layerSpread": 4
+    }
+  ],
   "layerConsistency": {
     "consistency": 1,
     "violationCount": 0
@@ -96,7 +159,9 @@
   ],
   "graphTopology": {
     "componentCount": 1,
-    "componentSizes": [7],
+    "componentSizes": [
+      7
+    ],
     "approximateDiameter": 4,
     "reachability": 1,
     "isFragmented": false

@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import type { Node } from "web-tree-sitter";
 import { readFileOr, writeFileSafe } from "../utils.js";
-import { parseSource, initForLanguage } from "../parsers/init.js";
+import { withParsedTree, initForLanguage } from "../parsers/init.js";
 import { CLARTE_DIR } from "../config/config.js";
 import type { ImportGraph, Language } from "../types.js";
 import type { CallSite, PersistedCallGraph } from "../types/call-graph.js";
@@ -97,38 +97,39 @@ function extractCallSitesFromFile(
   language: Language,
   edgesByFile: Map<string, { to: string; importedNames: string[] }[]>,
 ): CallSite[] {
-  const root = parseSource(content, language, filePath);
-  const sites: CallSite[] = [];
+  return withParsedTree(content, language, filePath, (root) => {
+    const sites: CallSite[] = [];
 
-  function processCallNode(node: Node, getCallee: () => Node | undefined): void {
-    const calleeNode = getCallee();
-    if (!calleeNode) return;
+    function processCallNode(node: Node, getCallee: () => Node | undefined): void {
+      const calleeNode = getCallee();
+      if (!calleeNode) return;
 
-    const name = extractCalleeName(calleeNode);
-    if (!name || name.length <= 1) return;
-    if (BUILTIN_GLOBALS.has(name.split(".")[0] ?? name)) return;
+      const name = extractCalleeName(calleeNode);
+      if (!name || name.length <= 1) return;
+      if (BUILTIN_GLOBALS.has(name.split(".")[0] ?? name)) return;
 
-    const calleeFile = resolveCallee(name, filePath, edgesByFile);
-    if (!calleeFile) return;
+      const calleeFile = resolveCallee(name, filePath, edgesByFile);
+      if (!calleeFile) return;
 
-    sites.push({
-      caller: filePath,
-      callerFn: getEnclosingFunctionName(node),
-      callee: name,
-      calleeFile,
-      line: node.startPosition.row + 1,
-    });
-  }
+      sites.push({
+        caller: filePath,
+        callerFn: getEnclosingFunctionName(node),
+        callee: name,
+        calleeFile,
+        line: node.startPosition.row + 1,
+      });
+    }
 
-  for (const call of root.descendantsOfType("call_expression")) {
-    processCallNode(call, () => call.childForFieldName("function") ?? undefined);
-  }
+    for (const call of root.descendantsOfType("call_expression")) {
+      processCallNode(call, () => call.childForFieldName("function") ?? undefined);
+    }
 
-  for (const newExpr of root.descendantsOfType("new_expression")) {
-    processCallNode(newExpr, () => newExpr.childForFieldName("constructor") ?? undefined);
-  }
+    for (const newExpr of root.descendantsOfType("new_expression")) {
+      processCallNode(newExpr, () => newExpr.childForFieldName("constructor") ?? undefined);
+    }
 
-  return sites;
+    return sites;
+  });
 }
 
 function resolveCallee(

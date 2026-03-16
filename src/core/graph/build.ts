@@ -1,7 +1,7 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
 import { readFileOr } from "../utils.js";
-import { initForLanguage, parseSource } from "../parsers/init.js";
+import { initForLanguage, withParsedTree } from "../parsers/init.js";
 import { detectBarrelAst, detectBarrelFromRoot } from "../parsers/barrel.js";
 import { computeHITS, computeBetweenness } from "./centrality.js";
 import { HITS } from "../config/thresholds.js";
@@ -176,27 +176,29 @@ export async function buildImportGraph(
     const content = await readFileOr(absPath);
     if (!content) continue;
 
-    let root: import("web-tree-sitter").Node;
+    let rawImports: ReturnType<typeof parseImportsAstFromRoot>;
     try {
-      root = parseSource(content, language, file);
+      rawImports = withParsedTree(content, language, file, (root) => {
+        const imports = parseImportsAstFromRoot(root, language);
+        const symbols = extractSymbolNamesFromRoot(root, language);
+        if (symbols.length > 0) symbolNames.set(file, symbols);
+
+        const bodyToks = extractSymbolBodiesFromRoot(root, language);
+        if (bodyToks.size > 0) symbolBodyTokens.set(file, bodyToks);
+
+        const startLines = extractSymbolStartLines(root, language);
+        if (startLines.size > 0) symbolStartLines.set(file, startLines);
+
+        if (symbols.length > 0) {
+          const symSet = new Set(symbols);
+          const intraCalls = extractIntraFileCalls(root, language, symSet);
+          if (intraCalls.length > 0) intraFileCalls.set(file, intraCalls);
+        }
+
+        return imports;
+      });
     } catch {
       continue;
-    }
-    const rawImports = parseImportsAstFromRoot(root, language);
-    const symbols = extractSymbolNamesFromRoot(root, language);
-    if (symbols.length > 0) symbolNames.set(file, symbols);
-
-    // Body tokens, start lines, intra-file calls (same parsed AST root, no re-parse)
-    const bodyToks = extractSymbolBodiesFromRoot(root, language);
-    if (bodyToks.size > 0) symbolBodyTokens.set(file, bodyToks);
-
-    const startLines = extractSymbolStartLines(root, language);
-    if (startLines.size > 0) symbolStartLines.set(file, startLines);
-
-    if (symbols.length > 0) {
-      const symSet = new Set(symbols);
-      const intraCalls = extractIntraFileCalls(root, language, symSet);
-      if (intraCalls.length > 0) intraFileCalls.set(file, intraCalls);
     }
 
     for (const raw of rawImports) {

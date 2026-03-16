@@ -262,28 +262,64 @@ export async function generateSnapshot(
   }
 
   if (ctx.secondaryLanguages && customPaths.length === 0) {
-    for (const secLang of ctx.secondaryLanguages) {
-      const secScanPaths = getDefaultScanPathsForLanguage(secLang, ctx);
-      const { glob: secGlob, extractor: secExtractor, ignore: secIgnore } = getLanguageConfig(secLang);
-      const secPatterns = secScanPaths.map((p) => `${p}/${secGlob}`);
-      let secFiles: string[];
+    // Collect all secondary language configs, then run a single combined glob
+    // to avoid multiple directory traversals
+    const secConfigs = ctx.secondaryLanguages.map((secLang) => ({
+      lang: secLang,
+      scanPaths: getDefaultScanPathsForLanguage(secLang, ctx),
+      ...getLanguageConfig(secLang),
+    }));
+
+    // Build combined patterns and merged ignore list
+    const combinedPatterns: string[] = [];
+    const combinedIgnore = [...ignorePatterns];
+    for (const cfg of secConfigs) {
+      for (const p of cfg.scanPaths) combinedPatterns.push(`${p}/${cfg.glob}`);
+      combinedIgnore.push(...cfg.ignore);
+    }
+
+    if (combinedPatterns.length > 0) {
+      let allSecFiles: string[];
       try {
-        secFiles = await glob(secPatterns, {
+        allSecFiles = await glob(combinedPatterns, {
           cwd: ctx.rootDir,
-          ignore: [...ignorePatterns, ...secIgnore],
+          ignore: [...new Set(combinedIgnore)],
           absolute: false,
         });
       } catch {
-        continue;
+        allSecFiles = [];
       }
 
-      onProgress?.(`Scanning ${secFiles.length} ${secLang} files...`);
-      for (let si = 0; si < secFiles.length; si += chunkSize) {
-        const secChunk = secFiles.slice(si, si + chunkSize);
-        const secResults = await Promise.all(
-          secChunk.map((file) => secExtractor(path.join(ctx.rootDir, file), file).catch(() => [] as SnapshotEntry[])),
-        );
-        for (const entries of secResults) allEntries.push(...entries);
+      // Partition results by extension back to their language extractor
+      const extToConfig = new Map<string, (typeof secConfigs)[number]>();
+      for (const cfg of secConfigs) {
+        // Extract extensions from glob pattern (e.g., "**/*.py" -> ".py")
+        const extMatch = cfg.glob.match(/\*\.(\w+)$/);
+        if (extMatch) extToConfig.set(`.${extMatch[1]}`, cfg);
+      }
+
+      const filesByLang = new Map<Language, string[]>();
+      for (const file of allSecFiles) {
+        const ext = path.extname(file).toLowerCase();
+        const cfg = extToConfig.get(ext);
+        if (cfg) {
+          const existing = filesByLang.get(cfg.lang) ?? [];
+          existing.push(file);
+          filesByLang.set(cfg.lang, existing);
+        }
+      }
+
+      for (const cfg of secConfigs) {
+        const secFiles = filesByLang.get(cfg.lang) ?? [];
+        if (secFiles.length === 0) continue;
+        onProgress?.(`Scanning ${secFiles.length} ${cfg.lang} files...`);
+        for (let si = 0; si < secFiles.length; si += chunkSize) {
+          const secChunk = secFiles.slice(si, si + chunkSize);
+          const secResults = await Promise.all(
+            secChunk.map((file) => cfg.extractor(path.join(ctx.rootDir, file), file).catch(() => [] as SnapshotEntry[])),
+          );
+          for (const entries of secResults) allEntries.push(...entries);
+        }
       }
     }
   }

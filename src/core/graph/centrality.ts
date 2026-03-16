@@ -56,7 +56,9 @@ export function computeHITS(
 
     const typeOnlyDiscount = edge.isTypeOnly ? HITS.TYPE_ONLY_DISCOUNT : 0;
     const dynamicDiscount = edge.isDynamic ? HITS.DYNAMIC_MULTIPLIER : 1.0;
-    const nameCount = edge.importedNames.length;
+    // Namespace imports ("*") represent moderate specificity (equivalent to ~3 named imports)
+    const nameCount =
+      edge.importedNames.length === 1 && edge.importedNames[0] === "*" ? 3 : edge.importedNames.length;
     const specificity =
       nameCount > 0
         ? Math.max(HITS.MIN_SPECIFICITY, Math.log2(nameCount + 1) / Math.log2(HITS.SPECIFICITY_LOG_BASE))
