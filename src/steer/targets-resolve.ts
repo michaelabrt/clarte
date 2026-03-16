@@ -695,6 +695,110 @@ export function resolveEditTargets(query: string, graph: PersistedGraph, maxTarg
     .map(([fp]) => fp);
 }
 
+export type TargetMatch = {
+  file: string;
+  rank: number;
+  matchType: "direct" | "import-only" | "coupling" | "proxy" | "neighbor";
+};
+
+/**
+ * Resolve edit targets with confidence metadata.
+ * Returns ranked targets annotated with match type for task-context rendering.
+ */
+export function resolveEditTargetsWithMeta(
+  query: string,
+  graph: PersistedGraph,
+  maxTargets = DEFAULT_MAX_TARGETS,
+): TargetMatch[] {
+  const queryTerms = tokenizeQuery(query);
+  if (queryTerms.length === 0) return [];
+
+  const filePaths = Object.keys(graph.files).filter((fp) => !isTestFile(fp));
+  if (filePaths.length === 0) return [];
+
+  const meta = collectEdgeMetadata(graph.edges);
+  const corpus = buildCorpus(filePaths, graph, meta);
+  const { docs, N, avgdlPath, avgdlSymbols, avgdlImports, df } = corpus;
+
+  const { expanded: synonymTerms } = expandQuerySynonyms(queryTerms);
+
+  const scores = new Map<string, number>();
+  const matchTypes = new Map<string, TargetMatch["matchType"]>();
+  const importOnlyFiles = new Set<string>();
+
+  for (const [fp, doc] of docs) {
+    let score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
+    if (synonymTerms.length > 0) {
+      score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports);
+    }
+    if (score === 0) {
+      score = scoreBM25F(doc, queryTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
+      if (synonymTerms.length > 0) {
+        score += SYNONYM_DISCOUNT * scoreBM25F(doc, synonymTerms, df, N, avgdlPath, avgdlSymbols, avgdlImports, true);
+      }
+      if (score > 0) {
+        importOnlyFiles.add(fp);
+        matchTypes.set(fp, "import-only");
+      }
+    }
+    if (score > 0) {
+      scores.set(fp, score);
+      if (!matchTypes.has(fp)) matchTypes.set(fp, "direct");
+    }
+  }
+
+  applyImportCeiling(scores, importOnlyFiles);
+  applyTestProxy(scores, graph, meta, corpus, queryTerms);
+
+  // Mark proxy-transferred files
+  for (const [fp] of scores) {
+    if (!matchTypes.has(fp)) matchTypes.set(fp, "proxy");
+  }
+
+  if (scores.size === 0) return [];
+
+  const directMatches = new Set(scores.keys());
+  expandNeighbors(scores, directMatches, graph);
+
+  // Mark expansion-added files
+  for (const [fp] of scores) {
+    if (!matchTypes.has(fp)) {
+      // Determine if it was added by coupling or import neighbor
+      const isCoupled = graph.changeCoupling.some(
+        (c) =>
+          c.confidence >= MIN_COUPLING_CONFIDENCE &&
+          ((directMatches.has(c.fileA) && c.fileB === fp) || (directMatches.has(c.fileB) && c.fileA === fp)),
+      );
+      matchTypes.set(fp, isCoupled ? "coupling" : "neighbor");
+    }
+  }
+
+  const importTargets = new Set(graph.edges.map((e) => e.to));
+  const importSources = new Set(graph.edges.map((e) => e.from));
+
+  return [...scores.entries()]
+    .sort((a, b) => {
+      const scoreDiff = b[1] - a[1];
+      if (scoreDiff !== 0) return scoreDiff;
+      const aDir = (importSources.has(a[0]) ? 1 : 0) - (importTargets.has(a[0]) ? 1 : 0);
+      const bDir = (importSources.has(b[0]) ? 1 : 0) - (importTargets.has(b[0]) ? 1 : 0);
+      if (aDir !== bDir) return bDir - aDir;
+      const aBetween = graph.files[a[0]]?.betweenness ?? 0;
+      const bBetween = graph.files[b[0]]?.betweenness ?? 0;
+      if (aBetween !== bBetween) return bBetween - aBetween;
+      const aImportedBy = graph.files[a[0]]?.importedByCount ?? 0;
+      const bImportedBy = graph.files[b[0]]?.importedByCount ?? 0;
+      if (aImportedBy !== bImportedBy) return bImportedBy - aImportedBy;
+      return a[0].localeCompare(b[0]);
+    })
+    .slice(0, maxTargets)
+    .map(([fp], i) => ({
+      file: fp,
+      rank: i + 1,
+      matchType: matchTypes.get(fp) ?? "direct",
+    }));
+}
+
 /**
  * Check whether the prompt already mentions any of the resolved targets.
  * When true, the agent can self-localize and pre-flight adds no value.

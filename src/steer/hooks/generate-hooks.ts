@@ -599,9 +599,19 @@ if (existsSync(graphPath)) {
       // Skip when the prompt already names a target file (agent can self-localize).
       // Negation detection: "NOT in src/foo.ts" or "don't edit src/foo.ts" should not trigger bailout.
       const negRe = /\\b(?:not|don't|do not|isn't|never|without|except|excluding|outside)\\b/i;
+      function mentionsFile(p, f) {
+        if (p.includes(f)) return true;
+        // Match basename without extension (e.g., "auth" matches "src/services/auth.ts")
+        const base = f.split("/").pop()?.replace(/\\.[^.]+$/, "");
+        if (base && base.length > 3 && p.includes(base)) return true;
+        // Match with ./ prefix
+        if (p.includes("./" + f)) return true;
+        return false;
+      }
       const mentioned = targets.filter(t => {
+        if (!mentionsFile(prompt, t)) return false;
         const idx = prompt.indexOf(t);
-        if (idx < 0) return false;
+        if (idx < 0) return true; // matched via basename, skip negation check
         // Check 30 chars before the mention for negation
         const before = prompt.slice(Math.max(0, idx - 30), idx).toLowerCase();
         return !negRe.test(before);
@@ -662,9 +672,21 @@ if (existsSync(graphPath)) {
         return sc;
       }
 
+      // Last-modified metadata for each target (lightweight: one git call per file, 1s timeout)
+      const lastModified = new Map();
+      try {
+        for (const fp of targets) {
+          try {
+            const age = execSync("git log -1 --format='%cr' -- " + JSON.stringify(fp), { cwd: root, encoding: "utf-8", timeout: 1000 }).trim();
+            if (age) lastModified.set(fp, age);
+          } catch {}
+        }
+      } catch {}
+
       const predictedSymbols = {};
       for (const fp of targets) {
-        lines.push("## " + fp);
+        const ageSuffix = lastModified.get(fp) ? ", modified " + lastModified.get(fp) : "";
+        lines.push("## " + fp + ageSuffix);
         const allSyms = (graph.files[fp]?.symbolNames) || [];
         const bodyToks = graph.files[fp]?.symbolBodyTokens || {};
         const symAuth = graph.files[fp]?.symbolAuthority || {};
