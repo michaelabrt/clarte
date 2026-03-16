@@ -13,8 +13,12 @@ import type {
   CommunityRecord,
   ChangeCouplingRecord,
   SymbolRecord,
+  SymbolEdgeRecord,
 } from "../../storage/types.js";
 import { computeSymbolAuthority } from "./persist-helpers.js";
+import type { FileGraphResult, ResolvedSymbolEdge } from "./symbol-types.js";
+import { resolveAllSymbolEdges, buildSymbolIndex, LRUCache } from "./symbol-resolution.js";
+import { computeSymbolHITS, type SymbolNode } from "./symbol-hits.js";
 
 /**
  * Persist the analysis graph to .clarte/graph.db.
@@ -231,6 +235,12 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
   if (communityRecords.length > 0) store.upsertCommunities(communityRecords);
   if (changeCouplingRecords.length > 0) store.upsertChangeCoupling(changeCouplingRecords);
 
+  // Phase 2: Symbol resolution, symbol edges and symbol HITS
+  const fileGraphResults = graph.fileGraphResults;
+  if (fileGraphResults && fileGraphResults.size > 0 && symbolRecords.length > 0) {
+    runSymbolPipeline(store, graph, fileGraphResults, edgeRecords);
+  }
+
   // Store head commit
   const headCommit = gitExecSafe(["rev-parse", "HEAD"], { cwd: rootDir }) ?? undefined;
   if (headCommit) store.setMeta("head_commit", headCommit);
@@ -258,6 +268,169 @@ export async function loadPersistedGraph(rootDir: string, store?: GraphStore): P
   } finally {
     if (ownStore) activeStore?.close();
   }
+}
+
+// ── Phase 2: Symbol resolution + HITS pipeline ───────────────────────────────
+
+/**
+ * Run the symbol-level pipeline after basic data is persisted:
+ * 1. Load symbol IDs from the DB
+ * 2. Build symbol index for resolution
+ * 3. Run 4-tier resolution to produce symbol edges
+ * 4. Store symbol edges
+ * 5. Run HITS on symbol graph
+ * 6. Update symbol authority scores
+ */
+function runSymbolPipeline(
+  store: GraphStore,
+  graph: ImportGraph,
+  fileGraphResults: Map<string, FileGraphResult>,
+  edgeRecords: FileEdgeRecord[],
+): void {
+  // 1. Load symbol graph to get IDs
+  const symGraph = store.loadSymbolGraph();
+  if (symGraph.symbols.size === 0) return;
+
+  // 2. Build symbol index
+  const symbolEntries = [...symGraph.symbols.values()].map((s) => ({
+    id: s.id,
+    filePath: s.filePath,
+    name: s.name,
+    kind: s.kind,
+    startLine: s.startLine,
+  }));
+  const symbolIndex = buildSymbolIndex(symbolEntries);
+
+  // 3. Build file edges for import map
+  const fileEdgesForImportMap = edgeRecords.map((e) => ({
+    fromPath: e.from_path,
+    toPath: e.to_path,
+    importedNames: e.imported_names ?? [],
+    isBarrelRouted: (e.is_barrel_routed ?? 0) === 1,
+  }));
+
+  // Also include edges from the full graph (may have additional barrel-routed edges)
+  for (const edge of graph.edges) {
+    if (edge.isExternal) continue;
+    const exists = fileEdgesForImportMap.some((e) => e.fromPath === edge.from && e.toPath === edge.to);
+    if (!exists) {
+      fileEdgesForImportMap.push({
+        fromPath: edge.from,
+        toPath: edge.to,
+        importedNames: edge.importedNames,
+        isBarrelRouted: edge.isBarrelRouted ?? false,
+      });
+    }
+  }
+
+  // 4. Run resolution
+  const cache = new LRUCache<string, number | null>(10000);
+  const resolvedEdges = resolveAllSymbolEdges({
+    fileGraphs: fileGraphResults,
+    fileEdges: fileEdgesForImportMap,
+    symbolIndex,
+    cache,
+  });
+
+  // 5. Convert to DB records and store
+  const symbolEdgeRecords = resolvedEdgesToRecords(resolvedEdges, symbolIndex, cache);
+  if (symbolEdgeRecords.length > 0) {
+    store.upsertSymbolEdges(symbolEdgeRecords);
+  }
+
+  // 6. Run HITS on symbol graph
+  const barrelFiles = graph.barrelFiles ?? new Set<string>();
+  const symbolNodes: SymbolNode[] = [...symGraph.symbols.values()].map((s) => ({
+    id: s.id,
+    filePath: s.filePath,
+    name: s.name,
+    kind: s.kind,
+    isBarrel: barrelFiles.has(s.filePath),
+  }));
+
+  const symbolIdLookup = (file: string, name: string): number | null => {
+    const cacheKey = `${file}::${name}`;
+    const cached = cache.get(cacheKey);
+    if (cached !== undefined) return cached;
+
+    const entries = symbolIndex.byFileAndName.get(cacheKey);
+    if (!entries || entries.length === 0) {
+      cache.set(cacheKey, null);
+      return null;
+    }
+    const id = entries[0].id;
+    cache.set(cacheKey, id);
+    return id;
+  };
+
+  const symbolHITS = computeSymbolHITS(symbolNodes, resolvedEdges, symbolIdLookup);
+
+  // 7. Update symbol authority in DB
+  const authorityUpdates: SymbolRecord[] = [];
+  for (const [symId, authScore] of symbolHITS.authority) {
+    const sym = symGraph.symbols.get(symId);
+    if (!sym) continue;
+    authorityUpdates.push({
+      file_path: sym.filePath,
+      name: sym.name,
+      kind: sym.kind,
+      start_line: sym.startLine,
+      authority: authScore,
+    });
+  }
+  if (authorityUpdates.length > 0) {
+    store.upsertSymbols(authorityUpdates);
+  }
+
+  store.setMeta("symbol_edge_count", String(symbolEdgeRecords.length));
+  store.setMeta("symbol_hits_complete", "true");
+}
+
+/**
+ * Convert resolved symbol edges to DB records.
+ * Looks up symbol IDs for the from/to pairs.
+ */
+function resolvedEdgesToRecords(
+  resolvedEdges: ResolvedSymbolEdge[],
+  symbolIndex: ReturnType<typeof buildSymbolIndex>,
+  cache: LRUCache<string, number | null>,
+): SymbolEdgeRecord[] {
+  const records: SymbolEdgeRecord[] = [];
+  const seen = new Set<string>();
+
+  for (const edge of resolvedEdges) {
+    const fromKey = `${edge.fromFile}::${edge.fromSymbol}`;
+    const toKey = `${edge.toFile}::${edge.toSymbol}`;
+
+    let fromId = cache.get(fromKey) ?? null;
+    if (fromId === undefined) fromId = null;
+    if (fromId === null) {
+      const entries = symbolIndex.byFileAndName.get(fromKey);
+      if (entries && entries.length > 0) fromId = entries[0].id;
+    }
+
+    let toId = cache.get(toKey) ?? null;
+    if (toId === undefined) toId = null;
+    if (toId === null) {
+      const entries = symbolIndex.byFileAndName.get(toKey);
+      if (entries && entries.length > 0) toId = entries[0].id;
+    }
+
+    if (fromId === null || toId === null) continue;
+
+    const dedupeKey = `${fromId}:${toId}:${edge.kind}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    records.push({
+      from_symbol_id: fromId,
+      to_symbol_id: toId,
+      kind: edge.kind,
+      line: edge.line,
+    });
+  }
+
+  return records;
 }
 
 // Re-export for test compatibility

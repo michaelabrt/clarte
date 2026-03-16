@@ -5,13 +5,10 @@ import { initForLanguage, withParsedTree } from "../parsers/init.js";
 import { detectBarrelAst } from "../parsers/barrel.js";
 import { computeHITS, computeBetweenness } from "./centrality.js";
 import { HITS } from "../config/thresholds.js";
-import {
-  extractSymbolNamesFromRoot,
-  extractSymbolBodiesFromRoot,
-  extractSymbolStartLines,
-  extractIntraFileCalls,
-} from "../parsers/extract-symbols.js";
+import { extractIntraFileCalls } from "../parsers/extract-symbols.js";
 import { parseImportsAstFromRoot } from "../parsers/parse-imports.js";
+import { extractFileGraph } from "../parsers/extract-file-graph.js";
+import type { FileGraphResult } from "./symbol-types.js";
 import {
   getSourceGlob,
   isRelativeSpecifier,
@@ -175,6 +172,7 @@ export async function buildImportGraph(
   const symbolBodyTokens = new Map<string, Map<string, string[]>>();
   const symbolStartLines = new Map<string, Map<string, number>>();
   const intraFileCalls = new Map<string, Array<{ caller: string; callee: string }>>();
+  const fileGraphResults = new Map<string, FileGraphResult>();
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -191,17 +189,27 @@ export async function buildImportGraph(
     try {
       rawImports = withParsedTree(content, language, file, (root) => {
         const imports = parseImportsAstFromRoot(root, language);
-        const symbols = extractSymbolNamesFromRoot(root, language);
-        if (symbols.length > 0) symbolNames.set(file, symbols);
 
-        const bodyToks = extractSymbolBodiesFromRoot(root, language);
+        // Phase 2: unified single-pass extraction
+        const fgr = extractFileGraph(root, language);
+        fileGraphResults.set(file, fgr);
+
+        // Populate legacy maps from the unified extraction result for backward compat
+        const symNames = fgr.symbols.map((s) => s.name);
+        if (symNames.length > 0) symbolNames.set(file, symNames);
+
+        const bodyToks = new Map<string, string[]>();
+        for (const sym of fgr.symbols) {
+          if (sym.bodyTokens) bodyToks.set(sym.name, sym.bodyTokens.split(" ").filter(Boolean));
+        }
         if (bodyToks.size > 0) symbolBodyTokens.set(file, bodyToks);
 
-        const startLines = extractSymbolStartLines(root, language);
+        const startLines = new Map<string, number>();
+        for (const sym of fgr.symbols) startLines.set(sym.name, sym.startLine);
         if (startLines.size > 0) symbolStartLines.set(file, startLines);
 
-        if (symbols.length > 0) {
-          const symSet = new Set(symbols);
+        if (symNames.length > 0) {
+          const symSet = new Set(symNames);
           const intraCalls = extractIntraFileCalls(root, language, symSet);
           if (intraCalls.length > 0) intraFileCalls.set(file, intraCalls);
         }
@@ -341,6 +349,7 @@ export async function buildImportGraph(
     symbolBodyTokens,
     symbolStartLines,
     intraFileCalls,
+    fileGraphResults,
   };
 }
 

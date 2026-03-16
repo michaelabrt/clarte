@@ -50,6 +50,8 @@ export interface ImportGraph {
   symbolStartLines?: Map<string, Map<string, number>>;
   /** Intra-file caller→callee edges per file, for navigation chain display */
   intraFileCalls?: Map<string, Array<{ caller: string; callee: string }>>;
+  /** Phase 2: unified file graph extraction results per file */
+  fileGraphResults?: Map<string, import("../graph/symbol-types.js").FileGraphResult>;
 }
 
 /** A highly-connected file identified by HITS analysis */
