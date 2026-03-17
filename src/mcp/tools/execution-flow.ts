@@ -121,7 +121,7 @@ function formatResponse(file: string, symbol: string | undefined, flows: Executi
         file: n.file,
         symbol: n.name,
         line: n.line,
-        edgeKind: i === 0 ? "entry" : "calls", // TODO: preserve edge kinds from path
+        edgeKind: i === 0 ? "entry" : (f.edges[i - 1]?.kind ?? "calls"),
         community: n.communityLabel,
         isDominator: n.isDominator,
       })),
