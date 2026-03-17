@@ -10,7 +10,7 @@
 import type { InMemorySymbolGraph, LeanFileGraph } from "../../storage/types";
 import type { CommunityInfo } from "./flow-annotation";
 import type { ScoredEntryPoint, TerminalNode } from "./entry-points";
-import { computeDominatorTree } from "./dominator";
+import { computeDominatorTree, dominates } from "./dominator";
 import { kShortestPaths } from "./k-shortest-paths";
 import { annotateCommunities } from "./flow-annotation";
 import { findScoredEntryPoints, findTerminalNodes } from "./entry-points";
@@ -47,10 +47,17 @@ export interface FlowNode {
   isBoundary: boolean;
 }
 
+export interface FlowEdge {
+  fromId: number;
+  toId: number;
+  kind: string;
+}
+
 export interface ExecutionFlowTrace {
   entryPoint: ScoredEntryPoint;
   terminal: TerminalNode | null;
   nodes: FlowNode[];
+  edges: FlowEdge[];
   confidence: number;
   communityTransitions: string[];
   summary: string;
@@ -122,6 +129,49 @@ function bfsReachable(start: Set<number>, adj: Map<number, FlowAdj[] | number[]>
   return visited;
 }
 
+// ── Community label inference ─────────────────────────────────────────────────
+
+/**
+ * Build community labels from the most common directory among each community's files.
+ * E.g. community 0 has files mostly in "src/auth/" -> label "auth".
+ */
+function buildCommunityLabels(fileGraph: LeanFileGraph): Map<number, string> {
+  const dirCounts = new Map<number, Map<string, number>>();
+
+  for (const [path, fileNode] of fileGraph.nodes) {
+    if (fileNode.communityId == null) continue;
+    if (!dirCounts.has(fileNode.communityId)) {
+      dirCounts.set(fileNode.communityId, new Map());
+    }
+    const dir = parentDir(path);
+    const counts = dirCounts.get(fileNode.communityId) as Map<string, number>;
+    counts.set(dir, (counts.get(dir) ?? 0) + 1);
+  }
+
+  const labels = new Map<number, string>();
+  for (const [communityId, counts] of dirCounts) {
+    let bestDir = "";
+    let bestCount = 0;
+    for (const [dir, count] of counts) {
+      if (count > bestCount) {
+        bestDir = dir;
+        bestCount = count;
+      }
+    }
+    if (bestDir) labels.set(communityId, bestDir);
+  }
+
+  return labels;
+}
+
+function parentDir(filePath: string): string {
+  const lastSlash = filePath.lastIndexOf("/");
+  if (lastSlash === -1) return filePath;
+  const dir = filePath.slice(0, lastSlash);
+  const lastSegment = dir.slice(dir.lastIndexOf("/") + 1);
+  return lastSegment || dir;
+}
+
 // ── Edge weight function ─────────────────────────────────────────────────────
 
 function flowEdgeWeight(_from: number, _to: number, kind: string): number {
@@ -157,7 +207,7 @@ export function compressFlowPath(
     const isFirst = i === 0;
     const isLast = i === nodes.length - 1;
     const bet = fileBetweenness.get(n.file) ?? 0;
-    const isWaypoint = isFirst || isLast || n.isDominator || n.isBoundary || bet >= threshold;
+    const isWaypoint = isFirst || isLast || n.isDominator || n.isBoundary || bet > threshold;
 
     if (isWaypoint) {
       if (buffer > 0) {
@@ -263,13 +313,14 @@ export function traceExecutionFlows(
     }
   }
 
-  // Step 6: Community lookup
+  // Step 6: Community lookup with directory-based labels
+  const communityLabels = buildCommunityLabels(fileGraph);
   const communityLookup = (nodeId: number): CommunityInfo | null => {
     const node = symbolGraph.symbols.get(nodeId);
     if (!node) return null;
     const fileNode = fileGraph.nodes.get(node.filePath);
     if (!fileNode || fileNode.communityId == null) return null;
-    return { communityId: fileNode.communityId, label: null };
+    return { communityId: fileNode.communityId, label: communityLabels.get(fileNode.communityId) ?? null };
   };
 
   // Step 7: Betweenness map
@@ -298,10 +349,12 @@ export function traceExecutionFlows(
         if (path.nodes.length - 1 < MIN_FLOW_LENGTH) continue;
         const flow = buildFlowTrace(
           path.nodes,
+          path.edgeKinds,
           path.confidence,
           entry,
           null,
           domTree.idom,
+          domTree.children,
           communityLookup,
           symbolGraph,
           fileBetweenness,
@@ -328,10 +381,12 @@ export function traceExecutionFlows(
 
         const flow = buildFlowTrace(
           path.nodes,
+          path.edgeKinds,
           path.confidence,
           entry,
           terminal,
           domTree.idom,
+          domTree.children,
           communityLookup,
           symbolGraph,
           fileBetweenness,
@@ -351,16 +406,30 @@ export function traceExecutionFlows(
 
 function buildFlowTrace(
   pathNodes: number[],
+  pathEdgeKinds: string[],
   confidence: number,
   entry: ScoredEntryPoint,
   terminal: TerminalNode | null,
   idom: Map<number, number>,
+  domChildren: Map<number, number[]>,
   communityLookup: (nodeId: number) => CommunityInfo | null,
   symbolGraph: InMemorySymbolGraph,
   fileBetweenness: Map<string, number>,
   compress: boolean,
 ): ExecutionFlowTrace | null {
   const annotated = annotateCommunities(pathNodes, communityLookup);
+
+  // A node is a dominator waypoint if it has children in the dominator tree
+  // (meaning other nodes are forced through it). Entry is excluded since it
+  // trivially dominates everything.
+  const pathTerminus = pathNodes[pathNodes.length - 1];
+  const dominatorSet = new Set<number>();
+  for (const nodeId of pathNodes) {
+    if (nodeId === entry.symbolId) continue;
+    if (domChildren.has(nodeId) && dominates(nodeId, pathTerminus, idom)) {
+      dominatorSet.add(nodeId);
+    }
+  }
 
   const nodes: FlowNode[] = [];
   for (let i = 0; i < pathNodes.length; i++) {
@@ -375,8 +444,18 @@ function buildFlowTrace(
       line: symNode.startLine,
       communityId: ann.communityId,
       communityLabel: ann.communityLabel,
-      isDominator: idom.has(pathNodes[i]) && pathNodes[i] !== entry.symbolId,
+      isDominator: dominatorSet.has(pathNodes[i]),
       isBoundary: ann.isBoundary,
+    });
+  }
+
+  // Build edges from path
+  const edges: FlowEdge[] = [];
+  for (let i = 0; i < pathNodes.length - 1; i++) {
+    edges.push({
+      fromId: pathNodes[i],
+      toId: pathNodes[i + 1],
+      kind: pathEdgeKinds[i] ?? "calls",
     });
   }
 
@@ -393,6 +472,7 @@ function buildFlowTrace(
     entryPoint: entry,
     terminal,
     nodes,
+    edges,
     confidence,
     communityTransitions: transitions,
     summary,
