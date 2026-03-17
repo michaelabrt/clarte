@@ -305,10 +305,10 @@ describe("Go T vs *T method set distinction", () => {
     const resettable = satisfied.find((s) => s.name === "Resettable");
 
     expect(lifecycle).toBeDefined();
-    expect(lifecycle!.receiverKind).toBe("value");
+    expect(lifecycle?.receiverKind).toBe("value");
 
     expect(resettable).toBeDefined();
-    expect(resettable!.receiverKind).toBe("pointer");
+    expect(resettable?.receiverKind).toBe("pointer");
   });
 
   it("no pointer receivers: interface requiring method not on type is not satisfied", () => {
