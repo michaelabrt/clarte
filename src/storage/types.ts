@@ -18,7 +18,7 @@ export interface FileRecord {
   is_barrel?: number;
   is_dead?: number;
   is_chokepoint?: number;
-  // Phase 1 compatibility columns (for PersistedGraph reconstruction)
+  // Legacy compatibility columns (for PersistedGraph reconstruction)
   separates_components?: number;
   is_cross_cutting?: number;
   layer_spread?: number;
@@ -86,6 +86,7 @@ export interface ChangeCouplingRecord {
   confidence: number;
   conf_ab?: number | null;
   conf_ba?: number | null;
+  last_cochange_days?: number | null;
 }
 
 // ── In-memory graph types (what GraphStore.loadFileGraph() returns) ───────────
@@ -103,7 +104,7 @@ export interface InMemoryFileNode {
   isBarrel: boolean;
   isDead: boolean;
   isChokepoint: boolean;
-  // Phase 1 compatibility
+  // Legacy compatibility
   separatesComponents: number;
   isCrossCutting: boolean;
   layerSpread: number;

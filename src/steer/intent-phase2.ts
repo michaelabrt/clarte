@@ -11,8 +11,8 @@
 
 import type { SymbolEdgeKind } from "../core/graph/symbol-types";
 import type { SymbolSubgraph } from "../core/graph/intent-subgraph";
-import { propagateIntent } from "./intent-propagation";
-import { BETWEENNESS_PERCENTILE, INTENT_MIN, PHASE2_MAX_HOPS } from "../core/config/intent-constants";
+import { propagateKatz } from "../core/graph/katz-centrality";
+import { BETWEENNESS_PERCENTILE, INTENT_MIN } from "../core/config/intent-constants";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -193,13 +193,13 @@ export function applyPhase2Seeding(
   const chokeSeeds = new Map<number, number>();
   for (const id of chokepoints) chokeSeeds.set(id, 1.0);
 
-  const phase2 = propagateIntent(chokeSeeds, subgraph, transmission, reverseMultiplier, ghostDiscount, PHASE2_MAX_HOPS);
+  const phase2Scores = propagateKatz(chokeSeeds, subgraph, transmission, reverseMultiplier, ghostDiscount);
 
   // Max-merge: for each symbol, take max(phase1, phase2)
   const mergedScores = new Map<number, number>();
-  const allIds = new Set([...phase1Scores.keys(), ...phase2.scores.keys()]);
+  const allIds = new Set([...phase1Scores.keys(), ...phase2Scores.keys()]);
   for (const id of allIds) {
-    mergedScores.set(id, Math.max(phase1Scores.get(id) ?? 0, phase2.scores.get(id) ?? 0));
+    mergedScores.set(id, Math.max(phase1Scores.get(id) ?? 0, phase2Scores.get(id) ?? 0));
   }
 
   return { mergedScores, chokepoints, phase2Triggered: true };

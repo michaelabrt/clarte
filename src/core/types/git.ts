@@ -12,6 +12,8 @@ export interface ChangeCoupling {
   confidenceAB?: number;
   /** Directional: P(fileA changes | fileB changes) = coChangeCount / commitsB */
   confidenceBA?: number;
+  /** Days since the most recent commit that changed both files (for temporal decay) */
+  lastCochangeDays?: number;
 }
 
 /** Lag-adjusted temporal coupling (files that change within 1-3 commits of each other) */
@@ -22,6 +24,12 @@ export interface LagCoupling {
   sameCommitCount: number;
   /** Weighted lag coupling score (inverse-lag weighted) */
   lagScore: number;
+}
+
+/** Per-symbol blame record for temporal decay */
+export interface SymbolBlameRecord {
+  symbolId: number;
+  daysSinceModified: number;
 }
 
 /** Git activity analysis results */

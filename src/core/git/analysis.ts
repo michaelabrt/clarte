@@ -340,6 +340,7 @@ export function computeChangeCoupling(
   const fileCommitSets = new Map<string, Set<number>>();
   const weightedCoChanges = new Map<string, number>();
   const rawCoChanges = new Map<string, number>();
+  const mostRecentAge = new Map<string, number>();
 
   const MAX_COUPLING_FILES = COUPLING.MAX_FILES_PER_COMMIT;
 
@@ -360,11 +361,14 @@ export function computeChangeCoupling(
     const noise = noiseDiscount(commit.message);
     const weight = pairWeight * decay * noise;
 
+    const age = commitAgeDays(commit.date, referenceMs);
     for (let i = 0; i < files.length; i++) {
       for (let j = i + 1; j < files.length; j++) {
         const key = [files[i], files[j]].sort().join("||");
         weightedCoChanges.set(key, (weightedCoChanges.get(key) ?? 0) + weight);
         rawCoChanges.set(key, (rawCoChanges.get(key) ?? 0) + 1);
+        const prev = mostRecentAge.get(key);
+        if (prev === undefined || age < prev) mostRecentAge.set(key, age);
       }
     }
   }
@@ -407,6 +411,7 @@ export function computeChangeCoupling(
         confidence,
         confidenceAB,
         confidenceBA,
+        lastCochangeDays: Math.round(mostRecentAge.get(key) ?? windowDays),
       });
     }
   }

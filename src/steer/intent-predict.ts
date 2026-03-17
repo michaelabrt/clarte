@@ -29,7 +29,8 @@ import {
   MAX_CONTEXT_TOKENS,
 } from "../core/config/intent-constants";
 import { extractSymbolSubgraph } from "../core/graph/intent-subgraph";
-import { propagateIntent, computePathConfidenceProducts } from "./intent-propagation";
+import { propagateKatz } from "../core/graph/katz-centrality";
+import { expandSeedsWithLSA } from "../core/graph/semantic-lsa";
 import { applyPhase2Seeding, computeSubgraphBetweenness } from "./intent-phase2";
 import { fuseIntentScores, aggregateToFiles, selectPredictions, type FusionInput } from "./intent-fusion";
 import { generateTheoryOfImpact } from "./theory-of-impact";
@@ -309,6 +310,7 @@ export function intentPredict(
   graphCommit: string,
   headCommit: string,
   _maxTargets?: number,
+  lsaEmbeddings?: Map<string, Float64Array>,
 ): IntentPredictResult {
   const t0 = performance.now();
 
@@ -319,7 +321,17 @@ export function intentPredict(
   }
 
   try {
-    return runPipeline(query, fileGraph, symbolGraph, changeCoupling, rootDir, graphCommit, headCommit, t0);
+    return runPipeline(
+      query,
+      fileGraph,
+      symbolGraph,
+      changeCoupling,
+      rootDir,
+      graphCommit,
+      headCommit,
+      t0,
+      lsaEmbeddings,
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     debugIntent(`pipeline error: ${msg}`);
@@ -336,6 +348,7 @@ function runPipeline(
   graphCommit: string,
   headCommit: string,
   t0: number,
+  lsaEmbeddings?: Map<string, Float64Array>,
 ): IntentPredictResult {
   const timing: PredictionTrace["timing_ms"] = {
     total: 0,
@@ -358,7 +371,7 @@ function runPipeline(
   }
 
   const seedResult = scoreSeedFiles(queryTokens, fileGraph, symbolGraph, SEED_TOP_K);
-  const seedFiles = seedResult.files;
+  let seedFiles = seedResult.files;
   timing.seed_selection = performance.now() - t1;
 
   if (seedFiles.length === 0) {
@@ -387,6 +400,13 @@ function runPipeline(
     ),
   }));
 
+  // ── Stage 2b: LSA Seed Expansion ────────────────────────────────────
+  if (lsaEmbeddings) {
+    const expanded = expandSeedsWithLSA(seedFiles, seedResult.scores, lsaEmbeddings);
+    seedFiles = expanded.files;
+    seedResult.scores = expanded.scores;
+  }
+
   // ── Stage 3: Subgraph Extraction ──────────────────────────────────────
   const t2 = performance.now();
   const subgraph = extractSymbolSubgraph(seedFiles, symbolGraph, MAX_PROPAGATION_HOPS, fileGraph.forward);
@@ -403,26 +423,17 @@ function runPipeline(
     `subgraph: ${subgraph.nodes.size} symbols, ${edgeCount} edges (${MAX_PROPAGATION_HOPS}-hop BFS, ${(timing.subgraph_extraction).toFixed(0)}ms)`,
   );
 
-  // ── Stage 4: Intent Propagation (Dijkstra) ──────────────────────────────
+  // ── Stage 4: Intent Propagation (Katz Centrality) ────────────────────
   const t3 = performance.now();
   const seedScoreMap = buildSeedScoreMap(seedFiles, seedResult.scores, symbolGraph);
-  const phase1 = propagateIntent(
-    seedScoreMap,
-    subgraph,
-    TRANSMISSION,
-    REVERSE_MULTIPLIER,
-    GHOST_DISCOUNT,
-    MAX_PROPAGATION_HOPS,
-  );
+  const katzScores = propagateKatz(seedScoreMap, subgraph, TRANSMISSION, REVERSE_MULTIPLIER, GHOST_DISCOUNT);
   timing.intent_propagation = performance.now() - t3;
 
-  debugIntent(
-    `propagation: ${phase1.scores.size} symbols scored (Dijkstra, ${(timing.intent_propagation).toFixed(0)}ms)`,
-  );
+  debugIntent(`propagation: ${katzScores.size} symbols scored (Katz, ${(timing.intent_propagation).toFixed(0)}ms)`);
 
   // ── Stage 5: Chokepoint Seeding (Betweenness re-propagation) ────────────
   const t4 = performance.now();
-  const phase2Result = applyPhase2Seeding(phase1.scores, subgraph, TRANSMISSION, REVERSE_MULTIPLIER, GHOST_DISCOUNT);
+  const phase2Result = applyPhase2Seeding(katzScores, subgraph, TRANSMISSION, REVERSE_MULTIPLIER, GHOST_DISCOUNT);
   timing.phase2_seeding = phase2Result.phase2Triggered ? performance.now() - t4 : null;
 
   if (phase2Result.phase2Triggered) {
@@ -435,9 +446,6 @@ function runPipeline(
   // Compute stale discount
   const staleDistance = commitDistance(graphCommit, headCommit, rootDir);
   const staleDiscount = staleDistance > STALE_COMMIT_THRESHOLD ? STALE_GRAPH_DISCOUNT : undefined;
-
-  // Compute path confidence products
-  const pathConfidences = computePathConfidenceProducts(phase1.paths, subgraph);
 
   // Build betweenness map for fusion
   const taskBetweenness = computeSubgraphBetweenness(subgraph);
@@ -454,7 +462,7 @@ function runPipeline(
       lexicalScore: seedResult.scores.get(sym.filePath) ?? 0,
       graphScore: mergedScore,
       betweennessScore: taskBetweenness.get(symbolId) ?? 0,
-      pathConfidence: pathConfidences.get(symbolId),
+      pathConfidence: undefined,
     });
   }
 
@@ -518,7 +526,7 @@ function runPipeline(
     predFiles,
     fileScores,
     symbolGraph,
-    phase1.paths,
+    new Map(),
     seedFileSet,
     changeCoupling,
     taskBetweenness,
@@ -529,7 +537,7 @@ function runPipeline(
   // ── Stage 9: Verification ─────────────────────────────────────────────
   const t6 = performance.now();
   const changedFileSet = new Set(changedFiles);
-  predictions = verifyPredictions(predictions, symbolGraph, rootDir, phase1.paths, fileTopSymbolId, changedFileSet);
+  predictions = verifyPredictions(predictions, symbolGraph, rootDir, new Map(), fileTopSymbolId, changedFileSet);
   timing.verification = performance.now() - t6;
 
   debugIntent(`verification: ${predictions.length}/${predFiles.length} passed`);

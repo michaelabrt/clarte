@@ -1,4 +1,7 @@
 /**
+ * @deprecated Replaced by katz-centrality.ts in Phase 7. Retained for
+ * computePathConfidenceProducts which may still be referenced.
+ *
  * Dijkstra-based intent propagation on the symbol subgraph.
  *
  * Computes max-product paths (max_pi prod gamma(u,v)) by transforming

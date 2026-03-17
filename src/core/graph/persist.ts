@@ -30,6 +30,9 @@ import { detectEventEdges } from "../parsers/ghost-events";
 import { detectRouteEdges } from "../parsers/ghost-routes";
 import { detectRustTraitBoundEdges } from "../parsers/ghost-rust-traits";
 import { detectPythonDescriptorEdges } from "../parsers/ghost-python-descriptors";
+import { buildNeighborhoodsFromResolvedEdges, buildFileNeighborhoods } from "./constraint-resolution";
+import { computeSymbolBlame } from "../git/blame";
+import { computeFileEmbeddings } from "./semantic-lsa";
 
 /**
  * Persist the analysis graph to .clarte/graph.db.
@@ -46,13 +49,18 @@ export async function persistGraph(
   const activeStore = store ?? (await openGraphStore(rootDir));
 
   try {
-    persistGraphToStore(rootDir, activeStore, graph, analysis);
+    await persistGraphToStore(rootDir, activeStore, graph, analysis);
   } finally {
     if (ownStore) activeStore.close();
   }
 }
 
-function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGraph, analysis: ContextAnalysis): void {
+async function persistGraphToStore(
+  rootDir: string,
+  store: GraphStore,
+  graph: ImportGraph,
+  analysis: ContextAnalysis,
+): Promise<void> {
   const now = new Date().toISOString();
 
   const hubByPath = new Map(analysis.hubFiles.map((h) => [h.path, h]));
@@ -161,11 +169,10 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
       is_cross_cutting: crossCutting ? 1 : 0,
       layer_spread: crossCutting?.layerSpread ?? 0,
       has_tests: tests.length > 0 ? 1 : 0,
-      // AC 1.9.2 exception: layers, test_files, intra_file_calls are JSON arrays stored in
-      // TEXT columns — the same pattern as imported_names (the AC's named exception).
-      // These are compatibility columns outside the RFC §5.2 schema, added so the steer
-      // module can reconstruct a PersistedGraph without a separate relational table per
-      // array. They are read back via parseJsonArray() in graph-store.ts, symmetric with
+      // layers, test_files, intra_file_calls are JSON arrays stored in TEXT columns,
+      // the same pattern as imported_names. These columns let the steer module
+      // reconstruct a PersistedGraph without a separate relational table per array.
+      // They are read back via parseJsonArray() in graph-store.ts, symmetric with
       // edgeRowToEdge()'s imported_names parsing.
       layers: layers.length > 0 ? JSON.stringify(layers) : null,
       test_files: tests.length > 0 ? JSON.stringify(tests) : null,
@@ -183,9 +190,9 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
   }));
 
   // Build symbol records.
-  // When Phase 2 fileGraphResults are available, use SymbolDefinition.kind for correct kinds.
+  // When fileGraphResults are available, use SymbolDefinition.kind for correct kinds.
   // Fall back to the legacy graph.symbolNames path only when fileGraphResults is absent,
-  // using "function" as a safe default (RFC §2.2 valid kinds exclude "unknown").
+  // using "function" as a safe default (valid kinds exclude "unknown").
   const fileGraphResults = graph.fileGraphResults;
   const symbolRecords: SymbolRecord[] = [];
 
@@ -248,6 +255,9 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
     file_b: c.fileB,
     co_changes: c.coChangeCount,
     confidence: c.confidence,
+    conf_ab: c.confidenceAB ?? null,
+    conf_ba: c.confidenceBA ?? null,
+    last_cochange_days: c.lastCochangeDays ?? null,
   }));
 
   // Write to SQLite
@@ -286,7 +296,7 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
   if (communityRecords.length > 0) store.upsertCommunities(communityRecords);
   if (changeCouplingRecords.length > 0) store.upsertChangeCoupling(changeCouplingRecords);
 
-  // Phase 2: Symbol resolution, symbol edges and symbol HITS
+  // Symbol resolution, symbol edges and symbol HITS
   if (fileGraphResults && fileGraphResults.size > 0 && symbolRecords.length > 0) {
     runSymbolPipeline(store, graph, fileGraphResults, edgeRecords);
   }
@@ -295,6 +305,19 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
   const headCommit = gitExecSafe(["rev-parse", "HEAD"], { cwd: rootDir }) ?? undefined;
   if (headCommit) store.setMeta("head_commit", headCommit);
   store.setMeta("build_timestamp", now);
+
+  // Phase 7b: Blame-boundary temporal decay
+  if (fileGraphResults && fileGraphResults.size > 0) {
+    const symGraph = store.loadSymbolGraph();
+    if (symGraph.symbols.size > 0) {
+      const blameData = await computeSymbolBlame(rootDir, symGraph);
+      if (headCommit) store.storeSymbolBlame(headCommit, blameData);
+
+      // Phase 7c: LSA file embeddings
+      const embeddings = computeFileEmbeddings(symGraph);
+      if (embeddings) store.storeLSAEmbeddings(embeddings);
+    }
+  }
 
   store.refreshBm25fStats();
 }
@@ -319,16 +342,14 @@ export async function loadPersistedGraph(rootDir: string, store?: GraphStore): P
   }
 }
 
-// ── Phase 2: Symbol resolution + HITS pipeline ───────────────────────────────
+// ── Symbol resolution + HITS pipeline ─────────────────────────────────────────
 
 /**
- * Run the symbol-level pipeline after basic data is persisted:
- * 1. Load symbol IDs from the DB
- * 2. Build symbol index for resolution
- * 3. Run 4-tier resolution to produce symbol edges
- * 4. Store symbol edges
- * 5. Run HITS on symbol graph
- * 6. Update symbol authority scores
+ * Run the symbol-level pipeline after basic data is persisted.
+ *
+ * Two-pass architecture to break the HITS/Tier-5 circular dependency:
+ *   Pass 1: Tiers 1-3 + language-specific + ghost -> edges_base -> HITS
+ *   Pass 2: Tier 5 using fresh HITS authority + neighborhoods from pass 1
  */
 function runSymbolPipeline(
   store: GraphStore,
@@ -378,12 +399,12 @@ function runSymbolPipeline(
     importMaps.set(filePath, buildImportMap(filePath, fileEdgesForImportMap));
   }
 
-  // 4b. Build type alias map (RFC §2.15) - must precede resolution so aliases are followed
+  // 4b. Build type alias map - must precede resolution so aliases are followed
   const aliasMap = buildAliasMap(fileGraphResults, symbolIndex, importMaps);
 
-  // 4c. Run core 4-tier resolution with alias awareness
+  // 4c. PASS 1: Tiers 1-3 only (no Tier 5 fields in context)
   const cache = new LRUCache<string, number | null>(10000);
-  const resolvedEdges = resolveAllSymbolEdges({
+  const pass1Edges = resolveAllSymbolEdges({
     fileGraphs: fileGraphResults,
     fileEdges: fileEdgesForImportMap,
     symbolIndex,
@@ -396,10 +417,17 @@ function runSymbolPipeline(
   const goResult = resolveGoStructuralEdges(fileGraphResults, symbolIndex, importMaps);
   const rustTraitEdges = resolveRustTraitEdges(fileGraphResults, symbolIndex, importMaps);
 
-  // Merge all resolved edges
-  const allResolvedEdges = [...resolvedEdges, ...pythonMROEdges, ...goResult.edges, ...rustTraitEdges];
+  // Merge pass 1 edges
+  const allPass1Edges = [...pass1Edges, ...pythonMROEdges, ...goResult.edges, ...rustTraitEdges];
 
-  // Phase 5: Ghost edge detection + noise gate
+  // Load community map (shared between ghost edges and Tier 5)
+  const leanGraph = store.loadFileGraphLean();
+  const fileCommunities = new Map<string, number>();
+  for (const [p, node] of leanGraph.nodes) {
+    if (node.communityId !== null) fileCommunities.set(p, node.communityId);
+  }
+
+  // Ghost edge detection + noise gate
   if (GHOST_EDGES_ENABLED) {
     const ghostCandidates = [
       ...detectDIEdges(fileGraphResults, symbolIndex, importMaps),
@@ -409,23 +437,11 @@ function runSymbolPipeline(
       ...detectPythonDescriptorEdges(fileGraphResults, symbolIndex, importMaps),
     ];
 
-    const fileToCommunity = new Map<string, number>();
-    const leanGraph = store.loadFileGraphLean();
-    for (const [p, node] of leanGraph.nodes) {
-      if (node.communityId !== null) fileToCommunity.set(p, node.communityId);
-    }
-
-    const ghostFiltered = applyNoiseGate(ghostCandidates, fileGraphResults.size, allResolvedEdges, fileToCommunity);
-    for (const c of ghostFiltered) allResolvedEdges.push(ghostCandidateToResolved(c));
+    const ghostFiltered = applyNoiseGate(ghostCandidates, fileGraphResults.size, allPass1Edges, fileCommunities);
+    for (const c of ghostFiltered) allPass1Edges.push(ghostCandidateToResolved(c));
   }
 
-  // 5. Convert to DB records and store
-  const symbolEdgeRecords = resolvedEdgesToRecords(allResolvedEdges, symbolIndex, cache);
-  if (symbolEdgeRecords.length > 0) {
-    store.upsertSymbolEdges(symbolEdgeRecords);
-  }
-
-  // 6. Run HITS on symbol graph
+  // 5. Run HITS on pass 1 edges (before Tier 5)
   const barrelFiles = graph.barrelFiles ?? new Set<string>();
   const symbolNodes: SymbolNode[] = [...symGraph.symbols.values()].map((s) => ({
     id: s.id,
@@ -450,9 +466,48 @@ function runSymbolPipeline(
     return id;
   };
 
-  const symbolHITS = computeSymbolHITS(symbolNodes, allResolvedEdges, symbolIdLookup);
+  const symbolHITS = computeSymbolHITS(symbolNodes, allPass1Edges, symbolIdLookup);
 
-  // 7. Update symbol authority in DB
+  // 6. Inject fresh HITS authority into in-memory symbol graph for Tier 5
+  for (const [symId, authScore] of symbolHITS.authority) {
+    const node = symGraph.symbols.get(symId);
+    if (node) node.authority = authScore;
+  }
+
+  // 7. PASS 2: Tier 5 proximity disambiguation with live authority
+  const symbolNeighborhoods = buildNeighborhoodsFromResolvedEdges(allPass1Edges, symbolIndex);
+  const fileNeighborhoods = buildFileNeighborhoods(fileEdgesForImportMap);
+
+  const pass2Edges = resolveAllSymbolEdges({
+    fileGraphs: fileGraphResults,
+    fileEdges: fileEdgesForImportMap,
+    symbolIndex,
+    cache,
+    aliasMap,
+    symbolNeighborhoods,
+    fileNeighborhoods,
+    fileCommunities,
+    symbolGraph: symGraph,
+  });
+
+  // Extract Tier 5-only edges (pass 2 minus pass 1)
+  const pass1Keys = new Set(
+    pass1Edges.map((e) => `${e.fromFile}::${e.fromSymbol}\0${e.toFile}::${e.toSymbol}\0${e.kind}`),
+  );
+  const tier5Edges = pass2Edges.filter(
+    (e) => !pass1Keys.has(`${e.fromFile}::${e.fromSymbol}\0${e.toFile}::${e.toSymbol}\0${e.kind}`),
+  );
+
+  // Final edge set: pass 1 (with language-specific + ghost) + Tier 5
+  const allResolvedEdges = [...allPass1Edges, ...tier5Edges];
+
+  // 8. Store all edges
+  const symbolEdgeRecords = resolvedEdgesToRecords(allResolvedEdges, symbolIndex, cache);
+  if (symbolEdgeRecords.length > 0) {
+    store.upsertSymbolEdges(symbolEdgeRecords);
+  }
+
+  // 9. Update symbol authority in DB
   const authorityUpdates: SymbolRecord[] = [];
   for (const [symId, authScore] of symbolHITS.authority) {
     const sym = symGraph.symbols.get(symId);
@@ -469,9 +524,7 @@ function runSymbolPipeline(
     store.upsertSymbols(authorityUpdates);
   }
 
-  // 8. M4: Aggregate symbol-level scores to file level and write back.
-  // File authority = max symbol authority, file hub = max symbol hub.
-  // This closes the feedback loop: symbol resolution feeds file-level metrics.
+  // 10. Aggregate symbol-level scores to file level and write back.
   const fileAgg = aggregateToFileLevel(symbolNodes, symbolHITS, allResolvedEdges);
   const now = new Date().toISOString();
   const fileScoreUpdates: FileRecord[] = [];
@@ -487,7 +540,6 @@ function runSymbolPipeline(
     });
   }
   if (fileScoreUpdates.length > 0) {
-    // Preserve existing hashes so we don't blank them
     const hashes = store.getAllHashes();
     const merged = fileScoreUpdates.map((f) => ({
       ...f,

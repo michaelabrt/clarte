@@ -6,11 +6,12 @@
  *   v1 -> v2: added symbols.is_exported, symbol_edges.confidence,
  *             FTS5 column rename (name -> symbol_name), dropped content-sync.
  *   v2 -> v3: added kv_cache table, removed dead vec_symbols virtual table.
+ *   v3 -> v4: added change_coupling.last_cochange_days for temporal decay.
  */
 
 import type { DatabaseAdapter } from "./db-adapter";
 
-export const SCHEMA_VERSION = "3";
+export const SCHEMA_VERSION = "4";
 
 /**
  * Initialize the database schema within a single transaction.
@@ -44,7 +45,7 @@ export function initSchema(db: DatabaseAdapter): void {
         is_barrel             INTEGER DEFAULT 0,
         is_dead               INTEGER DEFAULT 0,
         is_chokepoint         INTEGER DEFAULT 0,
-        -- Phase 1 compatibility columns
+        -- Legacy compatibility columns
         separates_components  INTEGER DEFAULT 0,
         is_cross_cutting      INTEGER DEFAULT 0,
         layer_spread          INTEGER DEFAULT 0,
@@ -134,6 +135,7 @@ export function initSchema(db: DatabaseAdapter): void {
         confidence  REAL    NOT NULL,
         conf_ab     REAL,
         conf_ba     REAL,
+        last_cochange_days INTEGER,
         PRIMARY KEY (file_a, file_b)
       )
     `);
@@ -178,8 +180,12 @@ export function initSchema(db: DatabaseAdapter): void {
   if (currentVersion === 1) {
     migrateV1toV2(db);
     migrateV2toV3(db);
+    migrateV3toV4(db);
   } else if (currentVersion === 2) {
     migrateV2toV3(db);
+    migrateV3toV4(db);
+  } else if (currentVersion === 3) {
+    migrateV3toV4(db);
   }
 }
 
@@ -267,6 +273,15 @@ function migrateV2toV3(db: DatabaseAdapter): void {
     )
   `);
 
+  db.exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`);
+}
+
+/**
+ * Migrate a v3 database to v4:
+ * - Add change_coupling.last_cochange_days column
+ */
+function migrateV3toV4(db: DatabaseAdapter): void {
+  tryAddColumn(db, "change_coupling", "last_cochange_days INTEGER");
   db.exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`);
 }
 

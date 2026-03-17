@@ -90,6 +90,7 @@ interface ChangeCouplingRow {
   confidence: number;
   conf_ab: number | null;
   conf_ba: number | null;
+  last_cochange_days: number | null;
 }
 
 // ── Positional column indices for raw queries ───────────────────────────────────
@@ -238,7 +239,7 @@ export class GraphStore {
     `);
 
     this.stmtLoadChangeCoupling = db.prepare(`
-      SELECT file_a, file_b, co_changes, confidence, conf_ab, conf_ba FROM change_coupling
+      SELECT file_a, file_b, co_changes, confidence, conf_ab, conf_ba, last_cochange_days FROM change_coupling
     `);
 
     this.stmtLoadAllCallSites = db.prepare(`
@@ -369,15 +370,15 @@ export class GraphStore {
     `);
 
     this.stmtUpsertChangeCoupling = db.prepare(`
-      INSERT OR REPLACE INTO change_coupling (file_a, file_b, co_changes, confidence, conf_ab, conf_ba)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO change_coupling (file_a, file_b, co_changes, confidence, conf_ab, conf_ba, last_cochange_days)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.stmtSetMeta = db.prepare(`
       INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)
     `);
 
-    // F1: FTS column is symbol_name (RFC-aligned), not name
+    // F1: FTS column is symbol_name, not name
     this.stmtFtsInsert = db.prepare(`
       INSERT INTO fts_symbols(rowid, file_path, symbol_name, body_tokens, import_names)
       VALUES (?, ?, ?, ?, ?)
@@ -890,6 +891,7 @@ export class GraphStore {
           c.confidence,
           c.conf_ab ?? null,
           c.conf_ba ?? null,
+          c.last_cochange_days ?? null,
         );
       }
     });
@@ -1008,6 +1010,58 @@ export class GraphStore {
     }
 
     this.stmtSetMeta.run("bm25f_doc_freqs", JSON.stringify(Object.fromEntries(filteredDf)));
+  }
+
+  // ── Blame + LSA persistence ──────────────────────────────────────────────
+
+  /**
+   * Store per-symbol blame data keyed by commit hash.
+   */
+  storeSymbolBlame(commitHash: string, blame: Map<number, number>): void {
+    const obj: Record<string, number> = {};
+    for (const [id, days] of blame) obj[String(id)] = Math.round(days * 100) / 100;
+    this.setCache(`blame_${commitHash}`, JSON.stringify(obj));
+  }
+
+  /**
+   * Load per-symbol blame data for a commit hash.
+   */
+  loadSymbolBlame(commitHash: string): Map<number, number> | null {
+    const raw = this.getCache(`blame_${commitHash}`);
+    if (!raw) return null;
+    try {
+      const obj = JSON.parse(raw) as Record<string, number>;
+      const result = new Map<number, number>();
+      for (const [id, days] of Object.entries(obj)) result.set(Number(id), days);
+      return result;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Store LSA file embeddings.
+   */
+  storeLSAEmbeddings(embeddings: Map<string, Float64Array>): void {
+    const obj: Record<string, number[]> = {};
+    for (const [file, emb] of embeddings) obj[file] = Array.from(emb);
+    this.setCache("lsa_embeddings", JSON.stringify(obj));
+  }
+
+  /**
+   * Load LSA file embeddings.
+   */
+  loadLSAEmbeddings(): Map<string, Float64Array> | null {
+    const raw = this.getCache("lsa_embeddings");
+    if (!raw) return null;
+    try {
+      const obj = JSON.parse(raw) as Record<string, number[]>;
+      const result = new Map<string, Float64Array>();
+      for (const [file, arr] of Object.entries(obj)) result.set(file, new Float64Array(arr));
+      return result;
+    } catch {
+      return null;
+    }
   }
 
   /**

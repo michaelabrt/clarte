@@ -1,5 +1,5 @@
 /**
- * Phase 2 type definitions and constants for the symbol graph.
+ * Type definitions and constants for the symbol graph.
  * Covers symbol definitions, call sites, heritage chains, edge kinds and weights.
  */
 
@@ -35,7 +35,7 @@ export interface SymbolDefinition {
   isPointerReceiver?: boolean;
   /** Python: base classes in declaration order (for C3 linearization) */
   bases?: string[];
-  /** [Hejlsberg] Python: metaclass name, separated from standard bases to prevent C3 false-positives (RFC §2.12) */
+  /** Python: metaclass name, separated from standard bases to prevent C3 false-positives */
   metaclass?: string;
   /** Java: true for interface default methods */
   isDefault?: boolean;
@@ -81,7 +81,7 @@ export interface TypeUsageEdge {
   line: number;
 }
 
-// ── Go struct embedding (RFC §2.13) ───────────────────────────────────────────
+// ── Go struct embedding ───────────────────────────────────────────────────────
 
 export interface EmbeddingEdge {
   structName: string;
@@ -89,7 +89,7 @@ export interface EmbeddingEdge {
   line: number;
 }
 
-// ── Rust impl blocks (RFC §2.14) ──────────────────────────────────────────────
+// ── Rust impl blocks ──────────────────────────────────────────────────────────
 
 export interface ImplBlock {
   targetType: string;
@@ -99,7 +99,7 @@ export interface ImplBlock {
   filePath: string;
 }
 
-// ── Type aliases (RFC §2.15) ──────────────────────────────────────────────────
+// ── Type aliases ──────────────────────────────────────────────────────────────
 
 export interface TypeAlias {
   name: string;
@@ -116,19 +116,19 @@ export interface FileGraphResult {
   heritageChains: HeritageEdge[];
   decorators: DecoratorEdge[];
   typeUsages: TypeUsageEdge[];
-  /** Variable-to-constructor assignments for Tier 3 resolution (RFC §2.6) */
+  /** Variable-to-constructor assignments for Tier 3 resolution */
   constructorAssignments: ConstructorAssignment[];
-  /** Go: struct embedded fields for method promotion (RFC §2.13) */
+  /** Go: struct embedded fields for method promotion */
   embeddings: EmbeddingEdge[];
-  /** Rust: impl blocks for method indexing (RFC §2.14) */
+  /** Rust: impl blocks for method indexing */
   implBlocks: ImplBlock[];
-  /** All languages: type aliases for transparent resolution (RFC §2.15) */
+  /** All languages: type aliases for transparent resolution */
   typeAliases: TypeAlias[];
   /** Language-semantic edges: implicit interfaces, deref chains, DI injection (audit Shift 3) */
   semanticEdges: SemanticEdge[];
 }
 
-// ── Symbol edge kinds and weights (RFC §6.3) ─────────────────────────────────
+// ── Symbol edge kinds and weights ─────────────────────────────────────────────
 
 export type SymbolEdgeKind =
   | "calls"
@@ -151,7 +151,7 @@ export const SYMBOL_EDGE_WEIGHTS: Record<SymbolEdgeKind, number> = {
   imports: 1.0,
 };
 
-// ── Ghost edge types (RFC-002 Phase 5) ────────────────────────────────────
+// ── Ghost edge types ──────────────────────────────────────────────────────
 
 export type GhostEdgeKind =
   | "ghost:di_inject"
@@ -174,7 +174,7 @@ export const GHOST_BASE_KIND: Record<string, SymbolEdgeKind> = {
 /**
  * Look up edge weight by kind string.
  * Checks SYMBOL_EDGE_WEIGHTS first, then GHOST_BASE_KIND for ghost: prefix,
- * falls back to 0.3 (uses_type level, per RFC spec).
+ * falls back to 0.3 (uses_type level).
  */
 export function getEdgeWeight(kind: string): number {
   const direct = SYMBOL_EDGE_WEIGHTS[kind as SymbolEdgeKind];
@@ -209,6 +209,8 @@ export const RESOLUTION_CONFIDENCE = {
   TIER_3_FACTORY: 0.25,
   /** Per-hop multiplier for barrel re-export chains (0.90^hops) */
   BARREL_HOP_DECAY: 0.9,
+  /** Tier 5: proximity disambiguation via Jaccard + locality (Phase 6) */
+  TIER_5_PROXIMITY: 0.5,
 } as const;
 
 /**
@@ -246,7 +248,7 @@ export interface ConstructorAssignment {
   variableName: string;
   /** Class being constructed (e.g. "UserService") */
   className: string;
-  /** Enclosing function — scope boundary for Tier 3 (RFC §2.6) */
+  /** Enclosing function - scope boundary for Tier 3 */
   callerFn: string | undefined;
   line: number;
   /**
