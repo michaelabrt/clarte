@@ -2,6 +2,8 @@ import type { PersistedGraph } from "../core/types/persisted-graph";
 import type { SymbolMatch } from "./targets-resolve";
 import type { ExecutionFlow } from "../mcp/tools/execution-flow";
 import type { FileRole } from "../core/types";
+import type { IntentPrediction } from "../core/config/intent-constants";
+import type { ContextSelection } from "./context-pruning";
 
 // ── Types for task-scoped data ───────────────────────────────────────────────
 
@@ -18,9 +20,138 @@ export interface TaskScopedInfo {
  * Render the task-context.md content from resolved targets and symbol rankings.
  * Pure function: given data, returns the markdown string.
  *
- * Supports optional execution flows (§4.7) and task-scoped rankings (§4.8).
+ * Supports two modes via discriminated union:
+ * - Legacy mode: targets is string[] (file paths)
+ * - Intent mode: targets is IntentPrediction[] (full prediction objects)
+ *
+ * Supports optional execution flows (§4.7), task-scoped rankings (§4.8)
+ * and context selection (§4.2 v2).
  */
 export function renderTaskContext(
+  targets: string[] | IntentPrediction[],
+  runnersUp: string[],
+  graph: PersistedGraph,
+  symbolRanking: Map<string, SymbolMatch[]>,
+  lastModified?: Map<string, string>,
+  executionFlows?: ExecutionFlow[],
+  taskScoped?: TaskScopedInfo,
+  contextSelection?: ContextSelection,
+): string {
+  // Intent mode: discriminate by checking first element type
+  if (targets.length > 0 && typeof targets[0] !== "string") {
+    return renderIntentMode(targets as IntentPrediction[], runnersUp, graph, contextSelection);
+  }
+
+  const stringTargets = targets as string[];
+  return renderLegacyMode(stringTargets, runnersUp, graph, symbolRanking, lastModified, executionFlows, taskScoped);
+}
+
+// ── Intent mode renderer (v2) ───────────────────────────────────────────────
+
+function renderIntentMode(
+  predictions: IntentPrediction[],
+  runnersUp: string[],
+  graph: PersistedGraph,
+  _contextSelection?: ContextSelection,
+): string {
+  const fileImporters = new Map<string, string[]>();
+  const fileImports = new Map<string, string[]>();
+  for (const e of graph.edges) {
+    if (!fileImporters.has(e.to)) fileImporters.set(e.to, []);
+    fileImporters.get(e.to)?.push(e.from);
+    if (!fileImports.has(e.from)) fileImports.set(e.from, []);
+    fileImports.get(e.from)?.push(e.to);
+  }
+
+  const targetFiles = new Set(predictions.map((p) => p.file));
+  const lines: string[] = [
+    "# Edit targets (clarte)",
+    "",
+    "Based on dependency graph analysis, these files are most likely to need editing.",
+    "Key symbols are listed so you can navigate directly without a broad search.",
+    "",
+  ];
+
+  for (const pred of predictions) {
+    const conf = pred.confidence === "high" ? "high confidence" : "medium confidence";
+    lines.push(`### ${pred.rank}. ${pred.file} (score: ${pred.score.toFixed(3)}, ${conf})`);
+    lines.push("");
+
+    if (pred.confidence === "high") {
+      lines.push("Edit this file. Start here.");
+    } else {
+      lines.push("Likely relevant. Check after primary targets.");
+    }
+    lines.push("");
+
+    // Key symbols (from context pruning selection or fallback)
+    if (pred.symbols.length > 0) {
+      lines.push("**Key symbols:**");
+      for (const sym of pred.symbols) {
+        lines.push(`- \`${sym.name}\` (line ${sym.line})`);
+      }
+      lines.push("");
+    }
+
+    // Theory of Impact
+    const hasEvidence =
+      pred.theory.lexical_evidence ||
+      pred.theory.graph_path ||
+      pred.theory.temporal_pair ||
+      pred.theory.betweenness_rank !== null;
+    if (hasEvidence) {
+      lines.push("**Why this file:**");
+      if (pred.theory.lexical_evidence) lines.push(`- Lexical: ${pred.theory.lexical_evidence}`);
+      if (pred.theory.graph_path) lines.push(`- Graph: ${pred.theory.graph_path}`);
+      if (pred.theory.temporal_pair) lines.push(`- Temporal: ${pred.theory.temporal_pair}`);
+      if (pred.theory.betweenness_rank !== null)
+        lines.push(`- Betweenness: ${(pred.theory.betweenness_rank * 100).toFixed(0)}th percentile`);
+      lines.push("");
+    }
+
+    // Relationships within target set
+    const relatedImporters = (fileImporters.get(pred.file) ?? []).filter((f) => targetFiles.has(f));
+    const relatedImports = (fileImports.get(pred.file) ?? []).filter((f) => targetFiles.has(f));
+    if (relatedImporters.length || relatedImports.length) {
+      lines.push("**Relationships within target set:**");
+      if (relatedImporters.length) lines.push(`- Imported by ${relatedImporters.join(", ")}`);
+      if (relatedImports.length) lines.push(`- Imports from ${relatedImports.join(", ")}`);
+      lines.push("");
+    }
+
+    // Test files
+    const tests = graph.testMapping[pred.file] ?? [];
+    if (tests.length) {
+      lines.push(`Tests: ${tests.slice(0, 3).join(", ")}`);
+      lines.push("When writing tests, update these existing test files rather than creating new ones.");
+      lines.push("");
+    }
+
+    // Staleness warning
+    if (pred.isStale) {
+      lines.push("**Warning:** This file has been modified since the graph was built. Prediction may be stale.");
+      lines.push("");
+    }
+  }
+
+  // Negative guidance
+  if (runnersUp.length > 0) {
+    const targetBasenames = new Set(predictions.map((p) => p.file.split("/").pop()));
+    const decoys = runnersUp.filter((r) => targetBasenames.has(r.split("/").pop()));
+    if (decoys.length > 0) {
+      lines.push("## Do NOT edit these files");
+      lines.push("These scored similarly but are in different paths. They are likely not the right target:");
+      for (const d of decoys) lines.push(`- ${d}`);
+      lines.push("");
+    }
+  }
+
+  return lines.join("\n");
+}
+
+// ── Legacy mode renderer ────────────────────────────────────────────────────
+
+function renderLegacyMode(
   targets: string[],
   runnersUp: string[],
   graph: PersistedGraph,
