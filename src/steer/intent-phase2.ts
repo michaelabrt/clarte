@@ -39,76 +39,91 @@ export function computeSubgraphBetweenness(subgraph: SymbolSubgraph): Map<number
   const n = nodeIds.length;
   if (n <= 2) return new Map(nodeIds.map((id) => [id, 0]));
 
-  const cb = new Map<number, number>();
-  for (const id of nodeIds) cb.set(id, 0);
+  // Map symbol IDs to contiguous indices for typed-array access
+  const idToIdx = new Map<number, number>();
+  for (let i = 0; i < n; i++) idToIdx.set(nodeIds[i], i);
 
-  // Brandes single-source BFS for each source node
-  for (const s of nodeIds) {
-    const stack: number[] = [];
-    const pred = new Map<number, number[]>();
-    const sigma = new Map<number, number>();
-    const d = new Map<number, number>();
-    const delta = new Map<number, number>();
-
-    for (const v of nodeIds) {
-      pred.set(v, []);
-      sigma.set(v, 0);
-      d.set(v, -1);
-      delta.set(v, 0);
+  // Pre-build index-based adjacency (avoids Map lookups in inner loop)
+  const adj: number[][] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const edges = subgraph.forward.get(nodeIds[i]);
+    adj[i] = [];
+    if (edges) {
+      for (const e of edges) {
+        const idx = idToIdx.get(e.targetId);
+        if (idx !== undefined) adj[i].push(idx);
+      }
     }
-    sigma.set(s, 1);
-    d.set(s, 0);
+  }
 
-    // BFS from s using forward edges only
-    const queue: number[] = [s];
-    let head = 0;
-    while (head < queue.length) {
-      const v = queue[head++];
-      stack.push(v);
-      const dv = d.get(v) ?? 0;
+  // Allocate working arrays once, reuse per source via .fill()
+  const cb = new Float64Array(n);
+  const sigma = new Float64Array(n);
+  const d = new Int32Array(n);
+  const delta = new Float64Array(n);
+  const pred: number[][] = new Array(n);
+  for (let i = 0; i < n; i++) pred[i] = [];
+  const stack = new Int32Array(n);
+  const queue = new Int32Array(n);
 
-      for (const edge of subgraph.forward.get(v) ?? []) {
-        const w = edge.targetId;
-        if (!subgraph.nodes.has(w)) continue;
+  for (let si = 0; si < n; si++) {
+    // Reset working arrays
+    sigma.fill(0);
+    d.fill(-1);
+    delta.fill(0);
+    for (let i = 0; i < n; i++) pred[i].length = 0;
 
-        // First time discovering w
-        if ((d.get(w) ?? -1) < 0) {
-          d.set(w, dv + 1);
-          queue.push(w);
+    sigma[si] = 1;
+    d[si] = 0;
+
+    let stackTop = 0;
+    let qHead = 0;
+    let qTail = 0;
+    queue[qTail++] = si;
+
+    // BFS from si using forward edges only
+    while (qHead < qTail) {
+      const v = queue[qHead++];
+      stack[stackTop++] = v;
+      const dv = d[v];
+
+      for (const w of adj[v]) {
+        if (d[w] < 0) {
+          d[w] = dv + 1;
+          queue[qTail++] = w;
         }
-        // Shortest path to w via v
-        if (d.get(w) === dv + 1) {
-          sigma.set(w, (sigma.get(w) ?? 0) + (sigma.get(v) ?? 0));
-          pred.get(w)?.push(v);
+        if (d[w] === dv + 1) {
+          sigma[w] += sigma[v];
+          pred[w].push(v);
         }
       }
     }
 
     // Accumulation phase (reverse topological order)
-    while (stack.length > 0) {
-      const w = stack.pop() as number;
-      const sigmaW = sigma.get(w) ?? 1;
+    while (stackTop > 0) {
+      const w = stack[--stackTop];
+      const sigmaW = sigma[w];
       if (sigmaW === 0) continue;
 
-      for (const v of pred.get(w) ?? []) {
-        const contribution = ((sigma.get(v) ?? 0) / sigmaW) * (1 + (delta.get(w) ?? 0));
-        delta.set(v, (delta.get(v) ?? 0) + contribution);
+      for (const v of pred[w]) {
+        delta[v] += (sigma[v] / sigmaW) * (1 + delta[w]);
       }
-      if (w !== s) {
-        cb.set(w, (cb.get(w) ?? 0) + (delta.get(w) ?? 0));
+      if (w !== si) {
+        cb[w] += delta[w];
       }
     }
   }
 
-  // Normalize to [0, 1]
+  // Normalize to [0, 1] and convert back to Map
   let maxCb = 0;
-  for (const [, v] of cb) if (v > maxCb) maxCb = v;
+  for (let i = 0; i < n; i++) if (cb[i] > maxCb) maxCb = cb[i];
 
-  if (maxCb > 0) {
-    for (const [id, v] of cb) cb.set(id, v / maxCb);
+  const result = new Map<number, number>();
+  for (let i = 0; i < n; i++) {
+    result.set(nodeIds[i], maxCb > 0 ? cb[i] / maxCb : 0);
   }
 
-  return cb;
+  return result;
 }
 
 // ── Percentile computation ──────────────────────────────────────────────────
@@ -116,9 +131,13 @@ export function computeSubgraphBetweenness(subgraph: SymbolSubgraph): Map<number
 /**
  * Exclusive percentile: 0th = min, 100th = max.
  *
- * Uses floor(p * (n - 1)) so the maximum value is never selected as the
- * threshold, preventing a dead zone where no element can exceed it.
- * For large n the difference from floor(p * n) is negligible (one index).
+ * Deliberate improvement over RFC-002 §1.4 which specifies floor(p * n).
+ * That formula selects the maximum value as the threshold when
+ * floor(p * n) = n - 1, creating a dead zone where no element can
+ * strictly exceed it. This makes chokepoint detection impossible for
+ * small subgraphs (n < 8). Using floor(p * (n - 1)) instead guarantees
+ * at least one element above the threshold when distinct values exist.
+ * For large n the difference is one index position.
  */
 function percentile(values: number[], p: number): number {
   if (values.length === 0) return 0;

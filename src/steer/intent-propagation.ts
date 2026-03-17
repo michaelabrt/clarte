@@ -165,32 +165,34 @@ export function propagateIntent(
 
     const uHops = hopCount.get(u) ?? 0;
 
-    // Iterate all neighbors: forward edges (natural direction) + reverse edges (against direction)
-    const neighbors: SymbolSubEdge[] = [];
+    // Iterate forward + reverse edges in-place (no temporary array allocation)
     const fwd = subgraph.forward.get(u);
-    if (fwd) for (const e of fwd) neighbors.push(e);
     const rev = subgraph.reverse.get(u);
-    if (rev) for (const e of rev) neighbors.push(e);
 
-    for (const edge of neighbors) {
-      const v = edge.targetId;
-      if (finalized.has(v)) continue;
+    for (let pass = 0; pass < 2; pass++) {
+      const edges = pass === 0 ? fwd : rev;
+      if (!edges) continue;
 
-      const newHops = uHops + 1;
-      if (newHops > maxHops) continue;
+      for (const edge of edges) {
+        const v = edge.targetId;
+        if (finalized.has(v)) continue;
 
-      const gamma = edgeGamma(edge, transmission, reverseMultiplier, ghostDiscount);
-      if (!(gamma > 0) || gamma > 1) continue; // NaN-safe: !(NaN > 0) is true
+        const newHops = uHops + 1;
+        if (newHops > maxHops) continue;
 
-      const edgeDist = -Math.log(gamma);
-      const newDist = uDist + edgeDist;
+        const gamma = edgeGamma(edge, transmission, reverseMultiplier, ghostDiscount);
+        if (!(gamma > 0) || gamma > 1) continue; // NaN-safe: !(NaN > 0) is true
 
-      const currentDist = dist.get(v);
-      if (currentDist === undefined || newDist < currentDist) {
-        dist.set(v, newDist);
-        hopCount.set(v, newHops);
-        prev.set(v, u);
-        pq.push({ id: v, dist: newDist });
+        const edgeDist = -Math.log(gamma);
+        const newDist = uDist + edgeDist;
+
+        const currentDist = dist.get(v);
+        if (currentDist === undefined || newDist < currentDist) {
+          dist.set(v, newDist);
+          hopCount.set(v, newHops);
+          prev.set(v, u);
+          pq.push({ id: v, dist: newDist });
+        }
       }
     }
   }
