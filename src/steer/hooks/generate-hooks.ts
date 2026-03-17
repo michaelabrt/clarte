@@ -361,8 +361,8 @@ function loadGraphFromDb(db) {
   const changeCoupling = db.prepare("SELECT file_a, file_b, co_changes, confidence FROM change_coupling").all();
   const symbolRows = db.prepare("SELECT file_path, name, kind, start_line, authority, body_tokens FROM symbols").all();
 
-  const files = {};
-  const reverseEdges = {};
+  const files: Record<string, unknown> = Object.create(null);
+  const reverseEdges: Record<string, string[]> = Object.create(null);
   for (const row of fileRows) {
     const layers = row.layers ? JSON.parse(row.layers) : [];
     const testFiles = row.test_files ? JSON.parse(row.test_files) : [];
@@ -403,20 +403,20 @@ function loadGraphFromDb(db) {
     if (!f.symbolNames) f.symbolNames = [];
     f.symbolNames.push(sym.name);
     if (sym.body_tokens) {
-      if (!f.symbolBodyTokens) f.symbolBodyTokens = {};
+      if (!f.symbolBodyTokens) f.symbolBodyTokens = Object.create(null);
       f.symbolBodyTokens[sym.name] = sym.body_tokens.split(" ").filter(Boolean);
     }
     if (sym.start_line > 0) {
-      if (!f.symbolStartLines) f.symbolStartLines = {};
+      if (!f.symbolStartLines) f.symbolStartLines = Object.create(null);
       f.symbolStartLines[sym.name] = sym.start_line;
     }
     if (sym.authority !== null) {
-      if (!f.symbolAuthority) f.symbolAuthority = {};
+      if (!f.symbolAuthority) f.symbolAuthority = Object.create(null);
       f.symbolAuthority[sym.name] = sym.authority;
     }
   }
 
-  const communityFiles = {};
+  const communityFiles: Record<string, string[]> = Object.create(null);
   for (const row of fileRows) {
     if (row.community_id !== null) {
       if (!communityFiles[row.community_id]) communityFiles[row.community_id] = [];

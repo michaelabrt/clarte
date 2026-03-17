@@ -148,12 +148,18 @@ interface SqlJsDatabase {
 function wrapSqlJs(db: SqlJsDatabase, dbPath: string): DatabaseAdapter {
   // sql.js needs explicit file saves after writes
   let pendingWrites = false;
+  const STMT_CACHE_MAX = 128;
   const stmtCache = new Map<string, ReturnType<SqlJsDatabase["prepare"]>>();
 
   const getOrPrepare = (sql: string): ReturnType<SqlJsDatabase["prepare"]> => {
     let stmt = stmtCache.get(sql);
     if (!stmt) {
       stmt = db.prepare(sql);
+      if (stmtCache.size >= STMT_CACHE_MAX) {
+        // Evict oldest entry (first key in insertion order)
+        const oldest = stmtCache.keys().next().value;
+        if (oldest !== undefined) stmtCache.delete(oldest);
+      }
       stmtCache.set(sql, stmt);
     }
     return stmt;

@@ -375,9 +375,9 @@ function buildSymbolRecords(
 
   for (const [filePath, fileRec] of Object.entries(graph.files)) {
     const symbolNames = fileRec.symbolNames ?? [];
-    const startLines = fileRec.symbolStartLines ?? {};
-    const bodyTokens = fileRec.symbolBodyTokens ?? {};
-    const authority = fileRec.symbolAuthority ?? {};
+    const startLines = fileRec.symbolStartLines ?? Object.create(null);
+    const bodyTokens = fileRec.symbolBodyTokens ?? Object.create(null);
+    const authority = fileRec.symbolAuthority ?? Object.create(null);
 
     for (const name of symbolNames) {
       if (typeof name !== "string") continue;
