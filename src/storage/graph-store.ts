@@ -273,19 +273,47 @@ export class GraphStore {
 
     // ── Write statements ──────────────────────────────────────────────────────
     this.stmtUpsertFile = db.prepare(`
-      INSERT OR REPLACE INTO files (
+      INSERT INTO files (
         path, hash, role, authority, hub_score, betweenness, instability,
         community_id, layer, is_barrel, is_dead, is_chokepoint,
         separates_components, is_cross_cutting, layer_spread, has_tests,
         layers, test_files, intra_file_calls, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(path) DO UPDATE SET
+        hash = CASE WHEN excluded.hash != '' THEN excluded.hash ELSE hash END,
+        role = excluded.role,
+        authority = excluded.authority,
+        hub_score = excluded.hub_score,
+        betweenness = excluded.betweenness,
+        instability = excluded.instability,
+        community_id = excluded.community_id,
+        layer = excluded.layer,
+        is_barrel = excluded.is_barrel,
+        is_dead = excluded.is_dead,
+        is_chokepoint = excluded.is_chokepoint,
+        separates_components = excluded.separates_components,
+        is_cross_cutting = excluded.is_cross_cutting,
+        layer_spread = excluded.layer_spread,
+        has_tests = excluded.has_tests,
+        layers = excluded.layers,
+        test_files = excluded.test_files,
+        intra_file_calls = excluded.intra_file_calls,
+        updated_at = excluded.updated_at
     `);
 
     this.stmtUpsertSymbol = db.prepare(`
-      INSERT OR REPLACE INTO symbols (
+      INSERT INTO symbols (
         file_path, name, kind, start_line, end_line, authority, body_hash,
         body_tokens, import_names, is_exported
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(file_path, name, start_line) DO UPDATE SET
+        kind = excluded.kind,
+        end_line = COALESCE(excluded.end_line, end_line),
+        authority = COALESCE(excluded.authority, authority),
+        body_hash = COALESCE(excluded.body_hash, body_hash),
+        body_tokens = COALESCE(excluded.body_tokens, body_tokens),
+        import_names = COALESCE(excluded.import_names, import_names),
+        is_exported = excluded.is_exported
     `);
 
     this.stmtSelectSymbolId = db.prepare(`

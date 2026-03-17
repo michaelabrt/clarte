@@ -105,9 +105,9 @@ function persistGraphToStore(rootDir: string, store: GraphStore, graph: ImportGr
 
     fileSymbolData.set(filePath, {
       symbolNames,
-      symbolBodyTokens: bodyTokens ? Object.fromEntries(bodyTokens) : {},
-      symbolStartLines: startLines ? Object.fromEntries(startLines) : {},
-      symbolAuthority: {},
+      symbolBodyTokens: bodyTokens ? Object.fromEntries(bodyTokens) : Object.create(null),
+      symbolStartLines: startLines ? Object.fromEntries(startLines) : Object.create(null),
+      symbolAuthority: Object.create(null),
       intraFileCalls: intraCalls ? intraCalls.map((c) => [c.caller, c.callee] as [string, string]) : [],
     });
   }
