@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createDatabase } from "../../storage/db-adapter.js";
-import { initSchema } from "../../storage/schema.js";
-import { GraphStore } from "../../storage/graph-store.js";
-import type { DatabaseAdapter } from "../../storage/db-adapter.js";
-import type { FileRecord } from "../../storage/types.js";
+import { createDatabase } from "../../storage/db-adapter";
+import { initSchema } from "../../storage/schema";
+import { GraphStore } from "../../storage/graph-store";
+import type { DatabaseAdapter } from "../../storage/db-adapter";
+import type { FileRecord } from "../../storage/types";
 
 const NOW = new Date().toISOString();
 

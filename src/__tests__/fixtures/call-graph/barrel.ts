@@ -1,1 +1,1 @@
-export { doThing } from "./helper.js";
+export { doThing } from "./helper";

@@ -12,8 +12,8 @@
  * - Java: no type aliases
  */
 
-import type { ImportBinding, SymbolIndex } from "./symbol-resolution.js";
-import type { FileGraphResult } from "./symbol-types.js";
+import type { ImportBinding, SymbolIndex } from "./symbol-resolution";
+import type { FileGraphResult } from "./symbol-types";
 
 // ── Alias map types ───────────────────────────────────────────────────────────
 

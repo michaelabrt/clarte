@@ -5,9 +5,9 @@
  * to shortest paths in -log(gamma) space. Multi-source Dijkstra from
  * seed symbols with hop-limited relaxation.
  *
- * Numerical bounds: min gamma = 0.09 (ghost uses_type reverse),
- * max 3-hop distance = 3 * -ln(0.09) ~ 7.2, min score = e^-7.2 ~ 0.0007.
- * Well above float64 precision.
+ * Numerical bounds: min gamma = 0.126 (ghost uses_type reverse:
+ * 0.3 * 0.7 * 0.6), max 3-hop distance = 3 * -ln(0.126) ~ 6.2,
+ * min score = e^-6.2 ~ 0.002. Well above float64 precision.
  */
 
 import type { SymbolEdgeKind } from "../core/graph/symbol-types";
@@ -84,7 +84,14 @@ class MinHeap {
 
 /**
  * Compute the edge gamma for a subgraph edge.
- * gamma = transmission[kind], modified by reverse multiplier and ghost discount.
+ *
+ * gamma = transmission[kind] * confidence, modified by reverse multiplier
+ * and ghost discount. Confidence modulates transmission strength so that
+ * low-confidence edges (e.g. Tier-3 factory at 0.25) transmit less intent
+ * than high-confidence edges (Tier-1 direct at 0.95).
+ *
+ * Returns 0 for unknown/ghost kinds that have no base transmission entry,
+ * which the caller skips via the degenerate-edge guard.
  */
 function edgeGamma(
   edge: SymbolSubEdge,
@@ -92,12 +99,17 @@ function edgeGamma(
   reverseMultiplier: number,
   ghostDiscount: number,
 ): number {
-  let gamma = transmission[edge.kind];
+  // Resolve base kind: strip "ghost:" prefix for Phase 5 ghost edges.
+  const kindStr = edge.kind as string;
+  const isGhost = kindStr.startsWith("ghost:");
+  const baseKind = isGhost ? kindStr.slice(6) : kindStr;
+
+  const baseGamma = transmission[baseKind as SymbolEdgeKind];
+  if (baseGamma === undefined) return 0; // unknown kind fallback
+
+  let gamma = baseGamma * edge.confidence;
   if (edge.isReverse) gamma *= reverseMultiplier;
-  // Ghost edges would have kind starting with "ghost:" - Phase 5 concern,
-  // but the infrastructure is here. Standard SymbolEdgeKind values never
-  // start with "ghost:", so this branch is not taken until ghost edges ship.
-  if ((edge.kind as string).startsWith("ghost:")) gamma *= ghostDiscount;
+  if (isGhost) gamma *= ghostDiscount;
   return gamma;
 }
 
@@ -167,7 +179,7 @@ export function propagateIntent(
       if (newHops > maxHops) continue;
 
       const gamma = edgeGamma(edge, transmission, reverseMultiplier, ghostDiscount);
-      if (gamma <= 0 || gamma > 1) continue; // defensive: skip degenerate edges
+      if (!(gamma > 0) || gamma > 1) continue; // NaN-safe: !(NaN > 0) is true
 
       const edgeDist = -Math.log(gamma);
       const newDist = uDist + edgeDist;

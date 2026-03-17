@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { initForLanguage, parseSource } from "../core/parsers/init.js";
+import { initForLanguage, parseSource } from "../core/parsers/init";
 import {
   tokenizeBody,
   extractSymbolBodiesFromRoot,
   extractSymbolStartLines,
   extractIntraFileCalls,
-} from "../core/parsers/extract-symbols.js";
-import { computeSymbolAuthority } from "../core/graph/persist.js";
-import type { EdgeRecord, FileRecord } from "../core/types/persisted-graph.js";
+} from "../core/parsers/extract-symbols";
+import { computeSymbolAuthority } from "../core/graph/persist";
+import type { EdgeRecord, FileRecord } from "../core/types/persisted-graph";
 
 beforeAll(async () => {
   await initForLanguage("typescript");

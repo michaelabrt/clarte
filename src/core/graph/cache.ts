@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { glob } from "tinyglobby";
-import { computeHITS, computeBetweenness } from "./centrality.js";
-import { buildImportGraph } from "./build.js";
-import { detectBarrelAst } from "../parsers/barrel.js";
+import { computeHITS, computeBetweenness } from "./centrality";
+import { buildImportGraph } from "./build";
+import { detectBarrelAst } from "../parsers/barrel";
 import {
   getSourceGlob,
   parseImports,
@@ -19,17 +19,17 @@ import {
   type PathAlias,
   type ResolveContext,
   type BarrelExportMap,
-} from "./import-resolution.js";
-import { routeBarrelImport } from "./barrel-routing.js";
-import { initForLanguage, parseSource } from "../parsers/init.js";
-import { extractSymbolNamesFromRoot } from "../parsers/extract-symbols.js";
-import { errorMessage, readFileOr } from "../utils.js";
-import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "../types.js";
-import { HASH_CONCURRENCY } from "../config/thresholds.js";
-import { CLARTE_DIR } from "../config/config.js";
-import { openGraphStore } from "../../storage/loader.js";
-import type { GraphStore } from "../../storage/graph-store.js";
-import type { FileRecord, FileEdgeRecord, SymbolRecord } from "../../storage/types.js";
+} from "./import-resolution";
+import { routeBarrelImport } from "./barrel-routing";
+import { initForLanguage, parseSource } from "../parsers/init";
+import { extractSymbolNamesFromRoot } from "../parsers/extract-symbols";
+import { errorMessage, readFileOr } from "../utils";
+import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "../types";
+import { HASH_CONCURRENCY } from "../config/thresholds";
+import { CLARTE_DIR } from "../config/config";
+import { openGraphStore } from "../../storage/loader";
+import type { GraphStore } from "../../storage/graph-store";
+import type { FileRecord, FileEdgeRecord, SymbolRecord } from "../../storage/types";
 
 export const CACHE_VERSION = 3;
 
@@ -215,7 +215,7 @@ export {
   loadAnalysisCache,
   saveAnalysisCache,
   type AnalysisCacheData,
-} from "./analysis-cache.js";
+} from "./analysis-cache";
 
 // ── File hashing ──────────────────────────────────────────────────────────────
 

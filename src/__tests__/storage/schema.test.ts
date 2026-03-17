@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createDatabase } from "../../storage/db-adapter.js";
-import { initSchema, SCHEMA_VERSION } from "../../storage/schema.js";
-import type { DatabaseAdapter } from "../../storage/db-adapter.js";
+import { createDatabase } from "../../storage/db-adapter";
+import { initSchema, SCHEMA_VERSION } from "../../storage/schema";
+import type { DatabaseAdapter } from "../../storage/db-adapter";
 
 describe("initSchema", () => {
   let db: DatabaseAdapter;

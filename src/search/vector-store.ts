@@ -4,7 +4,7 @@
  * Cosine similarity via flat-scan TypedArray math (< 1ms for 10K vectors at 384 dims).
  */
 
-import type { DatabaseAdapter, StatementAdapter } from "../storage/db-adapter.js";
+import type { DatabaseAdapter, StatementAdapter } from "../storage/db-adapter";
 
 const DIMENSIONS = 384;
 
@@ -62,6 +62,10 @@ export class VectorStore {
     const { upsert } = this.stmts;
     const run = this.db.transaction(() => {
       for (const e of entries) {
+        if (!isFiniteEmbedding(e.embedding)) {
+          process.stderr.write(`[clarte] Skipping embedding for symbol ${e.symbolId}: contains NaN or Infinity\n`);
+          continue;
+        }
         upsert.run(e.symbolId, float32ToBlob(e.embedding), e.bodyHash ?? null);
       }
     });
@@ -76,11 +80,17 @@ export class VectorStore {
   }
 
   /**
-   * Find nearest files to a query embedding.
-   * Flat-scan cosine similarity over all stored embeddings, aggregated to
-   * file level via max similarity (a file's score = its best symbol's score).
+   * [Dean & Stonebraker] Find nearest files to a query embedding.
+   * When candidatePaths is provided, only computes cosine similarity for symbols
+   * in those files (ANN pre-filter, RFC §3.3). Reduces O(N) full-scan to
+   * O(|candidates|) where |candidates| is typically the BM25F top-1000.
+   * Without candidatePaths, falls back to full-scan for backward compatibility.
    */
-  findNearest(query: Float32Array, limit: number): Array<{ path: string; score: number }> {
+  findNearest(
+    query: Float32Array,
+    limit: number,
+    candidatePaths?: Set<string>,
+  ): Array<{ path: string; score: number }> {
     if (!this.stmts) return [];
 
     if (!this.cache) {
@@ -91,9 +101,13 @@ export class VectorStore {
       }));
     }
 
-    // Compute cosine similarity (vectors are pre-normalized, so dot product suffices)
+    // ANN pre-filter: restrict scan to BM25F candidate paths when provided
+    const searchSet = candidatePaths
+      ? this.cache.filter((e) => candidatePaths.has(e.filePath))
+      : this.cache;
+
     const fileScores = new Map<string, number>();
-    for (const entry of this.cache) {
+    for (const entry of searchSet) {
       const sim = dotProduct(query, entry.embedding);
       const current = fileScores.get(entry.filePath) ?? -1;
       if (sim > current) fileScores.set(entry.filePath, sim);
@@ -131,4 +145,12 @@ function dotProduct(a: Float32Array, b: Float32Array): number {
   let sum = 0;
   for (let i = 0; i < a.length; i++) sum += a[i] * b[i];
   return sum;
+}
+
+/** Check that every element in a Float32Array is finite (no NaN or Infinity). */
+function isFiniteEmbedding(f32: Float32Array): boolean {
+  for (let i = 0; i < f32.length; i++) {
+    if (!Number.isFinite(f32[i])) return false;
+  }
+  return true;
 }

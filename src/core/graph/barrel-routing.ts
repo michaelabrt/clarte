@@ -1,5 +1,5 @@
-import type { ImportEdge } from "../types.js";
-import type { BarrelExportMap } from "./import-resolution.js";
+import type { ImportEdge } from "../types";
+import type { BarrelExportMap } from "./import-resolution";
 
 /**
  * Route an import through a barrel file to its actual source files.

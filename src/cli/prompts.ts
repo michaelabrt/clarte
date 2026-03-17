@@ -1,9 +1,9 @@
 import * as p from "@clack/prompts";
-import type { DetectedContext, IDETarget, ProjectConfig, UserAnswers } from "../core/types.js";
-import { theme as t } from "../core/theme.js";
-import { ExitCode } from "../core/errors.js";
-import { summarizeDetection } from "../core/detect/detect.js";
-import { SNAPSHOT_LANGUAGES } from "../core/config/thresholds.js";
+import type { DetectedContext, IDETarget, ProjectConfig, UserAnswers } from "../core/types";
+import { theme as t } from "../core/theme";
+import { ExitCode } from "../core/errors";
+import { summarizeDetection } from "../core/detect/detect";
+import { SNAPSHOT_LANGUAGES } from "../core/config/thresholds";
 
 /**
  * Run the interactive prompt flow. Takes the auto-detected context

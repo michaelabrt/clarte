@@ -2,8 +2,8 @@ import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { buildGraphWithCache } from "../core/graph/cache.js";
-import type { ImportEdge, ImportGraph } from "../core/types.js";
+import { buildGraphWithCache } from "../core/graph/cache";
+import type { ImportEdge, ImportGraph } from "../core/types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import type { ConfigConstraints } from "./detection.js";
+import type { ConfigConstraints } from "./detection";
 import type {
   HubFile,
   CircularDependency,
@@ -6,8 +6,8 @@ import type {
   LayerEdge,
   FileInstability,
   Community,
-} from "./graph.js";
-import type { GitAnalysis } from "./git.js";
+} from "./graph";
+import type { GitAnalysis } from "./git";
 import type {
   CrossCuttingFile,
   LayerConsistency,
@@ -19,7 +19,7 @@ import type {
   TightCoupling,
   MonorepoAnalysis,
   ArchViolation,
-} from "./analysis.js";
+} from "./analysis";
 
 /** A generated file ready to be written */
 export interface GeneratedFile {

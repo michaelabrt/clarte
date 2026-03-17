@@ -1,5 +1,5 @@
-import type { ContextAnalysis } from "../types.js";
-import type { GraphStore } from "../../storage/graph-store.js";
+import type { ContextAnalysis } from "../types";
+import type { GraphStore } from "../../storage/graph-store";
 
 const KV_KEY = "history_snapshot";
 

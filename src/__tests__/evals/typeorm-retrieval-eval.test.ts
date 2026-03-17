@@ -16,11 +16,11 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { existsSync } from "node:fs";
-import { buildImportGraph } from "../../core/graph/build.js";
-import { resolveEditTargets } from "../../steer/targets-resolve.js";
-import { PERSISTED_GRAPH_VERSION, type PersistedGraph, type FileRecord } from "../../core/types/persisted-graph.js";
-import type { ImportGraph } from "../../core/types.js";
-import { initTreeSitter } from "../../core/parsers/init.js";
+import { buildImportGraph } from "../../core/graph/build";
+import { resolveEditTargets } from "../../steer/targets-resolve";
+import { PERSISTED_GRAPH_VERSION, type PersistedGraph, type FileRecord } from "../../core/types/persisted-graph";
+import type { ImportGraph } from "../../core/types";
+import { initTreeSitter } from "../../core/parsers/init";
 
 const SKIP = !process.env.REAL_PROJECT_EVAL;
 const TYPEORM_DIR = "/tmp/clarte-test-typeorm";

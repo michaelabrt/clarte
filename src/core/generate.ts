@@ -1,6 +1,6 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
-import { theme as t } from "./theme.js";
+import { theme as t } from "./theme";
 import type {
   CodeSnapshot,
   ContextAnalysis,
@@ -8,14 +8,14 @@ import type {
   GeneratedFile,
   ProgressCallback,
   UserAnswers,
-} from "./types.js";
-import type { PersistedGraph } from "./types/persisted-graph.js";
-import { fileExists, readFileOr, writeFileSafe } from "./utils.js";
-import { buildMainContext, getMainContextFilename } from "../steer/context/main-context.js";
-import { buildClaudeSkills, renderClaudeSkill } from "../steer/context/claude-skills.js";
-import { buildPreFlightAgent } from "../steer/context/pre-flight-agent.js";
-import { detectContext } from "./detect/detect.js";
-import { generateSnapshot } from "./snapshot/snapshot.js";
+} from "./types";
+import type { PersistedGraph } from "./types/persisted-graph";
+import { fileExists, readFileOr, writeFileSafe } from "./utils";
+import { buildMainContext, getMainContextFilename } from "../steer/context/main-context";
+import { buildClaudeSkills, renderClaudeSkill } from "../steer/context/claude-skills";
+import { buildPreFlightAgent } from "../steer/context/pre-flight-agent";
+import { detectContext } from "./detect/detect";
+import { generateSnapshot } from "./snapshot/snapshot";
 
 export interface GenerateFilesOptions {
   ctx: DetectedContext;

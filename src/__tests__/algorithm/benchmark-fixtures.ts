@@ -6,8 +6,8 @@
  * expectations covering all algorithm outputs.
  */
 
-import { edge } from "./helpers.js";
-import type { EvalFixture } from "./fixtures.js";
+import { edge } from "./helpers";
+import type { EvalFixture } from "./fixtures";
 
 // ── Fixture: React Fullstack App ──────────────────────────────────────
 

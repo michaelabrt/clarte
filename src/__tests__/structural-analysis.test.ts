@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { findCrossCuttingFiles } from "../core/graph/cross-cutting.js";
-import { computeLayerConsistency, detectArchitecturalLayers } from "../core/graph/layers.js";
-import { findChokepoints } from "../core/graph/chokepoints.js";
-import type { ArchitecturalLayer, ImportEdge, LayerEdge } from "../core/types.js";
-import { makeGraph, edge } from "./algorithm/helpers.js";
+import { findCrossCuttingFiles } from "../core/graph/cross-cutting";
+import { computeLayerConsistency, detectArchitecturalLayers } from "../core/graph/layers";
+import { findChokepoints } from "../core/graph/chokepoints";
+import type { ArchitecturalLayer, ImportEdge, LayerEdge } from "../core/types";
+import { makeGraph, edge } from "./algorithm/helpers";
 
 function makeLayers(defs: Array<{ name: string; files: string[] }>): ArchitecturalLayer[] {
   return defs.map((d) => ({

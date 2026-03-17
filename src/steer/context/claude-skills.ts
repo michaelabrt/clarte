@@ -1,4 +1,4 @@
-import type { ClaudeSkill } from "../../core/types.js";
+import type { ClaudeSkill } from "../../core/types";
 
 /**
  * Build Claude Code skills.

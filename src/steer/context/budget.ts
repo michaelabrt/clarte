@@ -1,4 +1,4 @@
-import type { ContextSection } from "../../core/types.js";
+import type { ContextSection } from "../../core/types";
 
 /**
  * Default token budget for context files.

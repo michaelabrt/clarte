@@ -1,11 +1,11 @@
 import path from "node:path";
-import { IGNORE_GLOBS } from "../config/ignore-patterns.js";
-import { readFileOr, readJsonFile } from "../utils.js";
-import { parseImportsAst } from "../parsers/parse-imports.js";
-import { extractExportedNamesAst, resolveBarrelExportsAst } from "../parsers/barrel.js";
-import type { Language } from "../types.js";
+import { IGNORE_GLOBS } from "../config/ignore-patterns";
+import { readFileOr, readJsonFile } from "../utils";
+import { parseImportsAst } from "../parsers/parse-imports";
+import { extractExportedNamesAst, resolveBarrelExportsAst } from "../parsers/barrel";
+import type { Language } from "../types";
 
-export type { RawImport } from "../types/parser.js";
+export type { RawImport } from "../types/parser";
 type RawImport = import("../types/parser.js").RawImport;
 
 /**

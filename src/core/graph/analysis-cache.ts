@@ -12,12 +12,12 @@ import type {
   LayerConsistency,
   LayerEdge,
   TightCoupling,
-} from "../types.js";
+} from "../types";
 
-import { CLARTE_DIR } from "../config/config.js";
-import { BETWEENNESS_K } from "../config/thresholds.js";
-import { openGraphStore } from "../../storage/loader.js";
-import type { GraphStore } from "../../storage/graph-store.js";
+import { CLARTE_DIR } from "../config/config";
+import { BETWEENNESS_K } from "../config/thresholds";
+import { openGraphStore } from "../../storage/loader";
+import type { GraphStore } from "../../storage/graph-store";
 
 export const ANALYSIS_CACHE_VERSION = 4;
 

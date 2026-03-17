@@ -10,12 +10,12 @@ import {
   buildProjectCachePayload,
   PROJECT_CACHE_VERSION,
   type ProjectCacheData,
-} from "../core/project-cache.js";
-import { makeImportGraph, makeDetectedContext } from "./helpers/factories.js";
-import type { MonorepoAnalysis, TestMapping } from "../core/types.js";
-import { createDatabase } from "../storage/db-adapter.js";
-import { initSchema } from "../storage/schema.js";
-import { GraphStore } from "../storage/graph-store.js";
+} from "../core/project-cache";
+import { makeImportGraph, makeDetectedContext } from "./helpers/factories";
+import type { MonorepoAnalysis, TestMapping } from "../core/types";
+import { createDatabase } from "../storage/db-adapter";
+import { initSchema } from "../storage/schema";
+import { GraphStore } from "../storage/graph-store";
 
 let tmpDir: string;
 let store: GraphStore;

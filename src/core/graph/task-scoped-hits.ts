@@ -10,10 +10,10 @@
  * instead of getting a misleading role from the flat-graph guard (0.5/0.5).
  */
 
-import type { InMemoryFileGraph, InMemoryEdge } from "../../storage/types.js";
-import type { ImportEdge } from "../types.js";
-import { computeHITS, deriveRole } from "./centrality.js";
-import type { FileRole } from "../types.js";
+import type { InMemoryFileGraph, InMemoryEdge } from "../../storage/types";
+import type { ImportEdge } from "../types";
+import { computeHITS, deriveRole } from "./centrality";
+import type { FileRole } from "../types";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

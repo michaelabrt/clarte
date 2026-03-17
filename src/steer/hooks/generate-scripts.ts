@@ -1,10 +1,10 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { writeFileSafe } from "../../core/utils.js";
-import { CLARTE_DIR } from "../../core/config/config.js";
-import { LEARN } from "../../core/config/thresholds.js";
-import type { DetectedContext } from "../../core/types/detection.js";
-import type { PersistedGraph } from "../../core/types/persisted-graph.js";
+import { writeFileSafe } from "../../core/utils";
+import { CLARTE_DIR } from "../../core/config/config";
+import { LEARN } from "../../core/config/thresholds";
+import type { DetectedContext } from "../../core/types/detection";
+import type { PersistedGraph } from "../../core/types/persisted-graph";
 
 const SCRIPTS_DIR = `${CLARTE_DIR}/scripts`;
 

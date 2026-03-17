@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { inferConventions, renderConventionsSection } from "../core/conventions/conventions.js";
-import type { ConfigConstraints, InferredConventions } from "../core/types.js";
-import { makeImportGraph } from "./helpers/factories.js";
+import { inferConventions, renderConventionsSection } from "../core/conventions/conventions";
+import type { ConfigConstraints, InferredConventions } from "../core/types";
+import { makeImportGraph } from "./helpers/factories";
 
 // Mock utils.ts to control file reads
 vi.mock("../core/utils.js", async (importOriginal) => {
@@ -12,7 +12,7 @@ vi.mock("../core/utils.js", async (importOriginal) => {
   };
 });
 
-import { readFileOr } from "../core/utils.js";
+import { readFileOr } from "../core/utils";
 
 const mockReadFileOr = vi.mocked(readFileOr);
 

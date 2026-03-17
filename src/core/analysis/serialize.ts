@@ -1,4 +1,4 @@
-import type { CodeSnapshot, ContextAnalysis, DetectedContext, ImportGraph } from "../types.js";
+import type { CodeSnapshot, ContextAnalysis, DetectedContext, ImportGraph } from "../types";
 
 /** Structured JSON output for clarte --format=json */
 export interface ClarteJsonOutput {

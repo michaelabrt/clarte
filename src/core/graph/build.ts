@@ -1,14 +1,14 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
-import { readFileOr } from "../utils.js";
-import { initForLanguage, withParsedTree } from "../parsers/init.js";
-import { detectBarrelAst } from "../parsers/barrel.js";
-import { computeHITS, computeBetweenness } from "./centrality.js";
-import { HITS } from "../config/thresholds.js";
-import { extractIntraFileCalls } from "../parsers/extract-symbols.js";
-import { parseImportsAstFromRoot } from "../parsers/parse-imports.js";
-import { extractFileGraph } from "../parsers/extract-file-graph.js";
-import type { FileGraphResult } from "./symbol-types.js";
+import { readFileOr } from "../utils";
+import { initForLanguage, withParsedTree } from "../parsers/init";
+import { detectBarrelAst } from "../parsers/barrel";
+import { computeHITS, computeBetweenness } from "./centrality";
+import { HITS } from "../config/thresholds";
+import { extractIntraFileCalls } from "../parsers/extract-symbols";
+import { parseImportsAstFromRoot } from "../parsers/parse-imports";
+import { extractFileGraph } from "../parsers/extract-file-graph";
+import type { FileGraphResult } from "./symbol-types";
 import {
   getSourceGlob,
   isRelativeSpecifier,
@@ -24,9 +24,9 @@ import {
   type BarrelExportMap,
   type PathAlias,
   type ResolveContext,
-} from "./import-resolution.js";
-import { routeBarrelImport } from "./barrel-routing.js";
-import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "../types.js";
+} from "./import-resolution";
+import { routeBarrelImport } from "./barrel-routing";
+import type { ImportEdge, ImportGraph, Language, ProgressCallback } from "../types";
 
 /**
  * Detect barrel files: files where >50% of top-level statements are re-exports.

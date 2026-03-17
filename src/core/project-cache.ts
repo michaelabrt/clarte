@@ -10,8 +10,8 @@ import type {
   PackageHubFile,
   TestMapping,
   TestType,
-} from "./types.js";
-import type { GraphStore } from "../storage/graph-store.js";
+} from "./types";
+import type { GraphStore } from "../storage/graph-store";
 
 const KV_KEY = "project_cache";
 

@@ -6,13 +6,13 @@
  */
 
 import { bench, describe } from "vitest";
-import { computeHITS, computeBetweenness } from "../../core/graph/centrality.js";
-import { detectCommunitiesLeiden as detectCommunities } from "../../core/graph/leiden.js";
-import { findChokepoints } from "../../core/graph/chokepoints.js";
-import { computeInstability } from "../../core/graph/instability.js";
-import { findCircularDeps } from "../../core/graph/cycles.js";
-import { findDeadFiles } from "../../core/graph/dead-files.js";
-import { generateGraph } from "./graph-generator.js";
+import { computeHITS, computeBetweenness } from "../../core/graph/centrality";
+import { detectCommunitiesLeiden as detectCommunities } from "../../core/graph/leiden";
+import { findChokepoints } from "../../core/graph/chokepoints";
+import { computeInstability } from "../../core/graph/instability";
+import { findCircularDeps } from "../../core/graph/cycles";
+import { findDeadFiles } from "../../core/graph/dead-files";
+import { generateGraph } from "./graph-generator";
 
 // ── Pre-generate graphs (excluded from benchmark timing) ────────────
 

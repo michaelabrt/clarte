@@ -10,9 +10,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { resolveEditTargets } from "../../steer/targets-resolve.js";
-import type { PersistedGraph } from "../../core/types/persisted-graph.js";
-import { PERSISTED_GRAPH_VERSION } from "../../core/types/persisted-graph.js";
+import { resolveEditTargets } from "../../steer/targets-resolve";
+import type { PersistedGraph } from "../../core/types/persisted-graph";
+import { PERSISTED_GRAPH_VERSION } from "../../core/types/persisted-graph";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 

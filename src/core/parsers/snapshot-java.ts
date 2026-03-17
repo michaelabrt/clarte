@@ -1,6 +1,6 @@
 import type { Node } from "web-tree-sitter";
-import type { SnapshotEntry } from "../types.js";
-import { extractNodeBlock, extractSignatureBeforeBody, stripAnnotationName } from "./snapshot-utils.js";
+import type { SnapshotEntry } from "../types";
+import { extractNodeBlock, extractSignatureBeforeBody, stripAnnotationName } from "./snapshot-utils";
 
 /** JPA/Spring annotations that indicate a field is structurally significant */
 const JAVA_SIGNIFICANT_FIELD_ANNOTATIONS = new Set([

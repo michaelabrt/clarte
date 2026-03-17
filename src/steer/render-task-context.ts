@@ -1,7 +1,7 @@
-import type { PersistedGraph } from "../core/types/persisted-graph.js";
-import type { SymbolMatch } from "./targets-resolve.js";
-import type { ExecutionFlow } from "../mcp/tools/execution-flow.js";
-import type { FileRole } from "../core/types.js";
+import type { PersistedGraph } from "../core/types/persisted-graph";
+import type { SymbolMatch } from "./targets-resolve";
+import type { ExecutionFlow } from "../mcp/tools/execution-flow";
+import type { FileRole } from "../core/types";
 
 // ── Types for task-scoped data ───────────────────────────────────────────────
 

@@ -2,9 +2,9 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { detectContext } from "../core/detect/detect.js";
-import { buildMainContext } from "../steer/context/main-context.js";
-import type { DetectedContext, UserAnswers } from "../core/types.js";
+import { detectContext } from "../core/detect/detect";
+import { buildMainContext } from "../steer/context/main-context";
+import type { DetectedContext, UserAnswers } from "../core/types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 

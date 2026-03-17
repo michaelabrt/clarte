@@ -1,10 +1,10 @@
 import { readdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readJsonFile, writeFileSafe } from "../../core/utils.js";
+import { readJsonFile, writeFileSafe } from "../../core/utils";
 // context-map.ts retained for documentation but no longer generated at runtime (R.12 vestige)
-import { CLARTE_DIR } from "../../core/config/config.js";
-import { PRE_FLIGHT_AGENT_CONTENT } from "../context/pre-flight-agent.js";
+import { CLARTE_DIR } from "../../core/config/config";
+import { PRE_FLIGHT_AGENT_CONTENT } from "../context/pre-flight-agent";
 
 const HOOKS_DIR = `${CLARTE_DIR}/hooks`;
 // context-map.json removed (generated but never consumed by any hook script)

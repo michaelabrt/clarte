@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import type { ChangeCoupling, GitAnalysis, LagCoupling } from "./types.js";
-import { gitExecSafe } from "./git/git.js";
-import type { GraphStore } from "../storage/graph-store.js";
+import type { ChangeCoupling, GitAnalysis, LagCoupling } from "./types";
+import { gitExecSafe } from "./git/git";
+import type { GraphStore } from "../storage/graph-store";
 
 const KV_KEY = "git_cache";
 

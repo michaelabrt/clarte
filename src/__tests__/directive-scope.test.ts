@@ -4,7 +4,7 @@ import {
   assignScope,
   groupDirectivesByScope,
   buildFileDirectiveMap,
-} from "../steer/context/directive-scope.js";
+} from "../steer/context/directive-scope";
 
 describe("extractMentionedFiles", () => {
   it("extracts backtick-quoted file paths with extensions", () => {

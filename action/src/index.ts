@@ -1,7 +1,7 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
-import { runCiMode } from "../../src/cli/ci.js";
-import { formatComment } from "./comment.js";
+import { runCiMode } from "../../src/cli/ci";
+import { formatComment } from "./comment";
 
 const MARKER = "<!-- clarte-ci-review -->";
 

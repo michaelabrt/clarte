@@ -5,8 +5,8 @@ import {
   _bunSqliteTier,
   _sqlJsTier,
   type TierLoader,
-} from "../../storage/db-adapter.js";
-import { initSchema } from "../../storage/schema.js";
+} from "../../storage/db-adapter";
+import { initSchema } from "../../storage/schema";
 
 const nullTier: TierLoader = async () => null;
 

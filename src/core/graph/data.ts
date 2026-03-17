@@ -1,6 +1,6 @@
-import { isTestFile } from "../utils.js";
-import type { PersistedGraph } from "../types/persisted-graph.js";
-import { GRAPH_DATA } from "../config/thresholds.js";
+import { isTestFile } from "../utils";
+import type { PersistedGraph } from "../types/persisted-graph";
+import { GRAPH_DATA } from "../config/thresholds";
 
 export function normalizePath(p: string): string {
   return p.replace(/\\/g, "/").replace(/^\.\//, "");

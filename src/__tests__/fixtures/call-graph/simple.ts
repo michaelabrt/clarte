@@ -1,5 +1,5 @@
-import { doThing } from "./helper.js";
-import { Service } from "./service.js";
+import { doThing } from "./helper";
+import { Service } from "./service";
 
 export function foo() {
   doThing();

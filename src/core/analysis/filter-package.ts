@@ -1,4 +1,4 @@
-import type { ContextAnalysis, ImportGraph, ImportEdge } from "../types.js";
+import type { ContextAnalysis, ImportGraph, ImportEdge } from "../types";
 
 /**
  * Filter a root-level ContextAnalysis to contain only data relevant to a single package.

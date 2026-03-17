@@ -1,6 +1,6 @@
-import type { ClassifiedTurn } from "./classify.js";
-import type { WastePattern } from "./patterns.js";
-import { estimateTurnCost } from "./patterns.js";
+import type { ClassifiedTurn } from "./classify";
+import type { WastePattern } from "./patterns";
+import { estimateTurnCost } from "./patterns";
 
 /** Metrics for a single session */
 export interface SessionMetrics {

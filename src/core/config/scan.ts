@@ -1,6 +1,6 @@
 import path from "node:path";
-import { readFileOr, readJsonFile } from "../utils.js";
-import type { ConfigConstraints, DetectedContext } from "../types.js";
+import { readFileOr, readJsonFile } from "../utils";
+import type { ConfigConstraints, DetectedContext } from "../types";
 
 /** ESLint rule name -> Biome equivalent */
 const IMPACTFUL_RULES: Array<{

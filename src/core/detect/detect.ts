@@ -1,15 +1,15 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parse as parseToml } from "smol-toml";
-import type { DetectedContext, IDETarget, ProgressCallback } from "../types.js";
-import { errorMessage, fileExists, readFileOr, readJsonFile, readDirSafe } from "../utils.js";
-import { FRAMEWORK_MAP, PYTHON_FRAMEWORK_MAP, extractMavenVersion } from "./frameworks.js";
-import { detectMonorepo, parsePyprojectDeps } from "./monorepo.js";
-import { getExtensionsForLanguage, detectLanguageBreakdown } from "./languages.js";
+import type { DetectedContext, IDETarget, ProgressCallback } from "../types";
+import { errorMessage, fileExists, readFileOr, readJsonFile, readDirSafe } from "../utils";
+import { FRAMEWORK_MAP, PYTHON_FRAMEWORK_MAP, extractMavenVersion } from "./frameworks";
+import { detectMonorepo, parsePyprojectDeps } from "./monorepo";
+import { getExtensionsForLanguage, detectLanguageBreakdown } from "./languages";
 
 // Re-export for consumers that import from detect.ts
-export { enrichFrameworksWithUsage } from "./frameworks.js";
-export { SECONDARY_LANGUAGE_THRESHOLD } from "./languages.js";
+export { enrichFrameworksWithUsage } from "./frameworks";
+export { SECONDARY_LANGUAGE_THRESHOLD } from "./languages";
 
 /** Well-known directories to look for */
 const KNOWN_DIRS = [

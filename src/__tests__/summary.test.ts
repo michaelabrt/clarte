@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ContextAnalysis, GeneratedFile, CodeSnapshot } from "../core/types.js";
+import type { ContextAnalysis, GeneratedFile, CodeSnapshot } from "../core/types";
 
 const clackMock = vi.hoisted(() => ({
   logCalls: [] as Array<{ method: string; args: unknown[] }>,
@@ -17,7 +17,7 @@ vi.mock("../core/theme.js", async () => {
   return { theme: THEME_MOCK };
 });
 
-import { printSummary } from "../cli/summary.js";
+import { printSummary } from "../cli/summary";
 
 function allOutput(): string {
   return clackMock.logCalls.map((c) => String(c.args[0])).join("\n");

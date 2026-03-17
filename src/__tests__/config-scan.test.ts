@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { scanConfigConstraints, renderConstraintsSection } from "../core/config/scan.js";
-import type { ConfigConstraints, DetectedContext } from "../core/types.js";
+import { scanConfigConstraints, renderConstraintsSection } from "../core/config/scan";
+import type { ConfigConstraints, DetectedContext } from "../core/types";
 
 // Mock utils.ts to control file reads
 vi.mock("../core/utils.js", () => ({
@@ -8,7 +8,7 @@ vi.mock("../core/utils.js", () => ({
   readJsonFile: vi.fn().mockResolvedValue(null),
 }));
 
-import { readJsonFile, readFileOr } from "../core/utils.js";
+import { readJsonFile, readFileOr } from "../core/utils";
 
 const mockReadJsonFile = vi.mocked(readJsonFile);
 const mockReadFileOr = vi.mocked(readFileOr);

@@ -1,4 +1,4 @@
-import type { ImportGraph, StructuralTemporalMismatch } from "../types.js";
+import type { ImportGraph, StructuralTemporalMismatch } from "../types";
 
 /**
  * Find file pairs that co-change frequently (high temporal coupling)

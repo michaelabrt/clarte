@@ -6,8 +6,8 @@
  * external edges, and fully populated metadata maps.
  */
 
-import type { ImportEdge, ImportGraph } from "../../core/types.js";
-import { computeHITS } from "../../core/graph/centrality.js";
+import type { ImportEdge, ImportGraph } from "../../core/types";
+import { computeHITS } from "../../core/graph/centrality";
 
 // ── Seeded PRNG (xorshift32) ────────────────────────────────────────
 

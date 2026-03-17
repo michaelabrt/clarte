@@ -20,7 +20,7 @@ import type {
   StructuralTemporalMismatch,
   TestMapping,
   TightCoupling,
-} from "./index.js";
+} from "./index";
 
 /** Shared logging context passed to phase helpers */
 export interface LogCtx {

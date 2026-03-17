@@ -4,23 +4,25 @@
  * Extracts the k-hop neighborhood from seed symbols in the symbol graph
  * using multi-source BFS. Operates entirely on the in-memory symbol graph
  * loaded by GraphStore.loadSymbolGraph() - no SQLite I/O.
+ *
+ * Barrel routing is resolved from the file-level edge graph (InMemoryEdge.isBarrelRouted)
+ * rather than inferred from file names. The caller passes the file forward-edge map.
  */
 
-import type { InMemorySymbolGraph, InMemorySymbolNode, InMemorySymEdge } from "../../storage/types";
+import type { InMemorySymbolGraph, InMemorySymbolNode, InMemoryEdge } from "../../storage/types";
 import { SYMBOL_EDGE_WEIGHTS, type SymbolEdgeKind } from "./symbol-types";
-import { HITS } from "../config/thresholds";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface SymbolSubEdge {
   targetId: number;
   kind: SymbolEdgeKind;
-  /** SYMBOL_EDGE_WEIGHTS[kind] * barrel_discount * confidence */
-  weight: number;
-  /** Resolution tier confidence */
+  /** Resolution tier confidence (propagated from InMemorySymEdge) */
   confidence: number;
   /** True when Dijkstra would traverse this edge against the original direction */
   isReverse: boolean;
+  /** True when the corresponding file-level edge was barrel-routed */
+  isBarrelRouted: boolean;
 }
 
 export interface SymbolSubgraph {
@@ -42,10 +44,12 @@ function isValidEdgeKind(kind: string): kind is SymbolEdgeKind {
   return kind in SYMBOL_EDGE_WEIGHTS;
 }
 
-function computeEdgeWeight(edge: InMemorySymEdge, sourceIsBarrel: boolean, targetIsBarrel: boolean): number {
-  if (!isValidEdgeKind(edge.kind)) return 0;
-  const barrelDiscount = sourceIsBarrel || targetIsBarrel ? HITS.BARREL_DISCOUNT : 1.0;
-  return SYMBOL_EDGE_WEIGHTS[edge.kind] * barrelDiscount * (edge.confidence ?? 1.0);
+/**
+ * Build a lookup key for file-level edge barrel routing.
+ * Uses the same pair format as the file graph forward map.
+ */
+function fileEdgeKey(fromPath: string, toPath: string): string {
+  return `${fromPath}\0${toPath}`;
 }
 
 // ── Main extraction ─────────────────────────────────────────────────────────
@@ -58,11 +62,16 @@ function computeEdgeWeight(edge: InMemorySymEdge, sourceIsBarrel: boolean, targe
  *
  * Phase 2: Collect all original-graph edges where both endpoints are
  * in the discovered set. Build forward/reverse adjacency lists.
+ *
+ * @param fileForward - file-level forward edge map from InMemoryFileGraph.
+ *   Used to resolve barrel routing per symbol edge. When omitted (e.g. in
+ *   tests), all edges are treated as non-barrel-routed.
  */
 export function extractSymbolSubgraph(
   seedFiles: string[],
   symbolGraph: InMemorySymbolGraph,
   maxHops: number,
+  fileForward?: Map<string, InMemoryEdge[]>,
 ): SymbolSubgraph {
   const seedIds = new Set<number>();
   const visited = new Set<number>();
@@ -115,6 +124,19 @@ export function extractSymbolSubgraph(
     if (frontier.size === 0) break;
   }
 
+  // ── Build barrel-routing lookup from file-level edges ───────────────────
+  // Key: "fromPath\0toPath", value: true if the file edge is barrel-routed.
+  // Only built when fileForward is provided.
+
+  const barrelRoutedSet = new Set<string>();
+  if (fileForward) {
+    for (const [fromPath, edges] of fileForward) {
+      for (const fe of edges) {
+        if (fe.isBarrelRouted) barrelRoutedSet.add(fileEdgeKey(fromPath, fe.toPath));
+      }
+    }
+  }
+
   // ── Phase 2: Build subgraph from discovered nodes ───────────────────────
 
   const nodes = new Map<number, InMemorySymbolNode>();
@@ -122,17 +144,11 @@ export function extractSymbolSubgraph(
   const forward = new Map<number, SymbolSubEdge[]>();
   const reverse = new Map<number, SymbolSubEdge[]>();
 
-  // Barrel detection via index file naming heuristic.
-  // We only scan discovered nodes, not the full symbol graph.
-  const barrelPaths = new Set<string>();
-
   for (const id of visited) {
     const node = symbolGraph.symbols.get(id);
     if (!node) continue;
     nodes.set(id, node);
     fileSet.add(node.filePath);
-    const base = node.filePath.split("/").pop() ?? "";
-    if (/^index\.[jt]sx?$/.test(base)) barrelPaths.add(node.filePath);
   }
 
   // Collect all original-graph edges where both endpoints are discovered.
@@ -140,7 +156,6 @@ export function extractSymbolSubgraph(
   for (const sourceId of visited) {
     const sourceNode = nodes.get(sourceId);
     if (!sourceNode) continue;
-    const sourceIsBarrel = barrelPaths.has(sourceNode.filePath);
 
     for (const edge of symbolGraph.forward.get(sourceId) ?? []) {
       if (!visited.has(edge.toSymbolId)) continue;
@@ -148,10 +163,10 @@ export function extractSymbolSubgraph(
 
       const targetNode = nodes.get(edge.toSymbolId);
       if (!targetNode) continue;
-      const targetIsBarrel = barrelPaths.has(targetNode.filePath);
-      const weight = computeEdgeWeight(edge, sourceIsBarrel, targetIsBarrel);
+
       const confidence = edge.confidence ?? 1.0;
       const kind = edge.kind as SymbolEdgeKind;
+      const isBarrelRouted = barrelRoutedSet.has(fileEdgeKey(sourceNode.filePath, targetNode.filePath));
 
       // Forward adjacency: sourceId -> toSymbolId (original direction, isReverse=false)
       let fwdList = forward.get(sourceId);
@@ -159,7 +174,7 @@ export function extractSymbolSubgraph(
         fwdList = [];
         forward.set(sourceId, fwdList);
       }
-      fwdList.push({ targetId: edge.toSymbolId, kind, weight, confidence, isReverse: false });
+      fwdList.push({ targetId: edge.toSymbolId, kind, confidence, isReverse: false, isBarrelRouted });
 
       // Reverse adjacency: toSymbolId has incoming from sourceId (isReverse=true).
       // Dijkstra at toSymbolId can traverse this to reach sourceId against the edge direction.
@@ -168,7 +183,7 @@ export function extractSymbolSubgraph(
         revList = [];
         reverse.set(edge.toSymbolId, revList);
       }
-      revList.push({ targetId: sourceId, kind, weight, confidence, isReverse: true });
+      revList.push({ targetId: sourceId, kind, confidence, isReverse: true, isBarrelRouted });
     }
   }
 

@@ -1,5 +1,5 @@
-import type { ContextSection, ImportGraph } from "../../../core/types.js";
-import { estimateTokens, isTestFile } from "../../../core/utils.js";
+import type { ContextSection, ImportGraph } from "../../../core/types";
+import { estimateTokens, isTestFile } from "../../../core/utils";
 
 /** Maximum named exports to show per file before truncating with "..." */
 const MAX_EXPORTS_PER_FILE = 5;

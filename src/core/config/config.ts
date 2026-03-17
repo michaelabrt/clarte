@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { glob } from "tinyglobby";
-import type { Language, ProjectConfig, UserAnswers } from "../types.js";
-import { readFileOr, readJsonFile, writeFileSafe } from "../utils.js";
-import { HASH_CONCURRENCY } from "./thresholds.js";
+import type { Language, ProjectConfig, UserAnswers } from "../types";
+import { readFileOr, readJsonFile, writeFileSafe } from "../utils";
+import { HASH_CONCURRENCY } from "./thresholds";
 
 export const CLARTE_DIR = ".clarte";
 const CONFIG_FILENAME = ".clarte.json";

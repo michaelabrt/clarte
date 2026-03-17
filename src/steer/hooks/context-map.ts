@@ -1,6 +1,6 @@
-import { buildReverseAdjacency, getFileGraphData, type FileGraphData } from "../../core/graph/data.js";
-import type { PersistedGraph } from "../../core/types/persisted-graph.js";
-import { buildFileDirectiveMap } from "../context/directive-scope.js";
+import { buildReverseAdjacency, getFileGraphData, type FileGraphData } from "../../core/graph/data";
+import type { PersistedGraph } from "../../core/types/persisted-graph";
+import { buildFileDirectiveMap } from "../context/directive-scope";
 
 export const BETWEENNESS_THRESHOLD = 0.1;
 const MAX_DIRECTIVES_PER_FILE = 2;

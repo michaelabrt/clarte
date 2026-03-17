@@ -1,7 +1,7 @@
-import type { GraphTopology, ImportGraph } from "../types.js";
-import { findSCCsFromAdj } from "./scc.js";
-import { FRAGMENT_MIN_SIZE } from "../config/thresholds.js";
-import { buildAdjacencyMap } from "./adjacency.js";
+import type { GraphTopology, ImportGraph } from "../types";
+import { findSCCsFromAdj } from "./scc";
+import { FRAGMENT_MIN_SIZE } from "../config/thresholds";
+import { buildAdjacencyMap } from "./adjacency";
 
 /**
  * Compute graph topology metrics: connected components, approximate diameter,

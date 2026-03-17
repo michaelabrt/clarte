@@ -1,8 +1,8 @@
 import path from "node:path";
-import { isTestFile, readFileOr } from "../utils.js";
-import type { ConfigConstraints, ImportGraph, InferredConventions } from "../types.js";
-import { detectImportOrderingDetailed } from "./imports.js";
-import { MAJORITY_THRESHOLD, STRONG_MAJORITY_THRESHOLD } from "../config/thresholds.js";
+import { isTestFile, readFileOr } from "../utils";
+import type { ConfigConstraints, ImportGraph, InferredConventions } from "../types";
+import { detectImportOrderingDetailed } from "./imports";
+import { MAJORITY_THRESHOLD, STRONG_MAJORITY_THRESHOLD } from "../config/thresholds";
 
 const CAMEL_CASE = /^[a-z][a-zA-Z0-9]*$/;
 const PASCAL_CASE = /^[A-Z][a-zA-Z0-9]*$/;

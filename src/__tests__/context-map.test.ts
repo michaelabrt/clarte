@@ -2,10 +2,10 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, afterEach } from "vitest";
-import { buildContextMap } from "../steer/hooks/context-map.js";
-import { generateHookFiles, configureClaudeHooks } from "../steer/hooks/generate-hooks.js";
-import { PRE_FLIGHT_AGENT_CONTENT, buildPreFlightAgent } from "../steer/context/pre-flight-agent.js";
-import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
+import { buildContextMap } from "../steer/hooks/context-map";
+import { generateHookFiles, configureClaudeHooks } from "../steer/hooks/generate-hooks";
+import { PRE_FLIGHT_AGENT_CONTENT, buildPreFlightAgent } from "../steer/context/pre-flight-agent";
+import { makePersistedGraph, makeFileRecord } from "./helpers/factories";
 
 async function makeTmpDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "clarte-hooks-"));

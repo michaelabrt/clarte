@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { makeImportGraph, makeContextAnalysis } from "./helpers/factories.js";
+import { makeImportGraph, makeContextAnalysis } from "./helpers/factories";
 
 vi.mock("node:child_process", () => ({
   execFileSync: vi.fn(),

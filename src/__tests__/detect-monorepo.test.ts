@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { detectMonorepo } from "../core/detect/monorepo.js";
+import { detectMonorepo } from "../core/detect/monorepo";
 
 let tmpDir: string;
 

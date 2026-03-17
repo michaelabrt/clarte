@@ -1,6 +1,6 @@
 import path from "node:path";
 import * as p from "@clack/prompts";
-import { ClarteError, ExitCode } from "./core/errors.js";
+import { ClarteError, ExitCode } from "./core/errors";
 import {
   theme as t,
   initTheme,
@@ -8,16 +8,16 @@ import {
   unpatchPicocolors,
   resetTerminalColors,
   detectTerminalBackground,
-} from "./core/theme.js";
-import { errorMessage, fileExists, writeJsonStdout } from "./core/utils.js";
-import { loadConfig } from "./core/config/config.js";
-import { refreshSnapshot } from "./cli/refresh.js";
-import { initPreCommitHook } from "./cli/hooks.js";
-import { handleEarlyExits, parseCliArgs } from "./cli/args.js";
-import { runCheckMode } from "./cli/check.js";
-import { runCiMode } from "./cli/ci.js";
-import { runInitMode } from "./cli/init.js";
-import { runObserveMode } from "./cli/observe.js";
+} from "./core/theme";
+import { errorMessage, fileExists, writeJsonStdout } from "./core/utils";
+import { loadConfig } from "./core/config/config";
+import { refreshSnapshot } from "./cli/refresh";
+import { initPreCommitHook } from "./cli/hooks";
+import { handleEarlyExits, parseCliArgs } from "./cli/args";
+import { runCheckMode } from "./cli/check";
+import { runCiMode } from "./cli/ci";
+import { runInitMode } from "./cli/init";
+import { runObserveMode } from "./cli/observe";
 
 const PROJECT_MARKERS = [
   "package.json",

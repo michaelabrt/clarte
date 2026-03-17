@@ -19,11 +19,11 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { existsSync } from "node:fs";
-import { buildImportGraph } from "../../core/graph/build.js";
-import { findChokepoints } from "../../core/graph/chokepoints.js";
-import { initTreeSitter } from "../../core/parsers/init.js";
-import { buildDirectives, renderDirectivesSection } from "../../steer/context/directives.js";
-import type { ImportGraph, ContextAnalysis, DetectedContext } from "../../core/types.js";
+import { buildImportGraph } from "../../core/graph/build";
+import { findChokepoints } from "../../core/graph/chokepoints";
+import { initTreeSitter } from "../../core/parsers/init";
+import { buildDirectives, renderDirectivesSection } from "../../steer/context/directives";
+import type { ImportGraph, ContextAnalysis, DetectedContext } from "../../core/types";
 
 const SKIP = !process.env.REAL_PROJECT_EVAL;
 

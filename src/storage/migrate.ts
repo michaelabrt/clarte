@@ -20,8 +20,8 @@
 import { readFileSync as nodeReadFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { GraphStore } from "./graph-store.js";
-import type { FileRecord, FileEdgeRecord, CallSiteRecord, CommunityRecord, ChangeCouplingRecord } from "./types.js";
+import type { GraphStore } from "./graph-store";
+import type { FileRecord, FileEdgeRecord, CallSiteRecord, CommunityRecord, ChangeCouplingRecord } from "./types";
 
 const CLARTE_DIR = ".clarte";
 

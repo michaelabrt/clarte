@@ -1,4 +1,4 @@
-import { doThing } from "./helper.js";
+import { doThing } from "./helper";
 
 export function withChain(): void {
   // Direct call - should resolve to helper.ts

@@ -1,4 +1,4 @@
-import type { Chokepoint, ImportGraph } from "../types.js";
+import type { Chokepoint, ImportGraph } from "../types";
 
 /**
  * Find chokepoints in the import graph using directed reachability metrics.

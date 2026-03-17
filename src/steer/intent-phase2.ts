@@ -113,11 +113,18 @@ export function computeSubgraphBetweenness(subgraph: SymbolSubgraph): Map<number
 
 // ── Percentile computation ──────────────────────────────────────────────────
 
+/**
+ * Exclusive percentile: 0th = min, 100th = max.
+ *
+ * Uses floor(p * (n - 1)) so the maximum value is never selected as the
+ * threshold, preventing a dead zone where no element can exceed it.
+ * For large n the difference from floor(p * n) is negligible (one index).
+ */
 function percentile(values: number[], p: number): number {
   if (values.length === 0) return 0;
   const sorted = values.slice().sort((a, b) => a - b);
-  const idx = Math.floor(p * sorted.length);
-  return sorted[Math.min(idx, sorted.length - 1)];
+  const idx = Math.floor(p * (sorted.length - 1));
+  return sorted[idx];
 }
 
 // ── Phase 2 seeding ─────────────────────────────────────────────────────────

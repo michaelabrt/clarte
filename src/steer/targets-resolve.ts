@@ -1,5 +1,5 @@
-import type { PersistedGraph } from "../core/types/persisted-graph.js";
-import { isTestFile } from "../core/utils.js";
+import type { PersistedGraph } from "../core/types/persisted-graph";
+import { isTestFile } from "../core/utils";
 
 const STOP_WORDS = new Set([
   // Articles, prepositions, conjunctions
