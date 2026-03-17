@@ -19,6 +19,8 @@ export interface StatementAdapter {
   run(...params: unknown[]): RunResult;
   get<T = Record<string, unknown>>(...params: unknown[]): T | undefined;
   all<T = Record<string, unknown>>(...params: unknown[]): T[];
+  /** Returns rows as positional value arrays. Faster than all() for bulk reads. */
+  allRaw(...params: unknown[]): unknown[][];
 }
 
 export interface DatabaseAdapter {
@@ -30,12 +32,18 @@ export interface DatabaseAdapter {
 
 // ── Shared structural type for both better-sqlite3 and bun:sqlite ─────────────
 
+interface DatabaseLikeStatement {
+  run: (...params: unknown[]) => { changes: number; lastInsertRowid: number | bigint };
+  get: (...params: unknown[]) => unknown;
+  all: (...params: unknown[]) => unknown[];
+  /** better-sqlite3: toggle raw array mode (returns self) */
+  raw?: (toggle: boolean) => unknown;
+  /** bun:sqlite: return rows as value arrays */
+  values?: (...params: unknown[]) => unknown[][];
+}
+
 type DatabaseLike = {
-  prepare: (sql: string) => {
-    run: (...params: unknown[]) => { changes: number; lastInsertRowid: number | bigint };
-    get: (...params: unknown[]) => unknown;
-    all: (...params: unknown[]) => unknown[];
-  };
+  prepare: (sql: string) => DatabaseLikeStatement;
   exec: (sql: string) => void;
   transaction: <T>(fn: () => T) => () => T;
   close: () => void;
@@ -43,16 +51,7 @@ type DatabaseLike = {
 
 // ── Tier 1: better-sqlite3 adapter ────────────────────────────────────────────
 
-function wrapBetterSqlite3(db: {
-  prepare: (sql: string) => {
-    run: (...params: unknown[]) => { changes: number; lastInsertRowid: number | bigint };
-    get: (...params: unknown[]) => unknown;
-    all: (...params: unknown[]) => unknown[];
-  };
-  exec: (sql: string) => void;
-  transaction: <T>(fn: () => T) => () => T;
-  close: () => void;
-}): DatabaseAdapter {
+function wrapBetterSqlite3(db: DatabaseLike): DatabaseAdapter {
   return {
     prepare(sql: string): StatementAdapter {
       const stmt = db.prepare(sql);
@@ -65,6 +64,17 @@ function wrapBetterSqlite3(db: {
         },
         all<T>(...params: unknown[]): T[] {
           return stmt.all(...params) as T[];
+        },
+        allRaw(...params: unknown[]): unknown[][] {
+          if (stmt.raw) {
+            stmt.raw(true);
+            try {
+              return stmt.all(...params) as unknown[][];
+            } finally {
+              stmt.raw(false);
+            }
+          }
+          return (stmt.all(...params) as Record<string, unknown>[]).map((r) => Object.values(r));
         },
       };
     },
@@ -82,16 +92,7 @@ function wrapBetterSqlite3(db: {
 
 // ── Tier 2: bun:sqlite adapter ────────────────────────────────────────────────
 
-function wrapBunSqlite(db: {
-  prepare: (sql: string) => {
-    run: (...params: unknown[]) => { changes: number; lastInsertRowid: number | bigint };
-    get: (...params: unknown[]) => unknown | null;
-    all: (...params: unknown[]) => unknown[];
-  };
-  exec: (sql: string) => void;
-  transaction: <T>(fn: () => T) => () => T;
-  close: () => void;
-}): DatabaseAdapter {
+function wrapBunSqlite(db: DatabaseLike): DatabaseAdapter {
   return {
     prepare(sql: string): StatementAdapter {
       const stmt = db.prepare(sql);
@@ -106,6 +107,12 @@ function wrapBunSqlite(db: {
         },
         all<T>(...params: unknown[]): T[] {
           return stmt.all(...params) as T[];
+        },
+        allRaw(...params: unknown[]): unknown[][] {
+          if (stmt.values) {
+            return stmt.values(...params);
+          }
+          return (stmt.all(...params) as Record<string, unknown>[]).map((r) => Object.values(r));
         },
       };
     },
@@ -214,6 +221,21 @@ function wrapSqlJs(db: SqlJsDatabase, dbPath: string): DatabaseAdapter {
         stmt.bind(params);
         while (stmt.step()) {
           rows.push(stmt.getAsObject() as T);
+        }
+      } catch {
+        // ignore
+      }
+      return rows;
+    },
+    allRaw(...params: unknown[]): unknown[][] {
+      const rows: unknown[][] = [];
+      try {
+        const stmt = getOrPrepare(sql);
+        stmt.reset();
+        stmt.bind(params);
+        while (stmt.step()) {
+          const obj = stmt.getAsObject();
+          rows.push(Object.values(obj));
         }
       } catch {
         // ignore
