@@ -7,13 +7,18 @@
  * predictions with missing edges have their graph signal zeroed
  * and scores recomputed.
  *
- * Confidence calibration labels each surviving prediction as
- * "high" (score > THETA_HIGH) or "medium".
+ * F1 fix: recomputeScore uses signals.lexical (normalized [0,1]) and
+ * signals.graph (effective G*C*D), both stored by the fusion layer.
+ * The invariant holds: zeroing any signal always decreases the score.
+ *
+ * F3: Each prediction gets an isStale flag based on whether its file
+ * or any symbol in its propagation path has been modified since the
+ * last graph index.
  */
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { InMemorySymbolGraph, InMemoryFileGraph } from "../storage/types";
+import type { InMemorySymbolGraph } from "../storage/types";
 import type { IntentPrediction, VerificationResult } from "../core/config/intent-constants";
 import {
   LAMBDA_LEXICAL,
@@ -28,11 +33,13 @@ import {
 /**
  * Recompute the fused score from individual signals.
  *
- * Note: signals.lexical is the raw BM25+ score (un-normalized, per RFC §1.5
- * ToI transparency). This produces an approximate score when recomputing
- * after zeroing the graph signal. Acceptable because: (1) the direction
- * is always correct (score drops), (2) the stale+ghost edge case is rare,
- * (3) Phase 4 orchestrator can pass normalization context if precision needed.
+ * All signal values in IntentPrediction.signals are the effective values
+ * used in the weighted sum (lexical is normalized, graph is G*C*D).
+ * This makes recomputation exact: score = sum(lambda_i * signal_i).
+ *
+ * F1 invariant: since all signals are in [0,1] and lambdas sum to 1.0,
+ * the recomputed score is in [0,1]. Zeroing any non-negative signal
+ * always produces a lower or equal score.
  */
 function recomputeScore(signals: IntentPrediction["signals"]): number {
   return (
@@ -69,7 +76,6 @@ function verifyPathEdges(path: number[], symbolGraph: InMemorySymbolGraph): bool
     const to = path[i + 1];
     let found = false;
 
-    // Forward: from -> to
     for (const edge of symbolGraph.forward.get(from) ?? []) {
       if (edge.toSymbolId === to) {
         found = true;
@@ -77,7 +83,6 @@ function verifyPathEdges(path: number[], symbolGraph: InMemorySymbolGraph): bool
       }
     }
 
-    // Reverse traversal: to -> from in forward map
     if (!found) {
       for (const edge of symbolGraph.forward.get(to) ?? []) {
         if (edge.toSymbolId === from) {
@@ -93,28 +98,52 @@ function verifyPathEdges(path: number[], symbolGraph: InMemorySymbolGraph): bool
   return true;
 }
 
+/**
+ * Determine if a prediction is stale: its file or any symbol in its
+ * propagation path resides in a file modified since the last index.
+ */
+function computeIsStale(
+  file: string,
+  topSymId: number | null,
+  paths: Map<number, number[]>,
+  symbolGraph: InMemorySymbolGraph,
+  changedFiles: Set<string>,
+): boolean {
+  if (changedFiles.has(file)) return true;
+
+  if (topSymId !== null) {
+    const path = paths.get(topSymId);
+    if (path) {
+      for (const symId of path) {
+        const sym = symbolGraph.symbols.get(symId);
+        if (sym && changedFiles.has(sym.filePath)) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 // -- Main verification --------------------------------------------------------
 
 /**
  * Run the four-check verification protocol on predictions.
  *
- * The optional `propagationPaths` map (symbol_id -> path from Dijkstra)
- * enables edge-level verification. When omitted, edge existence defaults
- * to true (cannot verify without path data).
+ * propagationPaths and fileTopSymbolId are mandatory to prevent the
+ * "silent bypass" where edge verification is skipped when data is missing.
  *
- * The optional `fileTopSymbolId` map (file -> top symbol ID from aggregation)
- * links predictions to their underlying symbol IDs for path lookup.
+ * @param changedFilesSinceGraph - files modified since the graph was built.
+ *   Used to compute isStale per prediction. Defaults to empty (all fresh).
  */
 export function verifyPredictions(
   predictions: IntentPrediction[],
   symbolGraph: InMemorySymbolGraph,
-  _fileGraph: InMemoryFileGraph,
   rootDir: string,
-  propagationPaths?: Map<number, number[]>,
-  fileTopSymbolId?: Map<string, number>,
+  propagationPaths: Map<number, number[]>,
+  fileTopSymbolId: Map<string, number>,
+  changedFilesSinceGraph?: Set<string>,
 ): IntentPrediction[] {
-  const paths = propagationPaths ?? new Map<number, number[]>();
-  const topIds = fileTopSymbolId ?? new Map<string, number>();
+  const changedFiles = changedFilesSinceGraph ?? new Set<string>();
   const verified: IntentPrediction[] = [];
 
   for (const pred of predictions) {
@@ -127,12 +156,12 @@ export function verifyPredictions(
 
     // Resolve top symbol ID for this prediction
     const topSymId =
-      topIds.get(pred.file) ??
+      fileTopSymbolId.get(pred.file) ??
       (pred.symbols.length > 0 ? resolveSymbolId(pred.file, pred.symbols[0].name, symbolGraph) : null);
 
     // 1. Edge existence
     if (pred.signals.graph > 0 && pred.theory.graph_path && topSymId !== null) {
-      const path = paths.get(topSymId);
+      const path = propagationPaths.get(topSymId);
       if (path && !verifyPathEdges(path, symbolGraph)) {
         verification.edge_exists = false;
         pred.signals.graph = 0;
@@ -153,7 +182,6 @@ export function verifyPredictions(
         verification.symbol_exists = false;
       }
     } else if (pred.symbols.length > 0) {
-      // Could not resolve any symbol ID for this file
       verification.symbol_exists = false;
     }
 
@@ -161,6 +189,9 @@ export function verifyPredictions(
 
     // Confidence calibration (SS2.3)
     pred.confidence = pred.score > THETA_HIGH ? "high" : "medium";
+
+    // Staleness (F3)
+    pred.isStale = computeIsStale(pred.file, topSymId, propagationPaths, symbolGraph, changedFiles);
 
     verified.push(pred);
   }

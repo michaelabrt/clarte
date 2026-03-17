@@ -85,10 +85,11 @@ class MinHeap {
 /**
  * Compute the edge gamma for a subgraph edge.
  *
- * gamma = transmission[kind] * confidence, modified by reverse multiplier
- * and ghost discount. Confidence modulates transmission strength so that
- * low-confidence edges (e.g. Tier-3 factory at 0.25) transmit less intent
- * than high-confidence edges (Tier-1 direct at 0.95).
+ * gamma = transmission[kind], modified by reverse multiplier and ghost
+ * discount. Resolution confidence is NOT applied here (RFC-002 §1.5):
+ * propagation transmits full signal regardless of resolution tier.
+ * Confidence is preserved on the edge for downstream consumers (ToI,
+ * verification) but does not attenuate gamma.
  *
  * Returns 0 for unknown/ghost kinds that have no base transmission entry,
  * which the caller skips via the degenerate-edge guard.
@@ -107,7 +108,7 @@ function edgeGamma(
   const baseGamma = transmission[baseKind as SymbolEdgeKind];
   if (baseGamma === undefined) return 0; // unknown kind fallback
 
-  let gamma = baseGamma * edge.confidence;
+  let gamma = baseGamma;
   if (edge.isReverse) gamma *= reverseMultiplier;
   if (isGhost) gamma *= ghostDiscount;
   return gamma;
@@ -219,4 +220,62 @@ export function propagateIntent(
   }
 
   return { scores, paths, hops: hopCount };
+}
+
+// ── Path confidence products ────────────────────────────────────────────────
+
+/**
+ * Compute the product of edge resolution confidences along each Dijkstra path.
+ *
+ * For each symbol reached by propagation, walks the winning path and
+ * multiplies the confidence values from each traversed edge.
+ * Seeds (empty path) get confidence 1.0.
+ *
+ * Used by the orchestrator to populate FusionInput.pathConfidence before
+ * calling fuseIntentScores. This ensures Tier-3 factory resolutions
+ * (confidence=0.25) are penalized multiplicatively.
+ */
+export function computePathConfidenceProducts(
+  paths: Map<number, number[]>,
+  subgraph: SymbolSubgraph,
+): Map<number, number> {
+  const result = new Map<number, number>();
+
+  for (const [symbolId, path] of paths) {
+    if (path.length < 2) {
+      result.set(symbolId, 1.0);
+      continue;
+    }
+
+    let product = 1.0;
+    for (let i = 0; i < path.length - 1; i++) {
+      const u = path[i];
+      const v = path[i + 1];
+      let edgeConf: number | undefined;
+
+      // Check forward edges from u to v
+      for (const edge of subgraph.forward.get(u) ?? []) {
+        if (edge.targetId === v) {
+          edgeConf = edge.confidence;
+          break;
+        }
+      }
+
+      // Check reverse edges from u to v (traversed against direction)
+      if (edgeConf === undefined) {
+        for (const edge of subgraph.reverse.get(u) ?? []) {
+          if (edge.targetId === v) {
+            edgeConf = edge.confidence;
+            break;
+          }
+        }
+      }
+
+      product *= edgeConf ?? 1.0;
+    }
+
+    result.set(symbolId, product);
+  }
+
+  return result;
 }

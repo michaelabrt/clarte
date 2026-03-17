@@ -277,6 +277,51 @@ describe("propagateIntent", () => {
     expect(result.scores.get(2)).toBeCloseTo(0.7, 10);
   });
 
+  it("1.3.7: ghost edge applies ghost discount (calls ghost = 0.42)", () => {
+    const nodes = [makeNode(1, "a.ts", "A"), makeNode(2, "b.ts", "B")];
+    // Build subgraph manually to inject ghost kind (not in SymbolEdgeKind union)
+    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+    const sub: SymbolSubgraph = {
+      nodes: nodeMap,
+      forward: new Map([
+        [
+          1,
+          [
+            {
+              targetId: 2,
+              kind: "ghost:calls" as SymbolEdgeKind,
+              confidence: 1.0,
+              isReverse: false,
+              isBarrelRouted: false,
+            },
+          ],
+        ],
+      ]),
+      reverse: new Map([
+        [
+          2,
+          [
+            {
+              targetId: 1,
+              kind: "ghost:calls" as SymbolEdgeKind,
+              confidence: 1.0,
+              isReverse: true,
+              isBarrelRouted: false,
+            },
+          ],
+        ],
+      ]),
+      fileSet: new Set(["a.ts", "b.ts"]),
+      seedIds: new Set([1]),
+    };
+    const seeds = new Map([[1, 1.0]]);
+
+    const result = propagateIntent(seeds, sub, TRANSMISSION, REVERSE_MULTIPLIER, GHOST_DISCOUNT, 3);
+
+    // Ghost calls forward: gamma = 0.7 * 1.0 (confidence) * 0.6 (ghost) = 0.42
+    expect(result.scores.get(2)).toBeCloseTo(0.42, 10);
+  });
+
   it("1.3.8: seed symbols have score=1.0, hops=0, empty path", () => {
     const nodes = [makeNode(1, "a.ts", "A")];
     const sub = buildSubgraph(nodes, [], [1]);
@@ -389,6 +434,46 @@ describe("applyPhase2Seeding", () => {
     for (const [id, score] of result.mergedScores) {
       expect(score).toBeGreaterThanOrEqual(phase1.get(id) ?? 0);
     }
+  });
+
+  it("1.4.4: merge uses max - phase1 score 0.8 beats phase2 score", () => {
+    // Construct a scenario where phase2 triggers but a symbol already has a high phase1 score.
+    // Star: spokes 1,2 -> hub 10 -> spokes 3,4,5
+    const nodes = [
+      makeNode(10, "hub.ts", "hub"),
+      makeNode(1, "a.ts", "a"),
+      makeNode(2, "b.ts", "b"),
+      makeNode(3, "c.ts", "c"),
+      makeNode(4, "d.ts", "d"),
+      makeNode(5, "e.ts", "e"),
+    ];
+    const sub = buildSubgraph(
+      nodes,
+      [
+        { from: 1, to: 10, kind: "calls" },
+        { from: 2, to: 10, kind: "calls" },
+        { from: 10, to: 3, kind: "calls" },
+        { from: 10, to: 4, kind: "calls" },
+        { from: 10, to: 5, kind: "calls" },
+      ],
+      [1],
+    );
+
+    // Node 10 is a chokepoint (high betweenness) with low phase1 score.
+    // Node 1 has high phase1 score (0.8) that should be preserved.
+    const phase1 = new Map<number, number>([
+      [1, 0.8],
+      [10, 0.05],
+      [2, 0.0],
+      [3, 0.0],
+      [4, 0.0],
+      [5, 0.0],
+    ]);
+
+    const result = applyPhase2Seeding(phase1, sub, TRANSMISSION, REVERSE_MULTIPLIER, GHOST_DISCOUNT);
+
+    // Node 1's phase1 score of 0.8 must be preserved (max merge)
+    expect(result.mergedScores.get(1)).toBeGreaterThanOrEqual(0.8);
   });
 
   it("1.4.5: phase2 propagation limited to 1 hop", () => {
@@ -572,16 +657,20 @@ describe("fuseIntentScores", () => {
     expect(result.get(1)?.signals.temporal).toBe(0);
   });
 
-  it("1.5.7: signals stored un-normalized for ToI", () => {
+  it("1.5.7: signals store normalized lexical and raw lexical for ToI", () => {
     const inputs = [
       { symbolId: 1, filePath: "a.ts", lexicalScore: 5.0, graphScore: 0.3, betweennessScore: 0.2 },
       { symbolId: 2, filePath: "b.ts", lexicalScore: 2.5, graphScore: 0.1, betweennessScore: 0.1 },
     ];
     const result = fuseIntentScores(inputs, new Map(), new Set());
 
-    // Raw lexical score preserved (not normalized)
-    expect(result.get(1)?.signals.lexical).toBe(5.0);
-    expect(result.get(2)?.signals.lexical).toBe(2.5);
+    // rawLexical preserves BM25+ score for ToI display
+    expect(result.get(1)?.signals.rawLexical).toBe(5.0);
+    expect(result.get(2)?.signals.rawLexical).toBe(2.5);
+
+    // lexical stores normalized [0,1] for recomputeScore (F1 fix)
+    expect(result.get(1)?.signals.lexical).toBe(1.0); // 5.0/5.0
+    expect(result.get(2)?.signals.lexical).toBe(0.5); // 2.5/5.0
   });
 
   it("returns empty map for empty inputs", () => {
@@ -597,9 +686,9 @@ describe("aggregateToFiles", () => {
     const graph = buildGraph([makeNode(1, "a.ts", "fn1"), makeNode(2, "a.ts", "fn2"), makeNode(3, "a.ts", "fn3")], []);
 
     const symbolScores = new Map([
-      [1, { score: 0.8, signals: { lexical: 0, graph: 0, temporal: 0, betweenness: 0 } }],
-      [2, { score: 0.3, signals: { lexical: 0, graph: 0, temporal: 0, betweenness: 0 } }],
-      [3, { score: 0.1, signals: { lexical: 0, graph: 0, temporal: 0, betweenness: 0 } }],
+      [1, { score: 0.8, signals: { lexical: 0, rawLexical: 0, graph: 0, temporal: 0, betweenness: 0 } }],
+      [2, { score: 0.3, signals: { lexical: 0, rawLexical: 0, graph: 0, temporal: 0, betweenness: 0 } }],
+      [3, { score: 0.1, signals: { lexical: 0, rawLexical: 0, graph: 0, temporal: 0, betweenness: 0 } }],
     ]);
 
     const result = aggregateToFiles(symbolScores, graph);
@@ -610,7 +699,9 @@ describe("aggregateToFiles", () => {
 
   it("1.6.2: single symbol file gets that symbol's score", () => {
     const graph = buildGraph([makeNode(1, "a.ts", "fn1")], []);
-    const symbolScores = new Map([[1, { score: 0.5, signals: { lexical: 0, graph: 0, temporal: 0, betweenness: 0 } }]]);
+    const symbolScores = new Map([
+      [1, { score: 0.5, signals: { lexical: 0, rawLexical: 0, graph: 0, temporal: 0, betweenness: 0 } }],
+    ]);
 
     const result = aggregateToFiles(symbolScores, graph);
 
@@ -619,7 +710,9 @@ describe("aggregateToFiles", () => {
 
   it("1.6.4: file not in symbolScores does not appear", () => {
     const graph = buildGraph([makeNode(1, "a.ts", "fn1"), makeNode(2, "b.ts", "fn2")], []);
-    const symbolScores = new Map([[1, { score: 0.5, signals: { lexical: 0, graph: 0, temporal: 0, betweenness: 0 } }]]);
+    const symbolScores = new Map([
+      [1, { score: 0.5, signals: { lexical: 0, rawLexical: 0, graph: 0, temporal: 0, betweenness: 0 } }],
+    ]);
 
     const result = aggregateToFiles(symbolScores, graph);
 
@@ -631,7 +724,7 @@ describe("aggregateToFiles", () => {
 // ── 1.7 Dynamic Prediction Count ────────────────────────────────────────────
 
 describe("selectPredictions", () => {
-  const sig = { lexical: 0, graph: 0, temporal: 0, betweenness: 0 };
+  const sig = { lexical: 0, rawLexical: 0, graph: 0, temporal: 0, betweenness: 0 };
 
   it("1.7.1: [0.9, 0.8, 0.5, 0.2] -> predictions=[0.9,0.8], suppressed=1", () => {
     const scores = new Map([
@@ -689,5 +782,69 @@ describe("selectPredictions", () => {
 
     expect(predictions).toEqual([]);
     expect(suppressed).toBe(0);
+  });
+});
+
+// ── 1.8 Validation Gate: Latency Benchmark ──────────────────────────────────
+
+describe("Phase 1 latency benchmark", () => {
+  it("full pipeline completes in <80ms on 500-symbol subgraph", () => {
+    // Generate a synthetic 500-node graph with ~1000 edges
+    const nodeCount = 500;
+    const nodes: InMemorySymbolNode[] = [];
+    const edges: { from: number; to: number; kind: SymbolEdgeKind; confidence?: number }[] = [];
+
+    for (let i = 0; i < nodeCount; i++) {
+      nodes.push(makeNode(i, `file${i % 50}.ts`, `fn${i}`));
+    }
+    // Chain edges + random cross-links to reach ~1000 edges
+    for (let i = 0; i < nodeCount - 1; i++) {
+      edges.push({ from: i, to: i + 1, kind: "calls" });
+    }
+    const kinds: SymbolEdgeKind[] = ["calls", "extends", "implements", "uses_type", "imports"];
+    for (let i = 0; i < 500; i++) {
+      const from = Math.floor(Math.random() * nodeCount);
+      const to = Math.floor(Math.random() * nodeCount);
+      if (from !== to) edges.push({ from, to, kind: kinds[i % kinds.length] });
+    }
+
+    const seedIds = [0, 1, 2, 3, 4];
+    const sub = buildSubgraph(nodes, edges, seedIds);
+
+    const seeds = new Map(seedIds.map((id) => [id, 1.0] as const));
+    const coupling = new Map<string, Map<string, number>>();
+    const seedFiles = new Set(seedIds.map((id) => `file${id % 50}.ts`));
+
+    const start = performance.now();
+
+    // 1. Dijkstra propagation
+    const phase1 = propagateIntent(seeds, sub, TRANSMISSION, REVERSE_MULTIPLIER, GHOST_DISCOUNT, 3);
+
+    // 2. Phase 2 seeding
+    const phase2 = applyPhase2Seeding(phase1.scores, sub, TRANSMISSION, REVERSE_MULTIPLIER, GHOST_DISCOUNT);
+
+    // 3. Build fusion inputs
+    const fusionInputs = Array.from(phase2.mergedScores.entries()).map(([symbolId, graphScore]) => ({
+      symbolId,
+      filePath: sub.nodes.get(symbolId)?.filePath ?? "",
+      lexicalScore: seeds.get(symbolId) ?? 0,
+      graphScore,
+      betweennessScore: 0,
+    }));
+
+    // 4. Fuse scores
+    const fused = fuseIntentScores(fusionInputs, coupling, seedFiles);
+
+    // 5. Aggregate to files
+    const graph = buildGraph(nodes, []);
+    const fileScores = aggregateToFiles(fused, graph);
+
+    // 6. Select predictions
+    selectPredictions(fileScores);
+
+    const elapsed = performance.now() - start;
+
+    // Budget: 80ms (15ms subgraph + 30ms propagation + 20ms phase2 + 1ms fusion + 1ms agg + 13ms headroom)
+    expect(elapsed).toBeLessThan(80);
   });
 });

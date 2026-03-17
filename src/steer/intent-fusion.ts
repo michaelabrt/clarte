@@ -1,13 +1,18 @@
 /**
- * RFC-002 §1.3, §1.6, §1.7: Intent score fusion, file-level aggregation,
+ * RFC-002 SS1.3, SS1.6, SS1.7: Intent score fusion, file-level aggregation,
  * and dynamic prediction count selection.
  *
- * The fusion formula:
- *   S_intent(s) = lambda_L * L(s,q) + lambda_G * G(s,q)
+ * Updated fusion formula (F1/F2 remediation):
+ *   S_intent(s) = lambda_L * L_hat(s,q) + lambda_G * G(s,q) * C(s) * D
  *               + lambda_T * T(s,q) + lambda_B * B_tau(s)
  *
- * where L = lexical (BM25+), G = graph (Dijkstra propagation),
+ * where L_hat = normalized BM25+ in [0,1], G = Dijkstra propagation,
+ *       C = path resolution confidence product, D = stale discount,
  *       T = temporal (change coupling), B = task-scoped betweenness.
+ *
+ * signals.lexical stores L_hat (normalized) for exact recomputeScore.
+ * signals.rawLexical stores the raw BM25+ for ToI display.
+ * signals.graph stores the effective G*C*D for exact recomputeScore.
  */
 
 import type { InMemorySymbolGraph } from "../storage/types";
@@ -34,6 +39,8 @@ export interface FusionInput {
   graphScore: number;
   /** B_tau(s) from task-scoped betweenness, already in [0, 1] */
   betweennessScore: number;
+  /** Product of edge resolution confidences along the Dijkstra path. Defaults to 1.0. */
+  pathConfidence?: number;
 }
 
 export type FusionSignals = IntentPrediction["signals"];
@@ -59,14 +66,12 @@ const MIN_COUPLING_CONFIDENCE = 0.5;
  * Fuse four signals into a single intent score per symbol.
  *
  * Lexical scores are normalized to [0, 1] by dividing by the max across inputs.
- * Graph and betweenness are already normalized. Temporal is computed per-symbol
- * from change coupling with seed files.
+ * Graph scores are modulated by pathConfidence (resolution tier product) and
+ * staleDiscount (graph freshness). All effective values are stored in signals
+ * for exact recomputation by the verification protocol.
  *
- * Returns the un-normalized signal values in `signals` for Theory of Impact transparency.
- *
- * @param staleDiscount - When the graph is stale (built more than
- *   STALE_COMMIT_THRESHOLD commits ago), pass STALE_GRAPH_DISCOUNT (0.5)
- *   to halve the graph signal weight. Omit or pass undefined for fresh graphs.
+ * @param staleDiscount - Pass STALE_GRAPH_DISCOUNT (0.5) when the graph is
+ *   stale. Omit or pass undefined for fresh graphs.
  */
 export function fuseIntentScores(
   inputs: FusionInput[],
@@ -80,11 +85,13 @@ export function fuseIntentScores(
   let maxLexical = 0;
   for (const inp of inputs) if (inp.lexicalScore > maxLexical) maxLexical = inp.lexicalScore;
 
+  const staleFactor = staleDiscount ?? 1.0;
   const result = new Map<number, FusedScore>();
 
   for (const inp of inputs) {
     const L = maxLexical > 0 ? inp.lexicalScore / maxLexical : 0;
-    const G = staleDiscount !== undefined ? inp.graphScore * staleDiscount : inp.graphScore;
+    const pathConf = inp.pathConfidence ?? 1.0;
+    const G = inp.graphScore * pathConf * staleFactor;
     const B = inp.betweennessScore;
 
     // Temporal signal: max coupling confidence between this file and any seed file
@@ -109,8 +116,9 @@ export function fuseIntentScores(
     result.set(inp.symbolId, {
       score,
       signals: {
-        lexical: inp.lexicalScore, // un-normalized for ToI
-        graph: inp.graphScore,
+        lexical: L, // normalized [0,1] for recomputeScore
+        rawLexical: inp.lexicalScore, // raw BM25+ for ToI display
+        graph: G, // effective: G(s) * C_path * D_stale
         temporal: T,
         betweenness: inp.betweennessScore,
       },
