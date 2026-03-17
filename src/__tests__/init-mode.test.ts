@@ -218,8 +218,8 @@ vi.mock("../core/utils.js", () => ({
 
 // ── Import under test (after mocks) ────────────────────────────────
 
-import { runInitMode } from "../cli/init.js";
-import type { ProjectConfig } from "../core/types.js";
+import { runInitMode } from "../cli/init";
+import type { ProjectConfig } from "../core/types";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

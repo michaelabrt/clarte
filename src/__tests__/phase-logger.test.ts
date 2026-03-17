@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { LogCtx } from "../core/types/internal.js";
+import type { LogCtx } from "../core/types/internal";
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ import {
   logTestMapping,
   logMonorepoAnalysis,
   logDelta,
-} from "../core/phase-logger.js";
+} from "../core/phase-logger";
 
 // ── Fixtures ──────────────────────────────────────────────────────────
 

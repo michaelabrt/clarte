@@ -1,5 +1,5 @@
-import { deriveRole } from "./centrality.js";
-import type { HubFile, ImportEdge, ImportGraph } from "../types.js";
+import { deriveRole } from "./centrality";
+import type { HubFile, ImportEdge, ImportGraph } from "../types";
 
 /**
  * Build a set of "filepath::ExportName" pairs that are actually imported

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { findSCCsFromAdj } from "../core/graph/scc.js";
-import { routeBarrelImport } from "../core/graph/barrel-routing.js";
-import type { ImportEdge } from "../core/types.js";
-import type { BarrelExportMap } from "../core/graph/import-resolution.js";
+import { findSCCsFromAdj } from "../core/graph/scc";
+import { routeBarrelImport } from "../core/graph/barrel-routing";
+import type { ImportEdge } from "../core/types";
+import type { BarrelExportMap } from "../core/graph/import-resolution";
 
 // ---------------------------------------------------------------------------
 // findSCCsFromAdj

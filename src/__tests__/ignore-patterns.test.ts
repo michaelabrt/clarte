@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IGNORE_DIRS, IGNORE_GLOBS, IGNORE_DIRS_SET } from "../core/config/ignore-patterns.js";
+import { IGNORE_DIRS, IGNORE_GLOBS, IGNORE_DIRS_SET } from "../core/config/ignore-patterns";
 
 describe("IGNORE_DIRS", () => {
   it("is a non-empty array of strings", () => {

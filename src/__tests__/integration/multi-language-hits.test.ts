@@ -9,8 +9,8 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { buildImportGraph, mergeGraph } from "../../core/graph/build.js";
-import { computeHITS, computeBetweenness } from "../../core/graph/centrality.js";
+import { buildImportGraph, mergeGraph } from "../../core/graph/build";
+import { computeHITS, computeBetweenness } from "../../core/graph/centrality";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = path.join(__dirname, "fixtures", "ts-python-multi");

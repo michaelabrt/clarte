@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { ImportEdge, ImportGraph } from "../core/types.js";
-import { renderFileIndexSection } from "../steer/context/sections/file-index.js";
+import type { ImportEdge, ImportGraph } from "../core/types";
+import { renderFileIndexSection } from "../steer/context/sections/file-index";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 

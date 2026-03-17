@@ -1,30 +1,31 @@
-import { errorMessage } from "./utils.js";
-import { filterAliveGitActivity } from "./git/filter-alive.js";
+import { errorMessage } from "./utils";
+import { filterAliveGitActivity } from "./git/filter-alive";
+import { shouldRunDriftDetection } from "./graph/incremental";
 import {
   computeAnalysisCacheKey,
   loadAnalysisCache,
   saveAnalysisCache,
   ANALYSIS_CACHE_VERSION,
   type AnalysisCacheData,
-} from "./graph/cache.js";
-import { findCircularDeps } from "./graph/cycles.js";
-import { getHubFiles } from "./graph/hub-files.js";
-import { detectArchitecturalLayers, computeLayerConsistency } from "./graph/layers.js";
-import { computeInstability } from "./graph/instability.js";
-import { detectCommunitiesLeiden } from "./graph/leiden.js";
-import { findDeadFiles, readPackageEntryPoints } from "./graph/dead-files.js";
-import { findCrossCuttingFiles } from "./graph/cross-cutting.js";
-import { findChokepoints } from "./graph/chokepoints.js";
-import { computeGraphTopology } from "./graph/topology.js";
-import { findStructuralTemporalMismatches } from "./graph/mismatches.js";
-import { findTightCouplings } from "./graph/tight-coupling.js";
-import { checkArchitecturalFitness } from "./graph/fitness.js";
-import { analyzeGitActivity } from "./git/analysis.js";
-import { analyzeMonorepoGraph, computePackageCentrality } from "./analysis/monorepo.js";
-import { scanConfigConstraints } from "./config/scan.js";
-import { inferConventions } from "./conventions/conventions.js";
-import { buildTestMapping } from "./analysis/test-map.js";
-import { predictChangeImpact } from "./analysis/change-impact.js";
+} from "./graph/cache";
+import { findCircularDeps } from "./graph/cycles";
+import { getHubFiles } from "./graph/hub-files";
+import { detectArchitecturalLayers, computeLayerConsistency } from "./graph/layers";
+import { computeInstability } from "./graph/instability";
+import { detectCommunitiesLeiden } from "./graph/leiden";
+import { findDeadFiles, readPackageEntryPoints } from "./graph/dead-files";
+import { findCrossCuttingFiles } from "./graph/cross-cutting";
+import { findChokepoints } from "./graph/chokepoints";
+import { computeGraphTopology } from "./graph/topology";
+import { findStructuralTemporalMismatches } from "./graph/mismatches";
+import { findTightCouplings } from "./graph/tight-coupling";
+import { checkArchitecturalFitness } from "./graph/fitness";
+import { analyzeGitActivity } from "./git/analysis";
+import { analyzeMonorepoGraph, computePackageCentrality } from "./analysis/monorepo";
+import { scanConfigConstraints } from "./config/scan";
+import { inferConventions } from "./conventions/conventions";
+import { buildTestMapping } from "./analysis/test-map";
+import { predictChangeImpact } from "./analysis/change-impact";
 import {
   extractSnapshot,
   loadPreviousSnapshot,
@@ -32,14 +33,14 @@ import {
   computeDelta,
   isDeltaEmpty,
   renderDeltaSection,
-} from "./analysis/delta.js";
+} from "./analysis/delta";
 import {
   computeProjectCacheKey,
   loadProjectCache,
   saveProjectCache,
   buildProjectCachePayload,
   hydrateProjectCache,
-} from "./project-cache.js";
+} from "./project-cache";
 import {
   computeGitCacheKey,
   loadGitCache,
@@ -47,8 +48,8 @@ import {
   buildGitCachePayload,
   hydrateGitCache,
   type GitCacheData,
-} from "./git-cache.js";
-import type { GraphStore } from "../storage/graph-store.js";
+} from "./git-cache";
+import type { GraphStore } from "../storage/graph-store";
 import type {
   ConfigConstraints,
   ContextAnalysis,
@@ -61,8 +62,8 @@ import type {
   ProgressCallback,
   ProjectConfig,
   TestMapping,
-} from "./types.js";
-import type { GraphPhaseResult, LogCtx, PhaseTiming, ProjectPhaseResult } from "./types/internal.js";
+} from "./types";
+import type { GraphPhaseResult, LogCtx, PhaseTiming, ProjectPhaseResult } from "./types/internal";
 import {
   logHubFiles,
   logCircularDeps,
@@ -80,12 +81,14 @@ import {
   logTestMapping,
   logMonorepoAnalysis,
   logDelta,
-} from "./phase-logger.js";
+} from "./phase-logger";
 
 export interface AnalysisResult {
   analysis: ContextAnalysis;
   deltaSection: string | null;
   timing: PhaseTiming;
+  /** [Martin & Leskovec] Drift detection result from post-refresh hook (RFC §5.10) */
+  driftWarning?: { rebuildRecommended: boolean; reason: string };
 }
 
 export async function runAnalysis(
@@ -234,7 +237,68 @@ export async function runAnalysis(
     );
   }
 
-  return { analysis, deltaSection, timing };
+  // [Martin & Leskovec] Post-refresh drift detection hook (RFC §5.10)
+  const driftWarning = store ? checkDriftState(graph, store, jsonMode ? undefined : verboseLog) : undefined;
+
+  return { analysis, deltaSection, timing, driftWarning };
+}
+
+// ---------------------------------------------------------------------------
+// Drift detection (Martin & Leskovec, RFC §5.10)
+// ---------------------------------------------------------------------------
+
+/**
+ * [Martin & Leskovec] Post-refresh hook: compare current scores against stored baseline.
+ * Triggers every 100 incremental builds or weekly (whichever comes first).
+ * If score drift > 0.01 on any file, logs a warning and recommends Level 3 rebuild.
+ */
+function checkDriftState(
+  graph: ImportGraph,
+  store: GraphStore,
+  log?: ProgressCallback,
+): { rebuildRecommended: boolean; reason: string } | undefined {
+  // Guard: test mocks may not implement getMeta/getCache
+  if (typeof store.getMeta !== "function" || typeof store.getCache !== "function") {
+    return undefined;
+  }
+
+  const buildCountStr = store.getMeta("build_count");
+  const lastRebuild = store.getMeta("last_full_rebuild");
+  const buildCount = Number(buildCountStr ?? 0);
+
+  if (!shouldRunDriftDetection(buildCount, lastRebuild ?? undefined)) {
+    return undefined;
+  }
+
+  // Load baseline scores from kv_cache (stored after last full rebuild)
+  const baselineJson = store.getCache("drift_baseline_authority");
+  if (!baselineJson) {
+    // No baseline yet: store current scores as the baseline
+    store.setCache("drift_baseline_authority", JSON.stringify([...graph.authority]));
+    store.setCache("drift_baseline_hub", JSON.stringify([...graph.hubScores]));
+    return undefined;
+  }
+
+  const baselineAuth: Array<[string, number]> = JSON.parse(baselineJson);
+  const baselineMap = new Map(baselineAuth);
+
+  let maxDelta = 0;
+  const driftFiles: string[] = [];
+
+  for (const [file, auth] of graph.authority) {
+    const baseAuth = baselineMap.get(file) ?? 0;
+    const delta = Math.abs(auth - baseAuth);
+    if (delta > maxDelta) maxDelta = delta;
+    if (delta > 0.01) driftFiles.push(file);
+  }
+
+  if (driftFiles.length > 0) {
+    const reason = `Structural Drift Warning: ${driftFiles.length} files with authority delta > 0.01 (max: ${maxDelta.toFixed(3)}) after ${buildCount} incremental builds. Queue Level 3 full rebuild for next idle period.`;
+    log?.(reason);
+    return { rebuildRecommended: true, reason };
+  }
+
+  return { rebuildRecommended: false, reason: "" };
 }
 
 // ---------------------------------------------------------------------------

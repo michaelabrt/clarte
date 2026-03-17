@@ -1,4 +1,4 @@
-import type { IDETarget, Language } from "./detection.js";
+import type { IDETarget, Language } from "./detection";
 
 /** User-provided answers from the interactive prompts */
 export interface UserAnswers {

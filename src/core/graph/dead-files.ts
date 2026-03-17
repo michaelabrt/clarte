@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import type { ImportGraph } from "../types.js";
+import type { ImportGraph } from "../types";
 
 /**
  * Extract likely entry point file paths from package.json:

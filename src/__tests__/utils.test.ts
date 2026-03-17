@@ -12,7 +12,7 @@ import {
   readFileOr,
   readJsonFile,
   writeFileSafe,
-} from "../core/utils.js";
+} from "../core/utils";
 
 const TMP = path.join(path.dirname(fileURLToPath(import.meta.url)), ".tmp-utils-test");
 

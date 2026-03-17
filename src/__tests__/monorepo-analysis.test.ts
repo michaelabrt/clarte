@@ -6,9 +6,9 @@ import {
   analyzeMonorepoGraph,
   annotateCrossPackageEdges,
   computePackageCentrality,
-} from "../core/analysis/monorepo.js";
-import type { ImportEdge, MonorepoInfo } from "../core/types.js";
-import { makeImportGraph } from "./helpers/factories.js";
+} from "../core/analysis/monorepo";
+import type { ImportEdge, MonorepoInfo } from "../core/types";
+import { makeImportGraph } from "./helpers/factories";
 
 function makeGraph(edges: ImportEdge[]) {
   return makeImportGraph(edges);

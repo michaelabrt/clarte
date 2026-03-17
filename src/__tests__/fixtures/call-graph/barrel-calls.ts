@@ -1,4 +1,4 @@
-import { doThing } from "./barrel.js";
+import { doThing } from "./barrel";
 
 // doThing is re-exported by barrel.ts from helper.ts.
 // Known limitation: calleeFile resolves to "barrel.ts", not "helper.ts".

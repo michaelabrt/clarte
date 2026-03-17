@@ -1,9 +1,9 @@
 import path from "node:path";
 import { glob } from "tinyglobby";
-import { IGNORE_GLOBS } from "../config/ignore-patterns.js";
-import { estimateTokens, readJsonFile } from "../utils.js";
-import { findUsedExports } from "../graph/hub-files.js";
-import { initForLanguage } from "../parsers/init.js";
+import { IGNORE_GLOBS } from "../config/ignore-patterns";
+import { estimateTokens, readJsonFile } from "../utils";
+import { findUsedExports } from "../graph/hub-files";
+import { initForLanguage } from "../parsers/init";
 import type {
   CodeSnapshot,
   DetectedContext,
@@ -12,8 +12,8 @@ import type {
   Language,
   ProgressCallback,
   SnapshotEntry,
-} from "../types.js";
-import { getDefaultScanPaths, getDefaultScanPathsForLanguage, getLanguageConfig, makeExtractor } from "./scan-paths.js";
+} from "../types";
+import { getDefaultScanPaths, getDefaultScanPathsForLanguage, getLanguageConfig, makeExtractor } from "./scan-paths";
 
 function annotateSignature(entry: SnapshotEntry, commentPrefix = "//"): string {
   if (entry.importedByCount && entry.importedByCount > 2) {

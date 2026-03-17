@@ -1,4 +1,4 @@
-import type { FileRole } from "./detection.js";
+import type { FileRole } from "./detection";
 
 /** A single import edge in the project graph */
 export interface ImportEdge {

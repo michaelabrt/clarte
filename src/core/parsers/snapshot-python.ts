@@ -1,6 +1,6 @@
 import type { Node } from "web-tree-sitter";
-import type { SnapshotEntry } from "../types.js";
-import { stripAnnotationName } from "./snapshot-utils.js";
+import type { SnapshotEntry } from "../types";
+import { stripAnnotationName } from "./snapshot-utils";
 
 /** Bases that indicate a "type" category */
 const PY_TYPE_BASES = new Set(["BaseModel", "TypedDict", "NamedTuple", "Protocol"]);

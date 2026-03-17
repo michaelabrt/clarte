@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { resolveTestCommand, generateRunTestScript } from "../steer/hooks/generate-scripts.js";
-import type { DetectedContext } from "../core/types/detection.js";
+import { resolveTestCommand, generateRunTestScript } from "../steer/hooks/generate-scripts";
+import type { DetectedContext } from "../core/types/detection";
 
 function makeCtx(overrides: Partial<DetectedContext> = {}): DetectedContext {
   return {

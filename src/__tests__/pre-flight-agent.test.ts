@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { PRE_FLIGHT_AGENT_CONTENT } from "../steer/context/pre-flight-agent.js";
+import { PRE_FLIGHT_AGENT_CONTENT } from "../steer/context/pre-flight-agent";
 
 describe("Pre-flight agent prompt - 3-tier task classification", () => {
   it("contains bug fix tier with FILE/LINE/FIX format reference", () => {

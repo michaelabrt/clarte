@@ -1,4 +1,4 @@
-import type { ContextAnalysis, CrossCuttingFile, ImportGraph, Chokepoint, TightCoupling } from "../types.js";
+import type { ContextAnalysis, CrossCuttingFile, ImportGraph, Chokepoint, TightCoupling } from "../types";
 
 // ── Types ────────────────────────────────────────────────────────────
 

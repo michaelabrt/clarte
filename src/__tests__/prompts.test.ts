@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { DetectedContext, ProjectConfig } from "../core/types.js";
+import type { DetectedContext, ProjectConfig } from "../core/types";
 
 // Track prompt calls for verification
 const promptCalls: Array<{ type: string; args: unknown }> = [];
@@ -44,8 +44,8 @@ vi.mock("../core/detect/detect.js", () => ({
   summarizeDetection: () => "TypeScript + React + Vitest",
 }));
 
-import { runPrompts } from "../cli/prompts.js";
-import { makeDetectedContext } from "./helpers/mocks.js";
+import { runPrompts } from "../cli/prompts";
+import { makeDetectedContext } from "./helpers/mocks";
 
 function makeDetected(overrides: Partial<DetectedContext> = {}): DetectedContext {
   return makeDetectedContext({

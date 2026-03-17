@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getExtensionsForLanguage, SECONDARY_LANGUAGE_THRESHOLD } from "../core/detect/languages.js";
+import { getExtensionsForLanguage, SECONDARY_LANGUAGE_THRESHOLD } from "../core/detect/languages";
 
 describe("SECONDARY_LANGUAGE_THRESHOLD", () => {
   it("is 15%", () => {

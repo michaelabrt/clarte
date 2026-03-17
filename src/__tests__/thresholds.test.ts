@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { computeGraphTopology } from "../core/graph/topology.js";
+import { computeGraphTopology } from "../core/graph/topology";
 import {
   FRAGMENT_MIN_SIZE,
   HITS,
@@ -23,8 +23,8 @@ import {
   LAYER_CONSISTENCY,
   SNAPSHOT_LANGUAGES,
   GRAPH_DATA,
-} from "../core/config/thresholds.js";
-import { makeGraph, edge } from "./algorithm/helpers.js";
+} from "../core/config/thresholds";
+import { makeGraph, edge } from "./algorithm/helpers";
 
 /**
  * Build a chain of `n` isolated nodes: a0 -> a1 -> ... -> a(n-1).

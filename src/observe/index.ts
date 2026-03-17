@@ -1,8 +1,8 @@
-export { parseSessionFile } from "./parse-session.js";
-export type { Turn, ParsedSession, ToolCall } from "./parse-session.js";
+export { parseSessionFile } from "./parse-session";
+export type { Turn, ParsedSession, ToolCall } from "./parse-session";
 
-export { classifyTurns, isEditTurn } from "./classify.js";
-export type { Phase, ClassifiedTurn } from "./classify.js";
+export { classifyTurns, isEditTurn } from "./classify";
+export type { Phase, ClassifiedTurn } from "./classify";
 
 export {
   detectAllPatterns,
@@ -10,13 +10,13 @@ export {
   detectVerificationRereads,
   detectSummaryBloat,
   estimateTurnCost,
-} from "./patterns.js";
-export type { WastePattern } from "./patterns.js";
+} from "./patterns";
+export type { WastePattern } from "./patterns";
 
-export { computeMetrics } from "./metrics.js";
-export type { SessionMetrics } from "./metrics.js";
+export { computeMetrics } from "./metrics";
+export type { SessionMetrics } from "./metrics";
 
-export { aggregateMetrics } from "./aggregate.js";
-export type { AggregateMetrics } from "./aggregate.js";
+export { aggregateMetrics } from "./aggregate";
+export type { AggregateMetrics } from "./aggregate";
 
-export { formatSessionReport, formatAggregateReport, formatJson } from "./report.js";
+export { formatSessionReport, formatAggregateReport, formatJson } from "./report";

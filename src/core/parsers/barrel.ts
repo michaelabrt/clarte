@@ -1,8 +1,8 @@
 import path from "node:path";
-import { withParsedTree } from "./init.js";
-import { extractStringContent } from "./ts-imports.js";
-import { BARREL_THRESHOLD } from "../config/thresholds.js";
-import type { Language } from "../types/detection.js";
+import { withParsedTree } from "./init";
+import { extractStringContent } from "./ts-imports";
+import { BARREL_THRESHOLD } from "../config/thresholds";
+import type { Language } from "../types/detection";
 
 /** Pick the correct grammar for a JS/TS file. JSX/TSX files need the tsx grammar. */
 function barrelLang(filePath?: string): Language {

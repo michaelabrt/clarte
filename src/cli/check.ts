@@ -1,7 +1,7 @@
-import { loadConfig, computeSnapshotHash } from "../core/config/config.js";
-import { validateContextPaths } from "../core/analysis/check.js";
-import { ExitCode } from "../core/errors.js";
-import { errorMessage } from "../core/utils.js";
+import { loadConfig, computeSnapshotHash } from "../core/config/config";
+import { validateContextPaths } from "../core/analysis/check";
+import { ExitCode } from "../core/errors";
+import { errorMessage } from "../core/utils";
 
 /**
  * Handle --check mode: fast path for shell integration.

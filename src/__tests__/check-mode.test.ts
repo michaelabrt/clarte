@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ProjectConfig } from "../core/types.js";
-import { ExitCode } from "../core/errors.js";
+import type { ProjectConfig } from "../core/types";
+import { ExitCode } from "../core/errors";
 
 // Mock dependencies before importing the module under test
 vi.mock("../core/config/config.js", () => ({

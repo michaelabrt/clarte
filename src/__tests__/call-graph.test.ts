@@ -8,8 +8,8 @@ import {
   loadCallGraph,
   buildCallerIndex,
   buildFileCallIndex,
-} from "../core/graph/build-call-graph.js";
-import { makeImportGraph } from "./helpers/factories.js";
+} from "../core/graph/build-call-graph";
+import { makeImportGraph } from "./helpers/factories";
 
 const FIXTURE_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), "fixtures/call-graph");
 

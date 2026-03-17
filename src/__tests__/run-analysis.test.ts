@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { makeDetectedContext } from "./helpers/mocks.js";
+import { makeDetectedContext } from "./helpers/mocks";
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -173,8 +173,8 @@ vi.mock("../core/analysis/delta.js", () => ({
 
 // ── Import under test (after mocks) ────────────────────────────────
 
-import { runAnalysis } from "../core/run-analysis.js";
-import type { ImportGraph } from "../core/types.js";
+import { runAnalysis } from "../core/run-analysis";
+import type { ImportGraph } from "../core/types";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

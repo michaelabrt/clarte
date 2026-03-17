@@ -1,4 +1,4 @@
-import type { ImportGraph, TightCoupling } from "../types.js";
+import type { ImportGraph, TightCoupling } from "../types";
 
 /**
  * Find file pairs where one file imports many named exports from another,

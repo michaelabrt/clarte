@@ -2,7 +2,7 @@ import { describe, expect, it, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { loadTsconfigPaths } from "../core/graph/import-resolution.js";
+import { loadTsconfigPaths } from "../core/graph/import-resolution";
 
 async function makeTmpDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "clarte-tsconfig-"));

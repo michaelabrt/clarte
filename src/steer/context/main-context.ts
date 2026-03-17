@@ -5,11 +5,11 @@ import type {
   DetectedContext,
   IDETarget,
   UserAnswers,
-} from "../../core/types.js";
-import { getProjectName, resetProjectNameCache, renderProjectInfoSections } from "./sections/project-info.js";
+} from "../../core/types";
+import { getProjectName, resetProjectNameCache, renderProjectInfoSections } from "./sections/project-info";
 
 // Re-export for external consumers
-export { resetProjectNameCache } from "./sections/project-info.js";
+export { resetProjectNameCache } from "./sections/project-info";
 
 // Keep type export for backward compat (used by cli/args.ts)
 export interface SectionFilterOptions {

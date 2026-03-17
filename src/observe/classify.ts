@@ -1,4 +1,4 @@
-import type { Turn } from "./parse-session.js";
+import type { Turn } from "./parse-session";
 
 /** Phase of a conversation turn */
 export type Phase = "explore" | "edit" | "tail";

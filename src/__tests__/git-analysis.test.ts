@@ -7,7 +7,7 @@ import {
   analyzeGitActivityAsync,
   type ParsedCommit,
   type TimeWindow,
-} from "../core/git/analysis.js";
+} from "../core/git/analysis";
 
 function makeCommit(files: string[], overrides?: Partial<ParsedCommit>): ParsedCommit {
   return {

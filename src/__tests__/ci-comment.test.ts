@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatComment } from "../../action/src/comment.js";
-import type { CIAnalysisResult } from "../core/analysis/ci.js";
+import { formatComment } from "../../action/src/comment";
+import type { CIAnalysisResult } from "../core/analysis/ci";
 
 function makeResult(overrides?: Partial<CIAnalysisResult>): CIAnalysisResult {
   return {

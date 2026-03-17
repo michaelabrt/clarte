@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import type { DetectedContext, UserAnswers } from "../core/types.js";
+import type { DetectedContext, UserAnswers } from "../core/types";
 
 // Mock template builders
 vi.mock("../steer/context/main-context.js", () => ({
@@ -72,7 +72,7 @@ vi.mock("../core/theme.js", async () => {
   return { theme: THEME_MOCK };
 });
 
-import { generateFiles, extractUserSections, mergeUserSections } from "../core/generate.js";
+import { generateFiles, extractUserSections, mergeUserSections } from "../core/generate";
 
 let tmpDir: string;
 

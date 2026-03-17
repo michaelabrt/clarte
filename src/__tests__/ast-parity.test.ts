@@ -15,11 +15,11 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { initTreeSitter } from "../core/parsers/init.js";
-import { parseImportsAst } from "../core/parsers/parse-imports.js";
-import { extractSnapshotAst } from "../core/parsers/extract-snapshot.js";
-import type { RawImport } from "../core/types/parser.js";
-import type { Language } from "../core/types.js";
+import { initTreeSitter } from "../core/parsers/init";
+import { parseImportsAst } from "../core/parsers/parse-imports";
+import { extractSnapshotAst } from "../core/parsers/extract-snapshot";
+import type { RawImport } from "../core/types/parser";
+import type { Language } from "../core/types";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, "../..");

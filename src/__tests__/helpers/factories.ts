@@ -2,8 +2,8 @@
  * Shared test factories for building minimal test objects.
  * Import from here instead of copying factory functions across test files.
  */
-import type { ContextAnalysis, DetectedContext, ImportEdge, ImportGraph } from "../../core/types.js";
-import type { EdgeRecord, FileRecord, PersistedGraph } from "../../core/types/persisted-graph.js";
+import type { ContextAnalysis, DetectedContext, ImportEdge, ImportGraph } from "../../core/types";
+import type { EdgeRecord, FileRecord, PersistedGraph } from "../../core/types/persisted-graph";
 
 type SimpleEdge = { from: string; to: string };
 

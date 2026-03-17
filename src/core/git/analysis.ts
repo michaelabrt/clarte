@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { ChangeCoupling, GitAnalysis, LagCoupling, ProgressCallback } from "../types.js";
-import { errorMessage } from "../utils.js";
-import { gitExec } from "./git.js";
+import type { ChangeCoupling, GitAnalysis, LagCoupling, ProgressCallback } from "../types";
+import { errorMessage } from "../utils";
+import { gitExec } from "./git";
 
 const execFileAsync = promisify(execFile);
 

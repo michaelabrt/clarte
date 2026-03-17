@@ -6,8 +6,8 @@ import {
   parseRustImports,
   resolveImport,
   detectPythonPackageRoots,
-} from "../core/graph/import-resolution.js";
-import { initTreeSitter } from "../core/parsers/init.js";
+} from "../core/graph/import-resolution";
+import { initTreeSitter } from "../core/parsers/init";
 
 beforeAll(async () => {
   await initTreeSitter();
@@ -33,7 +33,8 @@ describe("parseJsImports", () => {
 
   it("parses namespace imports (* as)", () => {
     const result = parseJsImports(`import * as path from 'node:path'`);
-    expect(result).toEqual([{ specifier: "node:path", importedNames: ["*"], isTypeOnly: false }]);
+    // Alias preserved in "* as <alias>" format so resolution can match objectName
+    expect(result).toEqual([{ specifier: "node:path", importedNames: ["* as path"], isTypeOnly: false }]);
   });
 
   it("parses type-only imports", () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { resolveEditTargets, tokenizeQuery } from "../steer/targets-resolve.js";
-import { formatEditDirective } from "../steer/targets-format.js";
-import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
+import { resolveEditTargets, tokenizeQuery } from "../steer/targets-resolve";
+import { formatEditDirective } from "../steer/targets-format";
+import { makePersistedGraph, makeFileRecord } from "./helpers/factories";
 
 // ── tokenizeQuery ────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { ProgressCallback } from "./types/output.js";
+import type { ProgressCallback } from "./types/output";
 
 const TEST_FILE_PATTERNS = [
   /\.(test|spec)\.[jt]sx?$/, // .test.ts, .test.tsx, .test.js, .test.jsx

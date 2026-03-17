@@ -1,8 +1,8 @@
 import { Parser, Language } from "web-tree-sitter";
 import type { Node } from "web-tree-sitter";
 import path from "node:path";
-import type { Language as ClarteLanguage } from "../types.js";
-import { errorMessage } from "../utils.js";
+import type { Language as ClarteLanguage } from "../types";
+import { errorMessage } from "../utils";
 
 const languages = new Map<string, Language>();
 let parser: Parser | null = null;

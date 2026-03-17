@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { findTightCouplings } from "../core/graph/tight-coupling.js";
-import type { ImportEdge } from "../core/types.js";
-import { makeImportGraph } from "./helpers/factories.js";
+import { findTightCouplings } from "../core/graph/tight-coupling";
+import type { ImportEdge } from "../core/types";
+import { makeImportGraph } from "./helpers/factories";
 
 function makeEdge(from: string, to: string, names: string[], opts: Partial<ImportEdge> = {}): ImportEdge {
   return {

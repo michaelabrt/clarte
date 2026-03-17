@@ -6,7 +6,7 @@ import {
   detectAllPatterns,
   computeMetrics,
   formatSessionReport,
-} from "../observe/index.js";
+} from "../observe/index";
 
 // Use a real session log if available, skip otherwise
 const SESSION_DIR = resolve(process.env.HOME ?? "", ".claude/projects");

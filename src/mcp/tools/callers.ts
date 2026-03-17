@@ -8,7 +8,7 @@
  * F.1 fix: UNION (not UNION ALL) prevents exponential expansion on cyclic graphs.
  */
 
-import type { DatabaseAdapter } from "../../storage/db-adapter.js";
+import type { DatabaseAdapter } from "../../storage/db-adapter";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +24,8 @@ interface CallerEntry {
   line: number;
   depth: number;
   tag: "DIRECT" | "TRANSITIVE" | "DISTANT";
+  /** [Neubig & Reimers] Graph-derived explanation for why this caller was included */
+  rationale: string;
 }
 
 export interface CallersOutput {
@@ -122,13 +124,20 @@ export function executeCallers(db: DatabaseAdapter, input: CallersInput): Caller
   const callers: CallerEntry[] = [];
   for (const [, rows] of [...byDepth.entries()].sort((a, b) => a[0] - b[0])) {
     for (const row of rows) {
+      const tag = depthTag(row.depth);
+      // [Neubig & Reimers] Build rationale from graph context
+      const rationale =
+        tag === "DIRECT"
+          ? `Direct '${row.kind}' edge: ${row.name}() in ${row.file_path}:${row.start_line}`
+          : `${row.depth}-hop transitive '${row.kind}' chain (authority: ${(row.authority ?? 0).toFixed(2)})`;
       callers.push({
         file: row.file_path,
         symbol: row.name,
         kind: row.kind,
         line: row.start_line,
         depth: row.depth,
-        tag: depthTag(row.depth),
+        tag,
+        rationale,
       });
     }
   }

@@ -2,14 +2,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, afterEach } from "vitest";
-import { makeImportGraph } from "./helpers/factories.js";
+import { makeImportGraph } from "./helpers/factories";
 import {
   computeAnalysisCacheKey,
   loadAnalysisCache,
   saveAnalysisCache,
   ANALYSIS_CACHE_VERSION,
   type AnalysisCacheData,
-} from "../core/graph/analysis-cache.js";
+} from "../core/graph/analysis-cache";
 
 const TMP = path.join(path.dirname(fileURLToPath(import.meta.url)), ".tmp-analysis-cache-test");
 

@@ -1,5 +1,5 @@
-import type { ArchitecturalLayer, ImportGraph, LayerConsistency, LayerEdge, LayerViolation } from "../types.js";
-import { LAYER_CONSISTENCY } from "../config/thresholds.js";
+import type { ArchitecturalLayer, ImportGraph, LayerConsistency, LayerEdge, LayerViolation } from "../types";
+import { LAYER_CONSISTENCY } from "../config/thresholds";
 
 /** Directory patterns for classifying files into architectural layers (frontend) */
 const FRONTEND_PATTERNS: Array<{ name: string; pattern: RegExp }> = [

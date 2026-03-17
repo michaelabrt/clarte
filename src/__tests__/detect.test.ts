@@ -9,8 +9,8 @@ import {
   enrichFrameworksWithUsage,
   summarizeDetection,
   SECONDARY_LANGUAGE_THRESHOLD,
-} from "../core/detect/detect.js";
-import type { DetectedContext, DetectedFramework } from "../core/types.js";
+} from "../core/detect/detect";
+import type { DetectedContext, DetectedFramework } from "../core/types";
 
 /** Create a temporary project directory with the given file tree. */
 async function makeProject(files: Record<string, string>): Promise<string> {

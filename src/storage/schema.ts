@@ -8,7 +8,7 @@
  *   v2 -> v3: added kv_cache table, removed dead vec_symbols virtual table.
  */
 
-import type { DatabaseAdapter } from "./db-adapter.js";
+import type { DatabaseAdapter } from "./db-adapter";
 
 export const SCHEMA_VERSION = "3";
 

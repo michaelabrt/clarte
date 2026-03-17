@@ -1,5 +1,5 @@
-import type { SessionMetrics } from "./metrics.js";
-import type { AggregateMetrics } from "./aggregate.js";
+import type { SessionMetrics } from "./metrics";
+import type { AggregateMetrics } from "./aggregate";
 
 /**
  * Format a single session report for terminal output.

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { ClarteError } from "../errors.js";
-import { errorMessage } from "../utils.js";
+import { ClarteError } from "../errors";
+import { errorMessage } from "../utils";
 
 export interface GitExecOptions {
   cwd: string;

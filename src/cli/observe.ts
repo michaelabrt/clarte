@@ -10,8 +10,8 @@ import {
   formatSessionReport,
   formatAggregateReport,
   formatJson,
-} from "../observe/index.js";
-import type { SessionMetrics } from "../observe/index.js";
+} from "../observe/index";
+import type { SessionMetrics } from "../observe/index";
 
 export interface ObserveOptions {
   /** Specific session ID to analyze */

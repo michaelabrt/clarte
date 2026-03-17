@@ -9,8 +9,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { bench, describe, vi, afterAll } from "vitest";
-import { generateGraph } from "./graph-generator.js";
-import { CLARTE_DIR } from "../../core/config/config.js";
+import { generateGraph } from "./graph-generator";
+import { CLARTE_DIR } from "../../core/config/config";
 
 // Mock git analysis (no real git repo in fixture)
 vi.mock("../../core/git/analysis.js", () => ({

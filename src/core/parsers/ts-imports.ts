@@ -1,5 +1,5 @@
 import type { Node } from "web-tree-sitter";
-import type { RawImport } from "../types/parser.js";
+import type { RawImport } from "../types/parser";
 
 export function parseJsImportsAst(root: Node): RawImport[] {
   const imports: RawImport[] = [];
@@ -90,9 +90,10 @@ function parseJsImportStatement(node: Node): RawImport | null {
         }
       }
     } else if (child.type === "namespace_import") {
-      // import * as utils from '...' — mark as namespace with "*" sentinel
-      // so barrel routing and call graph resolution can handle it
-      names.push("*");
+      // import * as ns from '...' — store alias in "* as ns" format so
+      // resolution can match callSite.objectName against the alias
+      const aliasNode = child.namedChildren.find((c) => c.type === "identifier");
+      names.push(aliasNode ? `* as ${aliasNode.text}` : "*");
     }
   }
 

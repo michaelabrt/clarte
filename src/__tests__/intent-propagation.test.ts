@@ -70,22 +70,22 @@ function buildSubgraph(
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
   const forward = new Map<
     number,
-    Array<{ targetId: number; kind: SymbolEdgeKind; weight: number; confidence: number; isReverse: boolean }>
+    Array<{ targetId: number; kind: SymbolEdgeKind; confidence: number; isReverse: boolean; isBarrelRouted: boolean }>
   >();
   const reverse = new Map<
     number,
-    Array<{ targetId: number; kind: SymbolEdgeKind; weight: number; confidence: number; isReverse: boolean }>
+    Array<{ targetId: number; kind: SymbolEdgeKind; confidence: number; isReverse: boolean; isBarrelRouted: boolean }>
   >();
   const fileSet = new Set(nodes.map((n) => n.filePath));
 
   for (const e of edges) {
     const conf = e.confidence ?? 1.0;
     const fwd = forward.get(e.from) ?? [];
-    fwd.push({ targetId: e.to, kind: e.kind, weight: 1.0, confidence: conf, isReverse: false });
+    fwd.push({ targetId: e.to, kind: e.kind, confidence: conf, isReverse: false, isBarrelRouted: false });
     forward.set(e.from, fwd);
 
     const rev = reverse.get(e.to) ?? [];
-    rev.push({ targetId: e.from, kind: e.kind, weight: 1.0, confidence: conf, isReverse: true });
+    rev.push({ targetId: e.from, kind: e.kind, confidence: conf, isReverse: true, isBarrelRouted: false });
     reverse.set(e.to, rev);
   }
 

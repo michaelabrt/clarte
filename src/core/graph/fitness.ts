@@ -1,6 +1,6 @@
-import type { ArchitecturalLayer, ArchViolation, ImportGraph, LayerEdge } from "../types.js";
-import { LAYER_CONSISTENCY } from "../config/thresholds.js";
-import { buildLayerDAG } from "./layers.js";
+import type { ArchitecturalLayer, ArchViolation, ImportGraph, LayerEdge } from "../types";
+import { LAYER_CONSISTENCY } from "../config/thresholds";
+import { buildLayerDAG } from "./layers";
 
 /**
  * Derive a topological ordering of layers from layer dependency edges.

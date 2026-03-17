@@ -1,6 +1,6 @@
 import path from "node:path";
-import { fileExists } from "../utils.js";
-import type { GitAnalysis } from "../types.js";
+import { fileExists } from "../utils";
+import type { GitAnalysis } from "../types";
 
 /**
  * Filter git activity entries to only files that still exist on disk.

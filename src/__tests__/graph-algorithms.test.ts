@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { findSCCs, findCircularDeps, findFeedbackEdges } from "../core/graph/cycles.js";
-import { getHubFiles } from "../core/graph/hub-files.js";
-import { computeHITS, deriveRole, computeBetweenness } from "../core/graph/centrality.js";
-import { detectCommunitiesLeiden, computeAdaptiveGamma, computeCohesion } from "../core/graph/leiden.js";
+import { findSCCs, findCircularDeps, findFeedbackEdges } from "../core/graph/cycles";
+import { getHubFiles } from "../core/graph/hub-files";
+import { computeHITS, deriveRole, computeBetweenness } from "../core/graph/centrality";
+import { detectCommunitiesLeiden, computeAdaptiveGamma, computeCohesion } from "../core/graph/leiden";
 import {
   quantizeBetweennessK,
   checkRebuildTriggers,
   shouldRunDriftDetection,
   collectNHopNeighborhood,
   filesNeedingRoleUpdate,
-} from "../core/graph/incremental.js";
-import { findStructuralTemporalMismatches } from "../core/graph/mismatches.js";
-import { findTightCouplings } from "../core/graph/tight-coupling.js";
-import { checkArchitecturalFitness } from "../core/graph/fitness.js";
-import type { ArchitecturalLayer, CircularDependency, ImportEdge, LayerEdge } from "../core/types.js";
-import { makeGraph, edge } from "./algorithm/helpers.js";
+} from "../core/graph/incremental";
+import { findStructuralTemporalMismatches } from "../core/graph/mismatches";
+import { findTightCouplings } from "../core/graph/tight-coupling";
+import { checkArchitecturalFitness } from "../core/graph/fitness";
+import type { ArchitecturalLayer, CircularDependency, ImportEdge, LayerEdge } from "../core/types";
+import { makeGraph, edge } from "./algorithm/helpers";
 
 function dynamicEdge(from: string, to: string, names: string[] = []): ImportEdge {
   return { from, to, isExternal: false, specifier: `./${to}`, importedNames: names, isDynamic: true };

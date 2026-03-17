@@ -1,4 +1,4 @@
-import type { ArchitecturalLayer, CrossCuttingFile, ImportGraph } from "../types.js";
+import type { ArchitecturalLayer, CrossCuttingFile, ImportGraph } from "../types";
 
 /**
  * Find files imported across multiple architectural layers.

@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { createDatabase } from "../../storage/db-adapter.js";
-import { initSchema } from "../../storage/schema.js";
-import { GraphStore } from "../../storage/graph-store.js";
-import { migrateFromJson } from "../../storage/migrate.js";
+import { createDatabase } from "../../storage/db-adapter";
+import { initSchema } from "../../storage/schema";
+import { GraphStore } from "../../storage/graph-store";
+import { migrateFromJson } from "../../storage/migrate";
 
 const NOW = new Date().toISOString();
 

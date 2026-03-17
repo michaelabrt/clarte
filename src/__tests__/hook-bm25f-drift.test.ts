@@ -10,8 +10,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { resolveEditTargets, promptMentionsTargets, shouldSkipPreFlight } from "../steer/targets-resolve.js";
-import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
+import { resolveEditTargets, promptMentionsTargets, shouldSkipPreFlight } from "../steer/targets-resolve";
+import { makePersistedGraph, makeFileRecord } from "./helpers/factories";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const GENERATE_HOOKS = readFileSync(resolve(ROOT, "steer/hooks/generate-hooks.ts"), "utf-8");

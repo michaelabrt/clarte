@@ -9,7 +9,7 @@
  * F.6 fix: Entry points filtered by is_exported to reduce noise in library repos.
  */
 
-import type { DatabaseAdapter } from "../../storage/db-adapter.js";
+import type { DatabaseAdapter } from "../../storage/db-adapter";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import * as helpers from "./helper.js";
+import * as helpers from "./helper";
 
 export function useNamespace() {
   helpers.doThing();

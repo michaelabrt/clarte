@@ -11,7 +11,7 @@ vi.mock("../core/theme.js", () => ({
   }),
 }));
 
-import { startShimmer, NOOP_SHIMMER } from "../cli/animations.js";
+import { startShimmer, NOOP_SHIMMER } from "../cli/animations";
 
 describe("NOOP_SHIMMER", () => {
   it("has a stop method that does not throw", () => {

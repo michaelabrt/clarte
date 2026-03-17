@@ -10,8 +10,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { resolveEditTargets, tokenizeQuery } from "../steer/targets-resolve.js";
-import { makePersistedGraph, makeFileRecord } from "./helpers/factories.js";
+import { resolveEditTargets, tokenizeQuery } from "../steer/targets-resolve";
+import { makePersistedGraph, makeFileRecord } from "./helpers/factories";
 
 // ── Compound token preservation: edge cases ──────────────────────────────────
 

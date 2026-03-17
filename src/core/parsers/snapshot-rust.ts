@@ -1,6 +1,6 @@
 import type { Node } from "web-tree-sitter";
-import type { SnapshotEntry } from "../types.js";
-import { extractNodeBlock, extractSignatureBeforeBody } from "./snapshot-utils.js";
+import type { SnapshotEntry } from "../types";
+import { extractNodeBlock, extractSignatureBeforeBody } from "./snapshot-utils";
 
 export function extractRustSnapshot(root: Node, content: string, relPath: string): SnapshotEntry[] {
   const entries: SnapshotEntry[] = [];

@@ -5,9 +5,9 @@
  * derived by aggregation (max), not computed directly.
  */
 
-import { HITS as HITS_CONFIG } from "../config/thresholds.js";
-import { SYMBOL_EDGE_WEIGHTS, type SymbolEdgeKind } from "./symbol-types.js";
-import type { ResolvedSymbolEdge } from "./symbol-types.js";
+import { HITS as HITS_CONFIG } from "../config/thresholds";
+import { SYMBOL_EDGE_WEIGHTS, type SymbolEdgeKind } from "./symbol-types";
+import type { ResolvedSymbolEdge } from "./symbol-types";
 
 // ── Symbol HITS input/output ──────────────────────────────────────────────────
 
@@ -136,18 +136,22 @@ export function computeSymbolHITS(
       newHub[vi] = alpha * baseScore + (1 - alpha) * sum;
     }
 
-    // L2 normalize
-    let authNorm = 0;
-    let hubNorm = 0;
+    // Min-max normalize per iteration (RFC §2.10: "Normalization: min-max per iteration")
+    let authMin = Infinity;
+    let authMax = -Infinity;
+    let hubMin = Infinity;
+    let hubMax = -Infinity;
     for (let i = 0; i < n; i++) {
-      authNorm += newAuth[i] * newAuth[i];
-      hubNorm += newHub[i] * newHub[i];
+      if (newAuth[i] < authMin) authMin = newAuth[i];
+      if (newAuth[i] > authMax) authMax = newAuth[i];
+      if (newHub[i] < hubMin) hubMin = newHub[i];
+      if (newHub[i] > hubMax) hubMax = newHub[i];
     }
-    authNorm = Math.sqrt(authNorm) || 1;
-    hubNorm = Math.sqrt(hubNorm) || 1;
+    const authRange = authMax - authMin || 1;
+    const hubRange = hubMax - hubMin || 1;
     for (let i = 0; i < n; i++) {
-      newAuth[i] /= authNorm;
-      newHub[i] /= hubNorm;
+      newAuth[i] = (newAuth[i] - authMin) / authRange;
+      newHub[i] = (newHub[i] - hubMin) / hubRange;
     }
 
     // Convergence check
@@ -162,28 +166,13 @@ export function computeSymbolHITS(
     if (maxDelta < epsilon) break;
   }
 
-  // Min-max normalize to 0-1
-  let authMin = Infinity;
-  let authMax = -Infinity;
-  let hubMin = Infinity;
-  let hubMax = -Infinity;
-  for (let i = 0; i < n; i++) {
-    if (auth[i] < authMin) authMin = auth[i];
-    if (auth[i] > authMax) authMax = auth[i];
-    if (hub[i] < hubMin) hubMin = hub[i];
-    if (hub[i] > hubMax) hubMax = hub[i];
-  }
-
-  const NORM_EPSILON = 1e-9;
-  const authRange = authMax - authMin;
-  const hubRange = hubMax - hubMin;
-
+  // Scores are already in [0, 1] from per-iteration min-max normalization
   const authorityMap = new Map<number, number>();
   const hubMap = new Map<number, number>();
   for (let i = 0; i < n; i++) {
     const id = symbolNodes[i].id;
-    authorityMap.set(id, authRange > NORM_EPSILON ? (auth[i] - authMin) / authRange : 0.5);
-    hubMap.set(id, hubRange > NORM_EPSILON ? (hub[i] - hubMin) / hubRange : 0.5);
+    authorityMap.set(id, auth[i]);
+    hubMap.set(id, hub[i]);
   }
 
   return { authority: authorityMap, hub: hubMap };

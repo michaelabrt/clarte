@@ -10,14 +10,14 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { findSCCs, findCircularDeps } from "../../core/graph/cycles.js";
-import { getHubFiles } from "../../core/graph/hub-files.js";
-import { computeInstability } from "../../core/graph/instability.js";
-import { detectCommunitiesLeiden as detectCommunities } from "../../core/graph/leiden.js";
-import { detectArchitecturalLayers } from "../../core/graph/layers.js";
-import { findDeadFiles } from "../../core/graph/dead-files.js";
-import { buildGraphFromFixture, missingFromTopN } from "./helpers.js";
-import { layeredApp, hubAndSpoke, circularMess, monolith, EVAL_FIXTURES } from "./fixtures.js";
+import { findSCCs, findCircularDeps } from "../../core/graph/cycles";
+import { getHubFiles } from "../../core/graph/hub-files";
+import { computeInstability } from "../../core/graph/instability";
+import { detectCommunitiesLeiden as detectCommunities } from "../../core/graph/leiden";
+import { detectArchitecturalLayers } from "../../core/graph/layers";
+import { findDeadFiles } from "../../core/graph/dead-files";
+import { buildGraphFromFixture, missingFromTopN } from "./helpers";
+import { layeredApp, hubAndSpoke, circularMess, monolith, EVAL_FIXTURES } from "./fixtures";
 
 // ── Fixture: layered-app ──────────────────────────────────────────────
 

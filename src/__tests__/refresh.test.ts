@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { ClarteError } from "../core/errors.js";
-import { makeDetectedContext } from "./helpers/mocks.js";
+import { ClarteError } from "../core/errors";
+import { makeDetectedContext } from "./helpers/mocks";
 
 // Mock heavy dependencies
 vi.mock("../cli/animations.js", () => ({
@@ -75,7 +75,7 @@ vi.mock("../core/theme.js", async () => {
   return { theme: THEME_MOCK };
 });
 
-import { refreshSnapshot } from "../cli/refresh.js";
+import { refreshSnapshot } from "../cli/refresh";
 
 let tmpDir: string;
 

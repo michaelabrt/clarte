@@ -5,7 +5,7 @@ import type {
   CrossCuttingAlert,
   FlowBottleneckAlert,
   TightCouplingAlert,
-} from "../../src/core/analysis/ci.js";
+} from "../../src/core/analysis/ci";
 
 // ── Co-change Table ──────────────────────────────────────────────────
 

@@ -5,8 +5,8 @@
  * with computed inDegree, centrality (HITS authority), hub scores, etc.
  */
 
-import { computeHITS, computeBetweenness } from "../../core/graph/centrality.js";
-import type { ImportEdge, ImportGraph } from "../../core/types.js";
+import { computeHITS, computeBetweenness } from "../../core/graph/centrality";
+import type { ImportEdge, ImportGraph } from "../../core/types";
 
 /**
  * Create an internal (non-external) ImportEdge between two files.

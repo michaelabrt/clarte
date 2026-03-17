@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-export { makeDetectedContext } from "./factories.js";
+export { makeDetectedContext } from "./factories";
 
 /**
  * Shared theme mock: identity functions for all theme properties.

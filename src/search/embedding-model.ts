@@ -1,7 +1,7 @@
 /**
- * Embedding model loader using @xenova/transformers (optional dependency).
- * Loads all-MiniLM-L6-v2 (384 dims) for local embedding generation.
- * Singleton: model loaded once, shared across the pipeline.
+ * Embedding model loader using @huggingface/transformers (optional dependency).
+ * Loads snowflake-arctic-embed-xs (384 dims, INT8 quantized) for local embedding generation.
+ * Singleton: all callers await the same loading promise.
  */
 
 export interface EmbeddingModel {
@@ -10,28 +10,22 @@ export interface EmbeddingModel {
   dispose(): Promise<void>;
 }
 
-const MODEL_ID = "Xenova/all-MiniLM-L6-v2";
+const MODEL_ID = "Xenova/snowflake-arctic-embed-xs";
 const DIMENSIONS = 384;
 
-let instance: EmbeddingModel | null = null;
-let attempted = false;
+let pending: Promise<EmbeddingModel | null> | null = null;
 let fallbackLogged = false;
 
-/**
- * Load the embedding model. Returns null if @xenova/transformers is not installed.
- * Singleton: subsequent calls return the same instance.
- */
-export async function loadEmbeddingModel(): Promise<EmbeddingModel | null> {
-  if (attempted) return instance;
-  attempted = true;
-
+async function doLoad(): Promise<EmbeddingModel | null> {
   try {
-    const mod = (await import("@xenova/transformers" as never as string)) as {
-      pipeline: (task: string, model: string) => Promise<FeatureExtractionPipeline>;
+    const mod = (await import("@huggingface/transformers" as never as string)) as {
+      pipeline: (task: string, model: string, options?: { dtype?: string }) => Promise<FeatureExtractionPipeline>;
     };
-    const extractor = await mod.pipeline("feature-extraction", MODEL_ID);
+    const extractor = await mod.pipeline("feature-extraction", MODEL_ID, {
+      dtype: "q8",
+    });
 
-    instance = {
+    const instance: EmbeddingModel = {
       dimensions: DIMENSIONS,
 
       async embed(texts: string[]): Promise<Float32Array[]> {
@@ -40,7 +34,6 @@ export async function loadEmbeddingModel(): Promise<EmbeddingModel | null> {
         const data = output.data as Float32Array;
         const results: Float32Array[] = [];
         for (let i = 0; i < texts.length; i++) {
-          // slice creates independent copies (safe after Tensor disposal)
           results.push(data.slice(i * DIMENSIONS, (i + 1) * DIMENSIONS));
         }
         return results;
@@ -48,8 +41,7 @@ export async function loadEmbeddingModel(): Promise<EmbeddingModel | null> {
 
       async dispose(): Promise<void> {
         await extractor.dispose();
-        instance = null;
-        attempted = false;
+        pending = null;
       },
     };
 
@@ -59,21 +51,29 @@ export async function loadEmbeddingModel(): Promise<EmbeddingModel | null> {
       fallbackLogged = true;
       process.stderr.write(
         "[clarte] Semantic search unavailable; using BM25F only. " +
-          "Install @xenova/transformers for hybrid retrieval.\n",
+          "Install @huggingface/transformers for hybrid retrieval.\n",
       );
     }
     return null;
   }
 }
 
+/**
+ * Load the embedding model. Returns null if @huggingface/transformers is not installed.
+ * Singleton: all concurrent callers share the same loading promise.
+ */
+export function loadEmbeddingModel(): Promise<EmbeddingModel | null> {
+  if (!pending) pending = doLoad();
+  return pending;
+}
+
 /** Reset singleton state (for testing). */
 export function _resetModelState(): void {
-  instance = null;
-  attempted = false;
+  pending = null;
   fallbackLogged = false;
 }
 
-// Internal type for the pipeline function returned by @xenova/transformers
+// Internal type for the pipeline function returned by @huggingface/transformers
 type FeatureExtractionPipeline = {
   (
     input: string | string[],

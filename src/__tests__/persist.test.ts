@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { makeImportGraph, makeContextAnalysis } from "./helpers/factories.js";
-import { PERSISTED_GRAPH_VERSION } from "../core/types/persisted-graph.js";
+import { makeImportGraph, makeContextAnalysis } from "./helpers/factories";
+import { PERSISTED_GRAPH_VERSION } from "../core/types/persisted-graph";
 
 vi.mock("../core/git/git.js", () => ({
   gitExecSafe: vi.fn().mockReturnValue("abc123def456"),

@@ -1,4 +1,4 @@
-import type { ClassifiedTurn } from "./classify.js";
+import type { ClassifiedTurn } from "./classify";
 
 /** A detected waste pattern in a session */
 export interface WastePattern {

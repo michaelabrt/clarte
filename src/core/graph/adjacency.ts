@@ -1,4 +1,4 @@
-import type { ImportEdge } from "../types.js";
+import type { ImportEdge } from "../types";
 
 export interface AdjacencyOptions {
   /** Build directed adjacency (default: true). When false, adds both directions. */

@@ -1,4 +1,4 @@
-import type { SessionMetrics } from "./metrics.js";
+import type { SessionMetrics } from "./metrics";
 
 /** Aggregated metrics across multiple sessions */
 export interface AggregateMetrics {

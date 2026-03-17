@@ -1,19 +1,19 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import * as p from "@clack/prompts";
-import { theme as t, unpatchPicocolors, resetTerminalColors } from "../core/theme.js";
-import { errorMessage, fileExists, formatBytes, NOOP_PROGRESS, writeJsonStdout } from "../core/utils.js";
+import { theme as t, unpatchPicocolors, resetTerminalColors } from "../core/theme";
+import { errorMessage, fileExists, formatBytes, NOOP_PROGRESS, writeJsonStdout } from "../core/utils";
 import {
   detectContext,
   detectIDEs,
   detectProjectDescription,
   enrichFrameworksWithUsage,
-} from "../core/detect/detect.js";
-import { runPrompts } from "../cli/prompts.js";
-import { generateSnapshot } from "../core/snapshot/snapshot.js";
-import { generateFiles } from "../core/generate.js";
-import { printSummary } from "../cli/summary.js";
-import { ExitCode } from "../core/errors.js";
+} from "../core/detect/detect";
+import { runPrompts } from "../cli/prompts";
+import { generateSnapshot } from "../core/snapshot/snapshot";
+import { generateFiles } from "../core/generate";
+import { printSummary } from "../cli/summary";
+import { ExitCode } from "../core/errors";
 import type {
   ContextAnalysis,
   UserAnswers,
@@ -24,19 +24,19 @@ import type {
   PersistedGraph,
   ProgressCallback,
   ProjectConfig,
-} from "../core/types.js";
-import { saveConfig, configToAnswers, computeSnapshotHash } from "../core/config/config.js";
-import { initPreCommitHook } from "../cli/hooks.js";
-import { buildGraphWithCache } from "../core/graph/cache.js";
-import { buildImportGraph, mergeGraph, recomputeScoresAfterMerge } from "../core/graph/build.js";
-import { buildWorkspaceAliases } from "../core/graph/import-resolution.js";
-import { getHubFiles } from "../core/graph/hub-files.js";
-import { startShimmer, NOOP_SHIMMER } from "../cli/animations.js";
-import { serializeAnalysis } from "../core/analysis/serialize.js";
-import { runAnalysis } from "../core/run-analysis.js";
-import { persistGraph, loadPersistedGraph } from "../core/graph/persist.js";
-import { openGraphStore } from "../storage/loader.js";
-import { SNAPSHOT_LANGUAGES } from "../core/config/thresholds.js";
+} from "../core/types";
+import { saveConfig, configToAnswers, computeSnapshotHash } from "../core/config/config";
+import { initPreCommitHook } from "../cli/hooks";
+import { buildGraphWithCache } from "../core/graph/cache";
+import { buildImportGraph, mergeGraph, recomputeScoresAfterMerge } from "../core/graph/build";
+import { buildWorkspaceAliases } from "../core/graph/import-resolution";
+import { getHubFiles } from "../core/graph/hub-files";
+import { startShimmer, NOOP_SHIMMER } from "../cli/animations";
+import { serializeAnalysis } from "../core/analysis/serialize";
+import { runAnalysis } from "../core/run-analysis";
+import { persistGraph, loadPersistedGraph } from "../core/graph/persist";
+import { openGraphStore } from "../storage/loader";
+import { SNAPSHOT_LANGUAGES } from "../core/config/thresholds";
 
 export interface InitOptions {
   rootDir: string;

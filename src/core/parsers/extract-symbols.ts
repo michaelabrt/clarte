@@ -1,5 +1,5 @@
-import { withParsedTree } from "./init.js";
-import type { Language } from "../types/detection.js";
+import { withParsedTree } from "./init";
+import type { Language } from "../types/detection";
 import type { Node } from "web-tree-sitter";
 
 /** Single-pass descendantsOfType for multiple node types. */

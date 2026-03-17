@@ -1,4 +1,4 @@
-import type { Community, ImportGraph } from "../types.js";
+import type { Community, ImportGraph } from "../types";
 
 /** Community detection parameters */
 const COMMUNITY = {

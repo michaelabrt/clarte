@@ -2,8 +2,8 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, afterEach, beforeEach, vi } from "vitest";
-import { initPreCommitHook } from "../cli/hooks.js";
-import { ClarteError } from "../core/errors.js";
+import { initPreCommitHook } from "../cli/hooks";
+import { ClarteError } from "../core/errors";
 
 let tmpDir: string;
 

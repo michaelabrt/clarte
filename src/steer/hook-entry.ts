@@ -10,10 +10,10 @@ export {
   tokenizeQueryForSymbols,
   shouldSkipPreFlight,
   promptMentionsTargets,
-} from "./targets-resolve.js";
-export { renderTaskContext, renderFallbackContext } from "./render-task-context.js";
-export { resolveTargetsFromHistory } from "./git-fallback.js";
-export type { GitFallbackResult } from "./git-fallback.js";
-export { isTestFile } from "../core/utils.js";
-export type { PersistedGraph } from "../core/types/persisted-graph.js";
-export type { SymbolMatch } from "./targets-resolve.js";
+} from "./targets-resolve";
+export { renderTaskContext, renderFallbackContext } from "./render-task-context";
+export { resolveTargetsFromHistory } from "./git-fallback";
+export type { GitFallbackResult } from "./git-fallback";
+export { isTestFile } from "../core/utils";
+export type { PersistedGraph } from "../core/types/persisted-graph";
+export type { SymbolMatch } from "./targets-resolve";

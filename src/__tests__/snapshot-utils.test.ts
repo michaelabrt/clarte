@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Node } from "web-tree-sitter";
-import { extractNodeBlock, extractSignatureBeforeBody, stripAnnotationName } from "../core/parsers/snapshot-utils.js";
+import { extractNodeBlock, extractSignatureBeforeBody, stripAnnotationName } from "../core/parsers/snapshot-utils";
 
 // Minimal Node stub - only the properties snapshot-utils.ts actually reads
 function makeNode(overrides: {

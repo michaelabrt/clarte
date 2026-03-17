@@ -6,16 +6,16 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { resolveEditTargets } from "../steer/targets-resolve.js";
-import { computeBetweenness } from "../core/graph/centrality.js";
-import { findChokepoints } from "../core/graph/chokepoints.js";
-import { computeLayerConsistency } from "../core/graph/layers.js";
-import { findFeedbackEdges } from "../core/graph/cycles.js";
-import { detectCommunitiesLeiden as detectCommunities } from "../core/graph/leiden.js";
-import type { ArchitecturalLayer, CircularDependency, LayerEdge } from "../core/types.js";
-import type { PersistedGraph } from "../core/types/persisted-graph.js";
-import { PERSISTED_GRAPH_VERSION } from "../core/types/persisted-graph.js";
-import { makeGraph, edge } from "./algorithm/helpers.js";
+import { resolveEditTargets } from "../steer/targets-resolve";
+import { computeBetweenness } from "../core/graph/centrality";
+import { findChokepoints } from "../core/graph/chokepoints";
+import { computeLayerConsistency } from "../core/graph/layers";
+import { findFeedbackEdges } from "../core/graph/cycles";
+import { detectCommunitiesLeiden as detectCommunities } from "../core/graph/leiden";
+import type { ArchitecturalLayer, CircularDependency, LayerEdge } from "../core/types";
+import type { PersistedGraph } from "../core/types/persisted-graph";
+import { PERSISTED_GRAPH_VERSION } from "../core/types/persisted-graph";
+import { makeGraph, edge } from "./algorithm/helpers";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

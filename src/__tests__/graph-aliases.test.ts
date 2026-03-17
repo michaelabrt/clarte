@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import os from "node:os";
 import { describe, expect, it, afterEach } from "vitest";
-import { buildImportGraph } from "../core/graph/build.js";
+import { buildImportGraph } from "../core/graph/build";
 
 /** Create a temporary project directory with the given file tree. */
 async function makeProject(files: Record<string, string>): Promise<string> {

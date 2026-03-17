@@ -1,4 +1,4 @@
-import { doThing } from "./helper.js";
+import { doThing } from "./helper";
 
 export const arrowFn = () => {
   doThing();

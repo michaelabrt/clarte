@@ -1,13 +1,13 @@
 import path from "node:path";
 import { createHash } from "node:crypto";
 import type { Node } from "web-tree-sitter";
-import { readFileOr } from "../utils.js";
-import { withParsedTree, initForLanguage } from "../parsers/init.js";
-import type { ImportGraph, Language } from "../types.js";
-import type { CallSite, PersistedCallGraph } from "../types/call-graph.js";
-import { openGraphStore } from "../../storage/loader.js";
-import type { GraphStore } from "../../storage/graph-store.js";
-import type { CallSiteRecord } from "../../storage/types.js";
+import { readFileOr } from "../utils";
+import { withParsedTree, initForLanguage } from "../parsers/init";
+import type { ImportGraph, Language } from "../types";
+import type { CallSite, PersistedCallGraph } from "../types/call-graph";
+import { openGraphStore } from "../../storage/loader";
+import type { GraphStore } from "../../storage/graph-store";
+import type { CallSiteRecord } from "../../storage/types";
 
 const BUILTIN_GLOBALS = new Set([
   "console",

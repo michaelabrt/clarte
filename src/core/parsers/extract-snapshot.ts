@@ -1,10 +1,10 @@
-import type { Language as ClarteLanguage, SnapshotEntry } from "../types.js";
-import { withParsedTree } from "./init.js";
-import { extractJsSnapshot } from "./snapshot-ts.js";
-import { extractPythonSnapshot } from "./snapshot-python.js";
-import { extractGoSnapshot } from "./snapshot-go.js";
-import { extractRustSnapshot } from "./snapshot-rust.js";
-import { extractJavaSnapshot } from "./snapshot-java.js";
+import type { Language as ClarteLanguage, SnapshotEntry } from "../types";
+import { withParsedTree } from "./init";
+import { extractJsSnapshot } from "./snapshot-ts";
+import { extractPythonSnapshot } from "./snapshot-python";
+import { extractGoSnapshot } from "./snapshot-go";
+import { extractRustSnapshot } from "./snapshot-rust";
+import { extractJavaSnapshot } from "./snapshot-java";
 
 /**
  * Extract snapshot entries from source code using tree-sitter AST.

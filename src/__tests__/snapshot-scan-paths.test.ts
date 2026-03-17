@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getDefaultScanPaths, getDefaultScanPathsForLanguage, getLanguageConfig } from "../core/snapshot/scan-paths.js";
-import type { DetectedContext, Language } from "../core/types.js";
+import { getDefaultScanPaths, getDefaultScanPathsForLanguage, getLanguageConfig } from "../core/snapshot/scan-paths";
+import type { DetectedContext, Language } from "../core/types";
 
 function makeCtx(language: Language, directories: string[]): DetectedContext {
   return {

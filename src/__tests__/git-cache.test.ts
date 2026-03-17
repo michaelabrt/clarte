@@ -7,11 +7,11 @@ import {
   buildGitCachePayload,
   GIT_CACHE_VERSION,
   type GitCacheData,
-} from "../core/git-cache.js";
-import type { GitAnalysis, LagCoupling } from "../core/types.js";
-import { createDatabase } from "../storage/db-adapter.js";
-import { initSchema } from "../storage/schema.js";
-import { GraphStore } from "../storage/graph-store.js";
+} from "../core/git-cache";
+import type { GitAnalysis, LagCoupling } from "../core/types";
+import { createDatabase } from "../storage/db-adapter";
+import { initSchema } from "../storage/schema";
+import { GraphStore } from "../storage/graph-store";
 
 // ── Mock git/git.js ───────────────────────────────────────────────────────
 

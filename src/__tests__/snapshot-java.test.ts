@@ -20,10 +20,10 @@ vi.mock("../core/graph.js", async () => {
   };
 });
 
-import { generateSnapshot } from "../core/snapshot/snapshot.js";
-import { readFileOr } from "../core/utils.js";
+import { generateSnapshot } from "../core/snapshot/snapshot";
+import { readFileOr } from "../core/utils";
 import { glob } from "tinyglobby";
-import type { DetectedContext } from "../core/types.js";
+import type { DetectedContext } from "../core/types";
 
 const mockReadFileOr = vi.mocked(readFileOr);
 const mockGlob = vi.mocked(glob);

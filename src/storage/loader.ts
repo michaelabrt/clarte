@@ -6,13 +6,13 @@
 
 import path from "node:path";
 import fs from "node:fs/promises";
-import { createDatabase } from "./db-adapter.js";
-import { initSchema } from "./schema.js";
-import { GraphStore } from "./graph-store.js";
-import { migrateFromJson, migrateStateCaches } from "./migrate.js";
-import type { InMemoryFileGraph } from "./types.js";
-import type { ImportEdge, ImportGraph } from "../core/types.js";
-import type { PersistedGraph, FileRecord as PersistedFileRecord, EdgeRecord } from "../core/types/persisted-graph.js";
+import { createDatabase } from "./db-adapter";
+import { initSchema } from "./schema";
+import { GraphStore } from "./graph-store";
+import { migrateFromJson, migrateStateCaches } from "./migrate";
+import type { InMemoryFileGraph } from "./types";
+import type { ImportEdge, ImportGraph } from "../core/types";
+import type { PersistedGraph, FileRecord as PersistedFileRecord, EdgeRecord } from "../core/types/persisted-graph";
 
 const CLARTE_DIR = ".clarte";
 const DB_FILENAME = "graph.db";
