@@ -20,7 +20,7 @@ import {
   LSA_EXPANSION_DISCOUNT,
   LSA_MAX_EXPANSIONS,
   LSA_MIN_FILES,
-} from "../config/phase7-constants";
+} from "../config/semantic-constants";
 
 // ── Sparse CSR ───────────────────────────────────────────────────────────────
 

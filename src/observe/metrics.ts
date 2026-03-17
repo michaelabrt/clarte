@@ -14,7 +14,7 @@ export interface SessionMetrics {
   explorePercent: number;
   editPercent: number;
   tailPercent: number;
-  /** First edit turn index (the R18 predictor) */
+  /** First edit turn index */
   firstEditTurn: number | null;
   /** Total cost estimate (dollars) */
   totalCost: number;

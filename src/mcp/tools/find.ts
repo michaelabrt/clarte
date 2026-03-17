@@ -3,14 +3,6 @@
  *
  * "Where is the code that does X?" - Full BM25F pipeline + Semantic + RRF fusion.
  *
- * F.2 fix: Uses resolveEditTargetsWithMeta (the real BM25F pipeline with spreading
- * activation, test proxy, synonym expansion) instead of raw FTS5 ranking.
- * F.3 fix: match_type derived from TargetMatch.matchType (ground truth from the
- * scoring pipeline) instead of unreliable score heuristics.
- * F.4 fix: HybridSearchProvider hoisted to module singleton to avoid reloading
- * the 15MB+ vector cache on every call.
- * F.8 fix: BM25F corpus stats are used indirectly through the full pipeline.
- *
  * ANN pre-filter: semantic search is bounded to BM25F top-1000
  * candidates instead of flat-scanning all embeddings.
  * Rationale field explains match provenance.
@@ -43,7 +35,7 @@ export interface FindOutput {
   results: FindResultEntry[];
 }
 
-// ── Module-level singletons (F.4: avoid per-call reconstruction) ─────────────
+// ── Module-level singletons (avoid per-call reconstruction) ──────────────────
 
 let cachedHybrid: HybridSearchProvider | null = null;
 let cachedGraph: ReturnType<typeof buildPersistedGraphFromStore> | null = null;

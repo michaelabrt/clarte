@@ -66,13 +66,13 @@ export interface ProjectConfig {
   sectionOrder?: string[];
   /** Whether to generate Claude Code hooks for graph context delivery (default: true) */
   hooks?: boolean;
-  /** Progressive disclosure delivery experiments */
+  /** Delivery configuration */
   delivery?: {
-    /** Exp 1: Generate path-scoped .claude/rules/ files with paths: frontmatter */
+    /** Generate path-scoped .claude/rules/ files with paths: frontmatter */
     scopedRules?: boolean;
-    /** Exp 2: Enrich hook context-map with instability, layers, tight coupling, directives */
+    /** Enrich hook context-map with instability, layers, tight coupling, directives */
     enrichedHooks?: boolean;
-    /** Exp 3: Move heavy sections (coupling, health, tests) into on-demand skills */
+    /** Move heavy sections (coupling, health, tests) into on-demand skills */
     onDemandSkills?: boolean;
   };
 }

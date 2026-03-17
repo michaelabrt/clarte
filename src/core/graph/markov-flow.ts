@@ -1,5 +1,5 @@
 /**
- * Probabilistic execution flow tracing (Phase 6, Part 2).
+ * Probabilistic execution flow tracing.
  *
  * Demand-driven Markov Chain model where the call graph acts as an absorbing
  * state machine. Transition probabilities fuse edge weights, HITS authority
@@ -35,9 +35,9 @@ import {
   MARKOV_VISIT_THRESHOLD,
   MARKOV_MAX_FLOW_STATES,
   MARKOV_MASS_FLOOR,
-} from "../config/phase6-constants";
+} from "../config/proximity-constants";
 import { computeINF } from "./inf-attenuation";
-import { BLAME_LAMBDA, BLAME_FLOOR, BLAME_DEFAULT_DAYS } from "../config/phase7-constants";
+import { BLAME_LAMBDA, BLAME_FLOOR, BLAME_DEFAULT_DAYS } from "../config/semantic-constants";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

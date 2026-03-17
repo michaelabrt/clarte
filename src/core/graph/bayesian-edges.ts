@@ -15,7 +15,7 @@
 
 import type { InMemoryFileGraph, InMemoryEdge } from "../../storage/types";
 import type { ParsedCommit } from "../git/analysis";
-import { EWMA_DECAY, EWMA_PRIOR_STRENGTH, EWMA_WEIGHT_FLOOR } from "../config/phase8-constants";
+import { EWMA_DECAY, EWMA_PRIOR_STRENGTH, EWMA_WEIGHT_FLOOR } from "../config/fusion-constants";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

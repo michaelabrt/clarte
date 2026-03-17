@@ -1,5 +1,5 @@
 /**
- * @deprecated Replaced by katz-centrality.ts in Phase 7. Retained for
+ * @deprecated Replaced by katz-centrality.ts. Retained for
  * computePathConfidenceProducts which may still be referenced.
  *
  * Dijkstra-based intent propagation on the symbol subgraph.

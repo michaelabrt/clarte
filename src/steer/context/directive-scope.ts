@@ -1,6 +1,6 @@
 /**
  * Extract file paths from directives and group by directory scope.
- * Used by Exp 1 (scoped rules) and Exp 2 (enriched hooks).
+ * Used by scoped rules and enriched hooks delivery modes.
  */
 
 /** A directive with its mentioned files and assigned scope */

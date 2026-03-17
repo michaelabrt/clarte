@@ -4,8 +4,7 @@
  * "Who calls this function?" - BFS caller chain via recursive CTE on symbol_edges.
  * Max depth 5, branching factor 4 (highest authority per level).
  * Tags: DIRECT (depth 1), TRANSITIVE (2-3), DISTANT (4-5).
- *
- * F.1 fix: UNION (not UNION ALL) prevents exponential expansion on cyclic graphs.
+ * Uses UNION (not UNION ALL) to prevent exponential expansion on cyclic graphs.
  */
 
 import type { DatabaseAdapter } from "../../storage/db-adapter";
@@ -86,7 +85,7 @@ export function executeCallers(db: DatabaseAdapter, input: CallersInput): Caller
 
   const targetId = targetRow.id;
 
-  // F.1: UNION (not UNION ALL) deduplicates at each recursion level,
+  // UNION (not UNION ALL) deduplicates at each recursion level,
   // preventing O(N^depth) intermediate rows on cyclic graphs.
   const callersStmt = db.prepare(`
     WITH RECURSIVE callers(symbol_id, depth) AS (

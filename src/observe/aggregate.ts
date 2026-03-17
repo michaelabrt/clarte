@@ -6,7 +6,7 @@ export interface AggregateMetrics {
   sessionCount: number;
   /** Average turns per session */
   avgTurns: number;
-  /** Average first-edit turn (the R18 predictor) */
+  /** Average first-edit turn */
   avgFirstEditTurn: number | null;
   /** Average phase percentages */
   avgExplorePercent: number;

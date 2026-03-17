@@ -1,9 +1,3 @@
-/**
- * Phase 6 constants: Advanced Disambiguation and Probabilistic Flow Tracing.
- */
-
-// ── Part 1: Constraint-Scored Call Resolution ────────────────────────────────
-
 /** Exponent on HITS authority in proximity scoring: alpha(c)^beta */
 export const PROXIMITY_AUTHORITY_BETA = 0.5;
 
@@ -21,8 +15,6 @@ export const LOCALITY_SAME_FILE = 10.0;
 export const LOCALITY_SAME_COMMUNITY = 2.0;
 export const LOCALITY_CROSS_EXPORTED = 1.0;
 // Cross-community + unexported OR cross-file + unexported: candidate dropped (0.0)
-
-// ── Part 2: Probabilistic Execution Flow Tracing ─────────────────────────────
 
 /** Exponent on HITS authority in transition weight: alpha(v)^beta */
 export const MARKOV_AUTHORITY_BETA = 0.7;
@@ -60,8 +52,6 @@ export const UTILITY_TERMINAL_PENALTY = 0.05;
 
 /** Indegree threshold above which a cross-community terminal is considered a utility sink */
 export const UTILITY_INDEGREE_THRESHOLD = 5;
-
-// ── Part 1 supplement: authority floor for proximity scoring ──────────────────
 
 /**
  * Floor for candidate authority in proximity scoring: max(alpha, floor).

@@ -1,7 +1,3 @@
-/**
- * Phase 7 constants: Semantic LSA, Katz Intent Propagation, Blame-Boundary Decay.
- */
-
 // ── Katz Centrality ──────────────────────────────────────────────────────────
 
 /** Fraction of 1/rho(A) used as the attenuation factor alpha */

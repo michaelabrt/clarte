@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseBlameOutput, mapBlameToSymbols } from "../core/git/blame";
 import type { InMemorySymbolGraph, InMemorySymbolNode } from "../storage/types";
-import { BLAME_LAMBDA, BLAME_FLOOR, BLAME_DEFAULT_DAYS } from "../core/config/phase7-constants";
+import { BLAME_LAMBDA, BLAME_FLOOR, BLAME_DEFAULT_DAYS } from "../core/config/semantic-constants";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

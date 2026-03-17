@@ -22,7 +22,7 @@ import {
   KATZ_CONVERGENCE_EPSILON,
   KATZ_MIN_SCORE,
   KATZ_SPECTRAL_ITERATIONS,
-} from "../config/phase7-constants";
+} from "../config/semantic-constants";
 
 // ── Edge weight ──────────────────────────────────────────────────────────────
 

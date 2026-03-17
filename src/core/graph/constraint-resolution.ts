@@ -1,5 +1,5 @@
 /**
- * Constraint-scored call resolution (Phase 6, Part 1).
+ * Constraint-scored call resolution.
  *
  * Two-tiered architecture:
  * - Fast path (Tiers 1-3): import graph as structural proof (symbol-resolution.ts)
@@ -28,7 +28,7 @@ import {
   LOCALITY_SAME_FILE,
   LOCALITY_SAME_COMMUNITY,
   LOCALITY_CROSS_EXPORTED,
-} from "../config/phase6-constants";
+} from "../config/proximity-constants";
 
 // ── Pre-computation ───────────────────────────────────────────────────────────
 

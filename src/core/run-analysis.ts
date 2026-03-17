@@ -109,7 +109,7 @@ export async function runAnalysis(
   const useGraphCache = analysisCache !== null && analysisCache.cacheKey === analysisCacheKey;
   const log: LogCtx = { jsonMode, verbose };
 
-  // Phase 1: Graph analysis (sync, cacheable)
+  // Graph analysis (sync, cacheable)
   const graphStart = performance.now();
   const entryPoints = readPackageEntryPoints(rootDir);
   const graphResults = runGraphPhase(graph, savedConfig, useGraphCache ? analysisCache : null, log, entryPoints);
@@ -302,7 +302,7 @@ function checkDriftState(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 1: Graph analysis (cacheable, pure computation)
+// Graph analysis (cacheable, pure computation)
 // ---------------------------------------------------------------------------
 
 function runGraphPhase(
@@ -369,7 +369,7 @@ function runGraphPhase(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2: Git analysis
+// Git analysis
 // ---------------------------------------------------------------------------
 
 async function runGitPhase(
@@ -411,7 +411,7 @@ async function runGitPhase(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 3a: Cacheable project sub-analyses (parallel with git)
+// Cacheable project sub-analyses (parallel with git)
 // ---------------------------------------------------------------------------
 
 interface CacheableProjectResult {
@@ -479,7 +479,7 @@ async function runCacheableProjectPhase(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 3b: Git-dependent helpers
+// Git-dependent helpers
 // ---------------------------------------------------------------------------
 
 /**
@@ -531,7 +531,7 @@ function computePackageHubFiles(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 4: Delta detection
+// Delta detection
 // ---------------------------------------------------------------------------
 
 function runDeltaPhase(store: GraphStore, analysis: ContextAnalysis, log: LogCtx): string | null {

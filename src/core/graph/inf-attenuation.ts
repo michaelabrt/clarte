@@ -11,7 +11,7 @@
  * circular dependencies.
  */
 
-import { INF_FLOOR, INF_CEILING, HUB_SINK_FLOOR } from "../config/phase8-constants";
+import { INF_FLOOR, INF_CEILING, HUB_SINK_FLOOR } from "../config/fusion-constants";
 
 /**
  * Compute the INF attenuation factor for a target node.

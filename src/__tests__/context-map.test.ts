@@ -234,7 +234,7 @@ describe("generateHookFiles", () => {
     expect(script).toContain("fail-fast-override");
   });
 
-  it("does not generate context-map.json (removed: R.12 vestige)", async () => {
+  it("does not generate context-map.json", async () => {
     tmpDir = await makeTmpDir();
 
     await generateHookFiles(tmpDir);

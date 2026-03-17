@@ -1,7 +1,6 @@
 /**
  * Structural assertions for the pre-flight agent prompt.
- * Guards the 3-tier task classification and GUIDE format added in the
- * adversarial audit phase 4 improvements.
+ * Guards the 3-tier task classification and GUIDE format.
  */
 
 import { describe, it, expect } from "vitest";
