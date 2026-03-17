@@ -5,7 +5,7 @@
  * The constructor takes an already-initialized DatabaseAdapter (see loader.ts).
  */
 
-import type { DatabaseAdapter, StatementAdapter } from "./db-adapter.js";
+import type { DatabaseAdapter, StatementAdapter } from "./db-adapter";
 import type {
   CallSiteRecord,
   ChangeCouplingRecord,
@@ -18,9 +18,12 @@ import type {
   InMemorySymbolGraph,
   InMemorySymbolNode,
   InMemorySymEdge,
+  LeanEdge,
+  LeanFileGraph,
+  LeanFileNode,
   SymbolEdgeRecord,
   SymbolRecord,
-} from "./types.js";
+} from "./types";
 
 // ── Row types returned by SQL queries ─────────────────────────────────────────
 
@@ -138,6 +141,10 @@ export class GraphStore {
   private readonly stmtLoadChangeCoupling: StatementAdapter;
   private readonly stmtLoadAllCallSites: StatementAdapter;
 
+  // Lean (column-pruned) read statements
+  private readonly stmtSelectFilesLean: StatementAdapter;
+  private readonly stmtSelectEdgesLean: StatementAdapter;
+
   // KV cache statements
   private readonly stmtGetCache: StatementAdapter;
   private readonly stmtSetCache: StatementAdapter;
@@ -213,6 +220,19 @@ export class GraphStore {
 
     this.stmtLoadAllCallSites = db.prepare(`
       SELECT id, caller_file, caller_fn, callee_name, callee_file, line FROM call_sites
+    `);
+
+    // ── Lean read statements (column-pruned for fast graph loading) ─────────────
+    // Column order MUST match LEAN_FILE_COL / LEAN_EDGE_COL index constants below.
+    this.stmtSelectFilesLean = db.prepare(`
+      SELECT path, hash, authority, hub_score, betweenness,
+             is_barrel, is_dead, is_chokepoint, community_id
+      FROM files
+    `);
+
+    this.stmtSelectEdgesLean = db.prepare(`
+      SELECT from_path, to_path, is_type_only, is_dynamic, is_barrel_routed
+      FROM file_edges
     `);
 
     // ── KV cache statements ───────────────────────────────────────────────────
@@ -348,6 +368,78 @@ export class GraphStore {
         reverse.set(row.to_path, rev);
       }
       rev.push(edge);
+    }
+
+    return { nodes, forward, reverse };
+  }
+
+  /**
+   * Fast-loading file graph using column pruning and raw positional arrays.
+   *
+   * Skips: role, instability, layer, separatesComponents, isCrossCutting,
+   * layerSpread, hasTests, layers, testFiles, intraFileCalls, importedNames,
+   * crossPackage. No JSON.parse calls.
+   *
+   * Returns a LeanFileGraph (not assignable to InMemoryFileGraph) to prevent
+   * accidental use where full node data is needed.
+   */
+  loadFileGraphLean(): LeanFileGraph {
+    const t0 = process.env.CLARTE_DEBUG ? performance.now() : 0;
+
+    const fileRows = this.stmtSelectFilesLean.allRaw();
+    const edgeRows = this.stmtSelectEdgesLean.allRaw();
+
+    const nodes = new Map<string, LeanFileNode>();
+    for (const row of fileRows) {
+      const path = row[LEAN_FILE_COL.PATH] as string;
+      nodes.set(path, {
+        path,
+        hash: row[LEAN_FILE_COL.HASH] as string,
+        authority: (row[LEAN_FILE_COL.AUTHORITY] as number | null) ?? 0,
+        hubScore: (row[LEAN_FILE_COL.HUB_SCORE] as number | null) ?? 0,
+        betweenness: (row[LEAN_FILE_COL.BETWEENNESS] as number | null) ?? 0,
+        isBarrel: row[LEAN_FILE_COL.IS_BARREL] === 1,
+        isDead: row[LEAN_FILE_COL.IS_DEAD] === 1,
+        isChokepoint: row[LEAN_FILE_COL.IS_CHOKEPOINT] === 1,
+        communityId: row[LEAN_FILE_COL.COMMUNITY_ID] as number | null,
+      });
+    }
+
+    // Direct edge construction: build adjacency lists inline, no intermediate objects
+    const forward = new Map<string, LeanEdge[]>();
+    const reverse = new Map<string, LeanEdge[]>();
+
+    for (const row of edgeRows) {
+      const fromPath = row[LEAN_EDGE_COL.FROM_PATH] as string;
+      const toPath = row[LEAN_EDGE_COL.TO_PATH] as string;
+      const edge: LeanEdge = {
+        fromPath,
+        toPath,
+        isTypeOnly: row[LEAN_EDGE_COL.IS_TYPE_ONLY] === 1,
+        isDynamic: row[LEAN_EDGE_COL.IS_DYNAMIC] === 1,
+        isBarrelRouted: row[LEAN_EDGE_COL.IS_BARREL_ROUTED] === 1,
+      };
+
+      let fwd = forward.get(fromPath);
+      if (!fwd) {
+        fwd = [];
+        forward.set(fromPath, fwd);
+      }
+      fwd.push(edge);
+
+      let rev = reverse.get(toPath);
+      if (!rev) {
+        rev = [];
+        reverse.set(toPath, rev);
+      }
+      rev.push(edge);
+    }
+
+    if (process.env.CLARTE_DEBUG) {
+      const elapsed = performance.now() - t0;
+      process.stderr.write(
+        `[clarte:perf] loadFileGraphLean: ${elapsed.toFixed(2)}ms (${nodes.size} files, ${edgeRows.length} edges)\n`,
+      );
     }
 
     return { nodes, forward, reverse };
@@ -839,6 +931,29 @@ export class GraphStore {
     this.db.close();
   }
 }
+
+// ── Positional column indices for lean raw queries ──────────────────────────────
+// Must match the SELECT column order in stmtSelectFilesLean / stmtSelectEdgesLean.
+
+const LEAN_FILE_COL = {
+  PATH: 0,
+  HASH: 1,
+  AUTHORITY: 2,
+  HUB_SCORE: 3,
+  BETWEENNESS: 4,
+  IS_BARREL: 5,
+  IS_DEAD: 6,
+  IS_CHOKEPOINT: 7,
+  COMMUNITY_ID: 8,
+} as const;
+
+const LEAN_EDGE_COL = {
+  FROM_PATH: 0,
+  TO_PATH: 1,
+  IS_TYPE_ONLY: 2,
+  IS_DYNAMIC: 3,
+  IS_BARREL_ROUTED: 4,
+} as const;
 
 // ── Row-to-node converters ─────────────────────────────────────────────────────
 

@@ -17,9 +17,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createDatabase } from "../../storage/db-adapter.js";
-import { initSchema } from "../../storage/schema.js";
-import { GraphStore } from "../../storage/graph-store.js";
+import { createDatabase } from "../../storage/db-adapter";
+import { initSchema } from "../../storage/schema";
+import { GraphStore } from "../../storage/graph-store";
 
 const RUNS = 5; // repeated runs to reduce timer noise
 
@@ -99,6 +99,118 @@ describe("loadFileGraph performance (AC 1.6.2)", () => {
     // On file-based DBs with warm OS page cache the ratio approaches 1:1.
     const tolerance = 3;
     expect(sqliteMs).toBeLessThan(Math.max(jsonMs * tolerance, 5));
+
+    db.close();
+  });
+});
+
+describe("loadFileGraphLean performance", () => {
+  it("loads 500 files and 1000 edges in under 5ms", async () => {
+    const db = await createDatabase(":memory:");
+    initSchema(db);
+    const store = new GraphStore(db);
+
+    const NOW = new Date().toISOString();
+    const N_FILES = 500;
+    const N_EDGES = 1000;
+
+    const files = Array.from({ length: N_FILES }, (_, i) => ({
+      path: `src/mod${i}.ts`,
+      hash: `hash${i}`,
+      updated_at: NOW,
+    }));
+    store.upsertFiles(files);
+
+    const edges = Array.from({ length: N_EDGES }, (_, i) => ({
+      from_path: `src/mod${i % N_FILES}.ts`,
+      to_path: `src/mod${(i + 7) % N_FILES}.ts`,
+      imported_names: ["foo", "bar"],
+    }));
+    store.upsertFileEdges(edges);
+
+    // Warm up
+    store.loadFileGraphLean();
+
+    // Measure (average over RUNS)
+    const t0 = performance.now();
+    for (let i = 0; i < RUNS; i++) store.loadFileGraphLean();
+    const leanMs = (performance.now() - t0) / RUNS;
+
+    expect(leanMs).toBeLessThan(5);
+
+    db.close();
+  });
+
+  it("lean graph returns correct structure without full-node fields", async () => {
+    const db = await createDatabase(":memory:");
+    initSchema(db);
+    const store = new GraphStore(db);
+
+    const NOW = new Date().toISOString();
+    store.upsertFiles([
+      { path: "a.ts", hash: "h1", authority: 0.8, hub_score: 0.2, is_barrel: 1, updated_at: NOW },
+      { path: "b.ts", hash: "h2", authority: 0.3, hub_score: 0.7, updated_at: NOW },
+    ]);
+    store.upsertFileEdges([{ from_path: "a.ts", to_path: "b.ts", imported_names: ["Foo", "Bar"] }]);
+
+    const lean = store.loadFileGraphLean();
+
+    // Nodes
+    expect(lean.nodes.size).toBe(2);
+    const a = lean.nodes.get("a.ts");
+    expect(a?.authority).toBe(0.8);
+    expect(a?.hubScore).toBe(0.2);
+    expect(a?.isBarrel).toBe(true);
+    // Full-node fields must not exist (type safety prevents it at compile time,
+    // but verify at runtime that the object is truly lean)
+    expect("role" in (a as unknown as Record<string, unknown>)).toBe(false);
+    expect("layers" in (a as unknown as Record<string, unknown>)).toBe(false);
+    expect("intraFileCalls" in (a as unknown as Record<string, unknown>)).toBe(false);
+
+    // Edges - importedNames must not exist on LeanEdge
+    const fwd = lean.forward.get("a.ts") ?? [];
+    expect(fwd.length).toBe(1);
+    expect(fwd[0].toPath).toBe("b.ts");
+    expect("importedNames" in (fwd[0] as unknown as Record<string, unknown>)).toBe(false);
+
+    // Reverse adjacency
+    const rev = lean.reverse.get("b.ts") ?? [];
+    expect(rev.length).toBe(1);
+    expect(rev[0].fromPath).toBe("a.ts");
+
+    db.close();
+  });
+
+  it("lean path is faster than full loadFileGraph", async () => {
+    const db = await createDatabase(":memory:");
+    initSchema(db);
+    const store = new GraphStore(db);
+
+    const NOW = new Date().toISOString();
+    const N = 500;
+    store.upsertFiles(Array.from({ length: N }, (_, i) => ({ path: `f${i}.ts`, hash: `h${i}`, updated_at: NOW })));
+    store.upsertFileEdges(
+      Array.from({ length: N * 2 }, (_, i) => ({
+        from_path: `f${i % N}.ts`,
+        to_path: `f${(i + 3) % N}.ts`,
+        imported_names: ["x"],
+      })),
+    );
+
+    // Warm up both
+    store.loadFileGraph();
+    store.loadFileGraphLean();
+
+    const t0 = performance.now();
+    for (let i = 0; i < RUNS; i++) store.loadFileGraph();
+    const fullMs = (performance.now() - t0) / RUNS;
+
+    const t1 = performance.now();
+    for (let i = 0; i < RUNS; i++) store.loadFileGraphLean();
+    const leanMs = (performance.now() - t1) / RUNS;
+
+    // Lean should be strictly faster (the column pruning and raw mode save real time)
+    expect(leanMs).toBeLessThan(fullMs);
 
     db.close();
   });

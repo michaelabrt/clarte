@@ -129,6 +129,39 @@ export interface InMemoryFileGraph {
   reverse: Map<string, InMemoryEdge[]>;
 }
 
+// ── Lean file graph (column-pruned, no JSON.parse) ──────────────────────────────
+// Deliberately incompatible with InMemoryFileNode/InMemoryEdge to prevent
+// a lean graph from being accidentally passed where a full graph is expected.
+
+/** Subset of file node fields that do not require JSON.parse. */
+export interface LeanFileNode {
+  path: string;
+  hash: string;
+  authority: number;
+  hubScore: number;
+  betweenness: number;
+  isBarrel: boolean;
+  isDead: boolean;
+  isChokepoint: boolean;
+  communityId: number | null;
+}
+
+/** Edge without importedNames (skips JSON.parse of the imported_names column). */
+export interface LeanEdge {
+  fromPath: string;
+  toPath: string;
+  isTypeOnly: boolean;
+  isDynamic: boolean;
+  isBarrelRouted: boolean;
+}
+
+/** Fast-loading file graph for traversal and scoring. No JSON-parsed fields. */
+export interface LeanFileGraph {
+  nodes: Map<string, LeanFileNode>;
+  forward: Map<string, LeanEdge[]>;
+  reverse: Map<string, LeanEdge[]>;
+}
+
 // ── In-memory symbol graph ─────────────────────────────────────────────────────
 
 export interface InMemorySymbolNode {
