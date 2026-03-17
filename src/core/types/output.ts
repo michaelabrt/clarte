@@ -1,12 +1,5 @@
 import type { ConfigConstraints } from "./detection";
-import type {
-  HubFile,
-  CircularDependency,
-  ArchitecturalLayer,
-  LayerEdge,
-  FileInstability,
-  Community,
-} from "./graph";
+import type { HubFile, CircularDependency, ArchitecturalLayer, LayerEdge, FileInstability, Community } from "./graph";
 import type { GitAnalysis } from "./git";
 import type {
   CrossCuttingFile,
