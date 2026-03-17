@@ -10,7 +10,7 @@
  * min score = e^-6.2 ~ 0.002. Well above float64 precision.
  */
 
-import type { SymbolEdgeKind } from "../core/graph/symbol-types";
+import { GHOST_BASE_KIND, type SymbolEdgeKind } from "../core/graph/symbol-types";
 import type { SymbolSubgraph, SymbolSubEdge } from "../core/graph/intent-subgraph";
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ function edgeGamma(
   // Resolve base kind: strip "ghost:" prefix for Phase 5 ghost edges.
   const kindStr = edge.kind as string;
   const isGhost = kindStr.startsWith("ghost:");
-  const baseKind = isGhost ? kindStr.slice(6) : kindStr;
+  const baseKind = isGhost ? (GHOST_BASE_KIND[kindStr.slice(6)] ?? kindStr.slice(6)) : kindStr;
 
   const baseGamma = transmission[baseKind as SymbolEdgeKind];
   if (baseGamma === undefined) return 0; // unknown kind fallback
