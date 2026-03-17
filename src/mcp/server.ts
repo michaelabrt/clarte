@@ -9,7 +9,7 @@
  *   clarte_impact  - "What breaks if I change this?"
  *   clarte_find    - "Where is the code that does X?"
  *
- * F.5: Opens the SQLite database in read-only mode (SQLITE_OPEN_READONLY).
+ * Opens the SQLite database in read-only mode (SQLITE_OPEN_READONLY).
  * WAL mode allows concurrent reads while the main clarte process writes.
  * No DDL or write PRAGMAs are executed.
  */

@@ -209,7 +209,7 @@ export const RESOLUTION_CONFIDENCE = {
   TIER_3_FACTORY: 0.25,
   /** Per-hop multiplier for barrel re-export chains (0.90^hops) */
   BARREL_HOP_DECAY: 0.9,
-  /** Tier 5: proximity disambiguation via Jaccard + locality (Phase 6) */
+  /** Tier 5: proximity disambiguation via Jaccard + locality */
   TIER_5_PROXIMITY: 0.5,
 } as const;
 

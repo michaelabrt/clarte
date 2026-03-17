@@ -314,13 +314,13 @@ export interface ResolutionContext {
   cache: LRUCache<string, number | null>;
   /** Type alias map for transparent resolution. Optional for backward compat. */
   aliasMap?: Map<string, { targetKey: string }>;
-  /** Phase 6: Pre-computed symbol neighborhoods for proximity disambiguation */
+  /** Pre-computed symbol neighborhoods for proximity disambiguation */
   symbolNeighborhoods?: Map<number, Set<number>>;
-  /** Phase 6: Pre-computed file-level import neighborhoods (cold-start fallback) */
+  /** Pre-computed file-level import neighborhoods (cold-start fallback) */
   fileNeighborhoods?: Map<string, Set<string>>;
-  /** Phase 6: File -> Leiden community ID mapping */
+  /** File -> Leiden community ID mapping */
   fileCommunities?: Map<string, number>;
-  /** Phase 6: Full symbol graph for authority lookups */
+  /** Full symbol graph for authority lookups */
   symbolGraph?: InMemorySymbolGraph;
 }
 
@@ -589,7 +589,7 @@ function resolveCallSite(
     if (tier3) return tier3;
   }
 
-  // Tier 5: Proximity disambiguation (slow path, Phase 6)
+  // Tier 5: Proximity disambiguation (slow path)
   if (ctx.symbolNeighborhoods && ctx.fileNeighborhoods && ctx.fileCommunities && ctx.symbolGraph) {
     const callerSymbolId = callSite.callerFn
       ? lookupSymbolId(filePath, callSite.callerFn, ctx.symbolIndex, ctx.cache)

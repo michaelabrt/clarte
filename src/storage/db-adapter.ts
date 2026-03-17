@@ -378,7 +378,7 @@ export async function createDatabase(dbPath: string): Promise<DatabaseAdapter> {
   return createDatabaseWithTiers(dbPath, [tier1Loader, _bunSqliteTier, _sqlJsTier]);
 }
 
-// ── Read-only factory (F.5: for MCP server) ──────────────────────────────────
+// ── Read-only factory (for MCP server) ────────────────────────────────────────
 
 const readonlyTier1Loader: TierLoader = async (dbPath) => {
   try {

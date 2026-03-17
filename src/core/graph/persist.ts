@@ -314,14 +314,14 @@ async function persistGraphToStore(
   if (headCommit) store.setMeta("head_commit", headCommit);
   store.setMeta("build_timestamp", now);
 
-  // Phase 7b: Blame-boundary temporal decay
+  // Blame-boundary temporal decay
   if (fileGraphResults && fileGraphResults.size > 0) {
     const symGraph = store.loadSymbolGraph();
     if (symGraph.symbols.size > 0) {
       const blameData = await computeSymbolBlame(rootDir, symGraph);
       if (headCommit) store.storeSymbolBlame(headCommit, blameData);
 
-      // Phase 7c: LSA file embeddings
+      // LSA file embeddings
       const embeddings = computeFileEmbeddings(symGraph);
       if (embeddings) store.storeLSAEmbeddings(embeddings);
     }
@@ -329,9 +329,8 @@ async function persistGraphToStore(
 
   store.refreshBm25fStats();
 
-  // Phase 8a: Logistic fusion weight training
-  // Parse recent commits and train repo-specific lambda weights from
-  // co-change history with hard negative mining.
+  // Logistic fusion weight training: parse recent commits and train
+  // repo-specific lambda weights from co-change history with hard negative mining.
   try {
     const commits = parseGitLog(rootDir, { days: 90 });
     const fileGraph = store.loadFileGraph();
@@ -360,8 +359,8 @@ async function persistGraphToStore(
       store.setMeta("fusion_weights", JSON.stringify(weights));
     }
 
-    // Phase 8b: Bayesian EWMA edge priors
-    // Initialize from structural graph, then process commit history via EWMA.
+    // Bayesian EWMA edge priors: initialize from structural graph,
+    // then process commit history via EWMA.
     const priors = initializeEdgePriors(fileGraph);
     const priorMap = new Map<string, EdgePrior>();
     for (const p of priors) priorMap.set(`${p.fromPath}||${p.toPath}`, p);
@@ -388,7 +387,7 @@ async function persistGraphToStore(
       store.setMeta("edge_prior_weights", JSON.stringify(Object.fromEntries(expectedWeights)));
     }
   } catch {
-    // Phase 8 is non-critical; don't block the pipeline
+    // Fusion/EWMA is non-critical; don't block the pipeline
   }
 }
 

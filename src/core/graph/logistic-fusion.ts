@@ -21,7 +21,7 @@ import {
   FUSION_L2_LAMBDA,
   FUSION_MIN_COMMITS,
   FUSION_MAX_HOPS,
-} from "../config/phase8-constants";
+} from "../config/fusion-constants";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

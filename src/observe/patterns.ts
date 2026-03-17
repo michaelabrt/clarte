@@ -19,9 +19,8 @@ const TEST_CMD_RE =
  * Detect test-rerun loops: same base test command run multiple times
  * in the tail phase with no edits in between.
  *
- * From R11: 75% of tail waste comes from test output parsing loops
- * where the agent re-runs tests with different formatters (--verbose,
- * grep, head, tail) to parse the same result.
+ * Most tail waste comes from test output parsing loops where the agent
+ * re-runs tests with different formatters to parse the same result.
  */
 export function detectTestReruns(turns: ClassifiedTurn[]): WastePattern[] {
   const patterns: WastePattern[] = [];

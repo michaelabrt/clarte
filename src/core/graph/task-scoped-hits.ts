@@ -6,7 +6,7 @@
  * a 2-hop neighborhood subgraph and run HITS on it. This produces
  * task-specific authority/hub scores that may differ from global scores.
  *
- * F.7 fix: Files with zero edges in the task subgraph are forced to "Leaf"
+ * Files with zero edges in the task subgraph are forced to "Leaf"
  * instead of getting a misleading role from the flat-graph guard (0.5/0.5).
  */
 
@@ -107,7 +107,7 @@ function inMemoryEdgeToImportEdge(e: InMemoryEdge): ImportEdge {
  * 1. BFS 2-hop from seeds to build the subgraph
  * 2. Filter edges to only those within the subgraph
  * 3. Run HITS on the subgraph
- * 4. Derive task-scoped roles (F.7: isolated nodes forced to "Leaf")
+ * 4. Derive task-scoped roles (isolated nodes forced to "Leaf")
  */
 export function computeTaskScopedHITS(seeds: string[], fileGraph: InMemoryFileGraph, maxHops = 2): TaskScopedResult {
   const subgraphFiles = extractTaskSubgraph(seeds, fileGraph, maxHops);
@@ -124,7 +124,7 @@ export function computeTaskScopedHITS(seeds: string[], fileGraph: InMemoryFileGr
   const { authority, hub } = computeHITS(files, edges, 30, 1e-6, barrelFiles);
 
   // Derive task-scoped roles
-  // F.7: Files with zero edges in the subgraph are forced to "Leaf".
+  // Files with zero edges in the subgraph are forced to "Leaf".
   // Without this, the flat-graph guard in computeHITS assigns them 0.5/0.5,
   // which deriveRole would interpret as "Bridge" or "Utility".
   const roles = new Map<string, FileRole>();

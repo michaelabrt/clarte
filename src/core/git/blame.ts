@@ -8,7 +8,7 @@
 
 import { exec } from "node:child_process";
 import type { InMemorySymbolGraph } from "../../storage/types";
-import { BLAME_BATCH_SIZE, BLAME_DEFAULT_DAYS } from "../config/phase7-constants";
+import { BLAME_BATCH_SIZE, BLAME_DEFAULT_DAYS } from "../config/semantic-constants";
 
 // ── Porcelain parsing ────────────────────────────────────────────────────────
 
