@@ -200,8 +200,9 @@ export async function startServer(): Promise<void> {
   await server.connect(transport);
 }
 
-// Auto-start when run directly
-const isMain = process.argv[1] && (process.argv[1].endsWith("/server.ts") || process.argv[1].endsWith("/server.js"));
+// Auto-start when run directly (handles both source and tsup-renamed output)
+const scriptName = process.argv[1] ? path.basename(process.argv[1]) : "";
+const isMain = /^(mcp-)?server\.[jt]s$/.test(scriptName);
 
 if (isMain) {
   startServer().catch((err) => {
