@@ -29,7 +29,7 @@ import { HASH_CONCURRENCY } from "../config/thresholds";
 import { CLARTE_DIR } from "../config/config";
 import { openGraphStore } from "../../storage/loader";
 import type { GraphStore } from "../../storage/graph-store";
-import type { FileRecord, FileEdgeRecord, SymbolRecord } from "../../storage/types";
+import type { FileRecord, FileEdgeRecord } from "../../storage/types";
 
 export const CACHE_VERSION = 3;
 
@@ -186,24 +186,10 @@ function saveCacheToStore(store: GraphStore, data: CacheData): void {
       is_barrel_routed: e.isBarrelRouted ? 1 : 0,
     }));
 
-  // Build symbol records
-  const symbolRecords: SymbolRecord[] = [];
-  if (data.symbolNames) {
-    for (const [filePath, names] of Object.entries(data.symbolNames)) {
-      for (const name of names) {
-        symbolRecords.push({
-          file_path: filePath,
-          name,
-          kind: "unknown",
-          start_line: 0,
-        });
-      }
-    }
-  }
-
   store.upsertFiles(fileRecords);
   store.upsertFileEdges(edgeRecords);
-  if (symbolRecords.length > 0) store.upsertSymbols(symbolRecords);
+  // Symbol records are written by persistGraph with full kind/start_line data.
+  // The legacy symbolNames cache only has names (no kind, no line), so skip here.
   store.setMeta("build_language", data.language);
   store.setMeta("created_at", data.createdAt ?? now);
 }
