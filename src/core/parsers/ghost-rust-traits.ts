@@ -70,22 +70,13 @@ export function detectRustTraitBoundEdges(
       if (!impl.traitName) continue;
       if (STDLIB_TRAITS.has(impl.traitName)) continue;
 
-      // Look up the trait in the symbol index (scan all files for trait kind)
-      let traitFile: string | undefined;
-      let traitName: string | undefined;
+      // Look up the trait in the symbol index by name (O(1) map lookup)
+      const traitEntries = symbolIndex.byName.get(impl.traitName);
+      const traitEntry = traitEntries?.find((e) => e.kind === "trait");
+      if (!traitEntry) continue;
 
-      for (const [fp, entries] of symbolIndex.byFile) {
-        for (const entry of entries) {
-          if (entry.kind === "trait" && entry.name === impl.traitName) {
-            traitFile = fp;
-            traitName = entry.name;
-            break;
-          }
-        }
-        if (traitFile) break;
-      }
-
-      if (!traitFile || !traitName) continue;
+      const traitFile = traitEntry.filePath;
+      const traitName = traitEntry.name;
 
       // Find the target type symbol in the current file
       const targetKey = `${filePath}::${impl.targetType}`;

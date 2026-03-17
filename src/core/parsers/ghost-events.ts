@@ -14,6 +14,9 @@ import { GHOST_CONFIDENCE } from "../graph/ghost-types";
 /** Maximum ratio of files an objectName can appear in before being filtered */
 const FREQUENCY_CEILING = 0.1;
 
+/** Absolute cap on ghost edges per objectName to prevent O(n*m) blowup */
+const MAX_EDGES_PER_EMITTER = 50;
+
 interface EmitterInfo {
   onSites: Array<{ file: string; callerFn: string; line: number }>;
   emitSites: Array<{ file: string; callerFn: string; line: number }>;
@@ -64,9 +67,11 @@ export function detectEventEdges(
     // Must have both on and emit
     if (info.onSites.length === 0 || info.emitSites.length === 0) continue;
 
-    // Create edges from each emitter to each handler
+    // Create edges from each emitter to each handler (capped to prevent quadratic blowup)
+    let edgeCount = 0;
     for (const emitSite of info.emitSites) {
       for (const onSite of info.onSites) {
+        if (edgeCount >= MAX_EDGES_PER_EMITTER) break;
         // Skip self-edges (same function in same file)
         if (emitSite.file === onSite.file && emitSite.callerFn === onSite.callerFn) continue;
 
@@ -83,7 +88,9 @@ export function detectEventEdges(
             eventName: objectName,
           },
         });
+        edgeCount++;
       }
+      if (edgeCount >= MAX_EDGES_PER_EMITTER) break;
     }
   }
 
