@@ -477,7 +477,7 @@ export async function generateHookFiles(rootDir: string): Promise<void> {
 
   // Copy pre-built scoring bundle from dist/
   const thisDir = path.dirname(fileURLToPath(import.meta.url));
-  const bundleSrc = path.join(thisDir, "../../hook-entry.mjs");
+  const bundleSrc = path.join(thisDir, "hook-entry.mjs");
   try {
     const bundleContent = await readFile(bundleSrc, "utf-8");
     await writeFileSafe(path.join(hooksDir, "bm25f.mjs"), bundleContent);
@@ -490,7 +490,7 @@ export async function generateHookFiles(rootDir: string): Promise<void> {
   }
 
   // Remove stale hook files from previous versions
-  const knownFiles = new Set(HOOK_DEFS.map((d) => d.file));
+  const knownFiles = new Set([...HOOK_DEFS.map((d) => d.file), "bm25f.mjs", ".state"]);
   try {
     const entries = await readdir(hooksDir);
     for (const entry of entries) {
