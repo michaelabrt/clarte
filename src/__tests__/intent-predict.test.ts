@@ -161,7 +161,10 @@ describe("intentPredict orchestrator", () => {
     tmpDir = mkdtempSync(join(tmpdir(), "intent-test-"));
     // Create a minimal git repo so commitDistance/getChangedFiles don't crash
     const { execSync } = require("node:child_process");
-    execSync("git init && git commit --allow-empty -m 'init'", { cwd: tmpDir, stdio: "ignore" });
+    execSync(
+      "git init && git config user.email 'test@example.com' && git config user.name 'Test User' && git commit --allow-empty -m 'init'",
+      { cwd: tmpDir, stdio: "ignore" }
+    );
     // Create the source files so file existence check passes
     for (const dir of ["src/core"]) {
       mkdirSync(join(tmpDir, dir), { recursive: true });
