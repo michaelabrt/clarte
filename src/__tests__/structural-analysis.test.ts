@@ -14,7 +14,7 @@ function makeLayers(defs: Array<{ name: string; files: string[] }>): Architectur
   }));
 }
 
-// ── §1.12 User-Configurable Layer Patterns ─────────────────────────────
+// ── User-Configurable Layer Patterns ────────────────────────────────────
 
 describe("detectArchitecturalLayers with custom patterns", () => {
   it("uses custom patterns to classify files", () => {
@@ -93,7 +93,7 @@ describe("detectArchitecturalLayers with custom patterns", () => {
   });
 });
 
-// ── §1.7 Cross-Layer Fan-In Analysis ──────────────────────────────────
+// ── Cross-Layer Fan-In Analysis ───────────────────────────────────────
 
 describe("findCrossCuttingFiles", () => {
   it("identifies files imported across 3+ layers", () => {
@@ -236,7 +236,7 @@ describe("findCrossCuttingFiles", () => {
   });
 });
 
-// ── §1.8 Layer Dependency Consistency Score ────────────────────────────
+// ── Layer Dependency Consistency Score ─────────────────────────────────
 
 describe("computeLayerConsistency", () => {
   it("reports 100% consistency when all imports flow downward", () => {
@@ -371,7 +371,7 @@ describe("computeLayerConsistency", () => {
   });
 });
 
-// ── §2.53 Directed Reachability Chokepoints ────────────────────────────
+// ── Directed Reachability Chokepoints ──────────────────────────────────
 
 describe("findChokepoints", () => {
   it("finds chokepoints in a directed chain", () => {

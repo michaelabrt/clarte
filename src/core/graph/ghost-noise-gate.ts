@@ -1,5 +1,5 @@
 /**
- * RFC-002 Phase 5: Four-stage noise gate for ghost edge candidates.
+ * Four-stage noise gate for ghost edge candidates.
  *
  * Prevents graph bloat by filtering ghost edges through:
  * 1. Frequency gate - kills entire kinds that appear in >10% of files
@@ -11,9 +11,7 @@
 import type { GhostEdgeCandidate } from "./ghost-types";
 import type { GhostEdgeKind } from "./symbol-types";
 import { GHOST_COMMUNITY_DISCOUNT } from "./ghost-types";
-
-/** Maximum fraction of files a ghost kind can touch before being killed */
-const FREQUENCY_THRESHOLD = 0.1;
+import { GHOST_FREQUENCY_THRESHOLD } from "../config/intent-constants";
 
 /**
  * Apply four-stage noise gate to ghost edge candidates.
@@ -44,7 +42,7 @@ export function applyNoiseGate(
 
   const killedKinds = new Set<GhostEdgeKind>();
   for (const [kind, files] of kindFiles) {
-    if (files.size / fileCount > FREQUENCY_THRESHOLD) {
+    if (files.size / fileCount > GHOST_FREQUENCY_THRESHOLD) {
       killedKinds.add(kind);
     }
   }

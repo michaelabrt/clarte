@@ -87,7 +87,7 @@ export interface AnalysisResult {
   analysis: ContextAnalysis;
   deltaSection: string | null;
   timing: PhaseTiming;
-  /** [Martin & Leskovec] Drift detection result from post-refresh hook (RFC §5.10) */
+  /** Drift detection result from post-refresh hook */
   driftWarning?: { rebuildRecommended: boolean; reason: string };
 }
 
@@ -237,18 +237,18 @@ export async function runAnalysis(
     );
   }
 
-  // [Martin & Leskovec] Post-refresh drift detection hook (RFC §5.10)
+  // Post-refresh drift detection hook
   const driftWarning = store ? checkDriftState(graph, store, jsonMode ? undefined : verboseLog) : undefined;
 
   return { analysis, deltaSection, timing, driftWarning };
 }
 
 // ---------------------------------------------------------------------------
-// Drift detection (Martin & Leskovec, RFC §5.10)
+// Drift detection
 // ---------------------------------------------------------------------------
 
 /**
- * [Martin & Leskovec] Post-refresh hook: compare current scores against stored baseline.
+ * Post-refresh hook: compare current scores against stored baseline.
  * Triggers every 100 incremental builds or weekly (whichever comes first).
  * If score drift > 0.01 on any file, logs a warning and recommends Level 3 rebuild.
  */

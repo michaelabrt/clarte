@@ -1,5 +1,5 @@
 /**
- * Agent Performance Benchmark (§3.61)
+ * Agent Performance Benchmark
  *
  * Validates all algorithms against realistic project graphs that model
  * real-world architectures (React fullstack, Python backend). These are

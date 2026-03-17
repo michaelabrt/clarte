@@ -1,16 +1,9 @@
 /**
- * RFC-002 Phase 3: Context Pruning.
+ * Context pruning.
  *
  * Submodular coverage-based symbol selection that maximizes information
  * density within a token budget. Greedy algorithm with diminishing
  * returns guard and topological presentation ordering.
- *
- * §3.1 Token cost estimation
- * §3.2 Structural reach (2-hop BFS neighborhoods)
- * §3.3-3.4 Submodular coverage function and marginal gain
- * §3.5 Greedy symbol selection
- * §3.6 Diminishing returns guard (integrated in greedy loop)
- * §3.7 Presentation ordering
  */
 
 import type { InMemorySymbolGraph } from "../storage/types";
@@ -48,7 +41,7 @@ interface NeighborEntry {
   dist: number;
 }
 
-// ── §3.1 Token Cost Estimator ───────────────────────────────────────────────
+// ── Token Cost Estimator ────────────────────────────────────────────────────
 
 /**
  * Count tokens in an identifier by splitting on camelCase, PascalCase
@@ -103,7 +96,7 @@ export function estimateTokenCost(symbolId: number, symbolGraph: InMemorySymbolG
   return Math.max(sigTokens + pathTokens + 5 * edgeCount, 10);
 }
 
-// ── §3.2 Structural Reach Computation ───────────────────────────────────────
+// ── Structural Reach Computation ────────────────────────────────────────────
 
 /**
  * BFS up to depth 2 from a source node in the subgraph.
@@ -167,7 +160,7 @@ export function computeStructuralReach(subgraph: SymbolSubgraph): {
   return { reach, neighborhoods };
 }
 
-// ── §3.3-3.4 Submodular Coverage Function ───────────────────────────────────
+// ── Submodular Coverage Function ────────────────────────────────────────────
 
 /**
  * Compute the marginal gain of adding candidate `candidateId` to the
@@ -218,7 +211,7 @@ export function applyCoverage(
   }
 }
 
-// ── §3.5 Greedy Symbol Selection ────────────────────────────────────────────
+// ── Greedy Symbol Selection ─────────────────────────────────────────────────
 
 /**
  * Select context symbols using the submodular greedy algorithm.
@@ -288,7 +281,7 @@ export function selectContextSymbols(
 
     if (bestId === null) break;
 
-    // §3.6 Diminishing returns guard
+    // Diminishing returns guard
     if (firstRatio === null) {
       firstRatio = bestRatio;
     } else if (bestRatio < DIMINISHING_RETURNS_EPSILON * firstRatio) {
@@ -349,7 +342,7 @@ function topKFallback(
   };
 }
 
-// ── §3.7 Presentation Ordering ──────────────────────────────────────────────
+// ── Presentation Ordering ───────────────────────────────────────────────────
 
 /**
  * Order selected symbols for presentation to maximize LLM attention.

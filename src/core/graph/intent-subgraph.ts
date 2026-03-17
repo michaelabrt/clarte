@@ -1,5 +1,5 @@
 /**
- * RFC-002 §1.4, §6.1 Stage 3: Symbol subgraph extraction.
+ * Symbol subgraph extraction.
  *
  * Extracts the k-hop neighborhood from seed symbols in the symbol graph
  * using multi-source BFS. Operates entirely on the in-memory symbol graph

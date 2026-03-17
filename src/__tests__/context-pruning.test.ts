@@ -1,13 +1,13 @@
 /**
- * RFC-002 Phase 3 validation gate tests.
+ * Context pruning validation gate tests.
  *
- * Covers acceptance criteria from §3.1 through §3.7:
- * - 3.1: Token cost estimator (4 criteria incl. acronym handling)
- * - 3.2: Structural reach (4 criteria)
- * - 3.3-3.4: Submodular coverage (5 criteria)
- * - 3.5: Greedy symbol selection (9 criteria incl. same-file redundancy)
- * - 3.6: Diminishing returns guard (3 criteria)
- * - 3.7: Presentation ordering (4 criteria)
+ * Covers:
+ * - Token cost estimator (4 criteria incl. acronym handling)
+ * - Structural reach (4 criteria)
+ * - Submodular coverage (5 criteria)
+ * - Greedy symbol selection (9 criteria incl. same-file redundancy)
+ * - Diminishing returns guard (3 criteria)
+ * - Presentation ordering (4 criteria)
  */
 
 import { describe, it, expect } from "vitest";
@@ -98,9 +98,9 @@ function edgeKeys(pairs: [number, number][]): Set<string> {
   return new Set(pairs.map(([a, b]) => `${a}-${b}`));
 }
 
-// ── §3.1 Token Cost Estimator ───────────────────────────────────────────────
+// ── Token Cost Estimator ────────────────────────────────────────────────────
 
-describe("§3.1 Token Cost Estimator", () => {
+describe("Token Cost Estimator", () => {
   it("validateSession in src/auth/session.ts with 3 task edges: cost = 3 + 4 + 15 = 22", () => {
     // "validateSession" -> ["validate", "Session"] = 2 camelCase tokens + 1 kind token = 3
     // "src/auth/session.ts" -> ["src", "auth", "session", "ts"] = 4 path tokens
@@ -160,9 +160,9 @@ describe("§3.1 Token Cost Estimator", () => {
   });
 });
 
-// ── §3.2 Structural Reach ───────────────────────────────────────────────────
+// ── Structural Reach ────────────────────────────────────────────────────────
 
-describe("§3.2 Structural Reach", () => {
+describe("Structural Reach", () => {
   it("isolated symbol (no edges): reach = 1 / |V_tau|", () => {
     const nodes = [makeNode(1, "a.ts", "alpha"), makeNode(2, "b.ts", "beta"), makeNode(3, "c.ts", "gamma")];
     // No edges: each symbol only reaches itself
@@ -217,9 +217,9 @@ describe("§3.2 Structural Reach", () => {
   });
 });
 
-// ── §3.3-3.4 Submodular Coverage ─────────────────────────────────────────────
+// ── Submodular Coverage ─────────────────────────────────────────────────────
 
-describe("§3.4 Submodular Coverage", () => {
+describe("Submodular Coverage", () => {
   it("first symbol: gain = sum of gamma^dist for reachable + 1.0 for self", () => {
     const neighborhoods = new Map<number, Array<{ id: number; dist: number }>>([
       [
@@ -350,9 +350,9 @@ describe("§3.4 Submodular Coverage", () => {
   });
 });
 
-// ── §3.5 Greedy Symbol Selection ────────────────────────────────────────────
+// ── Greedy Symbol Selection ─────────────────────────────────────────────────
 
-describe("§3.5 Greedy Symbol Selection", () => {
+describe("Greedy Symbol Selection", () => {
   // Shared setup: 5 symbols across different files
   const nodes = [
     makeNode(1, "src/auth/session.ts", "validateSession"),
@@ -479,9 +479,9 @@ describe("§3.5 Greedy Symbol Selection", () => {
   });
 });
 
-// ── §3.6 Diminishing Returns Guard ──────────────────────────────────────────
+// ── Diminishing Returns Guard ───────────────────────────────────────────────
 
-describe("§3.6 Diminishing Returns Guard", () => {
+describe("Diminishing Returns Guard", () => {
   it("stops when second ratio < epsilon * first ratio", () => {
     // One high-value hub and many low-value isolated nodes
     const nodes = [
@@ -520,9 +520,9 @@ describe("§3.6 Diminishing Returns Guard", () => {
   });
 });
 
-// ── §3.7 Presentation Ordering ──────────────────────────────────────────────
+// ── Presentation Ordering ───────────────────────────────────────────────────
 
-describe("§3.7 Presentation Ordering", () => {
+describe("Presentation Ordering", () => {
   it("entry point (depth 0) before implementation (depth 2)", () => {
     // 1 -> 2 -> 3 (chain)
     const nodes = [
@@ -593,9 +593,9 @@ describe("§3.7 Presentation Ordering", () => {
   });
 });
 
-// ── §3.8 Performance ────────────────────────────────────────────────────────
+// ── Performance ─────────────────────────────────────────────────────────────
 
-describe("§3.8 Performance", () => {
+describe("Performance", () => {
   it("selectContextSymbols completes in <50ms on 500-symbol subgraph", () => {
     const n = 500;
     const nodes = Array.from({ length: n }, (_, i) =>

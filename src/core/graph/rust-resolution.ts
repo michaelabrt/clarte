@@ -1,6 +1,6 @@
 /**
  * Rust trait resolution: impl block method indexing, trait visibility
- * enforcement and deref coercion chains (RFC §2.14).
+ * enforcement and deref coercion chains.
  *
  * Rust dispatches all methods through impl blocks. A type can have:
  * - Inherent impls: `impl Foo { fn bar() }` — always visible

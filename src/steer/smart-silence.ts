@@ -1,5 +1,5 @@
 /**
- * RFC-002 SS2.5: Smart Silence gatekeeper.
+ * Smart Silence gatekeeper.
  *
  * Evaluates four suppression conditions in priority order.
  * When the system cannot make a reliable prediction, it stays silent
@@ -30,7 +30,7 @@ export interface SilenceResult {
 /**
  * Evaluate whether predictions should be suppressed.
  *
- * @param predictions - verified predictions from Phase 2
+ * @param predictions - verified predictions
  * @param query - the user's original task prompt
  * @param fileCount - total files in the project
  * @param _graphCommit - commit hash when graph was built (reserved for future use)

@@ -80,9 +80,9 @@ export class VectorStore {
   }
 
   /**
-   * [Dean & Stonebraker] Find nearest files to a query embedding.
+   * Find nearest files to a query embedding.
    * When candidatePaths is provided, only computes cosine similarity for symbols
-   * in those files (ANN pre-filter, RFC §3.3). Reduces O(N) full-scan to
+   * in those files (ANN pre-filter). Reduces O(N) full-scan to
    * O(|candidates|) where |candidates| is typically the BM25F top-1000.
    * Without candidatePaths, falls back to full-scan for backward compatibility.
    */

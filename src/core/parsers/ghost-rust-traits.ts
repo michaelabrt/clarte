@@ -1,5 +1,5 @@
 /**
- * RFC-002 Phase 5: Rust trait bound ghost edge detector.
+ * Rust trait bound ghost edge detector.
  *
  * Scans impl blocks for trait implementations. Links the target type
  * to the trait definition in the symbol graph, skipping stdlib traits.

@@ -215,7 +215,7 @@ export const MCP = {
 } as const;
 
 /**
- * Ghost edge detection feature gate (RFC-002 Phase 5).
+ * Ghost edge detection feature gate.
  * Set to true to enable ghost edge detection and noise gating.
  */
 export const GHOST_EDGES_ENABLED = true;

@@ -1,5 +1,5 @@
 /**
- * RFC-002 SS5.2: PredictionTrace logger.
+ * PredictionTrace logger.
  *
  * Writes structured prediction traces to .clarte/prediction-log.jsonl.
  * Supports log rotation at 1MB and feedback append (precision/recall/MRR).

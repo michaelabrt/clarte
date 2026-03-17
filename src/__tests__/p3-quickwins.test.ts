@@ -6,7 +6,7 @@ beforeAll(async () => {
   await initTreeSitter();
 });
 
-describe("Python TYPE_CHECKING detection (§3.24)", () => {
+describe("Python TYPE_CHECKING detection", () => {
   it("marks imports inside TYPE_CHECKING block as type-only", () => {
     const source = `
 from __future__ import annotations

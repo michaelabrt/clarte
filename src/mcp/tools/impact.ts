@@ -1,5 +1,5 @@
 /**
- * clarte_impact MCP tool (RFC §4.3).
+ * clarte_impact MCP tool.
  *
  * "What breaks if I change this?" - downstream impact analysis.
  * Three categories:
@@ -7,8 +7,8 @@
  *   LIKELY AFFECTED - 2-hop non-type-only dependents
  *   TEST         - test files covering the target + 1-hop dependents
  *
- * [Neubig] Stability guard: max_results cap and summary mode prevent token overflow.
- * [Neubig & Reimers] Explainability: rationale field explains why each file is included.
+ * Stability guard: max_results cap and summary mode prevent token overflow.
+ * Rationale field explains why each file is included.
  */
 
 import type { DatabaseAdapter } from "../../storage/db-adapter";
@@ -18,9 +18,9 @@ import { isTestFile } from "../../core/utils";
 
 export interface ImpactInput {
   file: string;
-  /** [Neubig] Cap per category to prevent token overflow (default: unlimited) */
+  /** Cap per category to prevent token overflow (default: unlimited) */
   maxResults?: number;
-  /** [Neubig] When true, returns file paths and counts only (default: false) */
+  /** When true, returns file paths and counts only (default: false) */
   summary?: boolean;
 }
 
@@ -34,12 +34,12 @@ export interface ImpactOutput {
   will_break: ImpactEntry[];
   likely_affected: ImpactEntry[];
   test: ImpactEntry[];
-  /** [Neubig] When max_results caps output, shows total count per category */
+  /** When max_results caps output, shows total count per category */
   truncated?: { will_break: number; likely_affected: number; test: number };
   error?: string;
 }
 
-/** [Neubig] Depth-limited summary: file paths + counts only, no rationale detail */
+/** Depth-limited summary: file paths + counts only, no rationale detail */
 export interface ImpactSummaryOutput {
   file: string;
   will_break: { count: number; files: string[] };
@@ -66,7 +66,7 @@ interface FileExistsRow {
 // ── Implementation ───────────────────────────────────────────────────────────
 
 /**
- * [Neubig] Compute the downstream blast radius of modifying a file.
+ * Compute the downstream blast radius of modifying a file.
  * Supports max_results cap and summary mode to prevent context window overflow.
  * Every entry includes a rationale explaining why it was included.
  */
@@ -130,7 +130,7 @@ export function executeImpact(db: DatabaseAdapter, input: ImpactInput): ImpactOu
     if (isTestFile(p) && !testMap.has(p)) testMap.set(p, file);
   }
 
-  // [Neubig] Summary mode: return counts and file paths only
+  // Summary mode: return counts and file paths only
   if (summary) {
     const cap = maxResults ?? Infinity;
     return {
@@ -144,7 +144,7 @@ export function executeImpact(db: DatabaseAdapter, input: ImpactInput): ImpactOu
     };
   }
 
-  // [Neubig & Reimers] Build entries with rationale
+  // Build entries with rationale
   const willBreakEntries: ImpactEntry[] = allWillBreak.map((p) => ({
     file: p,
     rationale: `Direct runtime import of ${file}`,
@@ -169,7 +169,7 @@ export function executeImpact(db: DatabaseAdapter, input: ImpactInput): ImpactOu
       rationale: `Test file covering ${covered}`,
     }));
 
-  // [Neubig] Apply max_results cap
+  // Apply max_results cap
   const cap = maxResults ?? Infinity;
   const truncated =
     cap < Infinity && (willBreakEntries.length > cap || likelyEntries.length > cap || testEntries.length > cap)

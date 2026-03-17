@@ -1,5 +1,5 @@
 /**
- * HITS on the symbol graph (RFC §2.10) and file-level aggregation (RFC §2.9).
+ * HITS on the symbol graph and file-level aggregation.
  *
  * Runs HITS on symbol nodes with edge-kind weights. File-level metrics are
  * derived by aggregation (max), not computed directly.
@@ -136,7 +136,7 @@ export function computeSymbolHITS(
       newHub[vi] = alpha * baseScore + (1 - alpha) * sum;
     }
 
-    // Min-max normalize per iteration (RFC §2.10: "Normalization: min-max per iteration")
+    // Min-max normalize per iteration
     let authMin = Infinity;
     let authMax = -Infinity;
     let hubMin = Infinity;
@@ -181,7 +181,7 @@ export function computeSymbolHITS(
 // ── File-level aggregation from symbol scores ─────────────────────────────────
 
 /**
- * Aggregate symbol-level HITS scores to file level (RFC §2.9).
+ * Aggregate symbol-level HITS scores to file level.
  * File authority = max symbol authority within the file.
  * File hub score = max symbol hub score within the file.
  */
@@ -225,7 +225,7 @@ export function aggregateToFileLevel(
 }
 
 /**
- * Derive file-level edges from symbol edges (RFC §2.9).
+ * Derive file-level edges from symbol edges.
  * If any symbol in file A has an edge to any symbol in file B, create a file edge A -> B.
  * is_type_only is true only if ALL edges from A to B are type-only kinds.
  */

@@ -1,14 +1,13 @@
 /**
- * RFC-002 Intent Propagation constants and types.
+ * Intent propagation constants and types.
  *
  * All tuning parameters for the predictive intelligence pipeline.
- * Constants match RFC-002 sections exactly; changing any value
- * invalidates cached prediction traces.
+ * Changing any value invalidates cached prediction traces.
  */
 
 import type { SymbolEdgeKind } from "../graph/symbol-types";
 
-// ── Transmission coefficients (Section 1.5) ─────────────────────────────────
+// ── Transmission coefficients ────────────────────────────────────────────────
 // gamma(u, v) for each edge kind in the forward direction.
 
 export const TRANSMISSION: Record<SymbolEdgeKind, number> = {
@@ -22,17 +21,17 @@ export const TRANSMISSION: Record<SymbolEdgeKind, number> = {
   imports: 0.7,
 };
 
-/** Reverse-direction multiplier (Section 1.5 directional asymmetry). */
+/** Reverse-direction multiplier for directional asymmetry. */
 export const REVERSE_MULTIPLIER = 0.7;
 
-/** Ghost edge discount (Section 4.2): ghost gamma = gamma_kind * GHOST_DISCOUNT. */
+/** Ghost edge discount: ghost gamma = gamma_kind * GHOST_DISCOUNT. */
 export const GHOST_DISCOUNT = 0.6;
 
 // ── Propagation limits ──────────────────────────────────────────────────────
 
 export const MAX_PROPAGATION_HOPS = 3;
 
-// ── Phase 2 seeding (Section 1.4) ───────────────────────────────────────────
+// ── Chokepoint seeding ──────────────────────────────────────────────────────
 
 /** Chokepoint threshold: symbols above the 75th percentile of betweenness. */
 export const BETWEENNESS_PERCENTILE = 0.75;
@@ -43,7 +42,7 @@ export const INTENT_MIN = 0.1;
 /** Re-propagation depth from chokepoints. */
 export const PHASE2_MAX_HOPS = 1;
 
-// ── Score fusion weights (Section 1.3) ──────────────────────────────────────
+// ── Score fusion weights ────────────────────────────────────────────────────
 // lambda_L + lambda_G + lambda_T + lambda_B = 1.0
 
 export const LAMBDA_LEXICAL = 0.35;
@@ -51,12 +50,12 @@ export const LAMBDA_GRAPH = 0.35;
 export const LAMBDA_TEMPORAL = 0.15;
 export const LAMBDA_BETWEENNESS = 0.15;
 
-// ── Confidence thresholds (Section 2.6) ─────────────────────────────────────
+// ── Confidence thresholds ───────────────────────────────────────────────────
 
 export const THETA_HIGH = 0.7;
 export const THETA_LOW = 0.3;
 
-// ── Prediction limits (Section 1.7) ─────────────────────────────────────────
+// ── Prediction limits ───────────────────────────────────────────────────────
 
 export const MIN_PREDICTIONS = 1;
 export const MAX_PREDICTIONS = 5;
@@ -65,34 +64,34 @@ export const MAX_PREDICTIONS = 5;
 
 export const SEED_TOP_K = 10;
 
-// ── Context pruning (Section 3) ─────────────────────────────────────────────
+// ── Context pruning ─────────────────────────────────────────────────────────
 
 export const MAX_CONTEXT_TOKENS = 1500;
 export const GAMMA_MAX_COVERAGE = 0.8;
 export const DIMINISHING_RETURNS_EPSILON = 0.05;
 export const SUBMODULAR_FALLBACK_THRESHOLD = 2000;
 
-// ── Ghost edge confidence (Section 4.2) ─────────────────────────────────────
+// ── Ghost edge confidence ───────────────────────────────────────────────────
 // 0.6 * TIER_3_FACTORY (0.25) = 0.15
 
 export const GHOST_CONFIDENCE = 0.15;
 
-// ── Noise gate (Section 4.4) ────────────────────────────────────────────────
+// ── Noise gate ──────────────────────────────────────────────────────────────
 
 export const GHOST_FREQUENCY_THRESHOLD = 0.1;
 export const GHOST_COMMUNITY_DISCOUNT = 0.5;
 
-// ── Staleness (Section 2.5) ─────────────────────────────────────────────────
+// ── Staleness ───────────────────────────────────────────────────────────────
 
 export const STALE_COMMIT_THRESHOLD = 10;
 export const STALE_FILE_OVERLAP_THRESHOLD = 0.3;
 export const STALE_GRAPH_DISCOUNT = 0.5;
 
-// ── Smart Silence (Section 2.5) ─────────────────────────────────────────────
+// ── Smart Silence ───────────────────────────────────────────────────────────
 
 export const MIN_PROJECT_FILES = 5;
 
-// ── Performance budget (Section 5.1) ────────────────────────────────────────
+// ── Performance budget ──────────────────────────────────────────────────────
 
 export const LATENCY_BUDGET_MS = 300;
 export const STAGE_OVERDRAFT_MULTIPLIER = 2;

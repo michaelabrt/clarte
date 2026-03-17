@@ -190,7 +190,7 @@ export async function buildImportGraph(
       rawImports = withParsedTree(content, language, file, (root) => {
         const imports = parseImportsAstFromRoot(root, language);
 
-        // Phase 2: unified single-pass extraction
+        // Unified single-pass extraction
         const fgr = extractFileGraph(root, language);
         fileGraphResults.set(file, fgr);
 

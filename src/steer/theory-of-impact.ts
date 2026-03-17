@@ -1,7 +1,7 @@
 /**
- * RFC-002 SS2.3: Theory of Impact generator.
+ * Theory of Impact generator.
  *
- * Synthesizes Phase 1 fusion signals into structured evidence for each
+ * Synthesizes fusion signals into structured evidence for each
  * predicted file. Each non-zero signal produces a human/AI-readable
  * explanation linking specific symbol relationships to the user's intent.
  *

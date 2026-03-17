@@ -50,7 +50,7 @@ describe("multi-language HITS recomputation", () => {
     // Without recomputation: TS files keep old authority, Python files have their own
     // These scores were computed in isolation and aren't comparable
 
-    // Recompute HITS on the merged graph (this is what §1.28 fixed)
+    // Recompute HITS on the merged graph
     const { authority: recomputedAuth, hub: recomputedHub } = computeHITS(
       allFiles,
       tsGraph.edges,

@@ -1,5 +1,5 @@
 /**
- * Hono BM25F retrieval evaluation (Phase 3 of adversarial audit).
+ * Hono BM25F retrieval evaluation (retrieval adversarial audit).
  *
  * Builds a real Hono import graph and runs resolveEditTargets for three
  * benchmark tasks where clarte underperformed or had insufficient evidence:

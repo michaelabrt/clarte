@@ -1,5 +1,5 @@
 /**
- * RFC-002 SS2.4: Verification Protocol + SS2.3 Confidence Calibration.
+ * Verification protocol and confidence calibration.
  *
  * Cross-checks every prediction against the current graph state.
  * Four checks: edge existence, file existence, symbol existence,
@@ -187,7 +187,7 @@ export function verifyPredictions(
 
     pred.verification = verification;
 
-    // Confidence calibration (SS2.3)
+    // Confidence calibration
     pred.confidence = pred.score > THETA_HIGH ? "high" : "medium";
 
     // Staleness (F3)

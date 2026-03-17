@@ -1,5 +1,5 @@
 /**
- * RFC-002 Phase 5: Route registration ghost edge detector.
+ * Route registration ghost edge detector.
  *
  * Detects two patterns:
  * 1. Decorator routes: @Get/@Post/etc on methods within @Controller classes

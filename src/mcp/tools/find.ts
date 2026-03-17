@@ -1,5 +1,5 @@
 /**
- * clarte_find MCP tool (RFC §4.4).
+ * clarte_find MCP tool.
  *
  * "Where is the code that does X?" - Full BM25F pipeline + Semantic + RRF fusion.
  *
@@ -11,9 +11,9 @@
  * the 15MB+ vector cache on every call.
  * F.8 fix: BM25F corpus stats are used indirectly through the full pipeline.
  *
- * [Dean & Stonebraker] ANN pre-filter: semantic search is bounded to BM25F top-1000
- * candidates instead of flat-scanning all embeddings (RFC §3.3).
- * [Neubig & Reimers] Explainability: rationale field explains match provenance.
+ * ANN pre-filter: semantic search is bounded to BM25F top-1000
+ * candidates instead of flat-scanning all embeddings.
+ * Rationale field explains match provenance.
  */
 
 import type { DatabaseAdapter } from "../../storage/db-adapter";
@@ -34,7 +34,7 @@ interface FindResultEntry {
   symbols: string[];
   match_type: "lexical" | "semantic" | "semantic+lexical";
   confidence: number;
-  /** [Neubig & Reimers] Graph-derived explanation for why this file matched */
+  /** Graph-derived explanation for why this file matched */
   rationale: string;
 }
 
@@ -75,7 +75,7 @@ export function _resetFindCache(): void {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /**
- * [Dean & Stonebraker] BM25F candidate pool size for ANN pre-filtering.
+ * BM25F candidate pool size for ANN pre-filtering.
  * Semantic search scans only these candidates instead of the full embedding store.
  * 1000 is the sweet spot: covers 95%+ recall while reducing scan cost by 50-500x.
  */
@@ -143,7 +143,7 @@ export async function executeFind(db: DatabaseAdapter, input: FindInput): Promis
     const symbols = syms.map((s: SymbolMatch) => s.name);
     const confidence = maxScore > 0 ? Math.round((r.score / maxScore) * 100) / 100 : 0;
 
-    // [Neubig & Reimers] Build rationale from match provenance
+    // Build rationale from match provenance
     const rationale = buildRationale(match_type, symbols, r.path, bm25fFiles);
 
     return { file: r.path, symbols, match_type, confidence, rationale };
@@ -155,7 +155,7 @@ export async function executeFind(db: DatabaseAdapter, input: FindInput): Promis
 // ── Semantic search helper ───────────────────────────────────────────────────
 
 /**
- * [Dean & Stonebraker] Run semantic search within BM25F candidate pool.
+ * Run semantic search within BM25F candidate pool.
  * Passes candidatePaths to the hybrid provider to bound the cosine scan.
  */
 async function getSemanticFiles(
@@ -172,7 +172,7 @@ async function getSemanticFiles(
 // ── Rationale builder ─────────────────────────────────────────────────────────
 
 /**
- * [Neubig & Reimers] Generate human-readable rationale for why a file matched.
+ * Generate human-readable rationale for why a file matched.
  * Uses match provenance (lexical/semantic/both) and symbol names from BM25F ranking.
  */
 function buildRationale(
