@@ -132,11 +132,11 @@ export async function runInitMode(opts: InitOptions): Promise<void> {
     );
     analysis = result.analysis;
 
-    // Persist analysis graph for hooks and cursor rules (non-critical)
+    // Persist analysis graph for hooks and cursor rules
     try {
       await persistGraph(rootDir, graph, analysis, store);
     } catch (err) {
-      verboseLog(`Graph persistence failed: ${errorMessage(err)}`);
+      process.stderr.write(`[clarte] Graph persistence failed: ${errorMessage(err)}\n`);
     }
     try {
       persistedGraph = await loadPersistedGraph(rootDir, store);

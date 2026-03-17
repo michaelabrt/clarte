@@ -201,7 +201,7 @@ export function buildPersistedGraphFromStore(store: GraphStore): PersistedGraph 
   const timestamp = store.getMeta("created_at") ?? new Date().toISOString();
 
   // Build files record
-  const files: Record<string, PersistedFileRecord> = {};
+  const files: Record<string, PersistedFileRecord> = Object.create(null);
   for (const [filePath, node] of fileGraph.nodes) {
     // Collect symbol data from symbol graph
     const symbolIds = symbolGraph.byFile.get(filePath) ?? [];
@@ -210,9 +210,9 @@ export function buildPersistedGraphFromStore(store: GraphStore): PersistedGraph 
     const symNames =
       fileSymbols.length > 0 ? fileSymbols.map((s) => s?.name).filter((n): n is string => n !== undefined) : undefined;
 
-    const symbolBodyTokens: Record<string, string[]> = {};
-    const symbolStartLines: Record<string, number> = {};
-    const symbolAuthority: Record<string, number> = {};
+    const symbolBodyTokens: Record<string, string[]> = Object.create(null);
+    const symbolStartLines: Record<string, number> = Object.create(null);
+    const symbolAuthority: Record<string, number> = Object.create(null);
 
     for (const sym of fileSymbols) {
       if (!sym) continue;

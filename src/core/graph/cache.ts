@@ -603,7 +603,10 @@ async function buildGraphWithStore(
         store.deleteFiles([...deletedFiles]);
       }
 
-      const mergedEdges = [...keptEdges, ...newEdges];
+      // Dedup edges: newEdges may overlap with keptEdges for unchanged targets
+      const edgeKeys = new Set(keptEdges.map((e) => `${e.from}\0${e.to}`));
+      const dedupedNew = newEdges.filter((e) => !edgeKeys.has(`${e.from}\0${e.to}`));
+      const mergedEdges = [...keptEdges, ...dedupedNew];
       const allFiles = [...currentHashes.keys()];
 
       const graph = rebuildGraph(mergedEdges, allFiles, detectedBarrels, mergedSymbols);

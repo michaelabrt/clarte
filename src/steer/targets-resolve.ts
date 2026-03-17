@@ -909,9 +909,9 @@ export function rankSymbols(targetFiles: string[], graph: PersistedGraph, query:
     const fileData = graph.files[fp];
     if (!fileData) continue;
     const allSyms = fileData.symbolNames ?? [];
-    const bodyToks = fileData.symbolBodyTokens ?? {};
-    const symAuth = fileData.symbolAuthority ?? {};
-    const symLines = fileData.symbolStartLines ?? {};
+    const bodyToks = fileData.symbolBodyTokens ?? Object.create(null);
+    const symAuth = fileData.symbolAuthority ?? Object.create(null);
+    const symLines = fileData.symbolStartLines ?? Object.create(null);
 
     const scored = allSyms.map((s) => {
       const bt = bodyToks[s] ?? [];
