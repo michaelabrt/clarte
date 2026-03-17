@@ -110,8 +110,13 @@ export interface IntentPrediction {
   rank: number;
   score: number;
   confidence: "high" | "medium";
+  isStale: boolean;
   signals: {
+    /** Normalized lexical score in [0,1] (L/maxL). Used by recomputeScore. */
     lexical: number;
+    /** Raw BM25+ score (pre-normalization). Used by ToI for evidence display. */
+    rawLexical: number;
+    /** Effective graph signal: G(s) * C_path * D_stale. */
     graph: number;
     temporal: number;
     betweenness: number;
