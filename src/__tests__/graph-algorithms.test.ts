@@ -1122,18 +1122,30 @@ describe("detectCommunitiesLeiden", () => {
     // Clique B: mix of src/api and src/util files, densely connected
     // Bridge: single edge between cliques
     const files = [
-      "src/core/a1.ts", "src/util/a2.ts", "src/core/a3.ts", "src/util/a4.ts",
-      "src/api/b1.ts", "src/util/b2.ts", "src/api/b3.ts", "src/core/b4.ts",
+      "src/core/a1.ts",
+      "src/util/a2.ts",
+      "src/core/a3.ts",
+      "src/util/a4.ts",
+      "src/api/b1.ts",
+      "src/util/b2.ts",
+      "src/api/b3.ts",
+      "src/core/b4.ts",
     ];
     const edges = [
       // Clique A (cross-directory)
-      edge("src/core/a1.ts", "src/util/a2.ts"), edge("src/core/a1.ts", "src/core/a3.ts"),
-      edge("src/core/a1.ts", "src/util/a4.ts"), edge("src/util/a2.ts", "src/core/a3.ts"),
-      edge("src/util/a2.ts", "src/util/a4.ts"), edge("src/core/a3.ts", "src/util/a4.ts"),
+      edge("src/core/a1.ts", "src/util/a2.ts"),
+      edge("src/core/a1.ts", "src/core/a3.ts"),
+      edge("src/core/a1.ts", "src/util/a4.ts"),
+      edge("src/util/a2.ts", "src/core/a3.ts"),
+      edge("src/util/a2.ts", "src/util/a4.ts"),
+      edge("src/core/a3.ts", "src/util/a4.ts"),
       // Clique B (cross-directory)
-      edge("src/api/b1.ts", "src/util/b2.ts"), edge("src/api/b1.ts", "src/api/b3.ts"),
-      edge("src/api/b1.ts", "src/core/b4.ts"), edge("src/util/b2.ts", "src/api/b3.ts"),
-      edge("src/util/b2.ts", "src/core/b4.ts"), edge("src/api/b3.ts", "src/core/b4.ts"),
+      edge("src/api/b1.ts", "src/util/b2.ts"),
+      edge("src/api/b1.ts", "src/api/b3.ts"),
+      edge("src/api/b1.ts", "src/core/b4.ts"),
+      edge("src/util/b2.ts", "src/api/b3.ts"),
+      edge("src/util/b2.ts", "src/core/b4.ts"),
+      edge("src/api/b3.ts", "src/core/b4.ts"),
       // Bridge
       edge("src/core/a1.ts", "src/api/b1.ts"),
     ];
@@ -1152,19 +1164,28 @@ describe("detectCommunitiesLeiden", () => {
   it("each community is internally connected (no disconnected sub-clusters)", () => {
     // Three separate cliques across mixed directories
     const files = [
-      "api/auth.ts", "api/user.ts", "api/session.ts",
-      "db/query.ts", "db/pool.ts", "db/migrate.ts",
-      "util/log.ts", "util/fmt.ts", "util/hash.ts",
+      "api/auth.ts",
+      "api/user.ts",
+      "api/session.ts",
+      "db/query.ts",
+      "db/pool.ts",
+      "db/migrate.ts",
+      "util/log.ts",
+      "util/fmt.ts",
+      "util/hash.ts",
     ];
     const edges = [
       // api cluster
-      edge("api/auth.ts", "api/user.ts"), edge("api/auth.ts", "api/session.ts"),
+      edge("api/auth.ts", "api/user.ts"),
+      edge("api/auth.ts", "api/session.ts"),
       edge("api/user.ts", "api/session.ts"),
       // db cluster
-      edge("db/query.ts", "db/pool.ts"), edge("db/query.ts", "db/migrate.ts"),
+      edge("db/query.ts", "db/pool.ts"),
+      edge("db/query.ts", "db/migrate.ts"),
       edge("db/pool.ts", "db/migrate.ts"),
       // util cluster
-      edge("util/log.ts", "util/fmt.ts"), edge("util/log.ts", "util/hash.ts"),
+      edge("util/log.ts", "util/fmt.ts"),
+      edge("util/log.ts", "util/hash.ts"),
       edge("util/fmt.ts", "util/hash.ts"),
     ];
     const graph = makeGraph(files, edges);
@@ -1177,15 +1198,15 @@ describe("detectCommunitiesLeiden", () => {
       for (const e of edges) {
         if (!adj.has(e.from)) adj.set(e.from, new Set());
         if (!adj.has(e.to)) adj.set(e.to, new Set());
-        adj.get(e.from)!.add(e.to);
-        adj.get(e.to)!.add(e.from);
+        adj.get(e.from)?.add(e.to);
+        adj.get(e.to)?.add(e.from);
       }
       const memberSet = new Set(c.files);
       const visited = new Set<string>();
       const queue = [c.files[0]];
       visited.add(c.files[0]);
       while (queue.length > 0) {
-        const node = queue.shift()!;
+        const node = queue.shift() as string;
         for (const neighbor of adj.get(node) ?? []) {
           if (memberSet.has(neighbor) && !visited.has(neighbor)) {
             visited.add(neighbor);
@@ -1199,8 +1220,12 @@ describe("detectCommunitiesLeiden", () => {
 
   it("returns empty when communities mirror directory structure (ARI > threshold, §5.5)", () => {
     const files = [
-      "src/auth/login.ts", "src/auth/logout.ts", "src/auth/token.ts",
-      "src/data/fetch.ts", "src/data/parse.ts", "src/data/cache.ts",
+      "src/auth/login.ts",
+      "src/auth/logout.ts",
+      "src/auth/token.ts",
+      "src/data/fetch.ts",
+      "src/data/parse.ts",
+      "src/data/cache.ts",
     ];
     const edges = [
       edge("src/auth/login.ts", "src/auth/token.ts"),
@@ -1222,9 +1247,15 @@ describe("detectCommunitiesLeiden", () => {
 
   it("cross-directory connections trigger Leiden to reassign files", () => {
     const files = [
-      "worker/job-a.ts", "worker/job-b.ts", "worker/job-c.ts",
-      "shared/queue.ts", "shared/config.ts", "shared/logger.ts",
-      "infra/monitor.ts", "infra/health.ts", "infra/metrics.ts",
+      "worker/job-a.ts",
+      "worker/job-b.ts",
+      "worker/job-c.ts",
+      "shared/queue.ts",
+      "shared/config.ts",
+      "shared/logger.ts",
+      "infra/monitor.ts",
+      "infra/health.ts",
+      "infra/metrics.ts",
     ];
     const edges = [
       edge("worker/job-a.ts", "shared/queue.ts"),
@@ -1258,16 +1289,28 @@ describe("detectCommunitiesLeiden", () => {
   it("produces communities with cohesion scores (§5.4)", () => {
     // Mixed-directory cliques so Leiden discovers non-trivial communities
     const files = [
-      "src/core/a1.ts", "src/util/a2.ts", "src/core/a3.ts", "src/util/a4.ts",
-      "src/api/b1.ts", "src/util/b2.ts", "src/api/b3.ts", "src/core/b4.ts",
+      "src/core/a1.ts",
+      "src/util/a2.ts",
+      "src/core/a3.ts",
+      "src/util/a4.ts",
+      "src/api/b1.ts",
+      "src/util/b2.ts",
+      "src/api/b3.ts",
+      "src/core/b4.ts",
     ];
     const edges = [
-      edge("src/core/a1.ts", "src/util/a2.ts"), edge("src/core/a1.ts", "src/core/a3.ts"),
-      edge("src/core/a1.ts", "src/util/a4.ts"), edge("src/util/a2.ts", "src/core/a3.ts"),
-      edge("src/util/a2.ts", "src/util/a4.ts"), edge("src/core/a3.ts", "src/util/a4.ts"),
-      edge("src/api/b1.ts", "src/util/b2.ts"), edge("src/api/b1.ts", "src/api/b3.ts"),
-      edge("src/api/b1.ts", "src/core/b4.ts"), edge("src/util/b2.ts", "src/api/b3.ts"),
-      edge("src/util/b2.ts", "src/core/b4.ts"), edge("src/api/b3.ts", "src/core/b4.ts"),
+      edge("src/core/a1.ts", "src/util/a2.ts"),
+      edge("src/core/a1.ts", "src/core/a3.ts"),
+      edge("src/core/a1.ts", "src/util/a4.ts"),
+      edge("src/util/a2.ts", "src/core/a3.ts"),
+      edge("src/util/a2.ts", "src/util/a4.ts"),
+      edge("src/core/a3.ts", "src/util/a4.ts"),
+      edge("src/api/b1.ts", "src/util/b2.ts"),
+      edge("src/api/b1.ts", "src/api/b3.ts"),
+      edge("src/api/b1.ts", "src/core/b4.ts"),
+      edge("src/util/b2.ts", "src/api/b3.ts"),
+      edge("src/util/b2.ts", "src/core/b4.ts"),
+      edge("src/api/b3.ts", "src/core/b4.ts"),
       edge("src/core/a1.ts", "src/api/b1.ts"),
     ];
     const graph = makeGraph(files, edges);
@@ -1454,10 +1497,22 @@ describe("collectNHopNeighborhood (§5.7)", () => {
 
 describe("filesNeedingRoleUpdate (§5.7)", () => {
   it("identifies files with score delta > 0.05", () => {
-    const oldAuth = new Map([["a", 0.5], ["b", 0.3]]);
-    const newAuth = new Map([["a", 0.57], ["b", 0.3]]);
-    const oldHub = new Map([["a", 0.2], ["b", 0.2]]);
-    const newHub = new Map([["a", 0.2], ["b", 0.2]]);
+    const oldAuth = new Map([
+      ["a", 0.5],
+      ["b", 0.3],
+    ]);
+    const newAuth = new Map([
+      ["a", 0.57],
+      ["b", 0.3],
+    ]);
+    const oldHub = new Map([
+      ["a", 0.2],
+      ["b", 0.2],
+    ]);
+    const newHub = new Map([
+      ["a", 0.2],
+      ["b", 0.2],
+    ]);
 
     const result = filesNeedingRoleUpdate(oldAuth, newAuth, oldHub, newHub);
     expect(result).toContain("a");
