@@ -95,7 +95,7 @@ export async function renderProjectInfoSections(
 
   // Behavioral (two imperative lines, no heading - proven +2 turns when removed)
   const behavioralText =
-    "Do not use Grep or Glob to explore the codebase upfront. Based on the task description, open the most relevant files directly. Only broaden your search if your first attempt doesn't find the right code. When searching is needed, prefer clarte-grep over plain grep for graph-annotated results.\nAfter editing, run tests once. Do not re-run tests to reformat output. If tests pass, stop.";
+    'Do not use Grep or Glob to explore the codebase upfront. Based on the task description, open the most relevant files directly. Only broaden your search if your first attempt doesn\'t find the right code.\nAlways use clarte MCP tools instead of Grep or Glob for any question about code structure, dependencies, callers, impact or safety. "Who uses X?" → clarte_callers. "What breaks if I change X?" → clarte_impact. "Where is the code that does X?" → clarte_find. "Is this change safe?" → clarte_safe. Reserve Grep for non-structural searches (string literals, config values) or if a symbol is missing from the graph.\nAfter editing, run tests once. Do not re-run tests to reformat output. If tests pass, stop.';
   sections.push({
     id: "behavioral",
     priority: 0,
