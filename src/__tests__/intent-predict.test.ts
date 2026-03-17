@@ -1,12 +1,12 @@
 /**
- * RFC-002 Phase 4 validation gate tests.
+ * Orchestration validation gate tests.
  *
  * Covers:
- * - 4.1: intentPredict orchestrator (7 acceptance criteria)
- * - 4.2: renderTaskContext v2 intent mode (6 acceptance criteria)
- * - 4.3: PredictionTrace logger (4 acceptance criteria)
- * - 4.6: Backward compatibility (empty graph fallback)
- * - 4.7: DEBUG_INTENT observability (verified via mock)
+ * - intentPredict orchestrator (7 acceptance criteria)
+ * - renderTaskContext v2 intent mode (6 acceptance criteria)
+ * - PredictionTrace logger (4 acceptance criteria)
+ * - Backward compatibility (empty graph fallback)
+ * - DEBUG_INTENT observability (verified via mock)
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -200,7 +200,7 @@ describe("intentPredict orchestrator", () => {
     expect(result.timing.total).toBeGreaterThan(0);
   });
 
-  it("timing.phase2_seeding is null when Phase 2 did not trigger", () => {
+  it("timing.phase2_seeding is null when chokepoint seeding did not trigger", () => {
     const { fileGraph, symbolGraph, changeCoupling } = buildTestGraph();
     // With only 5 symbols, phase2 may or may not trigger depending on betweenness
     const result = intentPredict(

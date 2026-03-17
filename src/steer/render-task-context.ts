@@ -24,8 +24,8 @@ export interface TaskScopedInfo {
  * - Legacy mode: targets is string[] (file paths)
  * - Intent mode: targets is IntentPrediction[] (full prediction objects)
  *
- * Supports optional execution flows (§4.7), task-scoped rankings (§4.8)
- * and context selection (§4.2 v2).
+ * Supports optional execution flows, task-scoped rankings
+ * and context selection.
  */
 export function renderTaskContext(
   targets: string[] | IntentPrediction[],
@@ -183,7 +183,7 @@ function renderLegacyMode(
     const ageSuffix = lastModified?.get(fp) ? `, modified ${lastModified.get(fp)}` : "";
     lines.push(`## ${fp} [rank ${i + 1}${ageSuffix}]`);
 
-    // §4.8: Task-scoped role (only when it differs from global)
+    // Task-scoped role (only when it differs from global)
     if (taskScoped) {
       const taskRole = taskScoped.taskRoles.get(fp);
       const globalRole = graph.files[fp]?.role;
@@ -231,7 +231,7 @@ function renderLegacyMode(
     lines.push("");
   }
 
-  // §4.7: Execution flows (max 3)
+  // Execution flows (max 3)
   if (executionFlows && executionFlows.length > 0) {
     for (const flow of executionFlows.slice(0, 3)) {
       const lastStep = flow.steps[flow.steps.length - 1];

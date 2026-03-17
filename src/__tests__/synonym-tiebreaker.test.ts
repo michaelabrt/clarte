@@ -1,5 +1,5 @@
 /**
- * Tests for Phase 2 changes:
+ * Tests for symbol graph changes:
  * - Synonym expansion in BM25F (expandQuerySynonyms behavior via public API)
  * - Semantic tiebreakers (import direction, betweenness, importedByCount)
  *

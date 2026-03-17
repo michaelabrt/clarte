@@ -1,6 +1,6 @@
 /**
- * RFC-002 SS1.3, SS1.6, SS1.7: Intent score fusion, file-level aggregation,
- * and dynamic prediction count selection.
+ * Intent score fusion, file-level aggregation and dynamic prediction
+ * count selection.
  *
  * Updated fusion formula (F1/F2 remediation):
  *   S_intent(s) = lambda_L * L_hat(s,q) + lambda_G * G(s,q) * C(s) * D

@@ -1,5 +1,5 @@
 /**
- * Python C3 linearization for MRO-aware method resolution (RFC §2.12).
+ * Python C3 linearization for MRO-aware method resolution.
  *
  * Given a class hierarchy extracted from Python AST, computes the Method
  * Resolution Order using the C3 linearization algorithm. Used to resolve
@@ -209,8 +209,8 @@ export function resolvePythonSuper(
 // ── Resolve all Python MRO edges ──────────────────────────────────────────────
 
 /**
- * [Hejlsberg] Generate resolved symbol edges for Python MRO-dependent call sites
- * and metaclass relationships (RFC §2.12).
+ * Generate resolved symbol edges for Python MRO-dependent call sites
+ * and metaclass relationships.
  * Metaclass edges use "uses_type" to prevent false-positives in C3 linearization
  * while preserving the dependency link for impact analysis.
  */
@@ -219,7 +219,7 @@ export function resolvePythonMROEdges(
   symbolIndex: SymbolIndex,
   importMaps: Map<string, Map<string, ImportBinding>>,
 ): ResolvedSymbolEdge[] {
-  // [Hejlsberg] Generate metaclass edges independently of MRO hierarchy
+  // Generate metaclass edges independently of MRO hierarchy
   const metaclassEdges = resolveMetaclassEdges(fileGraphs, symbolIndex, importMaps);
 
   const hierarchy = buildPythonClassHierarchy(fileGraphs, symbolIndex, importMaps);
@@ -337,7 +337,7 @@ function findEnclosingClass(result: FileGraphResult, methodName: string): string
 // ── Metaclass edge resolution ──────────────────────────────────────────────
 
 /**
- * [Hejlsberg] Generate "uses_type" edges for Python metaclass relationships (RFC §2.12).
+ * Generate "uses_type" edges for Python metaclass relationships.
  * Metaclass is NOT a base class for C3 linearization; it controls class creation behavior.
  * We emit a separate "uses_type" edge so that:
  *   - Impact analysis correctly flags classes when their metaclass changes

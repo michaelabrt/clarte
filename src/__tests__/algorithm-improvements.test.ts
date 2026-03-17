@@ -1,5 +1,5 @@
 /**
- * Tests for Phase 1 algorithm improvements (adversarial audit).
+ * Tests for algorithm improvements (adversarial audit).
  *
  * Each describe block targets a specific behavioral change, testing properties
  * that could plausibly regress independently from the rest of the codebase.

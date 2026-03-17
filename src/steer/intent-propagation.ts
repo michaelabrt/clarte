@@ -1,5 +1,5 @@
 /**
- * RFC-002 §1.5: Dijkstra-based intent propagation on the symbol subgraph.
+ * Dijkstra-based intent propagation on the symbol subgraph.
  *
  * Computes max-product paths (max_pi prod gamma(u,v)) by transforming
  * to shortest paths in -log(gamma) space. Multi-source Dijkstra from
@@ -86,8 +86,8 @@ class MinHeap {
  * Compute the edge gamma for a subgraph edge.
  *
  * gamma = transmission[kind], modified by reverse multiplier and ghost
- * discount. Resolution confidence is NOT applied here (RFC-002 §1.5):
- * propagation transmits full signal regardless of resolution tier.
+ * discount. Resolution confidence is NOT applied here: propagation
+ * transmits full signal regardless of resolution tier.
  * Confidence is preserved on the edge for downstream consumers (ToI,
  * verification) but does not attenuate gamma.
  *
@@ -100,7 +100,7 @@ function edgeGamma(
   reverseMultiplier: number,
   ghostDiscount: number,
 ): number {
-  // Resolve base kind: strip "ghost:" prefix for Phase 5 ghost edges.
+  // Resolve base kind: strip "ghost:" prefix for ghost edges.
   const kindStr = edge.kind as string;
   const isGhost = kindStr.startsWith("ghost:");
   const baseKind = isGhost ? (GHOST_BASE_KIND[kindStr.slice(6)] ?? kindStr.slice(6)) : kindStr;

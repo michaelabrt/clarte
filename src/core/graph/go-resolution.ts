@@ -1,6 +1,6 @@
 /**
  * Go structural resolution: struct embedding (method promotion) and
- * implicit interface satisfaction (RFC §2.13).
+ * implicit interface satisfaction.
  *
  * Go has no inheritance or implements keyword. Instead:
  * - Struct embedding promotes methods from embedded types onto the outer struct.
@@ -188,7 +188,7 @@ export function computePromotedMethods(
 // ── Implicit interface satisfaction ───────────────────────────────────────────
 
 /**
- * [Hejlsberg] Find all interfaces that a concrete type implicitly satisfies (RFC §2.13).
+ * Find all interfaces that a concrete type implicitly satisfies.
  * Distinguishes value (T) vs pointer (*T) method sets for compiler-accurate satisfaction.
  *
  * Go spec:
@@ -209,7 +209,7 @@ export function findSatisfiedInterfaces(
 
   const promoted = computePromotedMethods(typeKey, embeddingMap, typeMethodSets);
 
-  // [Hejlsberg] Build separate method sets for T (value) and *T (pointer)
+  // Build separate method sets for T (value) and *T (pointer)
   // Value method set: only value-receiver direct methods + promoted methods
   const valueMethods = new Set<string>();
   for (const method of methodSet.direct) {
@@ -318,7 +318,7 @@ export function resolveGoStructuralEdges(
 
     const satisfied = findSatisfiedInterfaces(typeKey, typeMethodSets, embeddingMap, interfaces);
     for (const iface of satisfied) {
-      // [Hejlsberg] Value-receiver satisfaction (T and *T both work) gets direct confidence.
+      // Value-receiver satisfaction (T and *T both work) gets direct confidence.
       // Pointer-only satisfaction (*T required) gets member-tier confidence (0.9) since
       // the concrete variable type (T vs *T) cannot be determined from static analysis alone.
       const confidence =
@@ -356,7 +356,7 @@ export function resolveGoStructuralEdges(
     methodSet.promoted = promoted;
   }
 
-  // Resolve call sites through promoted methods (RFC §2.13 AC1):
+  // Resolve call sites through promoted methods:
   // For obj.Method() where obj is a struct with promoted Method from an embedded type,
   // create a call edge from the caller to the embedded type's method.
   // Build a map: typeName -> promoted method -> owning type key for quick lookup

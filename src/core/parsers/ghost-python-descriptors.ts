@@ -1,5 +1,5 @@
 /**
- * RFC-002 Phase 5: Python descriptor ghost edge detector.
+ * Python descriptor ghost edge detector.
  *
  * Finds descriptor classes (containing __get__/__set__ methods) and
  * class-level assignments that instantiate them. Emits ghost:descriptor

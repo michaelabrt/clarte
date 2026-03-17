@@ -1,7 +1,7 @@
 /**
- * RFC-002 §1.4: Phase 2 seeding - betweenness chokepoint re-propagation.
+ * Betweenness chokepoint re-propagation seeding.
  *
- * After Phase 1 Dijkstra, identifies structural chokepoints in the task
+ * After initial Dijkstra propagation, identifies structural chokepoints in the task
  * subgraph that received negligible intent signal. Re-propagates 1 hop
  * from these chokepoints and merges via max.
  *
@@ -21,7 +21,7 @@ export interface Phase2Result {
   mergedScores: Map<number, number>;
   /** Symbol IDs identified as chokepoints */
   chokepoints: number[];
-  /** Whether Phase 2 actually ran */
+  /** Whether chokepoint re-propagation ran */
   phase2Triggered: boolean;
 }
 
@@ -32,7 +32,7 @@ export interface Phase2Result {
  * Returns normalized scores in [0, 1].
  *
  * Since |V_tau| ~ 500, full (not sampled) Brandes is tractable.
- * Uses only forward edges (import direction) per RFC specification.
+ * Uses only forward edges (import direction).
  */
 export function computeSubgraphBetweenness(subgraph: SymbolSubgraph): Map<number, number> {
   const nodeIds = Array.from(subgraph.nodes.keys());
@@ -131,7 +131,7 @@ export function computeSubgraphBetweenness(subgraph: SymbolSubgraph): Map<number
 /**
  * Exclusive percentile: 0th = min, 100th = max.
  *
- * Deliberate improvement over RFC-002 §1.4 which specifies floor(p * n).
+ * Deliberate improvement over the original floor(p * n) formula.
  * That formula selects the maximum value as the threshold when
  * floor(p * n) = n - 1, creating a dead zone where no element can
  * strictly exceed it. This makes chokepoint detection impossible for
@@ -146,17 +146,17 @@ function percentile(values: number[], p: number): number {
   return sorted[idx];
 }
 
-// ── Phase 2 seeding ─────────────────────────────────────────────────────────
+// ── Chokepoint seeding ──────────────────────────────────────────────────────
 
 /**
- * Identify structural chokepoints that received negligible Phase 1 intent
+ * Identify structural chokepoints that received negligible initial propagation intent
  * and re-propagate from them.
  *
  * A chokepoint is a symbol with:
- *   betweenness > 75th percentile AND phase1Score < INTENT_MIN (0.1)
+ *   betweenness > 75th percentile AND initial score < INTENT_MIN (0.1)
  *
  * Re-propagation runs 1 hop from chokepoints. Final scores are max-merged
- * with Phase 1 scores to prevent double-counting.
+ * with initial scores to prevent double-counting.
  */
 export function applyPhase2Seeding(
   phase1Scores: Map<number, number>,

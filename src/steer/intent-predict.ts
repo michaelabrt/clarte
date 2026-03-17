@@ -1,9 +1,9 @@
 /**
- * RFC-002 SS4.1: intentPredict orchestrator.
+ * intentPredict orchestrator.
  *
- * Sequentially executes Phase 1 (Dijkstra propagation), Phase 2
- * (verification and confidence calibration) and Phase 3 (context
- * pruning with topological ordering). Returns predictions, context
+ * Sequentially executes Dijkstra propagation, verification with
+ * confidence calibration and context pruning with topological
+ * ordering. Returns predictions, context
  * selection and timing data for the trace logger.
  *
  * Safe-failure pattern: if any phase throws, the orchestrator catches
@@ -294,7 +294,7 @@ function fallbackToLexical(predictions: IntentPrediction[]): IntentPrediction[] 
 
 /**
  * Run the full intent prediction pipeline: seed selection, subgraph
- * extraction, Dijkstra propagation, Phase 2 seeding, fusion,
+ * extraction, Dijkstra propagation, chokepoint seeding, fusion,
  * verification, smart silence, context pruning and presentation ordering.
  *
  * If the symbol graph is empty or any phase throws, falls back gracefully
@@ -403,7 +403,7 @@ function runPipeline(
     `subgraph: ${subgraph.nodes.size} symbols, ${edgeCount} edges (${MAX_PROPAGATION_HOPS}-hop BFS, ${(timing.subgraph_extraction).toFixed(0)}ms)`,
   );
 
-  // ── Stage 4: Intent Propagation (Phase 1 Dijkstra) ────────────────────
+  // ── Stage 4: Intent Propagation (Dijkstra) ──────────────────────────────
   const t3 = performance.now();
   const seedScoreMap = buildSeedScoreMap(seedFiles, seedResult.scores, symbolGraph);
   const phase1 = propagateIntent(
@@ -420,7 +420,7 @@ function runPipeline(
     `propagation: ${phase1.scores.size} symbols scored (Dijkstra, ${(timing.intent_propagation).toFixed(0)}ms)`,
   );
 
-  // ── Stage 5: Phase 2 Seeding (Betweenness chokepoint re-propagation) ──
+  // ── Stage 5: Chokepoint Seeding (Betweenness re-propagation) ────────────
   const t4 = performance.now();
   const phase2Result = applyPhase2Seeding(phase1.scores, subgraph, TRANSMISSION, REVERSE_MULTIPLIER, GHOST_DISCOUNT);
   timing.phase2_seeding = phase2Result.phase2Triggered ? performance.now() - t4 : null;
@@ -487,7 +487,7 @@ function runPipeline(
     fileTopSymbolId.set(file, fs.topSymbolId);
   }
 
-  // ── Stage 11: Context Pruning (Phase 3) ───────────────────────────────
+  // ── Stage 11: Context Pruning ─────────────────────────────────────────
   const t7 = performance.now();
   const taskEdgeKeys = buildTaskEdgeKeys(subgraph);
   const intentScoreMap = new Map<number, number>();

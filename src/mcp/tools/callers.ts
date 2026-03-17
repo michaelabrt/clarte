@@ -1,5 +1,5 @@
 /**
- * clarte_callers MCP tool (RFC §4.2).
+ * clarte_callers MCP tool.
  *
  * "Who calls this function?" - BFS caller chain via recursive CTE on symbol_edges.
  * Max depth 5, branching factor 4 (highest authority per level).
@@ -24,7 +24,7 @@ interface CallerEntry {
   line: number;
   depth: number;
   tag: "DIRECT" | "TRANSITIVE" | "DISTANT";
-  /** [Neubig & Reimers] Graph-derived explanation for why this caller was included */
+  /** Graph-derived explanation for why this caller was included */
   rationale: string;
 }
 
@@ -125,7 +125,7 @@ export function executeCallers(db: DatabaseAdapter, input: CallersInput): Caller
   for (const [, rows] of [...byDepth.entries()].sort((a, b) => a[0] - b[0])) {
     for (const row of rows) {
       const tag = depthTag(row.depth);
-      // [Neubig & Reimers] Build rationale from graph context
+      // Build rationale from graph context
       const rationale =
         tag === "DIRECT"
           ? `Direct '${row.kind}' edge: ${row.name}() in ${row.file_path}:${row.start_line}`

@@ -1,5 +1,5 @@
 /**
- * Tests for Phase 3 adversarial audit changes to resolve-targets.ts:
+ * Tests for adversarial audit changes to resolve-targets.ts:
  * 1. verify/verification synonym group
  * 2. Directional expansion: IMPORTER_EXPANSION=0.4 vs IMPORT_EXPANSION=0.2
  * 3. Compound token preservation for camelCase identifiers that lose signal via stop words

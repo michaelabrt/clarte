@@ -1,5 +1,5 @@
 /**
- * Task-scoped HITS (RFC §4.6): subgraph extraction + HITS re-ranking
+ * Task-scoped HITS: subgraph extraction + HITS re-ranking
  * for task-relevant files.
  *
  * Given a set of seed files (BM25F + semantic retrieval results), extract

@@ -598,7 +598,7 @@ describe("findCircularDeps with dynamic imports", () => {
   });
 });
 
-// ── §3.2 Approximate Betweenness Centrality ──────────────────────────
+// ── Approximate Betweenness Centrality ───────────────────────────────
 
 describe("computeBetweenness", () => {
   it("assigns zero to a pure dependency sink in a star", () => {
@@ -785,7 +785,7 @@ describe("computeBetweenness", () => {
   });
 });
 
-// ── §3.2 Adaptive betweenness k ───────────────────────────────────────
+// ── Adaptive betweenness k ────────────────────────────────────────────
 
 describe("computeBetweenness adaptive k", () => {
   it("small graph (V < 50) uses exact computation (k = V)", () => {
@@ -845,7 +845,7 @@ describe("computeBetweenness adaptive k", () => {
   });
 });
 
-// ── §3.3 findFeedbackEdges adaptive early-stop ────────────────────────
+// ── findFeedbackEdges adaptive early-stop ─────────────────────────────
 
 describe("findFeedbackEdges", () => {
   function makeCycle(chain: string[]): CircularDependency {
@@ -925,7 +925,7 @@ describe("findFeedbackEdges", () => {
   });
 });
 
-// ── §3.11 Architectural Fitness Functions ────────────────────────────
+// ── Architectural Fitness Functions ───────────────────────────────────
 
 function makeLayers(defs: Array<{ name: string; files: string[] }>): ArchitecturalLayer[] {
   return defs.map((d) => ({
@@ -1107,7 +1107,7 @@ describe("checkArchitecturalFitness", () => {
   });
 });
 
-// ── §5.1 Leiden community detection ───────────────────────────────────
+// ── Leiden community detection ────────────────────────────────────────
 
 describe("detectCommunitiesLeiden", () => {
   it("returns empty for empty graph", () => {
@@ -1115,7 +1115,7 @@ describe("detectCommunitiesLeiden", () => {
     expect(detectCommunitiesLeiden(graph)).toEqual([]);
   });
 
-  it("two cliques connected by a bridge produce two communities (§5.1 acceptance 1)", () => {
+  it("two cliques connected by a bridge produce two communities", () => {
     // Two cliques spread across MIXED directories so Leiden must discover
     // the real communities (ARI with directory structure will be low).
     // Clique A: mix of src/core and src/util files, densely connected
@@ -1155,7 +1155,7 @@ describe("detectCommunitiesLeiden", () => {
     // Leiden should find 2 communities (one per clique, not per directory)
     expect(communities.length).toBe(2);
 
-    // Each community is internally connected (§5.1 acceptance 2)
+    // Each community is internally connected
     for (const c of communities) {
       expect(c.files.length).toBe(4);
     }
@@ -1218,7 +1218,7 @@ describe("detectCommunitiesLeiden", () => {
     }
   });
 
-  it("returns empty when communities mirror directory structure (ARI > threshold, §5.5)", () => {
+  it("returns empty when communities mirror directory structure (ARI > threshold)", () => {
     const files = [
       "src/auth/login.ts",
       "src/auth/logout.ts",
@@ -1286,7 +1286,7 @@ describe("detectCommunitiesLeiden", () => {
     }
   });
 
-  it("produces communities with cohesion scores (§5.4)", () => {
+  it("produces communities with cohesion scores", () => {
     // Mixed-directory cliques so Leiden discovers non-trivial communities
     const files = [
       "src/core/a1.ts",
@@ -1324,9 +1324,9 @@ describe("detectCommunitiesLeiden", () => {
   });
 });
 
-// ── §5.2 Adaptive gamma ─────────────────────────────────────────────
+// ── Adaptive gamma ──────────────────────────────────────────────────
 
-describe("computeAdaptiveGamma (§5.2)", () => {
+describe("computeAdaptiveGamma", () => {
   it("returns 0.5 for 100 files", () => {
     expect(computeAdaptiveGamma(100)).toBe(0.5);
   });
@@ -1345,9 +1345,9 @@ describe("computeAdaptiveGamma (§5.2)", () => {
   });
 });
 
-// ── §5.4 Per-cluster cohesion ───────────────────────────────────────
+// ── Per-cluster cohesion ────────────────────────────────────────────
 
-describe("computeCohesion (§5.4)", () => {
+describe("computeCohesion", () => {
   it("clique of 4 has cohesion 1.0", () => {
     const adj = new Map<string, Set<string>>();
     const nodes = ["a", "b", "c", "d"];
@@ -1378,9 +1378,9 @@ describe("computeCohesion (§5.4)", () => {
   });
 });
 
-// ── §5.9 BETWEENNESS_K quantization ─────────────────────────────────
+// ── BETWEENNESS_K quantization ──────────────────────────────────────
 
-describe("quantizeBetweennessK (§5.9)", () => {
+describe("quantizeBetweennessK", () => {
   it("V=100 -> effectiveK=50", () => {
     expect(quantizeBetweennessK(100)).toBe(50);
   });
@@ -1410,9 +1410,9 @@ describe("quantizeBetweennessK (§5.9)", () => {
   });
 });
 
-// ── §5.8 Level 3 full rebuild triggers ──────────────────────────────
+// ── Level 3 full rebuild triggers ───────────────────────────────────
 
-describe("checkRebuildTriggers (§5.8)", () => {
+describe("checkRebuildTriggers", () => {
   it(">50% changed files triggers rebuild", () => {
     const result = checkRebuildTriggers({
       staleFiles: Array.from({ length: 60 }, (_, i) => `f${i}.ts`),
@@ -1458,9 +1458,9 @@ describe("checkRebuildTriggers (§5.8)", () => {
   });
 });
 
-// ── §5.10 Drift detection triggers ──────────────────────────────────
+// ── Drift detection triggers ────────────────────────────────────────
 
-describe("shouldRunDriftDetection (§5.10)", () => {
+describe("shouldRunDriftDetection", () => {
   it("triggers at 100 builds", () => {
     expect(shouldRunDriftDetection(100, undefined)).toBe(true);
   });
@@ -1475,9 +1475,9 @@ describe("shouldRunDriftDetection (§5.10)", () => {
   });
 });
 
-// ── §5.7 Level 2 incremental helpers ────────────────────────────────
+// ── Level 2 incremental helpers ─────────────────────────────────────
 
-describe("collectNHopNeighborhood (§5.7)", () => {
+describe("collectNHopNeighborhood", () => {
   it("collects 2-hop neighborhood", () => {
     const adj = new Map<string, Set<string>>();
     adj.set("a", new Set(["b"]));
@@ -1495,7 +1495,7 @@ describe("collectNHopNeighborhood (§5.7)", () => {
   });
 });
 
-describe("filesNeedingRoleUpdate (§5.7)", () => {
+describe("filesNeedingRoleUpdate", () => {
   it("identifies files with score delta > 0.05", () => {
     const oldAuth = new Map([
       ["a", 0.5],

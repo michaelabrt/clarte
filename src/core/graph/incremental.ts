@@ -1,14 +1,14 @@
 /**
- * Incremental graph update pipeline (§5.6-5.8, §5.10).
+ * Incremental graph update pipeline.
  *
  * Three levels:
- *   Level 1: Per-file delta updates (§5.6) - update only changed files
- *   Level 2: Warm-start score propagation (§5.7) - partial recomputation
- *   Level 3: Full rebuild triggers (§5.8) - conditions that force a complete rebuild
+ *   Level 1: Per-file delta updates - update only changed files
+ *   Level 2: Warm-start score propagation - partial recomputation
+ *   Level 3: Full rebuild triggers - conditions that force a complete rebuild
  *
  * Also includes:
- *   BETWEENNESS_K quantization (§5.9)
- *   Incremental drift detection (§5.10) with community ARI/cohesion (audit F1)
+ *   BETWEENNESS_K quantization
+ *   Incremental drift detection with community ARI/cohesion (audit F1)
  *   Lightweight edge-only update path (audit Shift 2)
  */
 
@@ -16,7 +16,7 @@ import type { Community, ImportGraph } from "../types";
 import { BETWEENNESS_K } from "../config/thresholds";
 import { computeARI, computeCohesion, buildUndirectedAdj, getDeepestDir, groupByCommunity } from "./leiden";
 
-// ── BETWEENNESS_K quantization (§5.9) ────────────────────────────────────────
+// ── BETWEENNESS_K quantization ────────────────────────────────────────────────
 
 /**
  * Quantize k to the nearest multiple of 10 to prevent spurious cache
@@ -37,7 +37,7 @@ export function quantizeBetweennessK(nodeCount: number): number {
   return Math.ceil(rawK / 10) * 10;
 }
 
-// ── Level 3: Full rebuild triggers (§5.8) ────────────────────────────────────
+// ── Level 3: Full rebuild triggers ────────────────────────────────────────────
 
 /** Conditions that trigger a full rebuild instead of incremental updates */
 export interface RebuildTrigger {
@@ -46,7 +46,7 @@ export interface RebuildTrigger {
 }
 
 /**
- * Check if a full rebuild should be triggered (§5.8).
+ * Check if a full rebuild should be triggered.
  *
  * Triggers:
  *   1. Schema version change
@@ -84,10 +84,10 @@ export function checkRebuildTriggers(opts: {
   return { triggered: false, reason: "" };
 }
 
-// ── Level 2: Warm-start score propagation helpers (§5.7) ─────────────────────
+// ── Level 2: Warm-start score propagation helpers ─────────────────────────────
 
 /**
- * Collect nodes within N hops of a set of changed files (§5.7).
+ * Collect nodes within N hops of a set of changed files.
  * Used for betweenness local re-sampling.
  */
 export function collectNHopNeighborhood(
@@ -116,7 +116,7 @@ export function collectNHopNeighborhood(
 }
 
 /**
- * Determine which files need role re-derivation after score changes (§5.7).
+ * Determine which files need role re-derivation after score changes.
  * Only files with score deltas > 0.05 warrant re-derivation.
  */
 export function filesNeedingRoleUpdate(
@@ -141,7 +141,7 @@ export function filesNeedingRoleUpdate(
   return needsUpdate;
 }
 
-// ── Drift detection (§5.10 + audit F1: community drift) ─────────────────────
+// ── Drift detection (audit F1: community drift) ─────────────────────────────
 
 /** Score field names that are compared during drift detection */
 type ScoreField = "authority" | "hub" | "betweenness" | "instability";
@@ -157,7 +157,7 @@ export interface CommunityDriftResult {
 }
 
 /**
- * Compare incremental scores against full rebuild scores (§5.10).
+ * Compare incremental scores against full rebuild scores.
  * Returns files with drift > threshold on any score field.
  *
  * Audit F1: Also computes community drift (ARI between incremental and
@@ -304,7 +304,7 @@ export function detectCommunityDrift(
 }
 
 /**
- * Check whether drift detection should run (§5.10).
+ * Check whether drift detection should run.
  * Triggers: every 100 incremental updates OR weekly (whichever comes first).
  */
 export function shouldRunDriftDetection(buildCount: number, lastFullRebuildTimestamp: string | undefined): boolean {
@@ -360,7 +360,7 @@ export function classifyUpdateWeight(opts: {
   /** True if heritage/decorator/type-usage edges changed */
   hasStructuralChanges: boolean;
 }): LightweightUpdateResult {
-  // Any barrel change requires full rebuild (existing §5.8 trigger)
+  // Any barrel change requires full rebuild (existing trigger)
   const barrelChanged = opts.changedFiles.some((f) => opts.barrelFiles.has(f));
   if (barrelChanged) {
     return {

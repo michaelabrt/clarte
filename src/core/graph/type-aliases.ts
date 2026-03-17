@@ -1,5 +1,5 @@
 /**
- * Type alias transparency for all languages (RFC §2.15).
+ * Type alias transparency for all languages.
  *
  * Follows type alias chains during symbol resolution so that methods
  * on aliased types resolve correctly. Max depth 5, cycle detection.

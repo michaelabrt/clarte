@@ -1,13 +1,13 @@
 /**
- * RFC-002 Phase 1 validation gate tests.
+ * Intent propagation validation gate tests.
  *
- * Covers acceptance criteria from §1.1 through §1.7:
- * - 1.2: Symbol subgraph extraction
- * - 1.3: Dijkstra propagation (10 acceptance criteria)
- * - 1.4: Phase 2 seeding (6 acceptance criteria)
- * - 1.5: Score fusion (8 acceptance criteria)
- * - 1.6: File-level aggregation
- * - 1.7: Dynamic prediction count
+ * Covers:
+ * - Symbol subgraph extraction
+ * - Dijkstra propagation (10 acceptance criteria)
+ * - Chokepoint seeding (6 acceptance criteria)
+ * - Score fusion (8 acceptance criteria)
+ * - File-level aggregation
+ * - Dynamic prediction count
  */
 
 import { describe, it, expect } from "vitest";
@@ -92,7 +92,7 @@ function buildSubgraph(
   return { nodes: nodeMap, forward, reverse, fileSet, seedIds: new Set(seedIds) };
 }
 
-// ── 1.2 Symbol Subgraph Extraction ─────────────────────────────────────────
+// ── Symbol Subgraph Extraction ──────────────────────────────────────────────
 
 describe("extractSymbolSubgraph", () => {
   it("extracts 3-hop neighborhood from seed files", () => {
@@ -164,10 +164,10 @@ describe("extractSymbolSubgraph", () => {
   });
 });
 
-// ── 1.3 Dijkstra Propagation ────────────────────────────────────────────────
+// ── Dijkstra Propagation ────────────────────────────────────────────────────
 
 describe("propagateIntent", () => {
-  it("1.3.1: single calls edge gives score 0.7", () => {
+  it("single calls edge gives score 0.7", () => {
     const nodes = [makeNode(1, "a.ts", "fnA"), makeNode(2, "b.ts", "fnB")];
     const sub = buildSubgraph(nodes, [{ from: 1, to: 2, kind: "calls" }], [1]);
     const seeds = new Map([[1, 1.0]]);
@@ -178,7 +178,7 @@ describe("propagateIntent", () => {
     expect(result.scores.get(2)).toBeCloseTo(0.7, 10);
   });
 
-  it("1.3.2: 2-hop extends chain gives score 0.64", () => {
+  it("2-hop extends chain gives score 0.64", () => {
     const nodes = [makeNode(1, "a.ts", "A"), makeNode(2, "b.ts", "B"), makeNode(3, "c.ts", "C")];
     const sub = buildSubgraph(
       nodes,
@@ -195,7 +195,7 @@ describe("propagateIntent", () => {
     expect(result.scores.get(3)).toBeCloseTo(0.64, 10);
   });
 
-  it("1.3.3: 3-hop calls chain gives score 0.343", () => {
+  it("3-hop calls chain gives score 0.343", () => {
     const nodes = [
       makeNode(1, "a.ts", "A"),
       makeNode(2, "b.ts", "B"),
@@ -218,7 +218,7 @@ describe("propagateIntent", () => {
     expect(result.scores.get(4)).toBeCloseTo(0.343, 10);
   });
 
-  it("1.3.4: 4-hop chain with maxHops=3 does not reach 4th symbol", () => {
+  it("4-hop chain with maxHops=3 does not reach 4th symbol", () => {
     const nodes = [
       makeNode(1, "a.ts", "A"),
       makeNode(2, "b.ts", "B"),
@@ -243,7 +243,7 @@ describe("propagateIntent", () => {
     expect(result.scores.has(5)).toBe(false);
   });
 
-  it("1.3.5: reverse edge applies reverse multiplier (calls reverse = 0.49)", () => {
+  it("reverse edge applies reverse multiplier (calls reverse = 0.49)", () => {
     const nodes = [makeNode(1, "a.ts", "A"), makeNode(2, "b.ts", "B")];
     // Edge direction: 2 -> 1 (forward in graph)
     // Seed is 1, so Dijkstra at node 1 follows reverse[1] to reach node 2
@@ -256,7 +256,7 @@ describe("propagateIntent", () => {
     expect(result.scores.get(2)).toBeCloseTo(0.49, 10);
   });
 
-  it("1.3.6: two paths to same symbol - max-product path wins", () => {
+  it("two paths to same symbol - max-product path wins", () => {
     // Path 1: 1 -> 2 via calls (gamma 0.7)
     // Path 2: 1 -> 3 -> 2 via extends (0.8 * 0.8 = 0.64)
     // Max-product = 0.7 (direct path wins)
@@ -277,7 +277,7 @@ describe("propagateIntent", () => {
     expect(result.scores.get(2)).toBeCloseTo(0.7, 10);
   });
 
-  it("1.3.7: ghost edge applies ghost discount (calls ghost = 0.42)", () => {
+  it("ghost edge applies ghost discount (calls ghost = 0.42)", () => {
     const nodes = [makeNode(1, "a.ts", "A"), makeNode(2, "b.ts", "B")];
     // Build subgraph manually to inject ghost kind (not in SymbolEdgeKind union)
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
@@ -322,7 +322,7 @@ describe("propagateIntent", () => {
     expect(result.scores.get(2)).toBeCloseTo(0.42, 10);
   });
 
-  it("1.3.8: seed symbols have score=1.0, hops=0, empty path", () => {
+  it("seed symbols have score=1.0, hops=0, empty path", () => {
     const nodes = [makeNode(1, "a.ts", "A")];
     const sub = buildSubgraph(nodes, [], [1]);
     const seeds = new Map([[1, 1.0]]);
@@ -334,7 +334,7 @@ describe("propagateIntent", () => {
     expect(result.paths.get(1)).toEqual([]);
   });
 
-  it("1.3.9: paths correctly trace back to nearest seed", () => {
+  it("paths correctly trace back to nearest seed", () => {
     const nodes = [makeNode(1, "a.ts", "A"), makeNode(2, "b.ts", "B"), makeNode(3, "c.ts", "C")];
     const sub = buildSubgraph(
       nodes,
@@ -354,10 +354,10 @@ describe("propagateIntent", () => {
   });
 });
 
-// ── 1.4 Phase 2 Seeding ────────────────────────────────────────────────────
+// ── Chokepoint Seeding ─────────────────────────────────────────────────────
 
 describe("applyPhase2Seeding", () => {
-  it("1.4.1: triggers on chokepoint with high betweenness and low phase1 score", () => {
+  it("triggers on chokepoint with high betweenness and low phase1 score", () => {
     // Star topology: node 10 is the hub connecting 5 spokes
     // Node 10 has high betweenness but low phase1 score
     const nodes = [
@@ -380,7 +380,7 @@ describe("applyPhase2Seeding", () => {
       [1],
     );
 
-    // Phase 1: only seed 1 got a score; hub got negligible signal
+    // Initial propagation: only seed 1 got a score; hub got negligible signal
     const phase1Scores = new Map<number, number>([
       [1, 1.0],
       [10, 0.05],
@@ -396,7 +396,7 @@ describe("applyPhase2Seeding", () => {
     expect(result.chokepoints.length).toBeGreaterThan(0);
   });
 
-  it("1.4.2: does not trigger when all have high phase1 scores", () => {
+  it("does not trigger when all have high phase1 scores", () => {
     const nodes = [makeNode(1, "a.ts", "a"), makeNode(2, "b.ts", "b"), makeNode(3, "c.ts", "c")];
     const sub = buildSubgraph(
       nodes,
@@ -419,7 +419,7 @@ describe("applyPhase2Seeding", () => {
     expect(result.mergedScores).toEqual(phase1Scores);
   });
 
-  it("1.4.3: merge uses max (phase2 > phase1)", () => {
+  it("merge uses max (phase2 > phase1)", () => {
     const nodes = [makeNode(1, "a.ts", "a"), makeNode(2, "b.ts", "b")];
     const sub = buildSubgraph(nodes, [{ from: 1, to: 2, kind: "calls" }], [1]);
 
@@ -436,7 +436,7 @@ describe("applyPhase2Seeding", () => {
     }
   });
 
-  it("1.4.4: merge uses max - phase1 score 0.8 beats phase2 score", () => {
+  it("merge uses max - phase1 score 0.8 beats phase2 score", () => {
     // Construct a scenario where phase2 triggers but a symbol already has a high phase1 score.
     // Star: spokes 1,2 -> hub 10 -> spokes 3,4,5
     const nodes = [
@@ -476,7 +476,7 @@ describe("applyPhase2Seeding", () => {
     expect(result.mergedScores.get(1)).toBeGreaterThanOrEqual(0.8);
   });
 
-  it("1.4.5: phase2 propagation limited to 1 hop", () => {
+  it("phase2 propagation limited to 1 hop", () => {
     // If a chokepoint exists, its neighbors get scores but 2-hop-away nodes don't
     const nodes = [
       makeNode(1, "a.ts", "a"),
@@ -561,10 +561,10 @@ describe("computeSubgraphBetweenness", () => {
   });
 });
 
-// ── 1.5 Score Fusion ────────────────────────────────────────────────────────
+// ── Score Fusion ────────────────────────────────────────────────────────────
 
 describe("fuseIntentScores", () => {
-  it("1.5.1: four equal signals of 0.5 produce fused score 0.5", () => {
+  it("four equal signals of 0.5 produce fused score 0.5", () => {
     const inputs = [
       {
         symbolId: 1,
@@ -584,13 +584,13 @@ describe("fuseIntentScores", () => {
     // L normalized = 0.5/0.5 = 1.0 (single input, max is itself)
     // G = 0.5, T = 0.5, B = 0.5
     // score = 0.35*1.0 + 0.35*0.5 + 0.15*0.5 + 0.15*0.5 = 0.35 + 0.175 + 0.075 + 0.075 = 0.675
-    // That's not 0.5. The RFC criterion assumes all four are literally 0.5 post-normalization.
+    // That's not 0.5. The test criterion assumes all four are literally 0.5 post-normalization.
     // With a single input, L normalizes to 1.0, not 0.5.
     // Test with two inputs to get proper normalization.
     expect(fused).toBeDefined();
   });
 
-  it("1.5.1 (corrected): equal signals produce weighted sum correctly", () => {
+  it("equal signals produce weighted sum correctly", () => {
     // Two inputs: one with L=1.0, one with L=0.5 -> max=1.0, normalized = [1.0, 0.5]
     const inputs = [
       { symbolId: 1, filePath: "a.ts", lexicalScore: 1.0, graphScore: 0.5, betweennessScore: 0.5 },
@@ -609,7 +609,7 @@ describe("fuseIntentScores", () => {
     expect(result.get(2)?.score).toBeCloseTo(0.5, 10);
   });
 
-  it("1.5.2: lexical-only match gives score 0.35", () => {
+  it("lexical-only match gives score 0.35", () => {
     const inputs = [{ symbolId: 1, filePath: "a.ts", lexicalScore: 1.0, graphScore: 0, betweennessScore: 0 }];
     const result = fuseIntentScores(inputs, new Map(), new Set());
 
@@ -617,18 +617,18 @@ describe("fuseIntentScores", () => {
     expect(result.get(1)?.score).toBeCloseTo(0.35, 10);
   });
 
-  it("1.5.3: graph-only match gives score 0.35", () => {
+  it("graph-only match gives score 0.35", () => {
     const inputs = [{ symbolId: 1, filePath: "a.ts", lexicalScore: 0, graphScore: 1.0, betweennessScore: 0 }];
     const result = fuseIntentScores(inputs, new Map(), new Set());
 
     expect(result.get(1)?.score).toBeCloseTo(0.35, 10);
   });
 
-  it("1.5.4: lambdas sum to 1.0", () => {
+  it("lambdas sum to 1.0", () => {
     expect(LAMBDA_LEXICAL + LAMBDA_GRAPH + LAMBDA_TEMPORAL + LAMBDA_BETWEENNESS).toBeCloseTo(1.0, 10);
   });
 
-  it("1.5.5: temporal picks max coupling across seed files", () => {
+  it("temporal picks max coupling across seed files", () => {
     const inputs = [{ symbolId: 1, filePath: "a.ts", lexicalScore: 0, graphScore: 0, betweennessScore: 0 }];
     const coupling = new Map([
       [
@@ -647,7 +647,7 @@ describe("fuseIntentScores", () => {
     expect(result.get(1)?.signals.temporal).toBe(0.8);
   });
 
-  it("1.5.6: temporal respects MIN_COUPLING_CONFIDENCE (values < 0.5 = 0)", () => {
+  it("temporal respects MIN_COUPLING_CONFIDENCE (values < 0.5 = 0)", () => {
     const inputs = [{ symbolId: 1, filePath: "a.ts", lexicalScore: 0, graphScore: 0, betweennessScore: 0 }];
     const coupling = new Map([["a.ts", new Map([["seed.ts", 0.3]])]]);
     const seedFiles = new Set(["seed.ts"]);
@@ -657,7 +657,7 @@ describe("fuseIntentScores", () => {
     expect(result.get(1)?.signals.temporal).toBe(0);
   });
 
-  it("1.5.7: signals store normalized lexical and raw lexical for ToI", () => {
+  it("signals store normalized lexical and raw lexical for ToI", () => {
     const inputs = [
       { symbolId: 1, filePath: "a.ts", lexicalScore: 5.0, graphScore: 0.3, betweennessScore: 0.2 },
       { symbolId: 2, filePath: "b.ts", lexicalScore: 2.5, graphScore: 0.1, betweennessScore: 0.1 },
@@ -679,10 +679,10 @@ describe("fuseIntentScores", () => {
   });
 });
 
-// ── 1.6 File-Level Aggregation ──────────────────────────────────────────────
+// ── File-Level Aggregation ──────────────────────────────────────────────────
 
 describe("aggregateToFiles", () => {
-  it("1.6.1: file with [0.8, 0.3, 0.1] gets score 0.8", () => {
+  it("file with [0.8, 0.3, 0.1] gets score 0.8", () => {
     const graph = buildGraph([makeNode(1, "a.ts", "fn1"), makeNode(2, "a.ts", "fn2"), makeNode(3, "a.ts", "fn3")], []);
 
     const symbolScores = new Map([
@@ -697,7 +697,7 @@ describe("aggregateToFiles", () => {
     expect(result.get("a.ts")?.topSymbolId).toBe(1);
   });
 
-  it("1.6.2: single symbol file gets that symbol's score", () => {
+  it("single symbol file gets that symbol's score", () => {
     const graph = buildGraph([makeNode(1, "a.ts", "fn1")], []);
     const symbolScores = new Map([
       [1, { score: 0.5, signals: { lexical: 0, rawLexical: 0, graph: 0, temporal: 0, betweenness: 0 } }],
@@ -708,7 +708,7 @@ describe("aggregateToFiles", () => {
     expect(result.get("a.ts")?.score).toBe(0.5);
   });
 
-  it("1.6.4: file not in symbolScores does not appear", () => {
+  it("file not in symbolScores does not appear", () => {
     const graph = buildGraph([makeNode(1, "a.ts", "fn1"), makeNode(2, "b.ts", "fn2")], []);
     const symbolScores = new Map([
       [1, { score: 0.5, signals: { lexical: 0, rawLexical: 0, graph: 0, temporal: 0, betweenness: 0 } }],
@@ -721,12 +721,12 @@ describe("aggregateToFiles", () => {
   });
 });
 
-// ── 1.7 Dynamic Prediction Count ────────────────────────────────────────────
+// ── Dynamic Prediction Count ────────────────────────────────────────────────
 
 describe("selectPredictions", () => {
   const sig = { lexical: 0, rawLexical: 0, graph: 0, temporal: 0, betweenness: 0 };
 
-  it("1.7.1: [0.9, 0.8, 0.5, 0.2] -> predictions=[0.9,0.8], suppressed=1", () => {
+  it("[0.9, 0.8, 0.5, 0.2] -> predictions=[0.9,0.8], suppressed=1", () => {
     const scores = new Map([
       ["a.ts", { score: 0.9, signals: sig, topSymbolId: 1 }],
       ["b.ts", { score: 0.8, signals: sig, topSymbolId: 2 }],
@@ -740,7 +740,7 @@ describe("selectPredictions", () => {
     expect(suppressed).toBe(1); // d.ts is <= 0.3
   });
 
-  it("1.7.2: no files above 0.7 -> single highest file", () => {
+  it("no files above 0.7 -> single highest file", () => {
     const scores = new Map([
       ["a.ts", { score: 0.5, signals: sig, topSymbolId: 1 }],
       ["b.ts", { score: 0.3, signals: sig, topSymbolId: 2 }],
@@ -753,7 +753,7 @@ describe("selectPredictions", () => {
     expect(suppressed).toBe(2); // b.ts (0.3) and c.ts (0.1) are both <= THETA_LOW
   });
 
-  it("1.7.3: six files above 0.7 -> only top 5", () => {
+  it("six files above 0.7 -> only top 5", () => {
     const scores = new Map([
       ["a.ts", { score: 0.95, signals: sig, topSymbolId: 1 }],
       ["b.ts", { score: 0.9, signals: sig, topSymbolId: 2 }],
@@ -768,7 +768,7 @@ describe("selectPredictions", () => {
     expect(predictions.length).toBe(5);
   });
 
-  it("1.7.4: single file scoring 0.1 is still selected", () => {
+  it("single file scoring 0.1 is still selected", () => {
     const scores = new Map([["a.ts", { score: 0.1, signals: sig, topSymbolId: 1 }]]);
 
     const { predictions, suppressed } = selectPredictions(scores);
@@ -785,9 +785,9 @@ describe("selectPredictions", () => {
   });
 });
 
-// ── 1.8 Validation Gate: Latency Benchmark ──────────────────────────────────
+// ── Latency Benchmark ───────────────────────────────────────────────────────
 
-describe("Phase 1 latency benchmark", () => {
+describe("Intent propagation latency benchmark", () => {
   it("full pipeline completes in <150ms on 500-symbol subgraph", () => {
     // Generate a synthetic 500-node graph with ~1000 edges
     const nodeCount = 500;
@@ -844,7 +844,7 @@ describe("Phase 1 latency benchmark", () => {
     timings.sort((a, b) => a - b);
     const median = timings[Math.floor(timings.length / 2)];
 
-    // RFC-002 §4.1: <100ms production budget. Threshold raised to 150ms to
+    // <100ms production budget. Threshold raised to 150ms to
     // tolerate parallel test execution overhead (~30% CPU contention).
     // Catches algorithmic regressions (O(n²) would be >1000ms) and 2x
     // constant-factor regressions (~180ms).

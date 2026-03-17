@@ -1,5 +1,5 @@
 /**
- * TypeORM BM25F retrieval evaluation (Phase 3 regression check).
+ * TypeORM BM25F retrieval evaluation (retrieval regression check).
  *
  * Validates that BM25F changes for Hono don't regress the TypeORM benchmark
  * where pre-flight already beats placebo by -66% turns, -71% cost.

@@ -1,7 +1,7 @@
 /**
  * Performance tests for loadFileGraph().
  *
- * RFC AC 1.6.2: loadFileGraph() must complete in ≤ time taken by JSON.parse() of
+ * loadFileGraph() must complete in <= time taken by JSON.parse() of
  * the equivalent graph-cache.json.
  *
  * The comparison is done at 500-file scale (larger than the 107-file clarte self-test
@@ -48,7 +48,7 @@ describe("loadFileGraph performance (AC 1.6.2)", () => {
     const elapsed = performance.now() - start;
 
     expect(graph.nodes.size).toBe(1000);
-    expect(elapsed).toBeLessThan(100); // RFC target: <5ms for 10K files
+    expect(elapsed).toBeLessThan(100); // Target: <5ms for 10K files
     db.close();
   });
 
@@ -95,7 +95,7 @@ describe("loadFileGraph performance (AC 1.6.2)", () => {
     // Hard ceiling regardless of JSON speed
     expect(sqliteMs).toBeLessThan(50);
 
-    // RFC requirement with 3x tolerance for :memory: / test environment variance.
+    // 3x tolerance for :memory: / test environment variance.
     // On file-based DBs with warm OS page cache the ratio approaches 1:1.
     const tolerance = 3;
     expect(sqliteMs).toBeLessThan(Math.max(jsonMs * tolerance, 5));

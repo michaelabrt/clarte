@@ -1,5 +1,5 @@
 /**
- * RFC-002 Phase 5: DI injection ghost edge detector.
+ * DI injection ghost edge detector.
  *
  * Scans decorator edges for DI markers (NestJS, Angular, Spring, Python)
  * and type usages for constructor parameter types. Emits ghost:di_inject

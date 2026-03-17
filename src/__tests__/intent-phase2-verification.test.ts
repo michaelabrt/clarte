@@ -1,16 +1,16 @@
 /**
- * RFC-002 Phase 2 validation gate tests.
+ * Verification and smart silence validation gate tests.
  *
- * Covers acceptance criteria from SS2.1 through SS2.6:
- * - 2.1: Theory of Impact generator (5 criteria + anti-fabrication + token intersection)
- * - 2.2: Verification protocol (7 criteria)
- * - 2.3: Confidence calibration (4 criteria)
- * - 2.4: Smart Silence (6 criteria)
- * - 2.5: Staleness Guard (4 criteria)
- * - 2.6: Integration test
- * - F1: Score inflation invariant
- * - F2: Confidence product attenuation
- * - F3: Per-prediction staleness flag
+ * Covers:
+ * - Theory of Impact generator (5 criteria + anti-fabrication + token intersection)
+ * - Verification protocol (7 criteria)
+ * - Confidence calibration (4 criteria)
+ * - Smart Silence (6 criteria)
+ * - Staleness Guard (4 criteria)
+ * - Integration test
+ * - Score inflation invariant
+ * - Confidence product attenuation
+ * - Per-prediction staleness flag
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -130,10 +130,10 @@ afterEach(() => {
   mockedExistsSync.mockReturnValue(true);
 });
 
-// ── 2.1 Theory of Impact Generator ─────────────────────────────────────────
+// ── Theory of Impact Generator ──────────────────────────────────────────────
 
 describe("generateTheoryOfImpact", () => {
-  it("2.1.1: lexical-only prediction has lexical_evidence non-null, rest null", () => {
+  it("lexical-only prediction has lexical_evidence non-null, rest null", () => {
     const graph = buildSymbolGraph([makeNode(1, "a.ts", "fetchUser")], []);
     const signals = { ...sig, rawLexical: 5.0 };
 
@@ -156,7 +156,7 @@ describe("generateTheoryOfImpact", () => {
     expect(toi.betweenness_rank).toBeNull();
   });
 
-  it("2.1.2: graph-only prediction has graph_path with hop count and edge kinds", () => {
+  it("graph-only prediction has graph_path with hop count and edge kinds", () => {
     const nodes = [makeNode(1, "a.ts", "fnA"), makeNode(2, "b.ts", "fnB"), makeNode(3, "c.ts", "fnC")];
     const edges = [makeEdge(1, 2, "calls"), makeEdge(2, 3, "extends")];
     const graph = buildSymbolGraph(nodes, edges);
@@ -183,7 +183,7 @@ describe("generateTheoryOfImpact", () => {
     expect(toi.lexical_evidence).toBeNull();
   });
 
-  it("2.1.3: multiple non-zero signals produce non-null evidence for each", () => {
+  it("multiple non-zero signals produce non-null evidence for each", () => {
     const nodes = [makeNode(1, "a.ts", "fnA"), makeNode(2, "b.ts", "fnB")];
     const edges = [makeEdge(1, 2, "calls")];
     const graph = buildSymbolGraph(nodes, edges);
@@ -213,7 +213,7 @@ describe("generateTheoryOfImpact", () => {
     expect(toi.betweenness_rank).not.toBeNull();
   });
 
-  it("2.1.4: graph path gamma is the product of transmission coefficients", () => {
+  it("graph path gamma is the product of transmission coefficients", () => {
     const nodes = [makeNode(1, "a.ts", "fnA"), makeNode(2, "b.ts", "fnB"), makeNode(3, "c.ts", "fnC")];
     const edges = [makeEdge(1, 2, "calls"), makeEdge(2, 3, "extends")];
     const graph = buildSymbolGraph(nodes, edges);
@@ -235,7 +235,7 @@ describe("generateTheoryOfImpact", () => {
     expect(toi.graph_path).toContain("gamma: 0.56");
   });
 
-  it("2.1.5: temporal evidence identifies best seed file", () => {
+  it("temporal evidence identifies best seed file", () => {
     const graph = buildSymbolGraph([makeNode(1, "target.ts", "fnT")], []);
     const coupling = new Map([
       [
@@ -264,7 +264,7 @@ describe("generateTheoryOfImpact", () => {
     expect(toi.temporal_pair).toContain("0.85");
   });
 
-  it("2.1c: returns null graph_path when edge is unresolvable (anti-fabrication)", () => {
+  it("returns null graph_path when edge is unresolvable (anti-fabrication)", () => {
     // Path claims [1, 2, 3] but edge 2->3 doesn't exist in graph
     const nodes = [makeNode(1, "a.ts", "fnA"), makeNode(2, "b.ts", "fnB"), makeNode(3, "c.ts", "fnC")];
     const edges = [makeEdge(1, 2, "calls")]; // no 2->3 edge
@@ -277,7 +277,7 @@ describe("generateTheoryOfImpact", () => {
     expect(toi.graph_path).toBeNull(); // Must NOT fabricate
   });
 
-  it("2.1d: lexical evidence uses query token intersection", () => {
+  it("lexical evidence uses query token intersection", () => {
     const graph = buildSymbolGraph([makeNode(1, "src/auth/session.ts", "validateSession")], []);
     const signals = { ...sig, rawLexical: 5.0 };
 
@@ -321,10 +321,10 @@ describe("generateTheoryOfImpact", () => {
   });
 });
 
-// ── 2.2 Verification Protocol ──────────────────────────────────────────────
+// ── Verification Protocol ───────────────────────────────────────────────────
 
 describe("verifyPredictions", () => {
-  it("2.2.1: missing edge zeros graph signal and recomputes score", () => {
+  it("missing edge zeros graph signal and recomputes score", () => {
     const graph = buildSymbolGraph(
       [makeNode(1, "a.ts", "fnA"), makeNode(2, "b.ts", "fnB"), makeNode(3, "c.ts", "fnC")],
       [makeEdge(1, 2, "calls")],
@@ -349,7 +349,7 @@ describe("verifyPredictions", () => {
     expect(result[0].score).toBeCloseTo(LAMBDA_LEXICAL * 0.5, 10);
   });
 
-  it("2.2.2: deleted file removes prediction from output", () => {
+  it("deleted file removes prediction from output", () => {
     const graph = buildSymbolGraph([makeNode(1, "a.ts", "fnA")], []);
     const pred = makePrediction("deleted.ts", 0.8, { ...sig, lexical: 1.0, rawLexical: 1.0 });
     mockedExistsSync.mockReturnValue(false);
@@ -359,7 +359,7 @@ describe("verifyPredictions", () => {
     expect(result.length).toBe(0);
   });
 
-  it("2.2.3: missing symbol flags symbol_exists but retains prediction", () => {
+  it("missing symbol flags symbol_exists but retains prediction", () => {
     const graph = buildSymbolGraph([makeNode(1, "a.ts", "fnA")], []);
     const pred = makePrediction("a.ts", 0.5, { ...sig, lexical: 0.5, rawLexical: 0.5 }, {}, [
       { name: "missingSymbol", score: 0.5, line: 99 },
@@ -371,7 +371,7 @@ describe("verifyPredictions", () => {
     expect(result[0].verification.symbol_exists).toBe(false);
   });
 
-  it("2.2.4: non-monotonic pair flagged", () => {
+  it("non-monotonic pair flagged", () => {
     const graph = buildSymbolGraph([makeNode(1, "a.ts", "fnA"), makeNode(2, "b.ts", "fnB")], []);
     const sameSignals = { lexical: 0.5, rawLexical: 0.5, graph: 0.3, temporal: 0.2, betweenness: 0.1 };
     const pred1 = makePrediction("a.ts", 0.5, { ...sameSignals });
@@ -383,7 +383,7 @@ describe("verifyPredictions", () => {
     expect(result[1].verification.monotonic).toBe(false);
   });
 
-  it("2.2.5: all checks pass on valid data", () => {
+  it("all checks pass on valid data", () => {
     const graph = buildSymbolGraph([makeNode(1, "a.ts", "fnA"), makeNode(2, "b.ts", "fnB")], [makeEdge(1, 2, "calls")]);
     const pred = makePrediction(
       "a.ts",
@@ -404,7 +404,7 @@ describe("verifyPredictions", () => {
     expect(result[0].verification.monotonic).toBe(true);
   });
 
-  it("2.2.6: re-scoring preserves rank order", () => {
+  it("re-scoring preserves rank order", () => {
     const graph = buildSymbolGraph([makeNode(1, "a.ts", "fnA"), makeNode(2, "b.ts", "fnB")], [makeEdge(1, 2, "calls")]);
     const pred1 = makePrediction("a.ts", 0.9, {
       lexical: 0.9,
@@ -429,24 +429,24 @@ describe("verifyPredictions", () => {
   });
 });
 
-// ── 2.3 Confidence Calibration ──────────────────────────────────────────────
+// ── Confidence Calibration ──────────────────────────────────────────────────
 
 describe("confidence calibration", () => {
-  it("2.3.1: score 0.85 -> high", () => {
+  it("score 0.85 -> high", () => {
     const graph = buildSymbolGraph([makeNode(1, "a.ts", "fn")], []);
     const pred = makePrediction("a.ts", 0.85, { ...sig, lexical: 1.0, rawLexical: 1.0, graph: 0.8 });
     const result = verifyPredictions([pred], graph, "/root", new Map(), new Map());
     expect(result[0].confidence).toBe("high");
   });
 
-  it("2.3.2: score 0.45 -> medium", () => {
+  it("score 0.45 -> medium", () => {
     const graph = buildSymbolGraph([makeNode(1, "a.ts", "fn")], []);
     const pred = makePrediction("a.ts", 0.45, { ...sig, lexical: 0.45, rawLexical: 0.45 });
     const result = verifyPredictions([pred], graph, "/root", new Map(), new Map());
     expect(result[0].confidence).toBe("medium");
   });
 
-  it("2.3.3: score exactly at THETA_HIGH boundary -> medium", () => {
+  it("score exactly at THETA_HIGH boundary -> medium", () => {
     const graph = buildSymbolGraph([makeNode(1, "a.ts", "fn")], []);
     const pred = makePrediction("a.ts", THETA_HIGH, { ...sig, lexical: 0.7, rawLexical: 0.7 });
     const result = verifyPredictions([pred], graph, "/root", new Map(), new Map());
@@ -454,16 +454,16 @@ describe("confidence calibration", () => {
   });
 });
 
-// ── 2.4 Smart Silence ──────────────────────────────────────────────────────
+// ── Smart Silence ───────────────────────────────────────────────────────────
 
 describe("evaluateSmartSilence", () => {
-  it("2.4.1: empty predictions -> suppress", () => {
+  it("empty predictions -> suppress", () => {
     const result = evaluateSmartSilence([], "fix the bug", 50, "abc", "def", [], []);
     expect(result.shouldSuppress).toBe(true);
     expect(result.reason).toBe("all below threshold");
   });
 
-  it("2.4.1b: all predictions below THETA_LOW -> suppress", () => {
+  it("all predictions below THETA_LOW -> suppress", () => {
     const preds = [
       makePrediction("a.ts", 0.2, { ...sig, lexical: 0.2, rawLexical: 0.2 }),
       makePrediction("b.ts", 0.1, { ...sig, lexical: 0.1, rawLexical: 0.1 }),
@@ -473,7 +473,7 @@ describe("evaluateSmartSilence", () => {
     expect(result.reason).toBe("all below threshold");
   });
 
-  it("2.4.2: query mentioning predicted file -> suppress", () => {
+  it("query mentioning predicted file -> suppress", () => {
     const preds = [makePrediction("src/foo/bar.ts", 0.8, { ...sig, lexical: 0.8, rawLexical: 0.8 })];
     const result = evaluateSmartSilence(
       preds,
@@ -488,7 +488,7 @@ describe("evaluateSmartSilence", () => {
     expect(result.reason).toBe("explicit paths");
   });
 
-  it("2.4.3: 50% of predicted files changed -> stale graph fallback", () => {
+  it("50% of predicted files changed -> stale graph fallback", () => {
     const preds = [
       makePrediction("a.ts", 0.8, { ...sig, lexical: 0.8, rawLexical: 0.8, graph: 0.5 }),
       makePrediction("b.ts", 0.7, { ...sig, lexical: 0.7, rawLexical: 0.7, graph: 0.3 }),
@@ -499,21 +499,21 @@ describe("evaluateSmartSilence", () => {
     expect(result.fallbackToLexical).toBe(true);
   });
 
-  it("2.4.4: 3-file project -> suppress", () => {
+  it("3-file project -> suppress", () => {
     const preds = [makePrediction("a.ts", 0.8, { ...sig, lexical: 0.8, rawLexical: 0.8 })];
     const result = evaluateSmartSilence(preds, "fix the bug", 3, "abc", "def", [], ["a.ts"]);
     expect(result.shouldSuppress).toBe(true);
     expect(result.reason).toBe("small project");
   });
 
-  it("2.4.5: normal case -> no suppression", () => {
+  it("normal case -> no suppression", () => {
     const preds = [makePrediction("a.ts", 0.8, { ...sig, lexical: 0.8, rawLexical: 0.8, graph: 0.5 })];
     const result = evaluateSmartSilence(preds, "fix the validation bug", 50, "abc", "def", [], ["a.ts"]);
     expect(result.shouldSuppress).toBe(false);
     expect(result.reason).toBeNull();
   });
 
-  it("2.4.6: condition priority - threshold before explicit paths", () => {
+  it("condition priority - threshold before explicit paths", () => {
     const preds = [makePrediction("src/foo.ts", THETA_LOW, { ...sig, lexical: 0.3, rawLexical: 0.3 })];
     const result = evaluateSmartSilence(preds, "fix src/foo.ts", 50, "abc", "def", [], ["src/foo.ts"]);
     expect(result.shouldSuppress).toBe(true);
@@ -521,24 +521,24 @@ describe("evaluateSmartSilence", () => {
   });
 });
 
-// ── 2.5 Staleness Guard ─────────────────────────────────────────────────────
+// ── Staleness Guard ─────────────────────────────────────────────────────────
 
 describe("staleness guard", () => {
-  it("2.5.1: fresh graph - full weight", () => {
+  it("fresh graph - full weight", () => {
     const inputs = [{ symbolId: 1, filePath: "a.ts", lexicalScore: 1.0, graphScore: 0.8, betweennessScore: 0 }];
     const result = fuseIntentScores(inputs, new Map(), new Set());
     const expected = LAMBDA_LEXICAL * 1.0 + LAMBDA_GRAPH * 0.8;
     expect(result.get(1)?.score).toBeCloseTo(expected, 10);
   });
 
-  it("2.5.2: stale graph - graph signal halved", () => {
+  it("stale graph - graph signal halved", () => {
     const inputs = [{ symbolId: 1, filePath: "a.ts", lexicalScore: 1.0, graphScore: 0.8, betweennessScore: 0 }];
     const result = fuseIntentScores(inputs, new Map(), new Set(), STALE_GRAPH_DISCOUNT);
     const expected = LAMBDA_LEXICAL * 1.0 + LAMBDA_GRAPH * 0.4;
     expect(result.get(1)?.score).toBeCloseTo(expected, 10);
   });
 
-  it("2.5.3: stale discount formula correct", () => {
+  it("stale discount formula correct", () => {
     const inputs = [{ symbolId: 1, filePath: "a.ts", lexicalScore: 0, graphScore: 1.0, betweennessScore: 0.5 }];
     const coupling = new Map([["a.ts", new Map([["seed.ts", 0.6]])]]);
     const result = fuseIntentScores(inputs, coupling, new Set(["seed.ts"]), STALE_GRAPH_DISCOUNT);
@@ -546,7 +546,7 @@ describe("staleness guard", () => {
     expect(result.get(1)?.score).toBeCloseTo(expected, 10);
   });
 
-  it("2.5.4: undefined staleDiscount does not affect graph signal", () => {
+  it("undefined staleDiscount does not affect graph signal", () => {
     const inputs = [{ symbolId: 1, filePath: "a.ts", lexicalScore: 0, graphScore: 0.6, betweennessScore: 0 }];
     const a = fuseIntentScores(inputs, new Map(), new Set(), undefined);
     const b = fuseIntentScores(inputs, new Map(), new Set());
@@ -728,10 +728,10 @@ describe("F3 staleness flag", () => {
   });
 });
 
-// ── 2.6 Integration Test ────────────────────────────────────────────────────
+// ── Integration Test ────────────────────────────────────────────────────────
 
-describe("Phase 2 integration", () => {
-  it("synthetic query through Phase 1 + Phase 2 produces valid IntentPrediction[]", () => {
+describe("Verification integration", () => {
+  it("synthetic query through propagation + verification produces valid IntentPrediction[]", () => {
     const nodes = [
       makeNode(1, "a.ts", "handleRequest"),
       makeNode(2, "b.ts", "validateInput"),

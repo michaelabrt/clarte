@@ -23,14 +23,14 @@ export class HybridSearchProvider {
   }
 
   /**
-   * [Dean & Stonebraker] Search combining BM25F results with semantic retrieval.
+   * Search combining BM25F results with semantic retrieval.
    * When candidatePaths is provided, semantic search is bounded to those files
    * (ANN pre-filter), reducing flat-scan cost from O(N) to O(|candidates|).
    *
    * @param query           Natural language query
    * @param bm25fFiles      Pre-computed BM25F ranked file paths (spreading activation already applied)
    * @param limit           Max results from the semantic branch
-   * @param candidatePaths  Optional BM25F candidate pool for ANN pre-filtering (RFC §3.3)
+   * @param candidatePaths  Optional BM25F candidate pool for ANN pre-filtering
    */
   async search(query: string, bm25fFiles: string[], limit = 50, candidatePaths?: Set<string>): Promise<RankedResult[]> {
     const semanticFiles = await this.semanticSearch(query, limit, candidatePaths);

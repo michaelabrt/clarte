@@ -1,5 +1,5 @@
 /**
- * Unified single-pass file graph extraction (RFC §2.1-2.3).
+ * Unified single-pass file graph extraction.
  *
  * One tree-sitter parse produces: imports, symbol definitions, call sites,
  * heritage chains, decorator edges and type usage edges.
@@ -124,10 +124,10 @@ function extractTsFileGraph(root: Node): TsExtraction {
   // Extract call sites with member expression info
   extractTsCallSites(root, callSites);
 
-  // Extract constructor assignments for Tier 3 resolution (RFC §2.6)
+  // Extract constructor assignments for Tier 3 resolution
   const constructorAssignments = extractTsConstructorAssignments(root);
 
-  // Extract type aliases (RFC §2.15): type Foo = Bar
+  // Extract type aliases: type Foo = Bar
   const typeAliases: TypeAlias[] = [];
   for (const node of root.descendantsOfType(["type_alias_declaration"])) {
     const nameNode = node.childForFieldName("name");
@@ -539,7 +539,7 @@ function extractTsCallSites(root: Node, out: RawCallSite[]): void {
 }
 
 /**
- * Extract variable-to-constructor assignments for Tier 3 resolution (RFC §2.6).
+ * Extract variable-to-constructor assignments for Tier 3 resolution.
  * Detects `const svc = new UserService()` and `svc = new UserService()` patterns.
  * Keyed by variable name so the resolution engine can match callSite.objectName.
  */
@@ -704,7 +704,7 @@ function extractPythonFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
       if (bases.length > 0) {
         symbols[symbols.length - 1].bases = bases;
       }
-      // [Hejlsberg] Separate metaclass from standard bases (RFC §2.12)
+      // Separate metaclass from standard bases
       if (metaclass) {
         symbols[symbols.length - 1].metaclass = metaclass;
       }
@@ -855,12 +855,7 @@ function isInsidePythonClass(node: Node): boolean {
 }
 
 /**
- * Python heritage extraction supporting C3 MRO.
- * class Foo(Bar, Baz, metaclass=Meta) - extracts Bar and Baz as extends.
- * Multiple base classes reflect Python's multiple inheritance with C3 linearization.
- */
-/**
- * [Hejlsberg] Python heritage extraction with metaclass separation (RFC §2.12).
+ * Python heritage extraction with metaclass separation.
  * class Foo(Bar, Baz, metaclass=Meta) extracts Bar and Baz as extends,
  * metaclass as a separate field to prevent C3 linearization false-positives.
  */
@@ -877,7 +872,7 @@ function extractPythonHeritage(
   let ordinal = 0;
   for (const arg of args.namedChildren) {
     if (arg.type === "keyword_argument") {
-      // [Hejlsberg] Extract metaclass keyword argument separately
+      // Extract metaclass keyword argument separately
       const key = arg.childForFieldName("name");
       const value = arg.childForFieldName("value");
       if (key?.text === "metaclass" && value) {
@@ -1066,7 +1061,7 @@ function extractGoFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
   }
 
   // Go type aliases: type Foo = Bar (with =, tree-sitter node type_alias)
-  // NOT type Foo Bar (new type, tree-sitter node type_spec) -- RFC §2.15
+  // NOT type Foo Bar (new type, tree-sitter node type_spec)
   const typeAliases: TypeAlias[] = [];
   for (const node of root.descendantsOfType(["type_alias"])) {
     const name = node.childForFieldName("name")?.text;
@@ -1336,7 +1331,7 @@ function extractJavaFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
     const bodyText = body ? getNodeText(body) : getNodeText(node);
     const tokens = bodyTokenString(body ?? node, JAVA_BODY_IDENT_TYPES);
 
-    // Java default method detection (RFC §2.1): method with a body inside an interface
+    // Java default method detection: method with a body inside an interface
     const isInsideInterface = (() => {
       let p = node.parent;
       while (p) {
@@ -1464,7 +1459,7 @@ function extractJavaHeritage(node: Node, className: string, out: HeritageEdge[])
 }
 
 /**
- * Extract variable-to-constructor assignments from Java code (RFC §2.6).
+ * Extract variable-to-constructor assignments from Java code.
  * Detects `UserService svc = new UserService()` patterns.
  */
 function extractJavaConstructorAssignments(root: Node): ConstructorAssignment[] {
@@ -1713,7 +1708,7 @@ function extractRustFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
     }
   }
 
-  // Rust derive macros and attribute macros → decorates edges (RFC §2.8 AC9)
+  // Rust derive macros and attribute macros as decorates edges
   const decorators: DecoratorEdge[] = [];
   for (const node of root.descendantsOfType(["attribute_item"])) {
     // #[derive(Debug, Clone)] or #[tokio::main]
@@ -1761,7 +1756,7 @@ function extractRustFileGraph(root: Node): Omit<FileGraphResult, "imports"> {
     }
   }
 
-  // Rust type aliases: type Foo = Bar (RFC §2.15)
+  // Rust type aliases: type Foo = Bar
   const typeAliases: TypeAlias[] = [];
   for (const node of root.descendantsOfType(["type_item"])) {
     // Skip type items inside impl blocks (associated types like type Target = Inner)

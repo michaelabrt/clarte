@@ -50,7 +50,7 @@ export interface ImportGraph {
   symbolStartLines?: Map<string, Map<string, number>>;
   /** Intra-file caller→callee edges per file, for navigation chain display */
   intraFileCalls?: Map<string, Array<{ caller: string; callee: string }>>;
-  /** Phase 2: unified file graph extraction results per file */
+  /** Unified file graph extraction results per file */
   fileGraphResults?: Map<string, import("../graph/symbol-types.js").FileGraphResult>;
 }
 
@@ -102,7 +102,7 @@ export interface Community {
   files: string[];
   /** Auto-derived label from common directory prefix */
   label: string;
-  /** Internal edge density (Leiden metric, §5.4). 0.0 = no internal edges, 1.0 = complete clique. */
+  /** Internal edge density (Leiden metric). 0.0 = no internal edges, 1.0 = complete clique. */
   cohesion?: number;
 }
 

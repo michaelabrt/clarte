@@ -6,7 +6,7 @@
  *   2. Refinement: sub-cluster within each community to guarantee connectivity
  *   3. Aggregation: contract to super-node graph, repeat
  *
- * Source: IMPLEMENTATION_RFC001.md §5.1, §5.2, §5.3, §5.4
+ * Source: Traag, Waltman & van Eck (2019), "From Louvain to Leiden"
  */
 
 import type { Community, ImportGraph } from "../types";
@@ -19,7 +19,7 @@ const ARI_NOVELTY_THRESHOLD = 0.85;
 /** Maximum outer iterations before forced convergence */
 const MAX_OUTER_ITERATIONS = 20;
 
-// ── Adaptive gamma (§5.2) ────────────────────────────────────────────────────
+// ── Adaptive gamma ───────────────────────────────────────────────────────────
 
 /**
  * Resolution parameter gamma controls community granularity.
@@ -40,7 +40,7 @@ export function computeAdaptiveGamma(nodeCount: number): number {
   return Math.max(0.5, Math.min(3.0, gamma));
 }
 
-// ── Per-cluster cohesion (§5.4) ──────────────────────────────────────────────
+// ── Per-cluster cohesion ─────────────────────────────────────────────────────
 
 /**
  * Internal edge density for a community.
@@ -72,7 +72,7 @@ export function computeCohesion(communityNodes: string[], adj: Map<string, Set<s
   return internalEdges / maxPossibleEdges;
 }
 
-// ── ARI novelty validation (§5.5) ───────────────────────────────────────────
+// ── ARI novelty validation ───────────────────────────────────────────────────
 
 /**
  * Adjusted Rand Index between two clusterings.
@@ -120,7 +120,7 @@ export function computeARI(
   return (sumNij - expected) / denominator;
 }
 
-// ── Leiden core algorithm (§5.1) ─────────────────────────────────────────────
+// ── Leiden core algorithm ────────────────────────────────────────────────────
 
 /**
  * Build undirected adjacency from import edges, filtering externals.
@@ -203,7 +203,7 @@ export function groupByCommunity(fileToCommunity: Map<string, number>): Map<numb
  * Move each node to the neighboring community that maximizes modularity gain.
  * Uses resolution parameter gamma in the null model term.
  *
- * Modularity gain for moving node i from community A to community B (§5.1):
+ * Modularity gain for moving node i from community A to community B:
  *   ΔQ = [Σ_in_B + 2*k_i_B] / (2*m) - gamma * [(Σ_tot_B + k_i)/(2*m)]^2
  *      - [Σ_in_A - 2*k_i_A] / (2*m) + gamma * [(Σ_tot_A - k_i)/(2*m)]^2
  *
@@ -272,7 +272,7 @@ function localMoving(
       const sigmaInB = (communityInternalWeight.get(candidateLabel) ?? 0) / 2;
       const sigmaTotB = communityDegree.get(candidateLabel) ?? 0;
 
-      // Modularity gain formula (§5.1)
+      // Modularity gain formula
       const twoM = 2 * m;
       const removeFromA = (sigmaInA - kiA) / twoM - gamma * ((sigmaTotA - ki) / twoM) ** 2;
       const addToB = (sigmaInB + kiB) / twoM - gamma * ((sigmaTotB + ki) / twoM) ** 2;
@@ -388,12 +388,12 @@ function countTotalEdges(adj: Map<string, Set<string>>): number {
 // ── Main entry point ─────────────────────────────────────────────────────────
 
 /**
- * Detect communities using the Leiden algorithm with directory seeding (§5.3).
+ * Detect communities using the Leiden algorithm with directory seeding.
  *
  * Flow:
  *   1. Seed from directory structure (warm start)
  *   2. Leiden local moving + refinement (replaces Louvain)
- *   3. Validate novelty via ARI (§5.5)
+ *   3. Validate novelty via ARI
  *
  * Returns communities with per-cluster cohesion scores.
  */
@@ -404,7 +404,7 @@ export function detectCommunitiesLeiden(graph: ImportGraph): Community[] {
 
   const gamma = computeAdaptiveGamma(files.length);
 
-  // Phase 1 seed: directory structure (§5.3)
+  // Phase 1 seed: directory structure
   const dirLabels = new Map<string, number>();
   const fileToCommunity = new Map<string, number>();
   let nextLabel = 0;
@@ -430,7 +430,7 @@ export function detectCommunitiesLeiden(graph: ImportGraph): Community[] {
     if (groups.size <= 1) break;
   }
 
-  // ARI novelty validation (§5.5)
+  // ARI novelty validation
   const dirOnlyCommunities = new Map<string, number>();
   let dirNextLabel = 0;
   for (const file of files) {
@@ -444,7 +444,7 @@ export function detectCommunitiesLeiden(graph: ImportGraph): Community[] {
     return [];
   }
 
-  // Build final communities with cohesion (§5.4)
+  // Build final communities with cohesion
   const finalGroups = groupByCommunity(fileToCommunity);
   const communities: Community[] = [];
   let id = 0;
@@ -467,7 +467,7 @@ export function detectCommunitiesLeiden(graph: ImportGraph): Community[] {
 }
 
 /**
- * Run a single Leiden refinement round on a subset of nodes (§5.7).
+ * Run a single Leiden refinement round on a subset of nodes.
  * Used for Level 2 incremental updates: only nodes adjacent to changed edges
  * participate in the local moving phase.
  */
@@ -493,7 +493,7 @@ export function leidenRefine(
     }
   }
 
-  // Only move affected nodes (§5.7: "only nodes adjacent to changed edges may move")
+  // Only move affected nodes ("only nodes adjacent to changed edges may move")
   const m = countTotalEdges(adj);
   if (m === 0) return partition;
 

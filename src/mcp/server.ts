@@ -1,5 +1,5 @@
 /**
- * Clarte MCP server (RFC §4.1).
+ * Clarte MCP server.
  *
  * Exposes graph intelligence tools to AI agents via the Model Context Protocol.
  * Started as a subprocess by Claude Code (or other MCP clients).
@@ -28,10 +28,10 @@ import { executeSafe } from "./tools/safe";
 import { executeExecutionFlow } from "./tools/execution-flow";
 import type { DatabaseAdapter } from "../storage/db-adapter";
 
-// ── Connection pool (Dean & Stonebraker) ─────────────────────────────────────
+// ── Connection pool ──────────────────────────────────────────────────────────
 
 /**
- * [Dean & Stonebraker] Read-only connection pool scaled to CPU core count (RFC §4.1).
+ * Read-only connection pool scaled to CPU core count.
  * Each connection is an independent SQLite handle in read-only mode.
  * WAL allows concurrent readers; the pool prepares for async transports (SSE/WS)
  * while functioning as a round-robin singleton under serial STDIO.

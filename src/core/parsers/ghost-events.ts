@@ -1,5 +1,5 @@
 /**
- * RFC-002 Phase 5: Event binding ghost edge detector.
+ * Event binding ghost edge detector.
  *
  * Scans call sites for .on() and .emit() patterns. Groups by objectName
  * (the emitter/bus instance) and creates ghost edges from handler scopes

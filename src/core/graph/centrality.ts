@@ -23,7 +23,7 @@ export function computeHITS(
   /** Rationale: 1e-6 precision catches meaningful score differences while avoiding float noise. */
   epsilon = 1e-6,
   barrelFiles?: Set<string>,
-  /** §5.7: Optional initial scores for warm-start from near-correct state (5 iterations vs 30). */
+  /** Optional initial scores for warm-start from near-correct state (5 iterations vs 30). */
   initialScores?: { authority: Map<string, number>; hub: Map<string, number> },
 ): { authority: Map<string, number>; hub: Map<string, number> } {
   const n = files.length;
@@ -87,7 +87,7 @@ export function computeHITS(
   const fileIndex = new Map<string, number>();
   for (let i = 0; i < n; i++) fileIndex.set(files[i], i);
 
-  // §5.7: Warm-start from provided initial scores, or start uniform
+  // Warm-start from provided initial scores, or start uniform
   let auth = new Float64Array(n);
   let hub = new Float64Array(n);
   if (initialScores) {
@@ -243,7 +243,7 @@ export function computeBetweenness(
   graph: ImportGraph,
   /** When omitted, k adapts to graph size: max(50, 2*sqrt(V)) for <5% error at typical scales. */
   k?: number,
-  /** §5.7: Restrict source sampling to 2-hop neighborhood of changed files. */
+  /** Restrict source sampling to 2-hop neighborhood of changed files. */
   changedFiles?: Set<string>,
   /** Audit F3: Leiden community assignments for stratified sampling. */
   communities?: Map<string, number>,
@@ -259,7 +259,7 @@ export function computeBetweenness(
   const n = files.length;
   if (n === 0) return new Map();
 
-  // §5.9: Quantized k = ceil(max(50, ceil(sqrt(V)*2)) / 10) * 10
+  // Quantized k = ceil(max(50, ceil(sqrt(V)*2)) / 10) * 10
   // Prevents spurious cache invalidation when file count changes by 1.
   const rawK = k ?? Math.max(50, Math.ceil(Math.sqrt(n) * 2));
   let effectiveK = Math.ceil(rawK / 10) * 10;
@@ -278,7 +278,7 @@ export function computeBetweenness(
   const seedStr = files.join(",");
   const rng = seededRandom(simpleHash(seedStr));
 
-  // §5.7: If changedFiles provided, restrict sources to 2-hop neighborhood
+  // If changedFiles provided, restrict sources to 2-hop neighborhood
   let candidateFiles = files;
   if (changedFiles && changedFiles.size > 0) {
     const neighborhood = new Set<string>(changedFiles);
