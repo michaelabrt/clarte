@@ -38,9 +38,11 @@ export function parseBlameOutput(output: string, referenceMs: number = Date.now(
       continue;
     }
 
-    // Content line (starts with tab): commit the line -> days mapping
-    if (line.startsWith("\t") && currentLine > 0 && currentTimestamp > 0) {
-      const daysAgo = Math.max(0, (referenceMs - currentTimestamp * 1000) / 86400_000);
+    // Content line (starts with tab): commit the line -> days mapping.
+    // author-time 0 = null commit (uncommitted changes) -> treat as 0 days (freshest).
+    if (line.startsWith("\t") && currentLine > 0 && currentTimestamp >= 0) {
+      const tsMs = currentTimestamp === 0 ? referenceMs : currentTimestamp * 1000;
+      const daysAgo = Math.max(0, (referenceMs - tsMs) / 86400_000);
       result.set(currentLine, daysAgo);
     }
   }

@@ -66,6 +66,17 @@ describe("parseBlameOutput", () => {
   it("returns empty map for empty output", () => {
     expect(parseBlameOutput("").size).toBe(0);
   });
+
+  it("uncommitted lines (null commit, author-time 0) treated as 0 days", () => {
+    const now = Date.now();
+    const nullSha = "0".repeat(40);
+    const output = `${nullSha} 1 1 1\nauthor Not Committed Yet\nauthor-mail <not.committed.yet>\nauthor-time 0\nauthor-tz +0000\ncommitter Not Committed Yet\ncommitter-mail <not.committed.yet>\ncommitter-time 0\ncommitter-tz +0000\nsummary uncommitted\nfilename test.ts\n\tuncommitted content`;
+
+    const result = parseBlameOutput(output, now);
+
+    expect(result.size).toBe(1);
+    expect(result.get(1)).toBeCloseTo(0, 0);
+  });
 });
 
 describe("mapBlameToSymbols", () => {
