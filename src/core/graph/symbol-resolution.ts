@@ -146,6 +146,8 @@ export interface SymbolIndex {
   byFileAndName: Map<string, SymbolEntry[]>;
   /** Map from filePath to all symbols in that file */
   byFile: Map<string, SymbolEntry[]>;
+  /** Map from symbolName to all entries with that name (cross-file lookup) */
+  byName: Map<string, SymbolEntry[]>;
 }
 
 export function buildSymbolIndex(
@@ -159,6 +161,7 @@ export function buildSymbolIndex(
 ): SymbolIndex {
   const byFileAndName = new Map<string, SymbolEntry[]>();
   const byFile = new Map<string, SymbolEntry[]>();
+  const byName = new Map<string, SymbolEntry[]>();
 
   for (const s of symbols) {
     const entry: SymbolEntry = {
@@ -183,9 +186,16 @@ export function buildSymbolIndex(
       byFile.set(s.filePath, fileEntries);
     }
     fileEntries.push(entry);
+
+    let nameEntries = byName.get(s.name);
+    if (!nameEntries) {
+      nameEntries = [];
+      byName.set(s.name, nameEntries);
+    }
+    nameEntries.push(entry);
   }
 
-  return { byFileAndName, byFile };
+  return { byFileAndName, byFile, byName };
 }
 
 /** Look up a symbol ID by file path and name, using LRU cache. */

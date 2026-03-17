@@ -218,7 +218,7 @@ export const MCP = {
  * Ghost edge detection feature gate (RFC-002 Phase 5).
  * Set to true to enable ghost edge detection and noise gating.
  */
-export const GHOST_EDGES_ENABLED = false;
+export const GHOST_EDGES_ENABLED = true;
 
 /**
  * Graph data computation limits.

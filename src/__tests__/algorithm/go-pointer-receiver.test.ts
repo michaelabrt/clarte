@@ -45,6 +45,10 @@ function buildIndex(
     string,
     Array<{ id: number; filePath: string; name: string; kind: string; startLine: number }>
   >();
+  const byName = new Map<
+    string,
+    Array<{ id: number; filePath: string; name: string; kind: string; startLine: number }>
+  >();
   for (const s of symbols) {
     const key = `${s.filePath}::${s.name}`;
     let entries = byFileAndName.get(key);
@@ -59,8 +63,14 @@ function buildIndex(
       byFile.set(s.filePath, fileEntries);
     }
     fileEntries.push(s);
+    let nameEntries = byName.get(s.name);
+    if (!nameEntries) {
+      nameEntries = [];
+      byName.set(s.name, nameEntries);
+    }
+    nameEntries.push(s);
   }
-  return { byFileAndName, byFile };
+  return { byFileAndName, byFile, byName };
 }
 
 // ── Test: Value receiver only ────────────────────────────────────────────────
