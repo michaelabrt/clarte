@@ -124,19 +124,6 @@ export function extractSymbolSubgraph(
     if (frontier.size === 0) break;
   }
 
-  // ── Build barrel-routing lookup from file-level edges ───────────────────
-  // Key: "fromPath\0toPath", value: true if the file edge is barrel-routed.
-  // Only built when fileForward is provided.
-
-  const barrelRoutedSet = new Set<string>();
-  if (fileForward) {
-    for (const [fromPath, edges] of fileForward) {
-      for (const fe of edges) {
-        if (fe.isBarrelRouted) barrelRoutedSet.add(fileEdgeKey(fromPath, fe.toPath));
-      }
-    }
-  }
-
   // ── Phase 2: Build subgraph from discovered nodes ───────────────────────
 
   const nodes = new Map<number, InMemorySymbolNode>();
@@ -149,6 +136,17 @@ export function extractSymbolSubgraph(
     if (!node) continue;
     nodes.set(id, node);
     fileSet.add(node.filePath);
+  }
+
+  // Build barrel-routing lookup scoped to subgraph files only.
+  // Key: "fromPath\0toPath", value: true if the file edge is barrel-routed.
+  const barrelRoutedSet = new Set<string>();
+  if (fileForward) {
+    for (const filePath of fileSet) {
+      for (const fe of fileForward.get(filePath) ?? []) {
+        if (fe.isBarrelRouted) barrelRoutedSet.add(fileEdgeKey(filePath, fe.toPath));
+      }
+    }
   }
 
   // Collect all original-graph edges where both endpoints are discovered.
