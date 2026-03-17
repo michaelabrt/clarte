@@ -35,9 +35,8 @@ import {
   MARKOV_VISIT_THRESHOLD,
   MARKOV_MAX_FLOW_STATES,
   MARKOV_MASS_FLOOR,
-  UTILITY_TERMINAL_PENALTY,
-  UTILITY_INDEGREE_THRESHOLD,
 } from "../config/phase6-constants";
+import { computeINF } from "./inf-attenuation";
 import { BLAME_LAMBDA, BLAME_FLOOR, BLAME_DEFAULT_DAYS } from "../config/phase7-constants";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -128,6 +127,7 @@ export function computeTransitionRow(
   entryCommunity: number | null,
   absorbing: Set<number>,
   symbolBlame?: Map<number, number>,
+  edgePriors?: Map<string, number>,
 ): TransitionRow | null {
   const edges = symbolGraph.forward.get(symbolId);
   if (!edges) return null;
@@ -135,6 +135,7 @@ export function computeTransitionRow(
   const node = symbolGraph.symbols.get(symbolId);
   if (!node) return null;
 
+  const totalSymbols = symbolGraph.symbols.size;
   const targets: number[] = [];
   const rawWeights: number[] = [];
 
@@ -168,16 +169,22 @@ export function computeTransitionRow(
 
     let raw = s * c * alpha ** MARKOV_AUTHORITY_BETA * tau * tauBlame;
 
-    // Domain-Terminal Filter: penalize cross-community utility sinks
-    if (absorbing.has(edge.toSymbolId)) {
-      const targetCommunity = fileGraph.nodes.get(targetNode.filePath)?.communityId ?? null;
-      const crossCommunity = entryCommunity === null || targetCommunity !== entryCommunity;
-      if (crossCommunity) {
-        const indegree = symbolGraph.reverse.get(edge.toSymbolId)?.length ?? 0;
-        if (indegree >= UTILITY_INDEGREE_THRESHOLD) {
-          raw *= UTILITY_TERMINAL_PENALTY;
-        }
-      }
+    // INF Edge Attenuation: continuous, information-theoretic replacement for
+    // the hardcoded Domain-Terminal Filter. Uses directed indegree/outdegree
+    // to penalize pure utility sinks while preserving flow through hubs.
+    const targetIndegree = symbolGraph.reverse.get(edge.toSymbolId)?.length ?? 0;
+    const targetOutdegree = (symbolGraph.forward.get(edge.toSymbolId) ?? []).filter((e) =>
+      FLOW_EDGE_KINDS.has(e.kind),
+    ).length;
+    raw *= computeINF(targetIndegree, targetOutdegree, totalSymbols);
+
+    // Bayesian edge prior: EWMA-learned co-change probability modulates
+    // the transition weight. Neutral priors (0.5) cancel out after row
+    // normalization; only differential priors shift the distribution.
+    if (edgePriors) {
+      const priorKey = `${node.filePath}||${targetNode.filePath}`;
+      const prior = edgePriors.get(priorKey);
+      if (prior !== undefined) raw *= prior;
     }
 
     targets.push(edge.toSymbolId);
@@ -216,6 +223,7 @@ export function propagateAbsorbing(
   maxSteps: number = MARKOV_MAX_STEPS,
   epsilon: number = MARKOV_CONVERGENCE_EPSILON,
   symbolBlame?: Map<number, number>,
+  edgePriors?: Map<string, number>,
 ): PropagationResult {
   const visits = new Map<number, number>();
   const absorbed = new Map<number, number>();
@@ -260,6 +268,7 @@ export function propagateAbsorbing(
           entryCommunity,
           absorbing,
           symbolBlame,
+          edgePriors,
         );
         rowCache.set(u, row);
       }
@@ -393,6 +402,7 @@ export function reconstructGreedyPath(
   absorbing: Set<number>,
   maxLength: number,
   symbolBlame?: Map<number, number>,
+  edgePriors?: Map<string, number>,
 ): number[] {
   const path: number[] = [entryId];
   const visited = new Set<number>([entryId]);
@@ -409,6 +419,7 @@ export function reconstructGreedyPath(
       entryCommunity,
       absorbing,
       symbolBlame,
+      edgePriors,
     );
     if (!row || row.targets.length === 0) break;
 
@@ -450,6 +461,7 @@ export function traceMarkovFlow(
   fileGraph: LeanFileGraph,
   changeCouplingIndex: Map<string, number>,
   symbolBlame?: Map<number, number>,
+  edgePriors?: Map<string, number>,
 ): FlowSignature {
   const entryNode = symbolGraph.symbols.get(entryId);
   if (!entryNode) return emptySignature(entryId);
@@ -470,6 +482,7 @@ export function traceMarkovFlow(
     MARKOV_MAX_STEPS,
     MARKOV_CONVERGENCE_EPSILON,
     symbolBlame,
+    edgePriors,
   );
 
   // 3. Build subgraph from visited nodes (context selection is caller's responsibility)
@@ -502,6 +515,7 @@ export function traceMarkovFlow(
     absorbing,
     MARKOV_MAX_FLOW_STATES,
     symbolBlame,
+    edgePriors,
   );
 
   const fileBetweenness = new Map<string, number>();

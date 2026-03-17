@@ -27,6 +27,7 @@ import {
   MIN_PREDICTIONS,
   MAX_PREDICTIONS,
 } from "../core/config/intent-constants";
+import type { FusionWeights } from "../core/graph/logistic-fusion";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -78,8 +79,15 @@ export function fuseIntentScores(
   changeCoupling: Map<string, Map<string, number>>,
   seedFiles: Set<string>,
   staleDiscount?: number,
+  trainedWeights?: FusionWeights,
 ): Map<number, FusedScore> {
   if (inputs.length === 0) return new Map();
+
+  // Use trained weights when available, fall back to hardcoded defaults
+  const wL = trainedWeights?.lambdaL ?? LAMBDA_LEXICAL;
+  const wG = trainedWeights?.lambdaG ?? LAMBDA_GRAPH;
+  const wT = trainedWeights?.lambdaT ?? LAMBDA_TEMPORAL;
+  const wB = trainedWeights?.lambdaB ?? LAMBDA_BETWEENNESS;
 
   // Normalize lexical scores to [0, 1]
   let maxLexical = 0;
@@ -111,7 +119,7 @@ export function fuseIntentScores(
       if (conf >= MIN_COUPLING_CONFIDENCE && conf > T) T = conf;
     }
 
-    const score = LAMBDA_LEXICAL * L + LAMBDA_GRAPH * G + LAMBDA_TEMPORAL * T + LAMBDA_BETWEENNESS * B;
+    const score = wL * L + wG * G + wT * T + wB * B;
 
     result.set(inp.symbolId, {
       score,

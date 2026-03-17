@@ -7,11 +7,12 @@
  *             FTS5 column rename (name -> symbol_name), dropped content-sync.
  *   v2 -> v3: added kv_cache table, removed dead vec_symbols virtual table.
  *   v3 -> v4: added change_coupling.last_cochange_days for temporal decay.
+ *   v4 -> v5: added edge_priors table for Bayesian EWMA edge weights.
  */
 
 import type { DatabaseAdapter } from "./db-adapter";
 
-export const SCHEMA_VERSION = "4";
+export const SCHEMA_VERSION = "5";
 
 /**
  * Initialize the database schema within a single transaction.
@@ -160,6 +161,19 @@ export function initSchema(db: DatabaseAdapter): void {
       )
     `);
 
+    // Bayesian EWMA edge priors for transition weight modulation.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS edge_priors (
+        from_path TEXT NOT NULL,
+        to_path   TEXT NOT NULL,
+        alpha     REAL NOT NULL,
+        beta      REAL NOT NULL,
+        PRIMARY KEY (from_path, to_path),
+        FOREIGN KEY (from_path) REFERENCES files(path) ON DELETE CASCADE,
+        FOREIGN KEY (to_path) REFERENCES files(path) ON DELETE CASCADE
+      )
+    `);
+
     // General-purpose key-value cache (replaces project-cache.json, git-cache.json, history.json).
     db.exec(`
       CREATE TABLE IF NOT EXISTS kv_cache (
@@ -181,11 +195,16 @@ export function initSchema(db: DatabaseAdapter): void {
     migrateV1toV2(db);
     migrateV2toV3(db);
     migrateV3toV4(db);
+    migrateV4toV5(db);
   } else if (currentVersion === 2) {
     migrateV2toV3(db);
     migrateV3toV4(db);
+    migrateV4toV5(db);
   } else if (currentVersion === 3) {
     migrateV3toV4(db);
+    migrateV4toV5(db);
+  } else if (currentVersion === 4) {
+    migrateV4toV5(db);
   }
 }
 
@@ -282,6 +301,26 @@ function migrateV2toV3(db: DatabaseAdapter): void {
  */
 function migrateV3toV4(db: DatabaseAdapter): void {
   tryAddColumn(db, "change_coupling", "last_cochange_days INTEGER");
+  db.exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`);
+}
+
+/**
+ * Migrate a v4 database to v5:
+ * - Add edge_priors table for Bayesian EWMA edge weights
+ */
+function migrateV4toV5(db: DatabaseAdapter): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS edge_priors (
+      from_path TEXT NOT NULL,
+      to_path   TEXT NOT NULL,
+      alpha     REAL NOT NULL,
+      beta      REAL NOT NULL,
+      PRIMARY KEY (from_path, to_path),
+      FOREIGN KEY (from_path) REFERENCES files(path) ON DELETE CASCADE,
+      FOREIGN KEY (to_path) REFERENCES files(path) ON DELETE CASCADE
+    )
+  `);
+
   db.exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`);
 }
 
