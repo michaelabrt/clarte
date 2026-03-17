@@ -45,7 +45,7 @@ export function computeSymbolAuthority(
   const result = new Map<string, Record<string, number>>();
   for (const [file, symbolCounts] of counts) {
     const maxCount = Math.max(...symbolCounts.values(), 1);
-    const normalized: Record<string, number> = {};
+    const normalized: Record<string, number> = Object.create(null);
     for (const [sym, count] of symbolCounts) {
       normalized[sym] = Math.round((count / maxCount) * 1000) / 1000;
     }
