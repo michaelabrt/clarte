@@ -18,6 +18,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod/v4";
 import path from "node:path";
+import { statSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { createReadonlyDatabase } from "../storage/db-adapter";
 import { executeCallers } from "./tools/callers";
@@ -37,13 +38,21 @@ import type { DatabaseAdapter } from "../storage/db-adapter";
 class ReadPool {
   private connections: DatabaseAdapter[] = [];
   private nextIdx = 0;
+  readonly dbPath: string;
+  mtimeMs: number;
+
+  private constructor(dbPath: string, mtimeMs: number) {
+    this.dbPath = dbPath;
+    this.mtimeMs = mtimeMs;
+  }
 
   get size(): number {
     return this.connections.length;
   }
 
   static async create(dbPath: string): Promise<ReadPool> {
-    const pool = new ReadPool();
+    const mtimeMs = statSync(dbPath).mtimeMs;
+    const pool = new ReadPool(dbPath, mtimeMs);
     // Cap at 4: SQLite WAL readers share a single file lock; beyond 4,
     // page cache thrashing outweighs concurrency gains.
     const size = Math.min(availableParallelism(), 4);
@@ -71,13 +80,28 @@ class ReadPool {
 let pool: ReadPool | null = null;
 
 /**
- * [Dean & Stonebraker] Acquire a read-only connection from the pool.
+ * Acquire a read-only connection from the pool.
  * Pool is lazily initialized on first call, sized to min(cpuCount, 4).
+ * Recreated when the DB file's mtime changes (after clarte init/refresh).
  */
 async function openDb(): Promise<DatabaseAdapter> {
+  const rootDir = process.env.CLARTE_ROOT ?? process.cwd();
+  const dbPath = path.join(rootDir, ".clarte", "graph.db");
+
+  if (pool) {
+    let stale = false;
+    try {
+      stale = statSync(dbPath).mtimeMs !== pool.mtimeMs;
+    } catch {
+      stale = true;
+    }
+    if (stale) {
+      pool.close();
+      pool = null;
+    }
+  }
+
   if (!pool) {
-    const rootDir = process.env.CLARTE_ROOT ?? process.cwd();
-    const dbPath = path.join(rootDir, ".clarte", "graph.db");
     pool = await ReadPool.create(dbPath);
   }
   return pool.acquire();
