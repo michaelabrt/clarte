@@ -151,6 +151,51 @@ export const SYMBOL_EDGE_WEIGHTS: Record<SymbolEdgeKind, number> = {
   imports: 1.0,
 };
 
+// ── Ghost edge types (RFC-002 Phase 5) ────────────────────────────────────
+
+export type GhostEdgeKind =
+  | "ghost:di_inject"
+  | "ghost:event_bind"
+  | "ghost:route"
+  | "ghost:trait_bound"
+  | "ghost:descriptor";
+
+export type ExtendedEdgeKind = SymbolEdgeKind | GhostEdgeKind;
+
+/** Maps ghost suffix to its base SymbolEdgeKind for transmission lookup */
+export const GHOST_BASE_KIND: Record<string, SymbolEdgeKind> = {
+  di_inject: "calls",
+  event_bind: "calls",
+  route: "calls",
+  trait_bound: "implements",
+  descriptor: "uses_type",
+};
+
+/**
+ * Look up edge weight by kind string.
+ * Checks SYMBOL_EDGE_WEIGHTS first, then GHOST_BASE_KIND for ghost: prefix,
+ * falls back to 0.3 (uses_type level, per RFC spec).
+ */
+export function getEdgeWeight(kind: string): number {
+  const direct = SYMBOL_EDGE_WEIGHTS[kind as SymbolEdgeKind];
+  if (direct !== undefined) return direct;
+
+  if (kind.startsWith("ghost:")) {
+    const base = GHOST_BASE_KIND[kind.slice(6)];
+    if (base) return SYMBOL_EDGE_WEIGHTS[base];
+  }
+
+  return 0.3;
+}
+
+/** Evidence attached to a ghost edge candidate */
+export interface GhostEdgeEvidence {
+  pattern: string;
+  trigger?: string;
+  eventName?: string;
+  routePath?: string;
+}
+
 // ── Resolution confidence per tier (pattern-aware, audit F2) ─────────────────
 
 export const RESOLUTION_CONFIDENCE = {
@@ -183,7 +228,7 @@ export interface ResolvedSymbolEdge {
   fromSymbol: string;
   toFile: string;
   toSymbol: string;
-  kind: SymbolEdgeKind;
+  kind: ExtendedEdgeKind;
   line: number;
   confidence: number;
   /** Python MRO: base class position in declaration order (0-indexed) */

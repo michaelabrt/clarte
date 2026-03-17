@@ -6,7 +6,7 @@
  */
 
 import { HITS as HITS_CONFIG } from "../config/thresholds";
-import { SYMBOL_EDGE_WEIGHTS, type SymbolEdgeKind } from "./symbol-types";
+import { getEdgeWeight } from "./symbol-types";
 import type { ResolvedSymbolEdge } from "./symbol-types";
 
 // ── Symbol HITS input/output ──────────────────────────────────────────────────
@@ -94,7 +94,7 @@ export function computeSymbolHITS(
     const toIdx = idToIndex.get(toId);
     if (fromIdx === undefined || toIdx === undefined) continue;
 
-    const edgeWeight = SYMBOL_EDGE_WEIGHTS[edge.kind as SymbolEdgeKind] ?? 1.0;
+    const edgeWeight = getEdgeWeight(edge.kind);
 
     // Barrel discount on authority (target is in a barrel file)
     const toNode = symbolNodes[toIdx];

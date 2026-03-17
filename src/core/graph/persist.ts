@@ -22,6 +22,14 @@ import { aggregateToFileLevel, computeSymbolHITS, type SymbolNode } from "./symb
 import { buildImportMap, buildSymbolIndex, LRUCache, resolveAllSymbolEdges } from "./symbol-resolution";
 import type { FileGraphResult, ResolvedSymbolEdge } from "./symbol-types";
 import { buildAliasMap } from "./type-aliases";
+import { GHOST_EDGES_ENABLED } from "../config/thresholds";
+import { ghostCandidateToResolved } from "./ghost-types";
+import { applyNoiseGate } from "./ghost-noise-gate";
+import { detectDIEdges } from "../parsers/ghost-di";
+import { detectEventEdges } from "../parsers/ghost-events";
+import { detectRouteEdges } from "../parsers/ghost-routes";
+import { detectRustTraitBoundEdges } from "../parsers/ghost-rust-traits";
+import { detectPythonDescriptorEdges } from "../parsers/ghost-python-descriptors";
 
 /**
  * Persist the analysis graph to .clarte/graph.db.
@@ -390,6 +398,26 @@ function runSymbolPipeline(
 
   // Merge all resolved edges
   const allResolvedEdges = [...resolvedEdges, ...pythonMROEdges, ...goResult.edges, ...rustTraitEdges];
+
+  // Phase 5: Ghost edge detection + noise gate
+  if (GHOST_EDGES_ENABLED) {
+    const ghostCandidates = [
+      ...detectDIEdges(fileGraphResults, symbolIndex, importMaps),
+      ...detectEventEdges(fileGraphResults, symbolIndex, fileGraphResults.size),
+      ...detectRouteEdges(fileGraphResults, symbolIndex, importMaps),
+      ...detectRustTraitBoundEdges(fileGraphResults, symbolIndex),
+      ...detectPythonDescriptorEdges(fileGraphResults, symbolIndex, importMaps),
+    ];
+
+    const fileToCommunity = new Map<string, number>();
+    const leanGraph = store.loadFileGraphLean();
+    for (const [p, node] of leanGraph.nodes) {
+      if (node.communityId !== null) fileToCommunity.set(p, node.communityId);
+    }
+
+    const ghostFiltered = applyNoiseGate(ghostCandidates, fileGraphResults.size, allResolvedEdges, fileToCommunity);
+    for (const c of ghostFiltered) allResolvedEdges.push(ghostCandidateToResolved(c));
+  }
 
   // 5. Convert to DB records and store
   const symbolEdgeRecords = resolvedEdgesToRecords(allResolvedEdges, symbolIndex, cache);

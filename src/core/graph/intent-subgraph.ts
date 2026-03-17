@@ -10,13 +10,13 @@
  */
 
 import type { InMemorySymbolGraph, InMemorySymbolNode, InMemoryEdge } from "../../storage/types";
-import { SYMBOL_EDGE_WEIGHTS, type SymbolEdgeKind } from "./symbol-types";
+import { SYMBOL_EDGE_WEIGHTS, GHOST_BASE_KIND, type ExtendedEdgeKind } from "./symbol-types";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface SymbolSubEdge {
   targetId: number;
-  kind: SymbolEdgeKind;
+  kind: ExtendedEdgeKind;
   /** Resolution tier confidence (propagated from InMemorySymEdge) */
   confidence: number;
   /** True when Dijkstra would traverse this edge against the original direction */
@@ -40,8 +40,10 @@ export interface SymbolSubgraph {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function isValidEdgeKind(kind: string): kind is SymbolEdgeKind {
-  return kind in SYMBOL_EDGE_WEIGHTS;
+function isValidEdgeKind(kind: string): kind is ExtendedEdgeKind {
+  if (kind in SYMBOL_EDGE_WEIGHTS) return true;
+  if (kind.startsWith("ghost:")) return kind.slice(6) in GHOST_BASE_KIND;
+  return false;
 }
 
 /**
@@ -163,7 +165,7 @@ export function extractSymbolSubgraph(
       if (!targetNode) continue;
 
       const confidence = edge.confidence ?? 1.0;
-      const kind = edge.kind as SymbolEdgeKind;
+      const kind = edge.kind as ExtendedEdgeKind;
       const isBarrelRouted = barrelRoutedSet.has(fileEdgeKey(sourceNode.filePath, targetNode.filePath));
 
       // Forward adjacency: sourceId -> toSymbolId (original direction, isReverse=false)
