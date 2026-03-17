@@ -63,11 +63,16 @@ const MIN_COUPLING_CONFIDENCE = 0.5;
  * from change coupling with seed files.
  *
  * Returns the un-normalized signal values in `signals` for Theory of Impact transparency.
+ *
+ * @param staleDiscount - When the graph is stale (built more than
+ *   STALE_COMMIT_THRESHOLD commits ago), pass STALE_GRAPH_DISCOUNT (0.5)
+ *   to halve the graph signal weight. Omit or pass undefined for fresh graphs.
  */
 export function fuseIntentScores(
   inputs: FusionInput[],
   changeCoupling: Map<string, Map<string, number>>,
   seedFiles: Set<string>,
+  staleDiscount?: number,
 ): Map<number, FusedScore> {
   if (inputs.length === 0) return new Map();
 
@@ -79,7 +84,7 @@ export function fuseIntentScores(
 
   for (const inp of inputs) {
     const L = maxLexical > 0 ? inp.lexicalScore / maxLexical : 0;
-    const G = inp.graphScore;
+    const G = staleDiscount !== undefined ? inp.graphScore * staleDiscount : inp.graphScore;
     const B = inp.betweennessScore;
 
     // Temporal signal: max coupling confidence between this file and any seed file
