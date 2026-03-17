@@ -25,6 +25,7 @@ import { executeCallers } from "./tools/callers";
 import { executeImpact } from "./tools/impact";
 import { executeFind } from "./tools/find";
 import { executeSafe } from "./tools/safe";
+import { executeExecutionFlow } from "./tools/execution-flow";
 import type { DatabaseAdapter } from "../storage/db-adapter";
 
 // ── Connection pool (Dean & Stonebraker) ─────────────────────────────────────
@@ -207,6 +208,35 @@ server.registerTool(
   async ({ symbol, file, change }) => {
     const database = await openDb();
     const result = executeSafe(database, { symbol, file, change });
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  },
+);
+
+// ── Tool: clarte_execution_flow ──────────────────────────────────────────────
+
+server.registerTool(
+  "clarte_execution_flow",
+  {
+    description:
+      "Trace execution flows through a file or symbol. Returns entry-to-terminal paths with dominator waypoints (mandatory control flow points), community transitions (architectural layer crossings) and confidence scores. Use when you need to understand how data or control flows through the codebase.",
+    inputSchema: {
+      file: z.string().describe("File path to trace flows through"),
+      symbol: z.string().optional().describe("Symbol name (if omitted, traces all symbols in file)"),
+      max_flows: z.number().optional().describe("Max flows to return (default: 5)"),
+      max_depth: z.number().optional().describe("Max traversal depth (default: 10)"),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ file, symbol, max_flows, max_depth }) => {
+    const database = await openDb();
+    const result = executeExecutionFlow(database, pool?.mtimeMs ?? 0, {
+      file,
+      symbol,
+      maxFlows: max_flows,
+      maxDepth: max_depth,
+    });
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };

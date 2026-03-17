@@ -1,17 +1,22 @@
 /**
- * Execution flow tracing (RFC §4.5).
+ * Execution flow tracing MCP tool.
  *
- * Computes forward execution flows (entry point -> ... -> target) by traversing
- * the symbol_edges table via recursive CTE. Entry points are exported
- * functions/methods with zero incoming 'calls' edges from project-internal files.
+ * Traces entry-to-terminal execution flows through a file or symbol using
+ * dominator trees (mandatory waypoints), k-diverse-shortest-paths (distinct
+ * routes) and community-aware path annotation (architectural context).
  *
- * F.1 fix: UNION (not UNION ALL) prevents exponential expansion on cyclic graphs.
- * F.6 fix: Entry points filtered by is_exported to reduce noise in library repos.
+ * Replaces the previous SQL-based 5-hop BFS with an in-memory graph algorithm
+ * pipeline that leverages the full symbol graph, ghost edges, HITS scores,
+ * betweenness centrality and Leiden communities.
  */
 
 import type { DatabaseAdapter } from "../../storage/db-adapter";
+import type { InMemorySymbolGraph, LeanFileGraph } from "../../storage/types";
+import { GraphStore } from "../../storage/graph-store";
+import { traceExecutionFlows } from "../../core/graph/flow-trace";
+import type { ExecutionFlowTrace } from "../../core/graph/flow-trace";
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Legacy types (consumed by render-task-context.ts) ────────────────────────
 
 export interface FlowStep {
   file: string;
@@ -26,118 +31,100 @@ export interface ExecutionFlow {
   steps: FlowStep[];
 }
 
-// ── SQL row types ────────────────────────────────────────────────────────────
+// ── Module-level cache (mtime-invalidated) ───────────────────────────────────
 
-interface EntryPointRow {
-  id: number;
-  file_path: string;
-  name: string;
-  start_line: number;
+let cachedSymGraph: InMemorySymbolGraph | null = null;
+let cachedFileGraph: LeanFileGraph | null = null;
+let cachedDbMtime = 0;
+
+function loadGraphs(
+  db: DatabaseAdapter,
+  dbMtimeMs: number,
+): { symGraph: InMemorySymbolGraph; fileGraph: LeanFileGraph } {
+  if (cachedSymGraph && cachedFileGraph && dbMtimeMs === cachedDbMtime) {
+    return { symGraph: cachedSymGraph, fileGraph: cachedFileGraph };
+  }
+
+  const store = new GraphStore(db);
+  cachedSymGraph = store.loadSymbolGraph();
+  cachedFileGraph = store.loadFileGraphLean();
+  cachedDbMtime = dbMtimeMs;
+
+  return { symGraph: cachedSymGraph, fileGraph: cachedFileGraph };
 }
 
-interface FlowRow {
-  file_path: string;
-  name: string;
-  start_line: number;
-  depth: number;
-  edge_kind: string;
+/** Reset cache (for testing). */
+export function _resetFlowCache(): void {
+  cachedSymGraph = null;
+  cachedFileGraph = null;
+  cachedDbMtime = 0;
+}
+
+// ── Response types ───────────────────────────────────────────────────────────
+
+export interface ExecutionFlowResponse {
+  file: string;
+  symbol?: string;
+  flowCount: number;
+  flows: Array<{
+    summary: string;
+    confidence: number;
+    entryPoint: { file: string; symbol: string; kind: string };
+    terminal: { file: string; symbol: string } | null;
+    communityPath: string[];
+    dominatorWaypoints: Array<{ file: string; symbol: string }>;
+    steps: Array<{
+      file: string;
+      symbol: string;
+      line: number;
+      edgeKind: string;
+      community: string | null;
+      isDominator: boolean;
+    }>;
+  }>;
 }
 
 // ── Implementation ───────────────────────────────────────────────────────────
 
-/**
- * Identify entry points: exported functions/methods with no incoming 'calls' edges.
- * These are public API roots (HTTP handlers, CLI commands, library exports).
- *
- * F.6: Requires is_exported = 1 to exclude private helper functions that happen
- * to have no internal callers. In library repos, this prevents every internal
- * utility from being treated as an entry point.
- */
-export function findEntryPoints(db: DatabaseAdapter): EntryPointRow[] {
-  const stmt = db.prepare(`
-    SELECT s.id, s.file_path, s.name, s.start_line
-    FROM symbols s
-    WHERE s.kind IN ('function', 'method')
-      AND s.is_exported = 1
-      AND NOT EXISTS (
-        SELECT 1 FROM symbol_edges se
-        WHERE se.to_symbol_id = s.id AND se.kind = 'calls'
-      )
-    ORDER BY s.file_path, s.start_line
-  `);
-  return stmt.all<EntryPointRow>();
+export function executeExecutionFlow(
+  db: DatabaseAdapter,
+  dbMtimeMs: number,
+  input: { file: string; symbol?: string; maxFlows?: number; maxDepth?: number },
+): ExecutionFlowResponse {
+  const { symGraph, fileGraph } = loadGraphs(db, dbMtimeMs);
+
+  const flows = traceExecutionFlows([input.file], input.symbol, symGraph, fileGraph, {
+    maxFlows: input.maxFlows,
+    maxDepth: input.maxDepth,
+  });
+
+  return formatResponse(input.file, input.symbol, flows);
 }
 
-/**
- * Trace a forward execution flow from a given symbol.
- *
- * Walks the symbol_edges forward (from_symbol_id -> to_symbol_id) via recursive
- * CTE, limited to 5 hops.
- *
- * F.1: UNION deduplicates at each recursion level, preventing exponential
- * intermediate row expansion on cyclic call graphs.
- */
-export function traceForwardFlow(db: DatabaseAdapter, entrySymbolId: number): FlowStep[] {
-  const stmt = db.prepare(`
-    WITH RECURSIVE flow(symbol_id, depth, edge_kind) AS (
-      SELECT to_symbol_id, 1, kind
-      FROM symbol_edges
-      WHERE from_symbol_id = ? AND kind IN ('calls', 'extends')
-      UNION
-      SELECT se.to_symbol_id, f.depth + 1, se.kind
-      FROM symbol_edges se
-      JOIN flow f ON se.from_symbol_id = f.symbol_id
-      WHERE f.depth < 5 AND se.kind IN ('calls', 'extends')
-    )
-    SELECT DISTINCT s.file_path, s.name, s.start_line, f.depth, f.edge_kind
-    FROM flow f
-    JOIN symbols s ON s.id = f.symbol_id
-    ORDER BY f.depth, s.file_path
-  `);
-
-  const rows = stmt.all<FlowRow>(entrySymbolId);
-  return rows.map((r) => ({
-    file: r.file_path,
-    symbol: r.name,
-    line: r.start_line,
-    depth: r.depth,
-    edgeKind: r.edge_kind,
-  }));
-}
-
-/**
- * Compute execution flows for a set of target files.
- *
- * Finds entry points among symbols in the target files, then traces forward
- * flows from each. Returns at most `maxFlows` flows.
- */
-export function computeExecutionFlows(db: DatabaseAdapter, targetFiles: string[], maxFlows = 3): ExecutionFlow[] {
-  const targetSet = new Set(targetFiles);
-  const entryPoints = findEntryPoints(db);
-
-  // Filter to entry points in the target files
-  const relevantEntries = entryPoints.filter((ep) => targetSet.has(ep.file_path));
-  const flows: ExecutionFlow[] = [];
-
-  for (const ep of relevantEntries) {
-    if (flows.length >= maxFlows) break;
-
-    const steps = traceForwardFlow(db, ep.id);
-    if (steps.length === 0) continue;
-
-    // Only include flows that reach another target file
-    const reachesOtherTarget = steps.some((s) => targetSet.has(s.file) && s.file !== ep.file_path);
-    if (!reachesOtherTarget && targetFiles.length > 1) continue;
-
-    flows.push({
+function formatResponse(file: string, symbol: string | undefined, flows: ExecutionFlowTrace[]): ExecutionFlowResponse {
+  return {
+    file,
+    symbol,
+    flowCount: flows.length,
+    flows: flows.map((f) => ({
+      summary: f.summary,
+      confidence: f.confidence,
       entryPoint: {
-        file: ep.file_path,
-        symbol: ep.name,
-        line: ep.start_line,
+        file: f.entryPoint.filePath,
+        symbol: f.entryPoint.name,
+        kind: f.entryPoint.kind,
       },
-      steps,
-    });
-  }
-
-  return flows;
+      terminal: f.terminal ? { file: f.terminal.filePath, symbol: f.terminal.name } : null,
+      communityPath: f.communityTransitions,
+      dominatorWaypoints: f.nodes.filter((n) => n.isDominator).map((n) => ({ file: n.file, symbol: n.name })),
+      steps: f.nodes.map((n, i) => ({
+        file: n.file,
+        symbol: n.name,
+        line: n.line,
+        edgeKind: i === 0 ? "entry" : "calls", // TODO: preserve edge kinds from path
+        community: n.communityLabel,
+        isDominator: n.isDominator,
+      })),
+    })),
+  };
 }
