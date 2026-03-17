@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs/promises";
@@ -10,6 +10,8 @@ import {
   buildFileCallIndex,
 } from "../core/graph/build-call-graph";
 import { makeImportGraph } from "./helpers/factories";
+import { openGraphStore } from "../storage/loader";
+import type { GraphStore } from "../storage/graph-store";
 
 const FIXTURE_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), "fixtures/call-graph");
 
@@ -86,13 +88,17 @@ describe("buildFileCallIndex", () => {
 
 describe("buildCallGraph - extraction", () => {
   const projectRoot = path.join(FIXTURE_DIR, "..", "..", "..", "..");
+  let tmpDir: string;
+  let store: GraphStore;
 
   beforeEach(async () => {
-    // Clean up the SQLite DB before each test to ensure fresh state
-    const dbPath = path.join(projectRoot, ".clarte/graph.db");
-    await fs.rm(dbPath, { force: true });
-    await fs.rm(dbPath + "-wal", { force: true });
-    await fs.rm(dbPath + "-shm", { force: true });
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-cg-"));
+    store = await openGraphStore(tmpDir);
+  });
+
+  afterEach(async () => {
+    store.close();
+    await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
   beforeAll(async () => {
@@ -104,7 +110,7 @@ describe("buildCallGraph - extraction", () => {
     const graph = makeCallGraphImportGraph();
     const files = ["src/__tests__/fixtures/call-graph/simple.ts"];
 
-    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript", store);
 
     // Should find calls to doThing (imported from helper)
     const doThingCalls = callGraph.sites.filter((s) => s.callee === "doThing");
@@ -117,7 +123,7 @@ describe("buildCallGraph - extraction", () => {
     const graph = makeImportGraph([], ["src/__tests__/fixtures/call-graph/simple.ts"]);
     const files = ["src/__tests__/fixtures/call-graph/simple.ts"];
 
-    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript", store);
 
     // No calls to console, Object, Array, etc.
     const builtinCalls = callGraph.sites.filter((s) => ["console", "Object", "Array", "Math"].includes(s.callee));
@@ -129,7 +135,7 @@ describe("buildCallGraph - extraction", () => {
     const graph = makeImportGraph([], ["src/__tests__/fixtures/call-graph/simple.ts"]);
     const files = ["src/__tests__/fixtures/call-graph/simple.ts"];
 
-    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript", store);
 
     // All sites should be empty since no imports to resolve against
     expect(callGraph.sites).toHaveLength(0);
@@ -139,7 +145,7 @@ describe("buildCallGraph - extraction", () => {
     const graph = makeCallGraphImportGraph();
     const files = ["src/__tests__/fixtures/call-graph/simple.ts"];
 
-    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript", store);
 
     const fooCall = callGraph.sites.find((s) => s.callerFn === "foo" && s.callee === "doThing");
     expect(fooCall).toBeDefined();
@@ -196,12 +202,17 @@ describe("persistCallGraph / loadCallGraph - round-trip", () => {
 
 describe("buildCallGraph - extraction (new fixtures)", () => {
   const projectRoot = path.join(FIXTURE_DIR, "..", "..", "..", "..");
+  let tmpDir: string;
+  let store: GraphStore;
 
   beforeEach(async () => {
-    const dbPath = path.join(projectRoot, ".clarte/graph.db");
-    await fs.rm(dbPath, { force: true });
-    await fs.rm(dbPath + "-wal", { force: true });
-    await fs.rm(dbPath + "-shm", { force: true });
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-cg-"));
+    store = await openGraphStore(tmpDir);
+  });
+
+  afterEach(async () => {
+    store.close();
+    await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
   it("arrow.ts: arrowFn calling doThing resolves to helper.ts", async () => {
@@ -219,7 +230,7 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
     );
     const files = ["src/__tests__/fixtures/call-graph/arrow.ts"];
 
-    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript", store);
 
     const arrowFnSite = callGraph.sites.find((s) => s.callerFn === "arrowFn" && s.callee === "doThing");
     expect(arrowFnSite).toBeDefined();
@@ -242,7 +253,7 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
     );
     const files = ["src/__tests__/fixtures/call-graph/method.ts"];
 
-    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript", store);
 
     const constructorSite = callGraph.sites.find((s) => s.callee === "Service");
     expect(constructorSite).toBeDefined();
@@ -266,7 +277,7 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
     );
     const files = ["src/__tests__/fixtures/call-graph/chained.ts"];
 
-    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript", store);
 
     const doThingSite = callGraph.sites.find((s) => s.callee === "doThing");
     expect(doThingSite).toBeDefined();
@@ -291,7 +302,7 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
     );
     const files = ["src/__tests__/fixtures/call-graph/namespace.ts"];
 
-    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript", store);
 
     const site = callGraph.sites.find((s) => s.callee === "doThing" && s.callerFn === "useNamespace");
     expect(site).toBeDefined();
@@ -313,7 +324,7 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
     );
     const files = ["src/__tests__/fixtures/call-graph/barrel-calls.ts"];
 
-    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript");
+    const callGraph = await buildCallGraph(projectRoot, graph, files, "typescript", store);
 
     const site = callGraph.sites.find((s) => s.callee === "doThing" && s.callerFn === "callThroughBarrel");
     expect(site).toBeDefined();
@@ -324,23 +335,28 @@ describe("buildCallGraph - extraction (new fixtures)", () => {
 
 describe("buildCallGraph - incremental invalidation", () => {
   const projectRoot = path.join(FIXTURE_DIR, "..", "..", "..", "..");
+  let tmpDir: string;
+  let store: GraphStore;
 
   beforeEach(async () => {
-    const dbPath = path.join(projectRoot, ".clarte/graph.db");
-    await fs.rm(dbPath, { force: true });
-    await fs.rm(dbPath + "-wal", { force: true });
-    await fs.rm(dbPath + "-shm", { force: true });
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clarte-cg-"));
+    store = await openGraphStore(tmpDir);
+  });
+
+  afterEach(async () => {
+    store.close();
+    await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
   it("reuses previous results for unchanged files", async () => {
     const graph = makeCallGraphImportGraph();
     const files = ["src/__tests__/fixtures/call-graph/simple.ts"];
 
-    const first = await buildCallGraph(projectRoot, graph, files, "typescript");
+    const first = await buildCallGraph(projectRoot, graph, files, "typescript", store);
     expect(first.sites.length).toBeGreaterThan(0);
 
     // Run again with same content - should reuse via hash
-    const second = await buildCallGraph(projectRoot, graph, files, "typescript");
+    const second = await buildCallGraph(projectRoot, graph, files, "typescript", store);
     expect(second.sites).toEqual(first.sites);
   });
 });

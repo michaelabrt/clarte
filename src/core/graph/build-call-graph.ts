@@ -155,10 +155,11 @@ export async function buildCallGraph(
   graph: ImportGraph,
   files: string[],
   language: Language,
+  store?: GraphStore,
 ): Promise<PersistedCallGraph> {
   await initForLanguage(language);
 
-  const previous = await loadCallGraph(rootDir);
+  const previous = await loadCallGraph(rootDir, store);
 
   // Group previous sites by caller file for fast lookup
   const prevSitesByFile = new Map<string, CallSite[]>();
