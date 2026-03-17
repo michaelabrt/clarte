@@ -33,6 +33,14 @@ import { detectPythonDescriptorEdges } from "../parsers/ghost-python-descriptors
 import { buildNeighborhoodsFromResolvedEdges, buildFileNeighborhoods } from "./constraint-resolution";
 import { computeSymbolBlame } from "../git/blame";
 import { computeFileEmbeddings } from "./semantic-lsa";
+import { parseGitLog } from "../git/analysis";
+import { trainFusionWeights } from "./logistic-fusion";
+import {
+  initializeEdgePriors,
+  updateEdgePriorsFromCommits,
+  computeExpectedWeights,
+  type EdgePrior,
+} from "./bayesian-edges";
 
 /**
  * Persist the analysis graph to .clarte/graph.db.
@@ -320,6 +328,68 @@ async function persistGraphToStore(
   }
 
   store.refreshBm25fStats();
+
+  // Phase 8a: Logistic fusion weight training
+  // Parse recent commits and train repo-specific lambda weights from
+  // co-change history with hard negative mining.
+  try {
+    const commits = parseGitLog(rootDir, { days: 90 });
+    const fileGraph = store.loadFileGraph();
+
+    // Build change coupling lookup for training
+    const couplingRows = store.loadChangeCoupling();
+    const couplingMap = new Map<string, Map<string, number>>();
+    for (const row of couplingRows) {
+      let mapA = couplingMap.get(row.file_a);
+      if (!mapA) {
+        mapA = new Map();
+        couplingMap.set(row.file_a, mapA);
+      }
+      mapA.set(row.file_b, row.confidence);
+
+      let mapB = couplingMap.get(row.file_b);
+      if (!mapB) {
+        mapB = new Map();
+        couplingMap.set(row.file_b, mapB);
+      }
+      mapB.set(row.file_a, row.confidence);
+    }
+
+    const weights = trainFusionWeights(commits, fileGraph, couplingMap);
+    if (weights) {
+      store.setMeta("fusion_weights", JSON.stringify(weights));
+    }
+
+    // Phase 8b: Bayesian EWMA edge priors
+    // Initialize from structural graph, then process commit history via EWMA.
+    const priors = initializeEdgePriors(fileGraph);
+    const priorMap = new Map<string, EdgePrior>();
+    for (const p of priors) priorMap.set(`${p.fromPath}||${p.toPath}`, p);
+
+    if (commits.length > 0) {
+      // Process oldest-first for correct EWMA accumulation
+      const chronological = [...commits].reverse();
+      updateEdgePriorsFromCommits(priorMap, chronological, fileGraph);
+    }
+
+    const updatedPriors = [...priorMap.values()];
+    if (updatedPriors.length > 0) {
+      store.upsertEdgePriors(
+        updatedPriors.map((p) => ({
+          from_path: p.fromPath,
+          to_path: p.toPath,
+          alpha: p.alpha,
+          beta: p.beta,
+        })),
+      );
+
+      // Store computed expected weights for quick runtime lookup
+      const expectedWeights = computeExpectedWeights(updatedPriors);
+      store.setMeta("edge_prior_weights", JSON.stringify(Object.fromEntries(expectedWeights)));
+    }
+  } catch {
+    // Phase 8 is non-critical; don't block the pipeline
+  }
 }
 
 /**

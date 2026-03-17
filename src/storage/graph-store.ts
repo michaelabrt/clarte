@@ -10,6 +10,7 @@ import type {
   CallSiteRecord,
   ChangeCouplingRecord,
   CommunityRecord,
+  EdgePriorRecord,
   FileEdgeRecord,
   FileRecord,
   InMemoryEdge,
@@ -66,6 +67,13 @@ interface KvCacheRow {
   key: string;
   value: string;
   expires_at: number | null;
+}
+
+interface EdgePriorRow {
+  from_path: string;
+  to_path: string;
+  alpha: number;
+  beta: number;
 }
 
 interface HashRow {
@@ -191,6 +199,11 @@ export class GraphStore {
   private readonly stmtUpsertChangeCoupling: StatementAdapter;
   private readonly stmtSetMeta: StatementAdapter;
   private readonly stmtFtsInsert: StatementAdapter;
+
+  // Edge prior statements
+  private readonly stmtLoadEdgePriors: StatementAdapter;
+  private readonly stmtUpsertEdgePrior: StatementAdapter;
+  private readonly stmtDeleteAllEdgePriors: StatementAdapter;
 
   constructor(db: DatabaseAdapter) {
     this.db = db;
@@ -382,6 +395,20 @@ export class GraphStore {
     this.stmtFtsInsert = db.prepare(`
       INSERT INTO fts_symbols(rowid, file_path, symbol_name, body_tokens, import_names)
       VALUES (?, ?, ?, ?, ?)
+    `);
+
+    // ── Edge prior statements ────────────────────────────────────────────────
+    this.stmtLoadEdgePriors = db.prepare(`
+      SELECT from_path, to_path, alpha, beta FROM edge_priors
+    `);
+
+    this.stmtUpsertEdgePrior = db.prepare(`
+      INSERT OR REPLACE INTO edge_priors (from_path, to_path, alpha, beta)
+      VALUES (?, ?, ?, ?)
+    `);
+
+    this.stmtDeleteAllEdgePriors = db.prepare(`
+      DELETE FROM edge_priors
     `);
   }
 
@@ -893,6 +920,28 @@ export class GraphStore {
           c.conf_ba ?? null,
           c.last_cochange_days ?? null,
         );
+      }
+    });
+    run();
+  }
+
+  // ── Edge prior interface ────────────────────────────────────────────────────
+
+  /**
+   * Load all Bayesian edge priors.
+   */
+  loadEdgePriors(): EdgePriorRow[] {
+    return this.stmtLoadEdgePriors.all<EdgePriorRow>();
+  }
+
+  /**
+   * Replace all edge priors in a single transaction.
+   */
+  upsertEdgePriors(priors: EdgePriorRecord[]): void {
+    const run = this.db.transaction(() => {
+      this.stmtDeleteAllEdgePriors.run();
+      for (const p of priors) {
+        this.stmtUpsertEdgePrior.run(p.from_path, p.to_path, p.alpha, p.beta);
       }
     });
     run();

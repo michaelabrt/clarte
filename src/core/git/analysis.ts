@@ -118,7 +118,7 @@ export type TimeWindow = { days: number } | { ref: string };
  * - { days: N } uses --since="N days ago" (default: 90)
  * - { ref: "main" } uses ref..HEAD for branch-specific analysis
  */
-function parseGitLog(rootDir: string, window: TimeWindow = { days: 90 }): ParsedCommit[] {
+export function parseGitLog(rootDir: string, window: TimeWindow = { days: 90 }): ParsedCommit[] {
   const args = buildGitLogArgs(window);
   const output = gitExec(args, { cwd: rootDir, timeout: 15000, maxBuffer: 10 * 1024 * 1024 });
   return parseGitLogOutput(output);

@@ -33,6 +33,7 @@ import { propagateKatz } from "../core/graph/katz-centrality";
 import { expandSeedsWithLSA } from "../core/graph/semantic-lsa";
 import { applyPhase2Seeding, computeSubgraphBetweenness } from "./intent-phase2";
 import { fuseIntentScores, aggregateToFiles, selectPredictions, type FusionInput } from "./intent-fusion";
+import type { FusionWeights } from "../core/graph/logistic-fusion";
 import { generateTheoryOfImpact } from "./theory-of-impact";
 import { verifyPredictions } from "./intent-verification";
 import { evaluateSmartSilence } from "./smart-silence";
@@ -311,6 +312,7 @@ export function intentPredict(
   headCommit: string,
   _maxTargets?: number,
   lsaEmbeddings?: Map<string, Float64Array>,
+  trainedWeights?: FusionWeights,
 ): IntentPredictResult {
   const t0 = performance.now();
 
@@ -331,6 +333,7 @@ export function intentPredict(
       headCommit,
       t0,
       lsaEmbeddings,
+      trainedWeights,
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -349,6 +352,7 @@ function runPipeline(
   headCommit: string,
   t0: number,
   lsaEmbeddings?: Map<string, Float64Array>,
+  trainedWeights?: FusionWeights,
 ): IntentPredictResult {
   const timing: PredictionTrace["timing_ms"] = {
     total: 0,
@@ -467,7 +471,7 @@ function runPipeline(
   }
 
   const seedFileSet = new Set(seedFiles);
-  const symbolScores = fuseIntentScores(fusionInputs, changeCoupling, seedFileSet, staleDiscount);
+  const symbolScores = fuseIntentScores(fusionInputs, changeCoupling, seedFileSet, staleDiscount, trainedWeights);
   timing.temporal_fusion = performance.now() - t5;
 
   // ── Stage 7-8: File Aggregation + Dynamic Count ───────────────────────

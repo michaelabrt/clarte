@@ -89,6 +89,13 @@ export interface ChangeCouplingRecord {
   last_cochange_days?: number | null;
 }
 
+export interface EdgePriorRecord {
+  from_path: string;
+  to_path: string;
+  alpha: number;
+  beta: number;
+}
+
 // ── In-memory graph types (what GraphStore.loadFileGraph() returns) ───────────
 
 export interface InMemoryFileNode {
