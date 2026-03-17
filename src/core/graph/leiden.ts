@@ -79,7 +79,11 @@ export function computeCohesion(communityNodes: string[], adj: Map<string, Set<s
  * Partition-agnostic: only cares about which pairs of nodes share a cluster.
  * Returns value in [-1, 1]; 1 = identical clusterings.
  */
-export function computeARI(files: string[], labelingA: Map<string, number>, getLabelB: (file: string) => number): number {
+export function computeARI(
+  files: string[],
+  labelingA: Map<string, number>,
+  getLabelB: (file: string) => number,
+): number {
   const n = files.length;
   if (n < 2) return 1;
 

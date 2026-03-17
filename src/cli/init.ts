@@ -3,12 +3,7 @@ import fs from "node:fs/promises";
 import * as p from "@clack/prompts";
 import { theme as t, unpatchPicocolors, resetTerminalColors } from "../core/theme";
 import { errorMessage, fileExists, formatBytes, NOOP_PROGRESS, writeJsonStdout } from "../core/utils";
-import {
-  detectContext,
-  detectIDEs,
-  detectProjectDescription,
-  enrichFrameworksWithUsage,
-} from "../core/detect/detect";
+import { detectContext, detectIDEs, detectProjectDescription, enrichFrameworksWithUsage } from "../core/detect/detect";
 import { runPrompts } from "../cli/prompts";
 import { generateSnapshot } from "../core/snapshot/snapshot";
 import { generateFiles } from "../core/generate";

@@ -32,12 +32,7 @@ export class HybridSearchProvider {
    * @param limit           Max results from the semantic branch
    * @param candidatePaths  Optional BM25F candidate pool for ANN pre-filtering (RFC §3.3)
    */
-  async search(
-    query: string,
-    bm25fFiles: string[],
-    limit = 50,
-    candidatePaths?: Set<string>,
-  ): Promise<RankedResult[]> {
+  async search(query: string, bm25fFiles: string[], limit = 50, candidatePaths?: Set<string>): Promise<RankedResult[]> {
     const semanticFiles = await this.semanticSearch(query, limit, candidatePaths);
 
     if (semanticFiles.length === 0) {
@@ -47,11 +42,7 @@ export class HybridSearchProvider {
     return rrfFusion(bm25fFiles, semanticFiles);
   }
 
-  private async semanticSearch(
-    query: string,
-    limit: number,
-    candidatePaths?: Set<string>,
-  ): Promise<string[]> {
+  private async semanticSearch(query: string, limit: number, candidatePaths?: Set<string>): Promise<string[]> {
     if (!this.modelPromise) {
       this.modelPromise = loadEmbeddingModel();
     }

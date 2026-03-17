@@ -102,9 +102,7 @@ export class VectorStore {
     }
 
     // ANN pre-filter: restrict scan to BM25F candidate paths when provided
-    const searchSet = candidatePaths
-      ? this.cache.filter((e) => candidatePaths.has(e.filePath))
-      : this.cache;
+    const searchSet = candidatePaths ? this.cache.filter((e) => candidatePaths.has(e.filePath)) : this.cache;
 
     const fileScores = new Map<string, number>();
     for (const entry of searchSet) {

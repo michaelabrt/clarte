@@ -2,11 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import {
-  analyzeMonorepoGraph,
-  annotateCrossPackageEdges,
-  computePackageCentrality,
-} from "../core/analysis/monorepo";
+import { analyzeMonorepoGraph, annotateCrossPackageEdges, computePackageCentrality } from "../core/analysis/monorepo";
 import type { ImportEdge, MonorepoInfo } from "../core/types";
 import { makeImportGraph } from "./helpers/factories";
 

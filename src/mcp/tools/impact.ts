@@ -70,10 +70,7 @@ interface FileExistsRow {
  * Supports max_results cap and summary mode to prevent context window overflow.
  * Every entry includes a rationale explaining why it was included.
  */
-export function executeImpact(
-  db: DatabaseAdapter,
-  input: ImpactInput,
-): ImpactOutput | ImpactSummaryOutput {
+export function executeImpact(db: DatabaseAdapter, input: ImpactInput): ImpactOutput | ImpactSummaryOutput {
   const { file, maxResults, summary } = input;
 
   const fileCheck = db.prepare("SELECT path FROM files WHERE path = ?");
@@ -139,7 +136,10 @@ export function executeImpact(
     return {
       file,
       will_break: { count: allWillBreak.length, files: allWillBreak.slice(0, cap) },
-      likely_affected: { count: allLikelyAffected.length, files: allLikelyAffected.slice(0, cap).map((r) => r.from_path) },
+      likely_affected: {
+        count: allLikelyAffected.length,
+        files: allLikelyAffected.slice(0, cap).map((r) => r.from_path),
+      },
       test: { count: testMap.size, files: [...testMap.keys()].sort().slice(0, cap) },
     };
   }
@@ -172,8 +172,7 @@ export function executeImpact(
   // [Neubig] Apply max_results cap
   const cap = maxResults ?? Infinity;
   const truncated =
-    cap < Infinity &&
-    (willBreakEntries.length > cap || likelyEntries.length > cap || testEntries.length > cap)
+    cap < Infinity && (willBreakEntries.length > cap || likelyEntries.length > cap || testEntries.length > cap)
       ? {
           will_break: willBreakEntries.length,
           likely_affected: likelyEntries.length,
