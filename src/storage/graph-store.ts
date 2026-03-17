@@ -27,38 +27,6 @@ import type {
 
 // ── Row types returned by SQL queries ─────────────────────────────────────────
 
-interface FileRow {
-  path: string;
-  hash: string;
-  role: string | null;
-  authority: number | null;
-  hub_score: number | null;
-  betweenness: number | null;
-  instability: number | null;
-  community_id: number | null;
-  layer: string | null;
-  is_barrel: number;
-  is_dead: number;
-  is_chokepoint: number;
-  separates_components: number;
-  is_cross_cutting: number;
-  layer_spread: number;
-  has_tests: number;
-  layers: string | null;
-  test_files: string | null;
-  intra_file_calls: string | null;
-}
-
-interface EdgeRow {
-  from_path: string;
-  to_path: string;
-  imported_names: string | null;
-  is_type_only: number;
-  is_dynamic: number;
-  is_barrel_routed: number;
-  cross_package: number;
-}
-
 interface SymbolRow {
   id: number;
   file_path: string;
@@ -123,6 +91,61 @@ interface ChangeCouplingRow {
   conf_ab: number | null;
   conf_ba: number | null;
 }
+
+// ── Positional column indices for raw queries ───────────────────────────────────
+// Must match the SELECT column order in the corresponding prepared statements.
+
+const FULL_FILE_COL = {
+  PATH: 0,
+  HASH: 1,
+  ROLE: 2,
+  AUTHORITY: 3,
+  HUB_SCORE: 4,
+  BETWEENNESS: 5,
+  INSTABILITY: 6,
+  COMMUNITY_ID: 7,
+  LAYER: 8,
+  IS_BARREL: 9,
+  IS_DEAD: 10,
+  IS_CHOKEPOINT: 11,
+  SEPARATES_COMPONENTS: 12,
+  IS_CROSS_CUTTING: 13,
+  LAYER_SPREAD: 14,
+  HAS_TESTS: 15,
+  LAYERS: 16,
+  TEST_FILES: 17,
+  INTRA_FILE_CALLS: 18,
+} as const;
+
+const FULL_EDGE_COL = {
+  FROM_PATH: 0,
+  TO_PATH: 1,
+  IMPORTED_NAMES: 2,
+  IS_TYPE_ONLY: 3,
+  IS_DYNAMIC: 4,
+  IS_BARREL_ROUTED: 5,
+  CROSS_PACKAGE: 6,
+} as const;
+
+const LEAN_FILE_COL = {
+  PATH: 0,
+  HASH: 1,
+  AUTHORITY: 2,
+  HUB_SCORE: 3,
+  BETWEENNESS: 4,
+  IS_BARREL: 5,
+  IS_DEAD: 6,
+  IS_CHOKEPOINT: 7,
+  COMMUNITY_ID: 8,
+} as const;
+
+const LEAN_EDGE_COL = {
+  FROM_PATH: 0,
+  TO_PATH: 1,
+  IS_TYPE_ONLY: 2,
+  IS_DYNAMIC: 3,
+  IS_BARREL_ROUTED: 4,
+} as const;
 
 // ── GraphStore class ───────────────────────────────────────────────────────────
 
@@ -341,33 +364,75 @@ export class GraphStore {
    * Target: <5ms for 10K files.
    */
   loadFileGraph(): InMemoryFileGraph {
-    const fileRows = this.stmtSelectFiles.all<FileRow>();
-    const edgeRows = this.stmtSelectEdges.all<EdgeRow>();
+    const t0 = process.env.CLARTE_DEBUG ? performance.now() : 0;
 
+    const fileRows = this.stmtSelectFiles.allRaw();
+    const edgeRows = this.stmtSelectEdges.allRaw();
+
+    const F = FULL_FILE_COL;
     const nodes = new Map<string, InMemoryFileNode>();
-    for (const row of fileRows) {
-      nodes.set(row.path, fileRowToNode(row));
+    for (const r of fileRows) {
+      const path = r[F.PATH] as string;
+      nodes.set(path, {
+        path,
+        hash: r[F.HASH] as string,
+        role: r[F.ROLE] as string | null,
+        authority: (r[F.AUTHORITY] as number | null) ?? 0,
+        hubScore: (r[F.HUB_SCORE] as number | null) ?? 0,
+        betweenness: (r[F.BETWEENNESS] as number | null) ?? 0,
+        instability: r[F.INSTABILITY] as number | null,
+        communityId: r[F.COMMUNITY_ID] as number | null,
+        layer: r[F.LAYER] as string | null,
+        isBarrel: r[F.IS_BARREL] === 1,
+        isDead: r[F.IS_DEAD] === 1,
+        isChokepoint: r[F.IS_CHOKEPOINT] === 1,
+        separatesComponents: (r[F.SEPARATES_COMPONENTS] as number) ?? 0,
+        isCrossCutting: r[F.IS_CROSS_CUTTING] === 1,
+        layerSpread: (r[F.LAYER_SPREAD] as number) ?? 0,
+        hasTests: r[F.HAS_TESTS] === 1,
+        layers: parseJsonArray(r[F.LAYERS] as string | null),
+        testFiles: parseJsonArray(r[F.TEST_FILES] as string | null),
+        intraFileCalls: parseIntraFileCalls(r[F.INTRA_FILE_CALLS] as string | null),
+      });
     }
 
+    const E = FULL_EDGE_COL;
     const forward = new Map<string, InMemoryEdge[]>();
     const reverse = new Map<string, InMemoryEdge[]>();
 
-    for (const row of edgeRows) {
-      const edge = edgeRowToEdge(row);
+    for (const r of edgeRows) {
+      const fromPath = r[E.FROM_PATH] as string;
+      const toPath = r[E.TO_PATH] as string;
+      const edge: InMemoryEdge = {
+        fromPath,
+        toPath,
+        importedNames: parseJsonArray(r[E.IMPORTED_NAMES] as string | null),
+        isTypeOnly: r[E.IS_TYPE_ONLY] === 1,
+        isDynamic: r[E.IS_DYNAMIC] === 1,
+        isBarrelRouted: r[E.IS_BARREL_ROUTED] === 1,
+        crossPackage: r[E.CROSS_PACKAGE] === 1,
+      };
 
-      let fwd = forward.get(row.from_path);
+      let fwd = forward.get(fromPath);
       if (!fwd) {
         fwd = [];
-        forward.set(row.from_path, fwd);
+        forward.set(fromPath, fwd);
       }
       fwd.push(edge);
 
-      let rev = reverse.get(row.to_path);
+      let rev = reverse.get(toPath);
       if (!rev) {
         rev = [];
-        reverse.set(row.to_path, rev);
+        reverse.set(toPath, rev);
       }
       rev.push(edge);
+    }
+
+    if (process.env.CLARTE_DEBUG) {
+      const elapsed = performance.now() - t0;
+      process.stderr.write(
+        `[clarte:perf] loadFileGraph: ${elapsed.toFixed(2)}ms (${nodes.size} files, ${edgeRows.length} edges)\n`,
+      );
     }
 
     return { nodes, forward, reverse };
@@ -932,66 +997,7 @@ export class GraphStore {
   }
 }
 
-// ── Positional column indices for lean raw queries ──────────────────────────────
-// Must match the SELECT column order in stmtSelectFilesLean / stmtSelectEdgesLean.
-
-const LEAN_FILE_COL = {
-  PATH: 0,
-  HASH: 1,
-  AUTHORITY: 2,
-  HUB_SCORE: 3,
-  BETWEENNESS: 4,
-  IS_BARREL: 5,
-  IS_DEAD: 6,
-  IS_CHOKEPOINT: 7,
-  COMMUNITY_ID: 8,
-} as const;
-
-const LEAN_EDGE_COL = {
-  FROM_PATH: 0,
-  TO_PATH: 1,
-  IS_TYPE_ONLY: 2,
-  IS_DYNAMIC: 3,
-  IS_BARREL_ROUTED: 4,
-} as const;
-
-// ── Row-to-node converters ─────────────────────────────────────────────────────
-
-function fileRowToNode(row: FileRow): InMemoryFileNode {
-  return {
-    path: row.path,
-    hash: row.hash,
-    role: row.role,
-    authority: row.authority ?? 0,
-    hubScore: row.hub_score ?? 0,
-    betweenness: row.betweenness ?? 0,
-    instability: row.instability,
-    communityId: row.community_id,
-    layer: row.layer,
-    isBarrel: row.is_barrel === 1,
-    isDead: row.is_dead === 1,
-    isChokepoint: row.is_chokepoint === 1,
-    separatesComponents: row.separates_components ?? 0,
-    isCrossCutting: row.is_cross_cutting === 1,
-    layerSpread: row.layer_spread ?? 0,
-    hasTests: row.has_tests === 1,
-    layers: parseJsonArray(row.layers),
-    testFiles: parseJsonArray(row.test_files),
-    intraFileCalls: parseIntraFileCalls(row.intra_file_calls),
-  };
-}
-
-function edgeRowToEdge(row: EdgeRow): InMemoryEdge {
-  return {
-    fromPath: row.from_path,
-    toPath: row.to_path,
-    importedNames: parseJsonArray(row.imported_names),
-    isTypeOnly: row.is_type_only === 1,
-    isDynamic: row.is_dynamic === 1,
-    isBarrelRouted: row.is_barrel_routed === 1,
-    crossPackage: row.cross_package === 1,
-  };
-}
+// ── JSON helpers ────────────────────────────────────────────────────────────────
 
 function parseJsonArray(value: string | null | undefined): string[] {
   if (!value) return [];
