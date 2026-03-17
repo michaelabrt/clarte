@@ -513,10 +513,11 @@ describe("applyPhase2Seeding", () => {
     if (result.phase2Triggered && result.chokepoints.includes(3)) {
       // Node 4 is 1 hop from chokepoint 3 -> should get a score
       expect(result.mergedScores.get(4)).toBeGreaterThan(0);
-      // Node 6 is 3 hops from chokepoint 3 -> should NOT be reached by phase2
-      // (phase2 max hops = 1)
-      const phase2OnlyScore6 = result.mergedScores.get(6) ?? 0;
-      expect(phase2OnlyScore6).toBe(0);
+      // Node 6 is 3 hops from chokepoint 3 -> Katz gives exponentially
+      // decayed score; much less than node 4 (1 hop)
+      const score4 = result.mergedScores.get(4) ?? 0;
+      const score6 = result.mergedScores.get(6) ?? 0;
+      expect(score4).toBeGreaterThan(score6);
     }
   });
 });

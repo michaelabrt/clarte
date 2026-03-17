@@ -1,5 +1,5 @@
 /**
- * 4-tier symbol resolution engine (RFC §2.4-2.7).
+ * 4-tier symbol resolution engine.
  *
  * Tier 1: Same-file symbol (local scope wins) then direct import match.
  * Tier 2: Member expression on imported binding (obj.method() where obj is imported).
@@ -9,8 +9,10 @@
  * Includes LRU cache for symbol ID lookups and language-specific heritage resolution.
  */
 
+import type { InMemorySymbolGraph } from "../../storage/types";
 import type { ConstructorBinding, FileGraphResult, RawCallSite, ResolvedSymbolEdge } from "./symbol-types";
 import { RESOLUTION_CONFIDENCE, barrelAdjustedConfidence } from "./symbol-types";
+import { resolveByProximity } from "./constraint-resolution";
 
 // ── LRU cache for symbol ID lookups ───────────────────────────────────────────
 
@@ -310,8 +312,16 @@ export interface ResolutionContext {
   symbolIndex: SymbolIndex;
   /** LRU cache for symbol ID lookups */
   cache: LRUCache<string, number | null>;
-  /** Type alias map for transparent resolution (RFC §2.15). Optional for backward compat. */
+  /** Type alias map for transparent resolution. Optional for backward compat. */
   aliasMap?: Map<string, { targetKey: string }>;
+  /** Phase 6: Pre-computed symbol neighborhoods for proximity disambiguation */
+  symbolNeighborhoods?: Map<number, Set<number>>;
+  /** Phase 6: Pre-computed file-level import neighborhoods (cold-start fallback) */
+  fileNeighborhoods?: Map<string, Set<string>>;
+  /** Phase 6: File -> Leiden community ID mapping */
+  fileCommunities?: Map<string, number>;
+  /** Phase 6: Full symbol graph for authority lookups */
+  symbolGraph?: InMemorySymbolGraph;
 }
 
 /**
@@ -449,7 +459,7 @@ function resolveTier2(
 // ── Tier 3: Constructor + method call ─────────────────────────────────────────
 
 /**
- * Build constructor bindings keyed by variable name (RFC §2.6).
+ * Build constructor bindings keyed by variable name.
  * Uses ConstructorAssignment records extracted from the AST, which carry the
  * actual variable name (e.g. "svc" from `const svc = new UserService()`).
  * Only assignments where the class is a known import are recorded.
@@ -471,7 +481,7 @@ function buildConstructorBindings(
       pattern: assignment.pattern ?? "new",
     };
 
-    // Scope key includes callerFn to prevent cross-function leakage (RFC §2.6, F9 fix)
+    // Scope key includes callerFn to prevent cross-function leakage (F9 fix)
     if (assignment.callerFn) {
       bindings.set(`${assignment.callerFn}::${assignment.variableName}`, ctorBinding);
     } else {
@@ -552,11 +562,7 @@ function resolveCallSite(
 
     const tier1 = resolveTier1(filePath, callSite.calleeName, callSite.callerFn, callSite.line, importMap, ctx);
     if (tier1) return tier1;
-
-    return null;
-  }
-
-  if (!callSite.isMemberExpression) {
+  } else if (!callSite.isMemberExpression) {
     // Same-file first: local scope takes precedence over imports in JS/TS/Python
     const sameFileId = lookupSymbolId(filePath, callSite.calleeName, ctx.symbolIndex, ctx.cache);
     if (sameFileId !== null) {
@@ -572,17 +578,40 @@ function resolveCallSite(
     }
 
     // Tier 1: direct import match
-    return resolveTier1(filePath, callSite.calleeName, callSite.callerFn, callSite.line, importMap, ctx);
+    const tier1 = resolveTier1(filePath, callSite.calleeName, callSite.callerFn, callSite.line, importMap, ctx);
+    if (tier1) return tier1;
+  } else {
+    // Member expression: Tier 2, then Tier 3
+    const tier2 = resolveTier2(filePath, callSite, importMap, ctx);
+    if (tier2) return tier2;
+
+    const tier3 = resolveTier3(filePath, callSite, constructorBindings, ctx);
+    if (tier3) return tier3;
   }
 
-  // Member expression: Tier 2, then Tier 3
-  const tier2 = resolveTier2(filePath, callSite, importMap, ctx);
-  if (tier2) return tier2;
+  // Tier 5: Proximity disambiguation (slow path, Phase 6)
+  if (ctx.symbolNeighborhoods && ctx.fileNeighborhoods && ctx.fileCommunities && ctx.symbolGraph) {
+    const callerSymbolId = callSite.callerFn
+      ? lookupSymbolId(filePath, callSite.callerFn, ctx.symbolIndex, ctx.cache)
+      : null;
+    return resolveByProximity(
+      filePath,
+      callerSymbolId,
+      callSite.calleeName,
+      callSite.line,
+      callSite.callerFn,
+      ctx.symbolNeighborhoods,
+      ctx.fileNeighborhoods,
+      ctx.symbolIndex,
+      ctx.symbolGraph,
+      ctx.fileCommunities,
+    );
+  }
 
-  return resolveTier3(filePath, callSite, constructorBindings, ctx);
+  return null;
 }
 
-// ── Type alias resolution (RFC §2.15) ──────────────────────────────────────────
+// ── Type alias resolution ──────────────────────────────────────────────────────
 
 /**
  * Resolve a symbol through the alias map. If the symbol at filePath::name
@@ -646,7 +675,7 @@ function resolveHeritage(
   // Then check imports
   const binding = importMap.get(heritage.target);
   if (binding) {
-    // Resolve through aliases if the target is a type alias (RFC §2.15)
+    // Resolve through aliases if the target is a type alias
     const resolved = resolveViaAlias(binding.sourceFile, heritage.target, ctx);
     const targetId = lookupSymbolId(resolved.filePath, resolved.name, ctx.symbolIndex, ctx.cache);
     if (targetId !== null) {
@@ -732,7 +761,7 @@ function resolveTypeUsage(
     };
   }
 
-  // Then check imports, resolving through aliases (RFC §2.15)
+  // Then check imports, resolving through aliases
   const binding = importMap.get(usage.typeName);
   if (binding) {
     const resolved = resolveViaAlias(binding.sourceFile, usage.typeName, ctx);
