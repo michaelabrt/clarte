@@ -359,8 +359,8 @@ function loadGraphFromDb(db) {
   const changeCoupling = db.prepare("SELECT file_a, file_b, co_changes, confidence FROM change_coupling").all();
   const symbolRows = db.prepare("SELECT file_path, name, kind, start_line, authority, body_tokens FROM symbols").all();
 
-  const files: Record<string, unknown> = Object.create(null);
-  const reverseEdges: Record<string, string[]> = Object.create(null);
+  const files = Object.create(null);
+  const reverseEdges = Object.create(null);
   for (const row of fileRows) {
     const layers = row.layers ? JSON.parse(row.layers) : [];
     const testFiles = row.test_files ? JSON.parse(row.test_files) : [];
@@ -414,7 +414,7 @@ function loadGraphFromDb(db) {
     }
   }
 
-  const communityFiles: Record<string, string[]> = Object.create(null);
+  const communityFiles = Object.create(null);
   for (const row of fileRows) {
     if (row.community_id !== null) {
       if (!communityFiles[row.community_id]) communityFiles[row.community_id] = [];
