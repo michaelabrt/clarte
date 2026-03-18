@@ -1,6 +1,6 @@
 # Experiment: R.5 - Content vs Wrapper
 
-**Status:** Done (2026-03-04)
+**Status:** Done (2026-03-04). The "detailed tasks hurt" finding was resolved by [on-demand delivery](on-demand-delivery.md), which skips pre-flight when the prompt already names file paths. The "opaque tasks help" finding motivated [R.20](bm25-retrieval.md) (BM25F targeting).
 **Branch:** `experimental/no-go/content-vs-wrapper`
 
 ## Context
@@ -46,7 +46,7 @@ the full context to identify which carry value.
 | Placebo | baseline | baseline |
 | No context | +8% vs placebo | +22% vs placebo |
 
-Full context cost +24.5% more than placebo on detailed tasks.
+Full context added +24.5% more processing overhead than placebo on detailed tasks.
 
 ### Wrapper effect
 

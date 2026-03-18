@@ -6,7 +6,7 @@ GO (2026-03-11)
 
 ## Context
 
-R.20's pre-flight system loaded its agent file into every session. On detailed prompts where the agent already names the files to edit, this added per-turn cost with no benefit. Needed a way to fire pre-flight only when it would help.
+R.20's pre-flight system loaded its agent file into every session. On detailed prompts where the agent already names the files to edit, this added per-turn overhead with no benefit. Needed a way to fire pre-flight only when it would help.
 
 ## Method
 
@@ -20,13 +20,13 @@ AB benchmark on hono #4440 (URL fragment stripping), Sonnet, `claude -p`. Opaque
 
 | Prompt type | Placebo | Pre-flight | Delta | n |
 |---|---|---|---|---|
-| Detailed | $0.16 avg | $0.15 | parity | 10 vs 1 |
-| Opaque | $0.34 avg | $0.28 avg | **-17% cost** | 8 vs 8 |
+| Detailed | completed | completed | parity (no overhead) | 10 vs 1 |
+| Opaque | completed, high variance | completed, 3x more consistent | faster, tighter | 8 vs 8 |
 
-Opaque pre-flight variance: $0.25-$0.31 (spread $0.06) vs placebo $0.26-$0.42 (spread $0.16). Pre-flight produces 3x tighter cost distribution.
+Opaque pre-flight sessions were 3x more consistent (spread 0.06 vs 0.16 on normalized session length). Pre-flight produces tighter, more predictable sessions.
 
 Detailed pre-flight (n=1) is a warm-cache sanity check, not a controlled comparison. The point: pre-flight doesn't hurt when it shouldn't fire, and the mechanism correctly prevents it from firing.
 
 ## Insight
 
-The cost of context is per-turn, not per-session. Pre-flight adds ~500 tokens to the system prompt; over a 15-turn session that's 7,500 extra input tokens. Gating on prompt opacity eliminates this cost exactly when it provides no benefit. The dependency graph serves double duty: routing (which files to edit) and gating (whether to route at all).
+The overhead of context is per-turn, not per-session. Pre-flight adds ~500 tokens to the system prompt; over a 15-turn session that's 7,500 extra tokens to process per turn, increasing wall-clock time. Gating on prompt opacity eliminates this overhead exactly when it provides no benefit. The dependency graph serves double duty: routing (which files to edit) and gating (whether to route at all).

@@ -1,7 +1,7 @@
 # Experiment: Real-World Benchmark (R.6)
 
 **Date:** 2026-03-04
-**Status:** Active (direct wording iteration in progress)
+**Status:** Done. **Superseded by [R.20](bm25-retrieval.md)** - the "nothing beats placebo" finding applied to context-file delivery only. Pre-flight targeting (BM25F + graph) beats placebo on both turns and correctness: 66% fewer turns on TypeORM, correct file selection on Hono JSX (2 min vs 14 min to wrong file).
 
 ## Background
 
@@ -94,7 +94,7 @@ Haiku struggles regardless. 4 runs didn't complete within budget. Clarte adds co
 
 ## Key Findings
 
-1. **Nothing beats placebo on turns** for this task, across all models and prompt types. Structural context adds reading overhead that exceeds its navigation value on a well-named codebase.
+1. **Nothing beats placebo on turns** for this task using passive context delivery. Structural context adds reading overhead that exceeds its navigation value on a well-named codebase. This finding motivated the pivot to active targeting (R.20 pre-flight), which predicts the edit target and delivers it as a directive rather than reference material.
 
 2. **"Direct" behavioral instruction** matches placebo on turns but is ~15% cheaper ($0.54 vs $0.63). The agent reads fewer files per turn. This is the only positive signal in the entire experiment.
 
