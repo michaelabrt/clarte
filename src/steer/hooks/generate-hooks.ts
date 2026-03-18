@@ -1,4 +1,3 @@
-import { execSync } from "node:child_process";
 import { readdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -293,24 +292,24 @@ const agentDst = resolve(root, ".claude/agents/clarte-pre-flight.md");
 try { unlinkSync(tcPath); } catch (e) { _dbg("cleanup: " + e.message); }
 try { unlinkSync(agentDst); } catch (e) { _dbg("cleanup: " + e.message); }
 
+async function openSqlite(filepath) {
+  // 1. bun:sqlite (Bun built-in)
+  try { const m = await import("bun:sqlite"); return new m.Database(filepath, { readonly: true }); } catch {}
+  // 2. node:sqlite (Node 24+)
+  try { const m = await import("node:sqlite"); return new m.DatabaseSync(filepath, { readOnly: true }); } catch {}
+  // 3. better-sqlite3 (npm)
+  try { const { createRequire } = await import("node:module"); return createRequire(import.meta.url)("better-sqlite3")(filepath, { readonly: true }); } catch {}
+  return null;
+}
+
 const dbPath = resolve(root, ".clarte/graph.db");
 if (existsSync(dbPath)) {
   let graph;
   try {
-    // Load graph from SQLite. Try bun:sqlite first (Bun built-in), then better-sqlite3.
-    let db;
-    try {
-      const bsq = await import("bun:sqlite");
-      db = new bsq.Database(dbPath, { readonly: true });
-    } catch {
-      try {
-        const { createRequire } = await import("node:module");
-        const req = createRequire(import.meta.url);
-        const Bsq = req("better-sqlite3");
-        db = new Bsq(dbPath, { readonly: true });
-      } catch { _dbg("no SQLite binding available"); }
-    }
-    if (db) {
+    const db = await openSqlite(dbPath);
+    if (!db) {
+      process.stderr.write("[clarte] No SQLite binding found. This project requires Node 24+ or bun.\\n");
+    } else {
       graph = loadGraphFromDb(db);
       try { db.close(); } catch {}
     }
@@ -550,15 +549,6 @@ function upsertHookEntry(entries: MatchedHookGroup[], newEntry: MatchedHookGroup
   }
 }
 
-function detectHookRunner(): string {
-  try {
-    execSync("bun --version", { stdio: "ignore" });
-    return "bun";
-  } catch {
-    return "node";
-  }
-}
-
 /**
  * Configure Claude Code hook settings in .claude/settings.json.
  * Merges SessionStart and PreToolUse hooks without clobbering user-defined hooks.
@@ -580,16 +570,12 @@ export async function configureClaudeHooks(rootDir: string): Promise<void> {
     }
   }
 
-  // bun has built-in SQLite (bun:sqlite), needed by on-prompt.mjs for graph loading.
-  // node falls back to git-history-based target resolution (no SQLite binding).
-  const runner = detectHookRunner();
-
   // Insert fresh hooks
   for (const def of HOOK_DEFS) {
     const group = (settings.hooks[def.event] ??= []) as MatchedHookGroup[];
     const entry: MatchedHookGroup = {
       ...(def.matcher ? { matcher: def.matcher } : {}),
-      hooks: [{ type: "command", command: `${runner} ${HOOKS_DIR}/${def.file}` }],
+      hooks: [{ type: "command", command: `node ${HOOKS_DIR}/${def.file}` }],
     };
     upsertHookEntry(group, entry, def.file);
   }
