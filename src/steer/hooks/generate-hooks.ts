@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { readdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -549,6 +550,15 @@ function upsertHookEntry(entries: MatchedHookGroup[], newEntry: MatchedHookGroup
   }
 }
 
+function detectHookRunner(): string {
+  try {
+    execSync("bun --version", { stdio: "ignore" });
+    return "bun";
+  } catch {
+    return "node";
+  }
+}
+
 /**
  * Configure Claude Code hook settings in .claude/settings.json.
  * Merges SessionStart and PreToolUse hooks without clobbering user-defined hooks.
@@ -570,12 +580,16 @@ export async function configureClaudeHooks(rootDir: string): Promise<void> {
     }
   }
 
+  // bun has built-in SQLite (bun:sqlite), needed by on-prompt.mjs for graph loading.
+  // node falls back to git-history-based target resolution (no SQLite binding).
+  const runner = detectHookRunner();
+
   // Insert fresh hooks
   for (const def of HOOK_DEFS) {
     const group = (settings.hooks[def.event] ??= []) as MatchedHookGroup[];
     const entry: MatchedHookGroup = {
       ...(def.matcher ? { matcher: def.matcher } : {}),
-      hooks: [{ type: "command", command: `bun ${HOOKS_DIR}/${def.file}` }],
+      hooks: [{ type: "command", command: `${runner} ${HOOKS_DIR}/${def.file}` }],
     };
     upsertHookEntry(group, entry, def.file);
   }
