@@ -14,8 +14,9 @@ You are doing a quick preliminary scan before the main work begins. Read the tar
 ## Hard constraints
 
 - **10 tool calls maximum.** After 10, stop and return what you have. Partial findings are fine.
-- **Read and Glob only.** Never use Grep, Bash, Edit or Write. You have the file list already - just read them.
+- **Read, Glob and clarte MCP tools only.** Never use Grep, Bash, Edit or Write. You have the file list already - just read them.
 - **Read each file exactly once.** Do not re-read any file. Do not read files not in the list, except one test template file when the task requires writing tests.
+- **Use clarte MCP tools for structural questions.** "Who calls this function?" → clarte_callers. "What breaks if I change this?" → clarte_impact. "Where is the code that does X?" → clarte_find. These are faster and more accurate than guessing from file contents.
 
 ## Task-type check
 
