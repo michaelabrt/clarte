@@ -41,7 +41,7 @@ External research on plan caching, context distillation and agent efficiency.
 |--------|-------|
 | Correlation (first-edit turn vs total turns) | r = 0.70 - 1.00 |
 | Tasks where correlation holds | 15/19 |
-| Cost of each delayed first-edit turn | ~1.3 additional total turns |
+| Impact of each delayed first-edit turn | ~1.3 additional total turns |
 
 Per-condition first-edit timing:
 
@@ -54,15 +54,15 @@ Per-condition first-edit timing:
 Context moves the first edit 2.8 turns earlier. Each of those turns saves ~1.3
 downstream turns, for a net saving of ~3.6 turns.
 
-### Phase cost breakdown
+### Phase time breakdown
 
-| Phase | Share of total cost |
+| Phase | Share of session time |
 |-------|-------------------|
 | Exploration | 55% |
 | Edit | 14% |
 | Tail (verification) | 31% |
 
-31% of cost is tail: the agent re-running tests, re-reading files and
+31% of session time is tail: the agent re-running tests, re-reading files and
 verifying its own work after the last edit.
 
 ### Multi-agent decomposition

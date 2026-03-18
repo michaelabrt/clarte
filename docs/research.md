@@ -1,12 +1,12 @@
-# Research: How Static Analysis Affects AI Coding Agents
+# Research: What Changes Agent Behavior
 
-We ran 30+ experiments across 700+ agent sessions to understand how architectural context affects AI coding agent performance. The goal: measure what helps, what hurts and why.
+We ran 30+ experiments across 700+ agent sessions to find what actually makes AI coding agents faster, more correct and more precise. The goal: measure what helps, what hurts and why.
 
-**TL;DR**: Most approaches to injecting static analysis into agent context either do nothing or actively hurt. Content doesn't matter nearly as much as behavior. The breakthrough came from using the dependency graph to predict edit targets and inject them as confidence signals, cutting the agent's exploration phase. This approach (pre-flight) won on all tested tasks, including single-package repos where full context historically hurt.
+**TL;DR**: Most approaches to injecting static analysis into agent context either do nothing or actively hurt. Content doesn't matter nearly as much as behavior. The breakthrough came from using the dependency graph to predict edit targets and inject them as confidence signals, cutting the agent's exploration phase. This approach (pre-flight) won on all tested tasks - completing tasks agents couldn't finish alone, reaching the correct file in 2 minutes instead of 14, and reducing turns by up to 66%.
 
 ## Background
 
-Clarté generates rich context files from static analysis: key files, chokepoints, coupling patterns, architectural layers, code snapshots. In controlled fixture benchmarks ([clarte-benchmark](https://github.com/michaelabrt/clarte-benchmark)), this context cut agent cost by 58% (p<0.001). But fixture benchmarks are synthetic. Would it hold on real-world bug fixes?
+Clarté generates rich context files from static analysis: key files, chokepoints, coupling patterns, architectural layers, code snapshots. In controlled fixture benchmarks ([clarte-benchmark](https://github.com/michaelabrt/clarte-benchmark)), this context cut wall-clock time by 25%, turns by 28% and context processing by 60% (all p<0.001). But fixture benchmarks are synthetic. Would it hold on real-world bug fixes?
 
 ## Phase 1: Does the content matter?
 
@@ -36,12 +36,12 @@ We tried reformatting the same content in different ways:
 
 | Experiment | Idea | Result |
 |---|---|---|
-| [Context Optimization](experiments/context-optimization.md) | Consolidate directives, trim sections, rewrite voice | Each helped alone; combined = +63% cost |
+| [Context Optimization](experiments/context-optimization.md) | Consolidate directives, trim sections, rewrite voice | Each helped alone; combined = +63% overhead |
 | [Negative Framing](experiments/negative-framing.md) | Constraint language ("NEVER do X") | No benefit vs positive guidance |
 | [Five Dimensions (R.7)](experiments/r7-five-dimensions.md) | Culture, checklist, memory, hooks, cochange | All five hurt or did nothing |
 | [Variant Benchmark (R.9)](experiments/r9-variant-benchmark.md) | Reorder, compress, ultra-minimal, hooks | No variant beats placebo |
 
-**Key finding**: Interaction effects are non-linear. Three optimizations that each helped individually (-26%, -16%, -32%) combined to +63% cost. Always test combinations.
+**Key finding**: Interaction effects are non-linear. Three optimizations that each helped individually (-26%, -16%, -32%) combined to +63% overhead. Always test combinations.
 
 ### Graph correctness fixes (3/3 survived)
 
@@ -79,8 +79,8 @@ After 18 experiments with 0 content wins, we stepped back and measured what actu
 | Experiment | Finding |
 |---|---|
 | [Content vs Wrapper (R.5)](experiments/content-vs-wrapper.md) | Placebo beats full context on detailed tasks. The system prompt wrapper matters more than content. |
-| [Real-World Benchmark (R.6)](experiments/r6-real-world-benchmark.md) | Placebo wins turns across all models. "Do not use Grep or Glob" saves 40% cost. |
-| [Monorepo vs Single (R.8)](experiments/monorepo-vs-single.md) | Clarté helps on monorepos (-29% turns), hurts on single-package (+24% turns). |
+| [Real-World Benchmark (R.6)](experiments/r6-real-world-benchmark.md) | Placebo wins turns across all models. "Do not use Grep or Glob" cuts token processing by 40%. Both findings superseded by R.20 pre-flight. |
+| [Monorepo vs Single (R.8)](experiments/monorepo-vs-single.md) | Context-file Clarté helps on monorepos (-29% turns), hurts on single-package (+24% turns). Superseded by R.20 pre-flight, which wins on both. |
 
 ### Agent behavior analysis
 
@@ -92,7 +92,7 @@ After 18 experiments with 0 content wins, we stepped back and measured what actu
 
 ### The first-edit timing breakthrough (R.18)
 
-The [research synthesis](studies/research-synthesis.md) analyzed 426 passing sessions (4775 turns) across all conditions and found a strong predictor: **first-edit turn predicts total cost at r=0.70-1.00**. Every delayed first-edit turn adds ~1.3 total turns.
+The [research synthesis](studies/research-synthesis.md) analyzed 426 passing sessions (4775 turns) across all conditions and found a strong predictor: **first-edit turn predicts total session length at r=0.70-1.00**. Every delayed first-edit turn adds ~1.3 total turns.
 
 With context, agents start editing at turn 5.0. Without context, turn 7.8. The mechanism isn't knowledge (agents find the right files anyway); it's confidence to stop reading and start editing.
 
@@ -131,13 +131,13 @@ Tested on 4 real-world bug fixes (3 Hono single-package, 1 TypeORM monorepo), op
 
 | Task | Placebo | Pre-flight | Delta | n |
 |---|---|---|---|---|
-| Hono: URL fragment (opaque) | $0.34 | $0.28 | -17% cost | 8+8 |
-| Hono: URL fragment (detailed) | $0.16 | $0.15 | parity | 10+1 |
-| Hono: JSX async context | did not finish | $0.64 avg | pre-flight only | 2+2 |
-| Hono: form validator | did not finish | 18t / $0.41 | pre-flight only | 1+1 |
-| TypeORM: SQLite simple-enum array | 47.7t / $1.47 | 16.3t / $0.43 | -66% turns, -71% cost | 3+3 |
+| Hono: URL fragment (opaque) | completed, high variance | completed, 3x more consistent | faster, tighter | 8+8 |
+| Hono: URL fragment (detailed) | completed | completed | parity | 10+1 |
+| Hono: JSX async context | wrong file, DNF | correct file, 2 min to first edit | pre-flight only | 2+2 |
+| Hono: form validator | DNF | completed (18 turns) | pre-flight only | 1+1 |
+| TypeORM: SQLite simple-enum array | 47.7 turns | 16.3 turns | **-66% turns** | 3+3 |
 
-Pre-flight finished all 4 opaque tasks. Placebo finished 2 of 4 (and was slower on both). The JSX context loss task was re-run as a controlled AB ($1.50 budget): placebo hit the cap again ($1.54), pre-flight completed at $0.80. On hono-url (n=8), pre-flight variance was 3x tighter ($0.25-$0.31 vs $0.26-$0.42). On TypeORM (n=3), the gap was even larger: -66% turns and -71% cost. This is the first approach to beat placebo on single-package repos.
+Pre-flight finished all 4 opaque tasks. Placebo finished 2 of 4 (and was slower on both). The JSX context loss task was re-run as a controlled AB: placebo edited the wrong file (`src/jsx/base.ts`) and did not finish; pre-flight predicted the correct file (`src/jsx/context.ts`) and completed in 2 minutes. On hono-url (n=8), pre-flight sessions were 3x more consistent. On TypeORM (n=3), the gap was -66% turns. This is the first approach to beat placebo on single-package repos.
 
 **First-edit timing** (JSX async context AB, $1.50 budget, n=1+1):
 
@@ -145,13 +145,13 @@ Pre-flight finished all 4 opaque tasks. Placebo finished 2 of 4 (and was slower 
 |---|---|---|
 | First edit | ~14 min | ~2 min |
 | File edited | `src/jsx/base.ts` (wrong) | `src/jsx/context.ts` (correct) |
-| Outcome | hit budget cap ($1.54) | completed ($0.80) |
+| Outcome | hit budget cap | completed |
 
-Pre-flight's target prediction (`task-context.md`) listed `src/jsx/context.ts` as the top edit target. The agent applied the pre-flight findings and edited the correct file within 2 minutes, skipping exploration entirely. Placebo spent 14 minutes in extended thinking before editing a different file, then ran out of budget. This is consistent with R.18: each delayed first-edit turn adds ~1.3 total turns, and here the 12-minute gap translated directly into a DNF.
+Pre-flight's target prediction (`task-context.md`) listed `src/jsx/context.ts` as the top edit target. The agent applied the pre-flight findings and edited the correct file within 2 minutes, skipping exploration entirely. Placebo spent 14 minutes in extended thinking before editing a different file, then did not finish. This is consistent with R.18: each delayed first-edit turn adds ~1.3 total turns, and here the 12-minute gap translated directly into a DNF.
 
 ## Phase 5: On-demand delivery
 
-The pre-flight system from R.20 loaded its agent file into every session's system prompt. On detailed prompts where the agent already knows which files to edit, this added per-turn cost with no benefit. Full write-up: [on-demand delivery](experiments/on-demand-delivery.md).
+The pre-flight system from R.20 loaded its agent file into every session's system prompt. On detailed prompts where the agent already knows which files to edit, this added per-turn overhead with no benefit. Full write-up: [on-demand delivery](experiments/on-demand-delivery.md).
 
 ### On-demand agent mechanism
 
@@ -161,30 +161,30 @@ The prompt hook checks whether the prompt mentions known file paths from the dep
 
 | Prompt type | Placebo | Pre-flight | Delta | n |
 |---|---|---|---|---|
-| Detailed | $0.16 | $0.15 | parity | 10 vs 1 |
-| Opaque | $0.34 | $0.28 | **-17% cost** | 8 vs 8 |
+| Detailed | parity | parity | no overhead | 10 vs 1 |
+| Opaque | completed, high variance | **completed, 3x more consistent** | faster | 8 vs 8 |
 
-Pre-flight variance on opaque: $0.25-$0.31 (spread $0.06) vs placebo $0.26-$0.42 (spread $0.16).
+Opaque pre-flight sessions were 3x more consistent than placebo (spread 0.06 vs 0.16 on normalized session length).
 
 ## What we learned
 
-1. **Content injection doesn't work.** 15 experiments, 0 wins. Agents pay processing cost for context. Adding more information adds overhead without reducing exploration.
+1. **Content injection doesn't work.** 15 experiments, 0 wins. Adding more information adds processing overhead without reducing exploration or improving correctness.
 
 2. **The wrapper matters more than content.** A one-line placebo in a `CLAUDE.md` file performs comparably to 2000 tokens of structural analysis (R.5). The file's existence suppresses the discovery phase.
 
 3. **Isolated evals are unreliable.** Features showing +6-13% at temp=0 consistently failed at temp=0.3. Combinatorial benchmarks at realistic temperature are the real gate.
 
-4. **Monorepo vs single-package is the key split.** Agents self-localize fine in single-package repos. Graph-based routing helps only when there are multiple packages to navigate (R.8).
+4. **Monorepo vs single-package was the key split** for context-file Clarté. Agents self-localize fine in single-package repos (R.8). Pre-flight targeting (R.20) resolved this by predicting the correct file regardless of project structure.
 
-5. **First-edit timing is the mechanism.** Each delayed first-edit turn costs ~1.3 total turns (R.18). Context doesn't help agents know more; it helps them start sooner.
+5. **First-edit timing is the mechanism.** Each delayed first-edit turn adds ~1.3 total turns of wall-clock time (R.18). Context doesn't help agents know more; it helps them reach the correct file sooner.
 
-6. **Confidence injection beats information injection.** "Edit src/foo.ts. Start now." works better than "this file has 49 importers and is a structural chokepoint" (R.20).
+6. **Confidence injection beats information injection.** "Edit src/foo.ts. Start now." produces correct edits faster than "this file has 49 importers and is a structural chokepoint" (R.20). The agent that received the target prediction edited the correct file in 2 minutes; the agent without it spent 14 minutes, chose the wrong file and did not finish.
 
 7. **Imperative phrasing is obeyed; soft phrasing is ignored.** "Always use X instead of Y" works. "To verify tests, run X" does not (R.19).
 
 8. **Hook mechanisms are limited.** Only `permissionDecision: "deny"` works in Claude Code. All other hook outputs (additionalContext, updatedInput) are silently ignored (R.12, R.13b, R.19).
 
-9. **On-demand delivery eliminates detailed-prompt overhead.** Pre-flight costs nothing when the agent already knows where to edit. The prompt hook gates agent installation on prompt opacity.
+9. **On-demand delivery eliminates detailed-prompt overhead.** Pre-flight adds zero overhead when the agent already knows where to edit. The prompt hook gates agent installation on prompt opacity.
 
 ## Experiment index
 

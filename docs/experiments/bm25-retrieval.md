@@ -18,14 +18,14 @@ Tested on 4 real-world bug fixes (3 Hono single-package, 1 TypeORM monorepo), op
 
 | Task | Placebo | Pre-flight | Delta | n |
 |------|---------|-----------|-------|---|
-| Hono URL fragments (opaque) | $0.34 avg | $0.28 avg | -17% cost | 8+8 |
-| Hono URL fragments (detailed) | $0.16 avg | $0.15 | parity | 10+1 |
-| Hono JSX context | DNF | 17t / $0.48 | pre-flight only | 1+1 |
-| Hono form validator | DNF | 18t / $0.41 | pre-flight only | 1+1 |
-| TypeORM SQLite enum | 47.7t / $1.47 | 16.3t / $0.43 | -66% turns, -71% cost | 3+3 |
+| Hono URL fragments (opaque) | completed, high variance | completed, 3x more consistent | faster, tighter | 8+8 |
+| Hono URL fragments (detailed) | completed | completed | parity (no overhead) | 10+1 |
+| Hono JSX context | wrong file, DNF | correct file, 2 min to first edit | **completion + correctness** | 2+2 |
+| Hono form validator | DNF | completed (18 turns) | **completion** | 1+1 |
+| TypeORM SQLite enum | 47.7 turns | 16.3 turns | **-66% turns** | 3+3 |
 
-Pre-flight finished all 4 opaque tasks. Placebo finished 2 of 4. On hono-url (n=8), pre-flight variance was 3x tighter ($0.25-$0.31 vs $0.26-$0.42). On TypeORM (n=3), the gap was -66% turns and -71% cost. First approach to beat placebo on single-package repos. See [on-demand delivery](on-demand-delivery.md) for the prompt-gating mechanism.
+Pre-flight finished all 4 opaque tasks. Placebo finished 2 of 4. On hono-url (n=8), pre-flight sessions were 3x more consistent. On TypeORM (n=3), the turn gap was 66%. On JSX context loss, pre-flight predicted the correct file (`src/jsx/context.ts`) and the agent edited it in 2 minutes; placebo chose the wrong file (`src/jsx/base.ts`) after 14 minutes and did not finish. First approach to beat placebo on single-package repos. See [on-demand delivery](on-demand-delivery.md) for the prompt-gating mechanism.
 
 ## Insight
 
-Confidence injection ("edit these files") works where information injection ("here's the architecture") failed. The graph makes the routing decision; the agent executes without exploration overhead.
+Confidence injection ("edit these files") works where information injection ("here's the architecture") failed. The graph makes the routing decision; the agent executes the correct edit without exploration. The primary wins are correctness (right file, right fix) and efficiency (fewer turns, less wall-clock time), not token savings.

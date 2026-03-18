@@ -8,59 +8,41 @@
   <a href="https://fsl.software"><img src="https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg" alt="License: FSL-1.1-MIT"></a>
 </p>
 
-<p align="center"><em>The starting point your agent is missing.</em></p>
-
-Clarté builds a dependency graph from your codebase and predicts which files need editing before the agent starts. In [real-world tests](#case-studies), it completed tasks agents couldn't finish alone, at 17-71% lower cost.
+<p align="center"><strong>Predicts which files to edit before the agent starts exploring.</strong></p>
 
 ```bash
-npx clarte            # set up pre-flight + hooks for your project
-npx clarte observe    # see where your agent wastes time and money
+npx clarte            # build graph, generate hooks and context
 ```
 
 Zero config. Detects your stack, scans source files, generates everything. Node.js 20+.
 
-## What We Learned
+---
 
-We tested 30+ approaches across 700+ sessions to find what actually changes agent behavior. Over 80% failed.
+Hono JSX async context loss. Real bug, opaque prompt, Claude Sonnet:
 
-**What doesn't work:** giving agents more information. We ran 15 content experiments - richer analysis, better formatting, more sections. Zero wins. A [placebo](#placebo) (minimal context with project language and test framework, no structural analysis) performed identically to the full analysis. When we analyzed 170 sessions (7,595 turns), we found agents spend most of their time exploring code they never edit, and 75% of tail waste is test-retry loops where the agent re-runs the same failing command without changing code.
+| | Without Clarté | With Clarté |
+|---|---|---|
+| Time to first edit | 14 minutes | **2 minutes** |
+| File edited | `src/jsx/base.ts` (wrong) | **`src/jsx/context.ts`** (correct) |
+| Outcome | hit budget cap | **task completed** |
 
-**What works:** telling agents where to edit. First-edit timing was the strongest predictor of session cost in our benchmarks (r=0.70-1.00 across 15 of 19 tasks; 4 tasks excluded due to ceiling effects where all sessions edited within 2 turns). Each turn before the first edit was associated with roughly 1.3 additional total turns. The bottleneck is not knowledge but confidence: agents can find files on their own; they lack a starting point.
+Clarté's BM25F retrieval predicted `src/jsx/context.ts` as the top edit target. The agent applied the prediction and skipped exploration entirely. Without it, the agent spent 14 minutes reasoning, edited the wrong file and ran out of budget.
 
-So we built a system that gives the agent a starting point. The dependency graph makes the decision; the agent executes.
+## Results
 
-For the full research story (30+ experiments, ablation studies, statistical methodology), see [docs/research.md](docs/research.md).
+Five real bug fixes in open-source repos. Opaque prompts, Claude Sonnet, `claude -p`:
 
-## Case Studies
+| Task | Repo | Without Clarté | With Clarté | n |
+|------|------|----------------|-------------|---|
+| JSX async context loss | Hono | wrong file, did not finish | **correct file, 2 min to first edit** | 2+2 |
+| Form validator prototype pollution | Hono | did not finish | **completed (18 turns)** | 1+1 |
+| SQLite simple-enum array | TypeORM | 47.7 turns | **16.3 turns (-66%)** | 3+3 |
+| WebSocket adapter shutdown | NestJS | 53 turns | **38 turns (-28%)** | 7+7 |
+| URL fragment stripping | Hono | completed, high variance | **completed, 3x more consistent** | 8+8 |
 
-Real bug fixes in open-source repos. Opaque prompts, Sonnet, `claude -p`:
+Clarté completed 5 of 5. Without it, the agent completed 3 of 5 within the same budget. The first four rows use the full stack (graph + BM25F targeting + pre-flight agent). The WebSocket row uses the context file only (no pre-flight). The TypeORM and WebSocket rows pool from multiple controlled runs; JSX and form validator include single-run pilots with follow-up ABs. For controlled evidence with statistical testing, see [controlled benchmarks](#controlled-benchmarks).
 
-| Task | Repo | Without Clarté | With Clarté | n | Stack |
-|------|------|----------------|-------------|---|-------|
-| URL fragment stripping | Hono | $0.34 avg | **$0.28 avg (-17%)** | 8+8 | pre-flight |
-| JSX async context loss | Hono | did not finish | **$0.64 avg** | 2+2 | pre-flight |
-| Form validator prototype pollution | Hono | did not finish | **18 turns / $0.41** | 1+1 | pre-flight |
-| SQLite simple-enum array | TypeORM | 47.7 turns / $1.47 | **16.3 turns / $0.43 (-71%)** | 3+3 | pre-flight |
-| WebSocket adapter shutdown | NestJS | 53 turns / $2.70 | **38 turns / $2.17 (-20%)** | 7+7 | context file |
-
-**Stack**: *pre-flight* = dependency graph + BM25F prompt targeting + pre-flight agent. *context file* = dependency graph + generated context file (no pre-flight).
-
-Clarté completed 5 of 5. Without it, the agent completed 3 of 5 within the same budget. The URL fragment, TypeORM and WebSocket rows are pooled from multiple controlled runs; JSX and form validator include single-run pilots with follow-up ABs. For controlled evidence with statistical testing, see [fixture benchmarks](#fixture-benchmarks).
-
-## How It Works
-
-`npx clarte` parses your imports with tree-sitter, builds a dependency graph and runs static analysis. Three mechanisms work together:
-
-**Steer** - predict edit targets and stop waste loops:
-
-| Component | When | What it does |
-|-----------|------|--------------|
-| [Pre-flight agent](#claude-code-integration) | Per prompt | BM25F retrieval over the dependency graph predicts edit targets. A pre-flight agent reads those targets and returns exact code locations before the main agent writes a single line. |
-| [Fail-fast hook](#claude-code-integration) | Per tool call | Blocks repeated test/build loops with no code edit in between. Addresses the #1 agent waste pattern (75% of tail turns in our analysis). |
-| [Context file](#claude-code-integration) | Background | Minimal operational directives: tech stack, config constraints, dev commands, test scripts. |
-| [Scripts](#generated-scripts) | On demand | Framework-aware test runner with structured output, filtered test-by-name runner and a grep wrapper with graph context. |
-
-**Observe** - measure what the agent actually does:
+## See the Problem in Your Project
 
 ```bash
 $ npx clarte observe --all
@@ -69,36 +51,174 @@ $ npx clarte observe --all
 
 Averages (per session)
   Turns:        48.2
-  Cost:         $4.04
   First edit:   turn 16.5
 
 Phase Distribution
-  Explore:  51%
-  Edit:     26%
-  Tail:     23%
-
-Waste
-  Total:    $10.05 of $76.83 (13%)
-  Per session: $0.53
+  Explore:  59%   ← reading files never edited
+  Edit:     28%
+  Tail:     13%   ← re-running tests with no code change
 ```
 
-Parses Claude Code session logs, classifies turns into explore/edit/tail phases, detects waste patterns (test reruns, verification re-reads, summary bloat) and computes cost metrics.
+Parses Claude Code session logs, classifies turns into explore/edit/tail phases and detects waste patterns. 59% of turns spent reading files the agent never touches. 75% of tail waste is test-retry loops where the agent re-runs the same failing command without changing code.
+
+## Why It Works
+
+We tested 30+ approaches across 700+ sessions. 15 content experiments (richer analysis, better formatting, more sections) produced zero wins. A [placebo](#placebo) (minimal context listing only language and test framework) performed identically to the full analysis. Content injection doesn't change agent behavior; confidence injection does.
+
+**First-edit timing** is the strongest predictor of session efficiency (r=0.70-1.00 across 15 of 19 tasks). Each turn before the first edit adds roughly 1.3 total turns. Agents find files on their own; they lack the confidence to stop reading and start editing. Clarté provides that confidence by running probabilistic inference over the dependency graph and delivering ranked edit targets before the first turn.
+
+For the full research story (30+ experiments, ablation studies, statistical methodology), see [docs/research.md](docs/research.md).
+
+## How It Works
+
+Clarté is a probabilistic intent-mapping engine. It parses imports with tree-sitter, builds a dependency graph and trains repository-specific scoring weights from git history. On every prompt, it maps the task description to ranked file targets through a multi-stage pipeline - BM25F retrieval, latent semantic expansion, Katz centrality propagation and learned logistic fusion - in under 50ms.
 
 ```mermaid
-graph LR
-    A[Your Codebase] --> B[Dependency Graph]
-    B --> C[Context File]
-    B --> D[Prompt Hook]
-    D --> E[Pre-flight Agent]
-    C & E --> F((Agent))
-    F -. "edits + commits" .-> A
-    F -. "session logs" .-> G[Observe]
-    G -. "waste patterns" .-> H[You]
+graph TD
+    subgraph offline ["Build Phase (offline)"]
+        A[tree-sitter] --> B[Dependency Graph]
+        C[git log] --> D[Change Coupling]
+        B --> E["HITS · Betweenness · Communities"]
+        D --> F[Bayesian EWMA Priors]
+        E & D --> G[Logistic Fusion Training]
+    end
+
+    subgraph prompt ["Query Phase (per prompt)"]
+        H[Task Prompt] --> I["BM25F Multi-field Scoring"]
+        I --> J[LSA Seed Expansion]
+        J --> K[Katz Propagation]
+        K --> L[Score Fusion]
+        L --> M[Pre-flight Agent]
+    end
+
+    B -.-> I
+    G -.-> L
+    F -.-> K
+    M --> N((Agent))
 ```
 
-## Fixture Benchmarks
+<details>
+<summary><strong>BM25F Seed Resolution</strong></summary>
 
-<a id="fixture-benchmarks"></a>
+File paths encode architectural intent. `auth/middleware.ts` tells you more about a session-handling bug than a function named `validate`. Clarté runs true multi-field BM25F (Robertson et al. 2004) across three document fields - file path, exported symbol names and import statements - with per-field length normalization and independent field weights.
+
+Path segments are weighted 2x higher than symbols. Import names are weighted 0.5x because they signal consumption, not definition. The query is tokenized with camelCase splitting, compound preservation and domain-specific synonym expansion (`auth` -> `authentication`, `db` -> `database`). IDF is computed globally across the corpus.
+
+After scoring, three post-processing steps refine the candidate set:
+
+1. **Spreading activation** propagates scores along import edges for 3 hops with $0.5^{(\text{hop}-1)}$ decay and directional bias (importers 0.4x, imports 0.2x, co-change partners 0.4x)
+2. **Test proxy scoring** transfers test file BM25F scores to their source files at 0.6x, since test paths encode what they cover
+3. **Import ceiling** caps import-only files at 0.5x the minimum path/symbol score, preventing re-export barrels from outranking direct matches
+
+$$\text{score}(d, q) = \sum_{t \in q} \text{IDF}(t) \cdot \frac{\widetilde{tf}(t, d)}{\widetilde{tf}(t, d) + k_1}$$
+
+where the weighted pseudo-term-frequency combines all three fields before saturation (true BM25F, not per-field BM25+):
+
+$$\widetilde{tf}(t, d) = \sum_{f \in \lbrace \text{path, sym, imp} \rbrace} w_f \cdot \frac{tf_{f}(t, d)}{1 - b_f + b_f \cdot |d_f| \, / \, \overline{dl}_f}$$
+
+| Parameter | Value | Role |
+|-----------|-------|------|
+| $k_1$ | 1.2 | Saturation constant |
+| $w_{\text{path}}$ | 2.0 | Path field weight |
+| $w_{\text{sym}}$ | 1.0 | Symbol field weight |
+| $w_{\text{imp}}$ | 0.5 | Import field weight |
+| $b_{\text{path}}$ | 0.3 | Path length normalization |
+| $b_{\text{sym}}$ | 0.4 | Symbol length normalization |
+| $b_{\text{imp}}$ | 0.5 | Import length normalization |
+
+</details>
+
+<details>
+<summary><strong>Semantic Expansion (LSA)</strong></summary>
+
+BM25F only finds lexical matches. A bug report mentioning "session tokens" won't match a file named `auth/middleware.ts` that exports `validateJWT`. Latent Semantic Analysis catches these conceptual neighbors.
+
+Clarté builds a file-symbol incidence matrix and computes a rank-32 approximation via randomized truncated SVD (Halko-Martinsson-Tropp). Files are projected into a 32-dimensional latent space where cosine similarity captures shared structural role rather than shared tokens.
+
+After BM25F scoring, the top seeds are averaged into a centroid vector. Non-seed files within cosine distance 0.3 of this centroid enter the candidate pool at a discounted score (0.4x the minimum BM25F seed score), expanding the set with up to 5 conceptually related files that share no surface tokens with the query. Activates only on codebases with 50+ files; below that threshold, BM25F alone has sufficient coverage.
+
+**Randomized SVD pipeline:**
+
+1. Build sparse file-symbol incidence matrix $M$ (CSR format)
+2. Generate random Gaussian $\Omega \in \mathbb{R}^{n \times (k+p)}$ where $k{=}32$ (rank), $p{=}10$ (oversampling)
+3. Form $Y = M\Omega$, then 2 power iterations: $Y \leftarrow M(M^T Y)$
+4. QR decomposition $Y = QR$ via modified Gram-Schmidt
+5. Project: $B = Q^T M$ (small dense matrix)
+6. Jacobi eigendecomposition of $BB^T$ for singular values and left vectors
+7. File embeddings: $U = Q \, U_B \, \text{diag}(S)$
+
+Sub-millisecond for typical codebases (1,000 files, 20 imports/file).
+
+</details>
+
+<details>
+<summary><strong>Katz Intent Propagation</strong></summary>
+
+Single-path graph traversal misses consensus. If a file is reachable from the query seeds via three independent import chains, it is more likely relevant than a file reachable via one chain. Katz centrality captures this by computing the weighted sum of all walks from the seed set, with exponential decay per hop.
+
+The attenuation factor $\alpha$ is set to 85% of $1/\rho(A)$, where $\rho(A)$ is the spectral radius of the weighted adjacency matrix (estimated via 10 power iterations). This guarantees convergence while maximizing the contribution of longer paths.
+
+Edge weights fuse four signals: edge kind (call, import, type-only), co-change confidence from Bayesian EWMA priors, directionality (reverse edges discounted) and ghost status (edges to files outside the analyzed scope).
+
+$$\mathbf{x}_{k+1} = \alpha \, A^T \mathbf{x}_k + \mathbf{s}$$
+
+Converges when $\lVert\mathbf{x}_{k+1} - \mathbf{x}_k\rVert_2 < 10^{-6}$ or after 50 iterations. The closed-form solution $(I - \alpha A^T)^{-1}\mathbf{s}$ avoids matrix inversion in favor of the iterative form, which supports sparse graphs with O(|E|) per iteration.
+
+</details>
+
+<details>
+<summary><strong>Logistic Score Fusion</strong></summary>
+
+Hardcoded weights assume every repository has the same coupling patterns. A monorepo with 200 packages and a single-file CLI tool need different blends of lexical, structural and temporal signals. Clarté learns repository-specific fusion weights from git history via logistic regression.
+
+For each of the 500 most recent multi-file commits, the system extracts four features per (candidate, seed-set) pair:
+
+| Feature | Signal |
+|---------|--------|
+| $L$ | Path token Jaccard similarity (lexical proximity) |
+| $G$ | $1 / (\text{BFS distance} + 1)$ via multi-source BFS (graph proximity) |
+| $T$ | Maximum change coupling confidence (temporal co-change) |
+| $B$ | Normalized betweenness centrality (structural importance) |
+
+Hard negatives are mined from three tiers: direct imports, same Leiden community members and 2-hop neighbors. Logistic regression with L2 regularization ($\lambda = 0.01$) learns $\boldsymbol{\lambda} = (\lambda_L, \lambda_G, \lambda_T, \lambda_B)$ via batch gradient descent. Trained weights are stored in the graph database. Repositories with fewer than 30 commits fall back to empirically tuned defaults.
+
+$$P(\text{co-change} \mid \mathbf{x}) = \sigma(\boldsymbol{\lambda}^T \mathbf{x}) = \frac{1}{1 + e^{-\boldsymbol{\lambda}^T \mathbf{x}}}$$
+
+Training budget: <50ms for 500 commits on a 1,000-file graph.
+
+</details>
+
+<details>
+<summary><strong>Execution Flow (Absorbing Markov Chains)</strong></summary>
+
+Import graphs show static structure. Execution flow shows runtime behavior. A function's callers reveal more about impact than its importers.
+
+Clarté models the call graph as an absorbing Markov chain. Each symbol is a state; symbols with no outgoing calls are absorbing states. Transition probabilities fuse four factors:
+
+$$w(u, v) = s(\text{kind}) \cdot c \cdot \alpha(v)^{0.7} \cdot e^{-0.033\,\Delta t}$$
+
+where $s$ is the edge kind weight, $c$ is coupling confidence, $\alpha(v)$ is the HITS authority of the target (raised to 0.7 to soften dominance) and $\Delta t$ is days since last co-change (exponential decay with ~90-day half-life).
+
+Cross-community utility sinks (loggers, formatters) with indegree $\geq 5$ receive a 0.05x penalty via information-theoretic attenuation (INF), which uses the ratio of directed indegree to outdegree to distinguish legitimate hubs from infrastructure drains. This keeps probability flowing through domain logic rather than pooling in shared utilities.
+
+Forward propagation from the entry point produces a flow signature: visited states with absorption probabilities, residual mass and convergence steps. The system reconstructs up to 5 diverse shortest paths and identifies dominator waypoints - nodes that all execution paths must traverse.
+
+</details>
+
+<details>
+<summary><strong>Supporting Infrastructure (HITS, Bayesian EWMA)</strong></summary>
+
+Two systems provide the edge weights consumed by the stages above.
+
+**HITS Authority/Hub Scoring.** Hyperlink-Induced Topic Search with teleportation smoothing ($\alpha = 0.15$) computes per-file authority and hub scores. Authority identifies foundational files (heavily imported); hub identifies orchestrators (many outgoing imports). Barrel files receive a 0.3x authority discount. Edge weights account for specificity (how many names are imported), type-only discount (0.7x) and dynamic import discount (0.5x). These scores feed into Markov transition weights, file role classification and the betweenness centrality used in logistic fusion features.
+
+**Bayesian EWMA Edge Priors.** Each import edge carries a Beta($\alpha$, $\beta$) distribution modeling co-change probability. Priors initialize from structural properties: direct value import at 0.7, barrel-routed at 0.5, dynamic at 0.4, type-only at 0.3. On each git commit, affected edges update via EWMA with 0.995 per-commit decay. The expected weight $E[w] = \alpha / (\alpha + \beta)$ modulates Katz edge weights and Markov transition probabilities, giving recently co-changed edges higher traversal probability.
+
+</details>
+
+## Controlled Benchmarks
+
+<a id="controlled-benchmarks"></a>
 
 Controlled benchmarks isolating context files alone (no hooks, no pre-flight). Same tasks, same model. Statistical testing with Wilcoxon signed-rank, bootstrap CIs, Benjamini-Hochberg FDR correction and Cliff's delta effect sizes.
 
@@ -106,15 +226,16 @@ Controlled benchmarks isolating context files alone (no hooks, no pre-flight). S
 
 | Metric | Without Context | With Context | Delta | Significance |
 |--------|----------------|--------------|-------|--------------|
-| Cost (median) | $1.08 | **$0.45** | **-58.5%** | p<0.001, medium effect |
-| Input tokens (median) | 272K | **108K** | **-60.4%** | p<0.001, large effect |
-| Turns (median) | 16 | **11.5** | **-28.1%** | p<0.001, medium effect |
-| Duration (median) | 130s | **98s** | **-24.8%** | p<0.001, small effect |
+| Wall-clock time (median) | 130s | **98s** | **-25%** | p<0.001, small effect |
+| Turns (median) | 16 | **11.5** | **-28%** | p<0.001, medium effect |
+| Input tokens (median) | 272K | **108K** | **-60%** | p<0.001, large effect |
 | Pass rate | 100% | 93% | -7pp | n.s. |
+
+Token reduction translates directly to faster response times - 60% less context for the model to process per turn, regardless of pricing model.
 
 <a id="placebo"></a>
 
-A placebo condition (minimal context with project language and test framework, no structural analysis) showed -1.3% cost (not significant, negligible effect), confirming the improvement comes from the analysis, not from having a system prompt.
+A placebo condition (minimal context with project language and test framework, no structural analysis) showed negligible change (not significant), confirming the improvement comes from the graph analysis, not from having a system prompt.
 
 The 7pp pass rate drop is not statistically significant at this sample size, but we are underpowered to rule out a small regression. Users should monitor pass rates in their own workloads.
 
@@ -122,21 +243,23 @@ The 7pp pass rate drop is not statistically significant at this sample size, but
 
 | Metric | Without Context | With Context | Delta |
 |--------|----------------|--------------|-------|
-| Pass rate | 86% | **95%** | +9pp |
+| Pass rate | 86% | **95%** | **+9pp** |
 | Turns (median) | 19 | **14** | -26% (p<0.001) |
-| Cost (median) | $0.35 | **$0.29** | -15% |
+
+Haiku shows a correctness gain: +9pp pass rate with 26% fewer turns.
 
 Methodology, fixture projects and full reports are in the [benchmark repo](https://github.com/michaelabrt/clarte-benchmark).
 
-## Claude Code Integration
+<details>
+<summary><strong>Claude Code Integration</strong></summary>
 
 For Claude Code, Clarté installs hooks and a pre-flight diagnostic agent on top of the context file. This is the full stack that produced the case study results.
 
 **The flow:**
 
 1. You submit a task prompt
-2. The prompt hook checks whether the prompt already mentions file paths from the dependency graph. If it does, the agent already knows where to edit - steps 3-4 are skipped (zero overhead).
-3. Otherwise, the hook runs BM25F retrieval over the graph (file paths + AST symbol names), writes the top-5 predicted edit targets to `.clarte/task-context.md` with key symbols and installs the pre-flight agent. Falls back to git history similarity when no graph is present.
+2. The prompt hook checks whether the prompt already mentions file paths from the dependency graph. If it does, the agent already knows where to edit - steps 3-4 are skipped (zero overhead)
+3. Otherwise, the hook runs BM25F retrieval over the graph (file paths + AST symbol names), writes the top-5 predicted edit targets to `.clarte/task-context.md` with key symbols and installs the pre-flight agent. Falls back to git history similarity when no graph is present
 4. The pre-flight agent reads each target file exactly once and returns exact code locations with verbatim surrounding context and a proposed fix
 5. The main agent's first action is an edit, not an exploration
 
@@ -152,7 +275,10 @@ Hooks wire into `.claude/settings.json` automatically. The pre-flight agent is s
 
 Also generates context files for Cursor, Copilot, Windsurf, Cline, Continue and OpenCode (context file only, no hooks or steering).
 
-## Generated Scripts
+</details>
+
+<details>
+<summary><strong>Generated Scripts</strong></summary>
 
 Clarté generates framework-aware shell scripts in `.clarte/scripts/`:
 
@@ -164,7 +290,10 @@ Clarté generates framework-aware shell scripts in `.clarte/scripts/`:
 
 These are referenced in the generated context file with imperative directives ("Always use X instead of Y") so the agent uses them by default.
 
-## Supported Languages
+</details>
+
+<details>
+<summary><strong>Supported Languages</strong></summary>
 
 | Language | Import parsing | Snapshot extraction |
 |----------|---------------|---------------------|
@@ -176,22 +305,10 @@ These are referenced in the generated context file with imperative directives ("
 
 Multi-language projects handled automatically when a secondary language exceeds 15% of source files.
 
-<details>
-<summary><strong>GitHub Action (work in progress)</strong></summary>
-
-There's an experimental GitHub Action that reviews PRs for missing co-changes and structural hotspots. It works but the signal-to-noise ratio needs improvement - most findings are technically correct but not actionable yet. Use at your own discretion.
-
-```yaml
-- uses: michaelabrt/clarte@v1
-  with:
-    github-token: ${{ secrets.GITHUB_TOKEN }}
-```
-
 </details>
 
-<a id="options"></a>
 <details>
-<summary><strong>CLI reference</strong></summary>
+<summary><strong>CLI Reference</strong></summary>
 
 ```bash
 npx clarte [directory] [options]
@@ -262,6 +379,19 @@ On first run, Clarté saves config to `.clarte.json` (add to `.gitignore`). Use 
 
 </details>
 
+<details>
+<summary><strong>GitHub Action (work in progress)</strong></summary>
+
+There's an experimental GitHub Action that reviews PRs for missing co-changes and structural hotspots. It works but the signal-to-noise ratio needs improvement - most findings are technically correct but not actionable yet. Use at your own discretion.
+
+```yaml
+- uses: michaelabrt/clarte@v1
+  with:
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+</details>
+
 ## Development
 
 ```bash
@@ -274,4 +404,4 @@ bun test           # Run tests with vitest
 
 ## License
 
-[FSL-1.1-MIT](LICENSE) - free to use, modify and distribute. The only restriction is competing use (building a product whose primary utility overlaps with Clarte's core functionality). Converts to MIT on March 17, 2028.
+[FSL-1.1-MIT](LICENSE) - free to use, modify and distribute. The only restriction is competing use (building a product whose primary utility overlaps with Clarté's core functionality). Converts to MIT on March 17, 2028.

@@ -1,6 +1,6 @@
 # Experiment: R.8 - Monorepo vs Single Package
 
-**Status:** Done (2026-03-05)
+**Status:** Done (2026-03-05). **Superseded by [R.20](bm25-retrieval.md)** - pre-flight targeting resolved the single-package regression. Clarté now completes tasks on single-package repos that the agent cannot finish alone (Hono JSX, Hono form validator) and reduces turns by 66% on TypeORM.
 **Branch:** `experimental/go/monorepo-routing`
 
 ## Context
