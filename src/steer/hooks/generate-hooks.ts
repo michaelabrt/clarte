@@ -534,7 +534,7 @@ interface ClaudeSettings {
   [key: string]: unknown;
 }
 
-function isClartHook(entry: MatchedHookGroup): boolean {
+function isClarteHook(entry: MatchedHookGroup): boolean {
   return entry.hooks?.some((h) => h.command?.includes(`${HOOKS_DIR}/`)) ?? false;
 }
 
@@ -566,7 +566,7 @@ export async function configureClaudeHooks(rootDir: string): Promise<void> {
   for (const event of ALL_HOOK_EVENTS) {
     const group = settings.hooks[event] as MatchedHookGroup[] | undefined;
     if (group) {
-      settings.hooks[event] = group.filter((entry) => !isClartHook(entry));
+      settings.hooks[event] = group.filter((entry) => !isClarteHook(entry));
     }
   }
 
@@ -575,7 +575,7 @@ export async function configureClaudeHooks(rootDir: string): Promise<void> {
     const group = (settings.hooks[def.event] ??= []) as MatchedHookGroup[];
     const entry: MatchedHookGroup = {
       ...(def.matcher ? { matcher: def.matcher } : {}),
-      hooks: [{ type: "command", command: `node ${HOOKS_DIR}/${def.file}` }],
+      hooks: [{ type: "command", command: `bun ${HOOKS_DIR}/${def.file}` }],
     };
     upsertHookEntry(group, entry, def.file);
   }
