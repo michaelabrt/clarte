@@ -52,7 +52,7 @@
     "url": "https://github.com/michaelabrt/clarte/issues"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "files": [
     "dist",

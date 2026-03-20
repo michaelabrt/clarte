@@ -8,7 +8,7 @@
   <a href="https://fsl.software"><img src="https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg" alt="License: FSL-1.1-MIT"></a>
 </p>
 
-<p align="center"><strong>The nervous system for AI coding agents.</strong></p>
+<p align="center"><strong>Structural intuition for coding agents.</strong></p>
 
 Clarté builds a dependency graph from your codebase and runs probabilistic inference over it. On every prompt, it predicts exactly which files the agent needs to edit, before the agent reads a single line of source code.
 
@@ -16,7 +16,7 @@ Clarté builds a dependency graph from your codebase and runs probabilistic infe
 npx clarte            # build graph, generate hooks and context
 ```
 
-Zero config. Detects your stack, scans source files, generates everything. Node.js 20+.
+Zero config. Detects your stack, scans source files, generates everything. Node.js 24+.
 
 ---
 
