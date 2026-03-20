@@ -315,7 +315,8 @@ if (existsSync(dbPath)) {
     }
   } catch (e) { _dbg("graph: " + e.message); }
   if (graph) {
-    const allCandidates = resolveEditTargets(prompt, graph, 10);
+    let allCandidates;
+    try { allCandidates = resolveEditTargets(prompt, graph, 10); } catch (e) { process.stderr.write("[clarte] BM25F error: " + e.stack + "\\n"); allCandidates = []; }
     const targets = allCandidates.slice(0, 5);
     const runnersUp = allCandidates.slice(5);
     if (targets.length > 0) {
