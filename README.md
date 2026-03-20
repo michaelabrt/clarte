@@ -10,7 +10,7 @@
 
 <p align="center"><strong>Structural intuition for coding agents.</strong></p>
 
-Clarté builds a dependency graph from your codebase and runs probabilistic inference over it. On every prompt, it predicts exactly which files the agent needs to edit, before the agent reads a single line of source code.
+On every prompt, Clarté predicts exactly which files the agent needs to edit. It parses your codebase into a weighted dependency graph and runs probabilistic inference over it in under 100ms.
 
 ```bash
 npx clarte            # build graph, generate hooks and context
@@ -30,7 +30,7 @@ Hono JSX async context loss. Real bug, opaque prompt, Claude Sonnet:
 
 Clarté's BM25F retrieval predicted `src/jsx/context.ts` as the top edit target. The agent applied the prediction, skipped exploration entirely and fixed the bug. Without it, the agent spent 14 minutes reasoning, edited the wrong file and ran out of budget.
 
-## What We Learned
+## 700+ Sessions
 
 We ran 30+ experiments across 700+ agent sessions to find what actually changes agent behavior. Not what seems like it should help. What measurably, reproducibly helps.
 
@@ -75,7 +75,7 @@ The graph makes the decision. The agent executes. Zero reasoning overhead. This 
 
 For the full research story (30+ experiments, ablation studies, statistical methodology), see [docs/research.md](docs/research.md).
 
-## How It Works
+## Architecture
 
 Clarté is a probabilistic intent-mapping engine. It parses source code with [tree-sitter](https://tree-sitter.github.io/tree-sitter/), builds a weighted dependency graph and trains repository-specific scoring weights from git history. On every prompt, it maps the task description to ranked file predictions through four stages in under 100ms.
 
