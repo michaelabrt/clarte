@@ -178,6 +178,8 @@ export class GraphStore {
   // Lean (column-pruned) read statements
   private readonly stmtSelectFilesLean: StatementAdapter;
   private readonly stmtSelectEdgesLean: StatementAdapter;
+  private readonly stmtSelectFilesLeanJson: StatementAdapter;
+  private readonly stmtSelectEdgesLeanJson: StatementAdapter;
 
   // KV cache statements
   private readonly stmtGetCache: StatementAdapter;
@@ -291,6 +293,19 @@ export class GraphStore {
     this.stmtSelectEdgesLean = db.prepare(`
       SELECT from_path, to_path, is_type_only, is_dynamic, is_barrel_routed
       FROM file_edges
+    `);
+
+    this.stmtSelectFilesLeanJson = db.prepare(`
+      SELECT json_group_array(json_array(
+        path, hash, authority, hub_score, betweenness,
+        is_barrel, is_dead, is_chokepoint, community_id
+      )) FROM files
+    `);
+
+    this.stmtSelectEdgesLeanJson = db.prepare(`
+      SELECT json_group_array(json_array(
+        from_path, to_path, is_type_only, is_dynamic, is_barrel_routed
+      )) FROM file_edges
     `);
 
     // ── KV cache statements ───────────────────────────────────────────────────
@@ -544,8 +559,19 @@ export class GraphStore {
   loadFileGraphLean(): LeanFileGraph {
     const t0 = process.env.CLARTE_DEBUG ? performance.now() : 0;
 
-    const fileRows = this.stmtSelectFilesLean.allRaw();
-    const edgeRows = this.stmtSelectEdgesLean.allRaw();
+    let fileRows: unknown[][];
+    let edgeRows: unknown[][];
+    try {
+      const fResult = this.stmtSelectFilesLeanJson.get<{ [key: string]: string }>();
+      const eResult = this.stmtSelectEdgesLeanJson.get<{ [key: string]: string }>();
+      const fJson = fResult ? Object.values(fResult)[0] : null;
+      const eJson = eResult ? Object.values(eResult)[0] : null;
+      fileRows = fJson ? (JSON.parse(fJson) as unknown[][]) : [];
+      edgeRows = eJson ? (JSON.parse(eJson) as unknown[][]) : [];
+    } catch {
+      fileRows = this.stmtSelectFilesLean.allRaw();
+      edgeRows = this.stmtSelectEdgesLean.allRaw();
+    }
 
     const nodes = new Map<string, LeanFileNode>();
     for (const row of fileRows) {
