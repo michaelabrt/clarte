@@ -161,9 +161,11 @@ const LEAN_EDGE_COL = {
 export class GraphStore {
   private readonly db: DatabaseAdapter;
 
-  // Read statements
+  // Read statements (row-based fallback + JSON-serialized fast path)
   private readonly stmtSelectFiles: StatementAdapter;
   private readonly stmtSelectEdges: StatementAdapter;
+  private readonly stmtSelectFilesJson: StatementAdapter;
+  private readonly stmtSelectEdgesJson: StatementAdapter;
   private readonly stmtSelectSymbols: StatementAdapter;
   private readonly stmtSelectSymEdges: StatementAdapter;
   private readonly stmtSelectCallSites: StatementAdapter;
@@ -221,6 +223,25 @@ export class GraphStore {
       SELECT from_path, to_path, imported_names, is_type_only, is_dynamic,
              is_barrel_routed, cross_package
       FROM file_edges
+    `);
+
+    // JSON-serialized variants: SQLite builds one JSON string in C/WASM,
+    // transferred as a single value, then parsed by V8's optimized JSON.parse.
+    // Eliminates per-row WASM/JS boundary crossings in the sql.js adapter.
+    this.stmtSelectFilesJson = db.prepare(`
+      SELECT json_group_array(json_array(
+        path, hash, role, authority, hub_score, betweenness, instability,
+        community_id, layer, is_barrel, is_dead, is_chokepoint,
+        separates_components, is_cross_cutting, layer_spread, has_tests,
+        layers, test_files, intra_file_calls
+      )) FROM files
+    `);
+
+    this.stmtSelectEdgesJson = db.prepare(`
+      SELECT json_group_array(json_array(
+        from_path, to_path, imported_names, is_type_only, is_dynamic,
+        is_barrel_routed, cross_package
+      )) FROM file_edges
     `);
 
     this.stmtSelectSymbols = db.prepare(`
@@ -422,13 +443,29 @@ export class GraphStore {
   loadFileGraph(): InMemoryFileGraph {
     const t0 = process.env.CLARTE_DEBUG ? performance.now() : 0;
 
-    const fileRows = this.stmtSelectFiles.allRaw();
-    const edgeRows = this.stmtSelectEdges.allRaw();
+    // Fast path: use json_group_array to serialize in SQLite (C/WASM),
+    // transfer as one string, parse with V8's optimized JSON.parse.
+    // Falls back to row-by-row allRaw() if json functions are unavailable.
+    let fileRows: unknown[][];
+    let edgeRows: unknown[][];
+    try {
+      const fResult = this.stmtSelectFilesJson.get<{ [key: string]: string }>();
+      const eResult = this.stmtSelectEdgesJson.get<{ [key: string]: string }>();
+      const fJson = fResult ? Object.values(fResult)[0] : null;
+      const eJson = eResult ? Object.values(eResult)[0] : null;
+      fileRows = fJson ? (JSON.parse(fJson) as unknown[][]) : [];
+      edgeRows = eJson ? (JSON.parse(eJson) as unknown[][]) : [];
+    } catch {
+      fileRows = this.stmtSelectFiles.allRaw();
+      edgeRows = this.stmtSelectEdges.allRaw();
+    }
 
     const F = FULL_FILE_COL;
     const nodes = new Map<string, InMemoryFileNode>();
     for (const r of fileRows) {
       const path = r[F.PATH] as string;
+      // json_group_array encodes nested JSON columns as strings (double-encoded);
+      // allRaw also returns them as strings. parseJsonArray handles both.
       nodes.set(path, {
         path,
         hash: r[F.HASH] as string,
