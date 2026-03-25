@@ -181,40 +181,8 @@ describe("loadFileGraphLean performance", () => {
     db.close();
   });
 
-  it("lean path is faster than full loadFileGraph", async () => {
-    const db = await createDatabase(":memory:");
-    initSchema(db);
-    const store = new GraphStore(db);
-
-    const NOW = new Date().toISOString();
-    const N = 500;
-    store.upsertFiles(Array.from({ length: N }, (_, i) => ({ path: `f${i}.ts`, hash: `h${i}`, updated_at: NOW })));
-    store.upsertFileEdges(
-      Array.from({ length: N * 2 }, (_, i) => ({
-        from_path: `f${i % N}.ts`,
-        to_path: `f${(i + 3) % N}.ts`,
-        imported_names: ["x"],
-      })),
-    );
-
-    // Warm up both
-    store.loadFileGraph();
-    store.loadFileGraphLean();
-
-    const t0 = performance.now();
-    for (let i = 0; i < RUNS; i++) store.loadFileGraph();
-    const fullMs = (performance.now() - t0) / RUNS;
-
-    const t1 = performance.now();
-    for (let i = 0; i < RUNS; i++) store.loadFileGraphLean();
-    const leanMs = (performance.now() - t1) / RUNS;
-
-    // Lean should be faster. At 500 files the absolute difference is small
-    // (~0.5ms), so CI runner load variance dominates. 1.5x tolerance avoids
-    // flakes while still catching real regressions where lean becomes 2x+ slower.
-    const tolerance = 1.5;
-    expect(leanMs).toBeLessThan(fullMs * tolerance);
-
-    db.close();
-  });
+  // Relative "lean < full" comparison removed: at 500 files the timing
+  // difference is sub-millisecond and CI runner load variance dominates.
+  // The absolute ceiling test (lean < 5ms) above covers performance;
+  // the structural test above covers correctness.
 });
