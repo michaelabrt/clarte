@@ -113,14 +113,9 @@ Path segments are weighted 2x higher than symbols. `auth/middleware.ts` tells yo
 
 Each query term's IDF is weighted by a saturated pseudo-term-frequency that blends all three fields before applying the `k₁ = 1.2` saturation constant. The weighted pseudo-term-frequency combines all three fields before saturation (true BM25F, not per-field BM25+).
 
-<details>
-<summary>BM25F scoring formula (renders on GitHub)</summary>
-
 $$\text{score}(d, q) = \sum_{t \in q} \text{IDF}(t) \cdot \frac{\widetilde{tf}(t, d)}{\widetilde{tf}(t, d) + k_1}$$
 
 $$\widetilde{tf}(t, d) = \sum_{f \in \lbrace \text{path, sym, imp} \rbrace} w_f \cdot \frac{tf_{f}(t, d)}{1 - b_f + b_f \cdot |d_f| \, / \, \overline{dl}_f}$$
-
-</details>
 
 Three post-processing steps refine the candidate set: spreading activation propagates scores along import edges for 3 hops with 0.5^(hop-1) decay; test proxy scoring transfers test file scores to their source files at 0.6x (test paths encode what they cover); and an import ceiling caps re-export barrels at 0.5x the minimum direct-match score.
 
@@ -171,12 +166,7 @@ If a file is reachable from the seed set through three independent import chains
 
 Katz centrality captures this. It computes the weighted sum of *all* walks from the seed set, with exponential decay per hop. The attenuation factor α is set to 85% of 1/ρ(A), where ρ(A) is the spectral radius of the weighted adjacency matrix (estimated via 10 power iterations). This guarantees convergence while maximizing the contribution of longer paths.
 
-<details>
-<summary>Katz iteration formula (renders on GitHub)</summary>
-
 $$\mathbf{x}_{k+1} = \alpha \, A^T \mathbf{x}_k + \mathbf{s}$$
-
-</details>
 
 Edge weights fuse four signals: edge kind (call 0.7, extends 0.8, type-only 0.3), co-change confidence from Bayesian EWMA priors, directionality (reverse edges at 0.7x) and ghost status (inferred edges at 0.6x). Converges when the L2 norm of the update falls below 10⁻⁶ or after 50 iterations. O(|E|) per iteration on sparse representation.
 
@@ -188,14 +178,9 @@ Import graphs show static structure. Runtime follows different paths. A function
 
 Clarté extracts a symbol-level call graph from the AST and models it as an absorbing Markov chain. Each symbol is a state. Symbols with no outgoing calls are absorbing states. Transition probabilities fuse four factors: edge kind weight, coupling confidence, HITS authority of the target (raised to 0.7 to soften dominance) and days since last co-change (exponential decay with ~90-day half-life).
 
-<details>
-<summary>Transition weight formula (renders on GitHub)</summary>
-
 $$w(u, v) = s(\text{kind}) \cdot c \cdot \alpha(v)^{0.7} \cdot e^{-0.033\,\Delta t}$$
 
 where *s* is the edge kind weight, *c* is coupling confidence, *α(v)* is HITS authority and *Δt* is days since last co-change.
-
-</details>
 
 Cross-community utility sinks (loggers, formatters) with indegree ≥ 5 receive a 0.05x penalty via information-theoretic attenuation. The ratio of directed indegree to outdegree distinguishes legitimate hubs from infrastructure drains, keeping probability flowing through domain logic rather than pooling in shared utilities.
 
@@ -218,12 +203,7 @@ Hardcoded weights assume every repository has the same coupling patterns. They d
 
 Hard negatives are mined from three tiers: direct imports, same Leiden community and 2-hop neighbors. L2-regularized logistic regression (λ = 0.01) learns repository-specific fusion weights via batch gradient descent. Repositories with fewer than 30 commits fall back to empirically tuned defaults (λ_L = 0.35, λ_G = 0.35, λ_T = 0.15, λ_B = 0.15). Training completes in under 50ms for 500 commits on a 1,000-file graph.
 
-<details>
-<summary>Logistic fusion formula (renders on GitHub)</summary>
-
 $$P(\text{co-change} \mid \mathbf{x}) = \sigma(\boldsymbol{\lambda}^T \mathbf{x}) = \frac{1}{1 + e^{-\boldsymbol{\lambda}^T \mathbf{x}}}$$
-
-</details>
 
 <details>
 <summary><strong>Supporting infrastructure: HITS, communities and betweenness</strong></summary>
