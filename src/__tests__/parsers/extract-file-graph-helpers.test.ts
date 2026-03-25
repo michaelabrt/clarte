@@ -50,12 +50,20 @@ describe("isDuplicateSymbol", () => {
 // ── Primitive checkers ────────────────────────────────────────────────────────
 
 describe("isTsPrimitive", () => {
-  it.each(["string", "number", "boolean", "void", "null", "undefined", "never", "any", "unknown", "object"])(
-    "returns true for %s",
-    (name) => {
-      expect(isTsPrimitive(name)).toBe(true);
-    },
-  );
+  it.each([
+    "string",
+    "number",
+    "boolean",
+    "void",
+    "null",
+    "undefined",
+    "never",
+    "any",
+    "unknown",
+    "object",
+  ])("returns true for %s", (name) => {
+    expect(isTsPrimitive(name)).toBe(true);
+  });
 
   it("returns false for a non-primitive type", () => {
     expect(isTsPrimitive("UserService")).toBe(false);
@@ -67,12 +75,19 @@ describe("isTsPrimitive", () => {
 });
 
 describe("isGoPrimitive", () => {
-  it.each(["int", "int64", "float64", "string", "bool", "error", "any", "byte", "rune"])(
-    "returns true for %s",
-    (name) => {
-      expect(isGoPrimitive(name)).toBe(true);
-    },
-  );
+  it.each([
+    "int",
+    "int64",
+    "float64",
+    "string",
+    "bool",
+    "error",
+    "any",
+    "byte",
+    "rune",
+  ])("returns true for %s", (name) => {
+    expect(isGoPrimitive(name)).toBe(true);
+  });
 
   it("returns false for a user-defined type", () => {
     expect(isGoPrimitive("Repository")).toBe(false);
@@ -80,12 +95,22 @@ describe("isGoPrimitive", () => {
 });
 
 describe("isRustPrimitive", () => {
-  it.each(["i32", "u64", "f64", "bool", "char", "str", "String", "Self", "Option", "Result", "Vec", "Box"])(
-    "returns true for %s",
-    (name) => {
-      expect(isRustPrimitive(name)).toBe(true);
-    },
-  );
+  it.each([
+    "i32",
+    "u64",
+    "f64",
+    "bool",
+    "char",
+    "str",
+    "String",
+    "Self",
+    "Option",
+    "Result",
+    "Vec",
+    "Box",
+  ])("returns true for %s", (name) => {
+    expect(isRustPrimitive(name)).toBe(true);
+  });
 
   it("returns false for a user-defined type", () => {
     expect(isRustPrimitive("MyStruct")).toBe(false);
