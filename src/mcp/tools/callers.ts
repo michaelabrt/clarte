@@ -124,7 +124,6 @@ export function executeCallers(db: DatabaseAdapter, input: CallersInput): Caller
   for (const [, rows] of [...byDepth.entries()].sort((a, b) => a[0] - b[0])) {
     for (const row of rows) {
       const tag = depthTag(row.depth);
-      // Build rationale from graph context
       const rationale =
         tag === "DIRECT"
           ? `Direct '${row.kind}' edge: ${row.name}() in ${row.file_path}:${row.start_line}`

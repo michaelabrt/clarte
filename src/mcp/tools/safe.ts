@@ -327,10 +327,8 @@ export function executeSafe(db: DatabaseAdapter, input: SafeInput): SafeOutput {
     }
   }
 
-  // Deduplicate tests
   const uniqueTests = [...new Map(tests.map((t) => [t.file, t])).values()];
 
-  // Build summary
   const breaks = impact.filter((e) => e.verdict === "BREAKS").length;
   const compatible = impact.filter((e) => e.verdict === "COMPATIBLE").length;
   const unknown = impact.filter((e) => e.verdict === "UNKNOWN").length;

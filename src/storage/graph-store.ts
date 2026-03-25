@@ -521,19 +521,8 @@ export class GraphStore {
         crossPackage: r[E.CROSS_PACKAGE] === 1,
       };
 
-      let fwd = forward.get(fromPath);
-      if (!fwd) {
-        fwd = [];
-        forward.set(fromPath, fwd);
-      }
-      fwd.push(edge);
-
-      let rev = reverse.get(toPath);
-      if (!rev) {
-        rev = [];
-        reverse.set(toPath, rev);
-      }
-      rev.push(edge);
+      pushEdge(forward, fromPath, edge);
+      pushEdge(reverse, toPath, edge);
     }
 
     if (process.env.CLARTE_DEBUG) {
@@ -604,19 +593,8 @@ export class GraphStore {
         isBarrelRouted: row[LEAN_EDGE_COL.IS_BARREL_ROUTED] === 1,
       };
 
-      let fwd = forward.get(fromPath);
-      if (!fwd) {
-        fwd = [];
-        forward.set(fromPath, fwd);
-      }
-      fwd.push(edge);
-
-      let rev = reverse.get(toPath);
-      if (!rev) {
-        rev = [];
-        reverse.set(toPath, rev);
-      }
-      rev.push(edge);
+      pushEdge(forward, fromPath, edge);
+      pushEdge(reverse, toPath, edge);
     }
 
     if (process.env.CLARTE_DEBUG) {
@@ -629,9 +607,6 @@ export class GraphStore {
     return { nodes, forward, reverse };
   }
 
-  /**
-   * Load the complete symbol graph from SQLite.
-   */
   loadSymbolGraph(): InMemorySymbolGraph {
     const symbolRows = this.stmtSelectSymbols.all<SymbolRow>();
     const symEdgeRows = this.stmtSelectSymEdges.all<SymEdgeRow>();
@@ -654,12 +629,7 @@ export class GraphStore {
       };
       symbols.set(row.id, node);
 
-      let ids = byFile.get(row.file_path);
-      if (!ids) {
-        ids = [];
-        byFile.set(row.file_path, ids);
-      }
-      ids.push(row.id);
+      pushEdge(byFile, row.file_path, row.id);
     }
 
     const forward = new Map<number, InMemorySymEdge[]>();
@@ -675,34 +645,17 @@ export class GraphStore {
         confidence: row.confidence,
       };
 
-      let fwd = forward.get(row.from_symbol_id);
-      if (!fwd) {
-        fwd = [];
-        forward.set(row.from_symbol_id, fwd);
-      }
-      fwd.push(edge);
-
-      let rev = reverse.get(row.to_symbol_id);
-      if (!rev) {
-        rev = [];
-        reverse.set(row.to_symbol_id, rev);
-      }
-      rev.push(edge);
+      pushEdge(forward, row.from_symbol_id, edge);
+      pushEdge(reverse, row.to_symbol_id, edge);
     }
 
     return { symbols, forward, reverse, byFile };
   }
 
-  /**
-   * Load call sites for a specific caller file.
-   */
   loadCallSites(file: string): CallSiteRow[] {
     return this.stmtSelectCallSites.all<CallSiteRow>(file);
   }
 
-  /**
-   * Load all call sites (for full graph reconstruction).
-   */
   loadAllCallSites(): CallSiteRow[] {
     return this.stmtLoadAllCallSites.all<CallSiteRow>();
   }
@@ -748,24 +701,15 @@ export class GraphStore {
     return map;
   }
 
-  /**
-   * Read a value from the meta table.
-   */
   getMeta(key: string): string | undefined {
     const row = this.stmtGetMeta.get<MetaRow>(key);
     return row?.value;
   }
 
-  /**
-   * Load all communities.
-   */
   loadCommunities(): CommunityRow[] {
     return this.stmtLoadCommunities.all<CommunityRow>();
   }
 
-  /**
-   * Load all change coupling records.
-   */
   loadChangeCoupling(): ChangeCouplingRow[] {
     return this.stmtLoadChangeCoupling.all<ChangeCouplingRow>();
   }
@@ -790,18 +734,12 @@ export class GraphStore {
     this.stmtSetCache.run(key, value, expiresAt ?? null);
   }
 
-  /**
-   * Delete a key from the kv_cache table.
-   */
   deleteCache(key: string): void {
     this.stmtDeleteCache.run(key);
   }
 
   // ── Write interface ─────────────────────────────────────────────────────────
 
-  /**
-   * Upsert file records in a single transaction.
-   */
   upsertFiles(files: FileRecord[]): void {
     const now = new Date().toISOString();
     const run = this.db.transaction(() => {
@@ -887,9 +825,6 @@ export class GraphStore {
     return ids;
   }
 
-  /**
-   * Upsert file-level import edges.
-   */
   upsertFileEdges(edges: FileEdgeRecord[]): void {
     const run = this.db.transaction(() => {
       for (const e of edges) {
@@ -954,9 +889,6 @@ export class GraphStore {
     run();
   }
 
-  /**
-   * Replace all community records.
-   */
   upsertCommunities(communities: CommunityRecord[]): void {
     const run = this.db.transaction(() => {
       this.stmtDeleteAllCommunities.run();
@@ -967,9 +899,6 @@ export class GraphStore {
     run();
   }
 
-  /**
-   * Replace all change-coupling records.
-   */
   upsertChangeCoupling(couplings: ChangeCouplingRecord[]): void {
     const run = this.db.transaction(() => {
       this.stmtDeleteAllChangeCoupling.run();
@@ -990,16 +919,10 @@ export class GraphStore {
 
   // ── Edge prior interface ────────────────────────────────────────────────────
 
-  /**
-   * Load all Bayesian edge priors.
-   */
   loadEdgePriors(): EdgePriorRow[] {
     return this.stmtLoadEdgePriors.all<EdgePriorRow>();
   }
 
-  /**
-   * Replace all edge priors in a single transaction.
-   */
   upsertEdgePriors(priors: EdgePriorRecord[]): void {
     const run = this.db.transaction(() => {
       this.stmtDeleteAllEdgePriors.run();
@@ -1026,9 +949,6 @@ export class GraphStore {
     run();
   }
 
-  /**
-   * Delete multiple files in a single transaction.
-   */
   deleteFiles(paths: string[]): void {
     if (paths.length === 0) return;
     const run = this.db.transaction(() => {
@@ -1044,9 +964,6 @@ export class GraphStore {
     run();
   }
 
-  /**
-   * Set a meta key-value pair.
-   */
   setMeta(key: string, value: string): void {
     this.stmtSetMeta.run(key, value);
   }
@@ -1126,18 +1043,12 @@ export class GraphStore {
 
   // ── Blame + LSA persistence ──────────────────────────────────────────────
 
-  /**
-   * Store per-symbol blame data keyed by commit hash.
-   */
   storeSymbolBlame(commitHash: string, blame: Map<number, number>): void {
     const obj: Record<string, number> = {};
     for (const [id, days] of blame) obj[String(id)] = Math.round(days * 100) / 100;
     this.setCache(`blame_${commitHash}`, JSON.stringify(obj));
   }
 
-  /**
-   * Load per-symbol blame data for a commit hash.
-   */
   loadSymbolBlame(commitHash: string): Map<number, number> | null {
     const raw = this.getCache(`blame_${commitHash}`);
     if (!raw) return null;
@@ -1151,18 +1062,12 @@ export class GraphStore {
     }
   }
 
-  /**
-   * Store LSA file embeddings.
-   */
   storeLSAEmbeddings(embeddings: Map<string, Float64Array>): void {
     const obj: Record<string, number[]> = {};
     for (const [file, emb] of embeddings) obj[file] = Array.from(emb);
     this.setCache("lsa_embeddings", JSON.stringify(obj));
   }
 
-  /**
-   * Load LSA file embeddings.
-   */
   loadLSAEmbeddings(): Map<string, Float64Array> | null {
     const raw = this.getCache("lsa_embeddings");
     if (!raw) return null;
@@ -1176,19 +1081,24 @@ export class GraphStore {
     }
   }
 
-  /**
-   * Run a function within a transaction.
-   */
   transaction<T>(fn: () => T): T {
     return this.db.transaction(fn)();
   }
 
-  /**
-   * Close the database connection.
-   */
   close(): void {
     this.db.close();
   }
+}
+
+// ── Adjacency helper ────────────────────────────────────────────────────────────
+
+function pushEdge<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+  let arr = map.get(key);
+  if (!arr) {
+    arr = [];
+    map.set(key, arr);
+  }
+  arr.push(value);
 }
 
 // ── JSON helpers ────────────────────────────────────────────────────────────────

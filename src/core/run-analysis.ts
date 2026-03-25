@@ -109,13 +109,11 @@ export async function runAnalysis(
   const useGraphCache = analysisCache !== null && analysisCache.cacheKey === analysisCacheKey;
   const log: LogCtx = { jsonMode, verbose };
 
-  // Graph analysis (sync, cacheable)
   const graphStart = performance.now();
   const entryPoints = readPackageEntryPoints(rootDir);
   const graphResults = runGraphPhase(graph, savedConfig, useGraphCache ? analysisCache : null, log, entryPoints);
   const graphPhaseMs = performance.now() - graphStart;
 
-  // Load project cache + git cache key
   const projectCacheKey = await computeProjectCacheKey(rootDir, graph, detected);
   const gitCacheKey = computeGitCacheKey(rootDir, analysisDays);
   const projectCache = store ? loadProjectCache(store) : null;
@@ -123,7 +121,6 @@ export async function runAnalysis(
   const useProjectCache = projectCache !== null && projectCache.cacheKey === projectCacheKey;
   const validGitCache = gitCacheKey && gitCache && gitCache.cacheKey === gitCacheKey ? gitCache : null;
 
-  // Parallel group: git + cacheable project sub-analyses
   const parallelStart = performance.now();
 
   const gitPromise = runGitPhase(
@@ -141,8 +138,7 @@ export async function runAnalysis(
   const [{ gitActivity, gitCacheHit }, cacheableProject] = await Promise.all([gitPromise, projectPromise]);
   const parallelGroupMs = performance.now() - parallelStart;
 
-  // Git-dependent work (fast pure computation, runs after parallel group)
-  const gitPhaseMs = parallelGroupMs; // git overlapped with project
+  const gitPhaseMs = parallelGroupMs;
   const projectStart = performance.now();
 
   const structuralMismatches = gitActivity
@@ -162,7 +158,6 @@ export async function runAnalysis(
     changeImpact,
   };
 
-  // Save project cache on miss
   if (!useProjectCache && store) {
     try {
       saveProjectCache(
@@ -482,9 +477,6 @@ async function runCacheableProjectPhase(
 // Git-dependent helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Compute change impact predictions for the top hub files.
- */
 function computeChangeImpactForHubs(
   hubFiles: HubFile[],
   graph: ImportGraph,
@@ -508,9 +500,6 @@ function computeChangeImpactForHubs(
   return impactMap.size > 0 ? impactMap : undefined;
 }
 
-/**
- * Compute per-package hub files from HITS centrality.
- */
 function computePackageHubFiles(
   graph: ImportGraph,
   packages: Array<{ name: string; path: string }>,
