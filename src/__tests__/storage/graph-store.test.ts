@@ -191,6 +191,50 @@ describe("GraphStore write interface", () => {
   });
 });
 
+describe("parseJsonArray (via loadFileGraph importedNames)", () => {
+  let db: DatabaseAdapter;
+  let store: GraphStore;
+
+  beforeEach(async () => {
+    db = await createDatabase(":memory:");
+    initSchema(db);
+    store = new GraphStore(db);
+    store.upsertFiles([makeFile("a.ts"), makeFile("b.ts")]);
+  });
+
+  function getEdge() {
+    const g = store.loadFileGraph();
+    return g.forward.get("a.ts")?.[0];
+  }
+
+  it("null imported_names produces empty array", () => {
+    store.upsertFileEdges([{ from_path: "a.ts", to_path: "b.ts" }]);
+    expect(getEdge()?.importedNames).toEqual([]);
+  });
+
+  it("empty JSON array '[]' produces empty array", () => {
+    store.upsertFileEdges([{ from_path: "a.ts", to_path: "b.ts", imported_names: [] }]);
+    expect(getEdge()?.importedNames).toEqual([]);
+  });
+
+  it("single element array round-trips correctly", () => {
+    store.upsertFileEdges([{ from_path: "a.ts", to_path: "b.ts", imported_names: ["one"] }]);
+    expect(getEdge()?.importedNames).toEqual(["one"]);
+  });
+
+  it("multiple elements round-trip correctly", () => {
+    store.upsertFileEdges([{ from_path: "a.ts", to_path: "b.ts", imported_names: ["a", "b", "c"] }]);
+    expect(getEdge()?.importedNames).toEqual(["a", "b", "c"]);
+  });
+
+  it("elements with special chars (spaces, dots, underscores) round-trip correctly", () => {
+    store.upsertFileEdges([
+      { from_path: "a.ts", to_path: "b.ts", imported_names: ["my.export", "some_name", "with space"] },
+    ]);
+    expect(getEdge()?.importedNames).toEqual(["my.export", "some_name", "with space"]);
+  });
+});
+
 describe("GraphStore FTS5", () => {
   let db: DatabaseAdapter;
   let store: GraphStore;

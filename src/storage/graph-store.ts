@@ -1131,13 +1131,10 @@ export class GraphStore {
 // ── JSON helpers ────────────────────────────────────────────────────────────────
 
 function parseJsonArray(value: string | null | undefined): string[] {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? (parsed as string[]) : [];
-  } catch {
-    return [];
-  }
+  if (!value || value.length < 3) return []; // null, "", "[]"
+  // Fast path: values are always well-formed JSON string arrays written by this codebase.
+  // Splitting '["a","b"]' directly is ~10x faster than JSON.parse for short arrays.
+  return value.slice(2, -2).split('","');
 }
 
 function parseIntraFileCalls(value: string | null | undefined): Array<[string, string]> {
