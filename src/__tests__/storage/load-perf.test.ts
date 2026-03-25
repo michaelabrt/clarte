@@ -97,8 +97,10 @@ describe("loadFileGraph performance (AC 1.6.2)", () => {
 
     // 3x tolerance for :memory: / test environment variance.
     // On file-based DBs with warm OS page cache the ratio approaches 1:1.
+    // Floor of 15ms accounts for shared CI runner variance (Node 20 on
+    // overloaded GitHub Actions runners can hit 10ms for trivial SQLite ops).
     const tolerance = 3;
-    expect(sqliteMs).toBeLessThan(Math.max(jsonMs * tolerance, 5));
+    expect(sqliteMs).toBeLessThan(Math.max(jsonMs * tolerance, 15));
 
     db.close();
   });
