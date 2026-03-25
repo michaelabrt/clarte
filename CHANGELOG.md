@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/michaelabrt/clarte/compare/v1.0.1...v1.0.2) (2026-03-25)
+
+
+### Bug Fixes
+
+* **test:** raise loadFileGraph hard floor to 15ms for CI runner variance ([7ca9232](https://github.com/michaelabrt/clarte/commit/7ca9232245a91fe22bd15d4c9e4a527ecf079425))
+
 ## [1.0.1](https://github.com/michaelabrt/clarte/compare/v1.0.0...v1.0.1) (2026-03-25)
 
 
