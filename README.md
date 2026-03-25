@@ -8,7 +8,7 @@
   <a href="https://fsl.software"><img src="https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg" alt="License: FSL-1.1-MIT"></a>
 </p>
 
-<p align="center"><strong>Structural intuition for coding agents.</strong></p>
+<p align="center"><strong>Agents don’t need better context. They need confidence.</strong></p>
 
 Your agent spends ~60% of its turns reading files it will never edit. Clarté predicts which files need editing and tells the agent to start there. The agent's first action becomes an edit, not a file read.
 
