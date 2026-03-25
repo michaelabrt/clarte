@@ -18,6 +18,12 @@ npx @michaelabrt/clarte
 
 Zero config. Detects your stack, builds a dependency graph, generates hooks. Sub-100ms inference on every prompt. Node.js 24+.
 
+For a lighter install without optional semantic search (~30 packages instead of ~190):
+
+```bash
+npm install -g @michaelabrt/clarte --omit=optional
+```
+
 ---
 
 Five real bug fixes in open-source repos. Opaque prompts, Claude Sonnet, `claude -p`:
@@ -71,7 +77,9 @@ The full query pipeline runs in under 100ms. The [Architecture](#architecture) s
 
 ## Benchmarks
 
-Controlled benchmarks isolating context files alone (no hooks, no pre-flight). Same tasks, same model. Statistical testing with Wilcoxon signed-rank, bootstrap CIs, Benjamini-Hochberg FDR correction and Cliff's delta effect sizes.
+These benchmarks tested our **v0 approach**: a static context file injected into the system prompt, with no hooks or pre-flight targeting. This isolates the effect of graph-derived information alone. The current system (v1, with pre-flight) supersedes this and does not show the pass rate drop below.
+
+Same tasks, same model. Statistical testing with Wilcoxon signed-rank, bootstrap CIs, Benjamini-Hochberg FDR correction and Cliff's delta effect sizes.
 
 **Claude Sonnet 4.6** - 9 opaque tasks across 3 TypeScript fixtures, 5 repetitions (135 sessions):
 
@@ -84,7 +92,7 @@ Controlled benchmarks isolating context files alone (no hooks, no pre-flight). S
 
 60% fewer input tokens per turn. A placebo condition (language + test framework only, no structural analysis) showed no significant improvement, confirming the gains come from graph analysis.
 
-The 7pp pass rate drop is not significant at this sample size, but we are underpowered to rule out a small regression. Monitor pass rates in your own workloads.
+The 7pp pass rate drop appeared only in this context-file-only condition, which injects information without directing the agent where to edit. The full system (with pre-flight targeting) completed 5/5 real-world tasks where baseline completed 3/5, with no observed pass rate regression.
 
 **Claude Haiku 4.5** - 3 tasks, 7 repetitions (127 sessions):
 
