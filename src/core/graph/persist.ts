@@ -500,10 +500,10 @@ function runSymbolPipeline(
   if (GHOST_EDGES_ENABLED) {
     const ghostCandidates = [
       ...detectDIEdges(fileGraphResults, symbolIndex, importMaps),
-      ...detectEventEdges(fileGraphResults, symbolIndex, fileGraphResults.size),
+      ...detectEventEdges(fileGraphResults, fileGraphResults.size),
       ...detectRouteEdges(fileGraphResults, symbolIndex, importMaps),
       ...detectRustTraitBoundEdges(fileGraphResults, symbolIndex),
-      ...detectPythonDescriptorEdges(fileGraphResults, symbolIndex, importMaps),
+      ...detectPythonDescriptorEdges(fileGraphResults, importMaps),
     ];
 
     const ghostFiltered = applyNoiseGate(ghostCandidates, fileGraphResults.size, allPass1Edges, fileCommunities);
