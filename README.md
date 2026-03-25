@@ -1,9 +1,9 @@
-<h1 align="center"><img src="logo.svg" width="110" alt="Clarté logo" /><br>Clarté</h1>
+<h1 align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNDAwIDQwMCI+CiAgPGNpcmNsZSBjeD0iMjAwIiBjeT0iMjAwIiByPSIxNjgiIGZpbGw9IiMwZDExMTciLz4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1saW5lY2FwPSJidXR0Ij4KICAgIDxwYXRoIGQ9Ik0gMjQ2IDIzOC42IEEgNjAgNjAgMCAxIDEgMjQ2IDE2MS40IiBzdHJva2Utd2lkdGg9IjIwIi8+CiAgICA8cGF0aCBkPSJNIDEyOC43IDE1MC4wIEwgMTE0LjAgMTM5LjcgQSAxMDUgMTA1IDAgMSAxIDEwNC44IDI0NC40IiBzdHJva2Utd2lkdGg9IjE2Ii8+CiAgICA8cGF0aCBkPSJNIDIxOC4yIDMwMy40IEwgMjI0LjcgMzM5LjgiIHN0cm9rZS13aWR0aD0iMTYiLz4KICAgIDxwYXRoIGQ9Ik0gMzI0LjEgMTU0LjkgTCAzNDEuMCAxNDguNyBBIDE1MCAxNTAgMCAxIDEgMjM4LjggNTUuMSIgc3Ryb2tlLXdpZHRoPSIxNiIvPgogIDwvZz4KPC9zdmc+"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNDAwIDQwMCI+CiAgPGNpcmNsZSBjeD0iMjAwIiBjeT0iMjAwIiByPSIxNjgiIGZpbGw9IiMwZDExMTciLz4KICA8ZyBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1saW5lY2FwPSJidXR0Ij4KICAgIDxwYXRoIGQ9Ik0gMjQ2IDIzOC42IEEgNjAgNjAgMCAxIDEgMjQ2IDE2MS40IiBzdHJva2Utd2lkdGg9IjIwIi8+CiAgICA8cGF0aCBkPSJNIDEyOC43IDE1MC4wIEwgMTE0LjAgMTM5LjcgQSAxMDUgMTA1IDAgMSAxIDEwNC44IDI0NC40IiBzdHJva2Utd2lkdGg9IjE2Ii8+CiAgICA8cGF0aCBkPSJNIDIxOC4yIDMwMy40IEwgMjI0LjcgMzM5LjgiIHN0cm9rZS13aWR0aD0iMTYiLz4KICAgIDxwYXRoIGQ9Ik0gMzI0LjEgMTU0LjkgTCAzNDEuMCAxNDguNyBBIDE1MCAxNTAgMCAxIDEgMjM4LjggNTUuMSIgc3Ryb2tlLXdpZHRoPSIxNiIvPgogIDwvZz4KPC9zdmc+" width="110" alt="Clarté logo" /></picture><br>Clarté</h1>
 <p align="center"><em>/klaʁ.te/</em></p>
 
 <p align="center">
   <a href="https://github.com/michaelabrt/clarte/actions/workflows/ci.yml"><img src="https://github.com/michaelabrt/clarte/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.npmjs.com/package/clarte"><img src="https://img.shields.io/npm/v/clarte" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/@michaelabrt/clarte"><img src="https://img.shields.io/npm/v/%40michaelabrt%2fclarte" alt="npm version"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-blue" alt="TypeScript"></a>
   <a href="https://fsl.software"><img src="https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg" alt="License: FSL-1.1-MIT"></a>
 </p>
@@ -13,7 +13,7 @@
 On every prompt, Clarté predicts exactly which files the agent needs to edit. It parses your codebase into a weighted dependency graph and runs probabilistic inference over it in under 100ms.
 
 ```bash
-npx clarte            # build graph, generate hooks and context
+npx @michaelabrt/clarte            # build graph, generate hooks and context
 ```
 
 Zero config. Detects your stack, scans source files, generates everything. Node.js 24+.
@@ -37,7 +37,7 @@ We ran 30+ experiments across 700+ agent sessions to find what actually changes 
 The first thing we did was measure how agents actually spend their time. We parsed 170 Claude Code sessions (7,595 turns) and classified every turn:
 
 ```
-$ npx clarte observe --all
+$ npx @michaelabrt/clarte observe --all
 
 19 sessions analyzed
 
@@ -111,13 +111,18 @@ You submit a task: "fix the JWT session leak." Two problems need solving.
 
 Path segments are weighted 2x higher than symbols. `auth/middleware.ts` tells you more about a session-handling bug than a function named `validate`. Import names get 0.5x because they signal consumption, not definition. The query is tokenized with camelCase splitting, compound-word preservation and domain-specific synonym expansion (`auth` → `authentication`, `db` → `database`). IDF is computed globally across the corpus.
 
-$$\text{score}(d, q) = \sum_{t \in q} \text{IDF}(t) \cdot \frac{\widetilde{tf}(t, d)}{\widetilde{tf}(t, d) + k_1}$$
+Each query term's IDF is weighted by a saturated pseudo-term-frequency that blends all three fields before applying the `k₁ = 1.2` saturation constant. The weighted pseudo-term-frequency combines all three fields before saturation (true BM25F, not per-field BM25+).
 
-where the weighted pseudo-term-frequency combines all three fields before saturation (true BM25F, not per-field BM25+):
+<details>
+<summary>BM25F scoring formula (renders on GitHub)</summary>
+
+$$\text{score}(d, q) = \sum_{t \in q} \text{IDF}(t) \cdot \frac{\widetilde{tf}(t, d)}{\widetilde{tf}(t, d) + k_1}$$
 
 $$\widetilde{tf}(t, d) = \sum_{f \in \lbrace \text{path, sym, imp} \rbrace} w_f \cdot \frac{tf_{f}(t, d)}{1 - b_f + b_f \cdot |d_f| \, / \, \overline{dl}_f}$$
 
-Three post-processing steps refine the candidate set: spreading activation propagates scores along import edges for 3 hops with $0.5^{(\text{hop}-1)}$ decay; test proxy scoring transfers test file scores to their source files at 0.6x (test paths encode what they cover); and an import ceiling caps re-export barrels at 0.5x the minimum direct-match score.
+</details>
+
+Three post-processing steps refine the candidate set: spreading activation propagates scores along import edges for 3 hops with 0.5^(hop-1) decay; test proxy scoring transfers test file scores to their source files at 0.6x (test paths encode what they cover); and an import ceiling caps re-export barrels at 0.5x the minimum direct-match score.
 
 **Conceptual matching.** BM25F will never connect a bug report about "session tokens" to a file named `SessionGuard.ts` that exports `validateJWT`. No surface tokens overlap.
 
@@ -132,15 +137,15 @@ Sub-millisecond for typical codebases (1,000 files, 20 imports/file).
 
 | Parameter | Value | Role |
 |-----------|-------|------|
-| $k_1$ | 1.2 | Saturation constant |
-| $w_{\text{path}}$ | 2.0 | Path field weight |
-| $w_{\text{sym}}$ | 1.0 | Symbol field weight |
-| $w_{\text{imp}}$ | 0.5 | Import field weight |
-| $b_{\text{path}}$ | 0.3 | Path length normalization |
-| $b_{\text{sym}}$ | 0.4 | Symbol length normalization |
-| $b_{\text{imp}}$ | 0.5 | Import length normalization |
+| k₁ | 1.2 | Saturation constant |
+| w_path | 2.0 | Path field weight |
+| w_sym | 1.0 | Symbol field weight |
+| w_imp | 0.5 | Import field weight |
+| b_path | 0.3 | Path length normalization |
+| b_sym | 0.4 | Symbol length normalization |
+| b_imp | 0.5 | Import length normalization |
 
-**Spreading activation:** 3 hops, $0.5^{(\text{hop}-1)}$ decay. Importers 0.4x, imports 0.2x, co-change partners 0.4x.
+**Spreading activation:** 3 hops, 0.5^(hop-1) decay. Importers 0.4x, imports 0.2x, co-change partners 0.4x.
 
 **Test proxy scoring:** transfers test file BM25F scores to source files at 0.6x.
 
@@ -148,13 +153,13 @@ Sub-millisecond for typical codebases (1,000 files, 20 imports/file).
 
 **Randomized SVD pipeline:**
 
-1. Build sparse file-symbol incidence matrix $M$ (CSR format)
-2. Generate random Gaussian $\Omega \in \mathbb{R}^{n \times (k+p)}$ where $k{=}32$ (rank), $p{=}10$ (oversampling)
-3. Form $Y = M\Omega$, then 2 power iterations: $Y \leftarrow M(M^T Y)$
-4. QR decomposition $Y = QR$ via modified Gram-Schmidt
-5. Project: $B = Q^T M$ (small dense matrix)
-6. Jacobi eigendecomposition of $BB^T$ for singular values and left vectors
-7. File embeddings: $U = Q \, U_B \, \text{diag}(S)$
+1. Build sparse file-symbol incidence matrix M (CSR format)
+2. Generate random Gaussian Ω ∈ ℝⁿˣ⁽ᵏ⁺ᵖ⁾ where k=32 (rank), p=10 (oversampling)
+3. Form Y = MΩ, then 2 power iterations: Y ← M(Mᵀ Y)
+4. QR decomposition Y = QR via modified Gram-Schmidt
+5. Project: B = Qᵀ M (small dense matrix)
+6. Jacobi eigendecomposition of BBᵀ for singular values and left vectors
+7. File embeddings: U = Q · U_B · diag(S)
 
 </details>
 
@@ -164,13 +169,16 @@ BM25F and LSA found the seed files. The bug might live one or two imports away. 
 
 If a file is reachable from the seed set through three independent import chains, it is more likely relevant than a file reachable through one. Dijkstra sees only the single best path. The other two, each carrying independent evidence, are discarded. That throws away the strongest signal in the graph.
 
-Katz centrality captures this. It computes the weighted sum of *all* walks from the seed set, with exponential decay per hop:
+Katz centrality captures this. It computes the weighted sum of *all* walks from the seed set, with exponential decay per hop. The attenuation factor α is set to 85% of 1/ρ(A), where ρ(A) is the spectral radius of the weighted adjacency matrix (estimated via 10 power iterations). This guarantees convergence while maximizing the contribution of longer paths.
+
+<details>
+<summary>Katz iteration formula (renders on GitHub)</summary>
 
 $$\mathbf{x}_{k+1} = \alpha \, A^T \mathbf{x}_k + \mathbf{s}$$
 
-The attenuation factor $\alpha$ is set to 85% of $1/\rho(A)$, where $\rho(A)$ is the spectral radius of the weighted adjacency matrix (estimated via 10 power iterations). This guarantees convergence while maximizing the contribution of longer paths.
+</details>
 
-Edge weights fuse four signals: edge kind (call 0.7, extends 0.8, type-only 0.3), co-change confidence from Bayesian EWMA priors, directionality (reverse edges at 0.7x) and ghost status (inferred edges at 0.6x). Converges when $\lVert\mathbf{x}_{k+1} - \mathbf{x}_k\rVert_2 < 10^{-6}$ or after 50 iterations. $O(|E|)$ per iteration on sparse representation.
+Edge weights fuse four signals: edge kind (call 0.7, extends 0.8, type-only 0.3), co-change confidence from Bayesian EWMA priors, directionality (reverse edges at 0.7x) and ghost status (inferred edges at 0.6x). Converges when the L2 norm of the update falls below 10⁻⁶ or after 50 iterations. O(|E|) per iteration on sparse representation.
 
 After Katz converges, a second pass re-propagates from chokepoints (files above the 75th percentile of betweenness centrality) for one additional hop, amplifying structural bottlenecks that all paths must traverse.
 
@@ -178,13 +186,18 @@ After Katz converges, a second pass re-propagates from chokepoints (files above 
 
 Import graphs show static structure. Runtime follows different paths. A function might import ten modules but only call three during execution. Import analysis alone cannot distinguish.
 
-Clarté extracts a symbol-level call graph from the AST and models it as an absorbing Markov chain. Each symbol is a state. Symbols with no outgoing calls are absorbing states. Transition probabilities fuse four factors:
+Clarté extracts a symbol-level call graph from the AST and models it as an absorbing Markov chain. Each symbol is a state. Symbols with no outgoing calls are absorbing states. Transition probabilities fuse four factors: edge kind weight, coupling confidence, HITS authority of the target (raised to 0.7 to soften dominance) and days since last co-change (exponential decay with ~90-day half-life).
+
+<details>
+<summary>Transition weight formula (renders on GitHub)</summary>
 
 $$w(u, v) = s(\text{kind}) \cdot c \cdot \alpha(v)^{0.7} \cdot e^{-0.033\,\Delta t}$$
 
-where $s$ is the edge kind weight, $c$ is coupling confidence, $\alpha(v)$ is the HITS authority of the target (raised to 0.7 to soften dominance) and $\Delta t$ is days since last co-change (exponential decay with ~90-day half-life).
+where *s* is the edge kind weight, *c* is coupling confidence, *α(v)* is HITS authority and *Δt* is days since last co-change.
 
-Cross-community utility sinks (loggers, formatters) with indegree $\geq 5$ receive a 0.05x penalty via information-theoretic attenuation. The ratio of directed indegree to outdegree distinguishes legitimate hubs from infrastructure drains, keeping probability flowing through domain logic rather than pooling in shared utilities.
+</details>
+
+Cross-community utility sinks (loggers, formatters) with indegree ≥ 5 receive a 0.05x penalty via information-theoretic attenuation. The ratio of directed indegree to outdegree distinguishes legitimate hubs from infrastructure drains, keeping probability flowing through domain logic rather than pooling in shared utilities.
 
 Forward propagation from entry points produces a flow signature: visited states with absorption probabilities, residual mass and convergence steps. The system reconstructs up to 5 diverse shortest paths (Yen's algorithm) and identifies dominator waypoints that all execution paths must traverse.
 
@@ -192,33 +205,36 @@ Forward propagation from entry points produces a flow signature: visited states 
 
 Hardcoded weights assume every repository has the same coupling patterns. They don't. A monorepo with 200 packages and a single-file CLI tool need fundamentally different signal blending. Clarté learns per-repository weights from two sources.
 
-**Bayesian EWMA Edge Priors.** Each import edge carries a Beta($\alpha$, $\beta$) distribution modeling co-change probability. Priors initialize from structural properties: direct value import at 0.7, barrel-routed at 0.5, dynamic at 0.4, type-only at 0.3. On each git commit, affected edges update via exponential weighted moving average with 0.995 per-commit decay. The posterior mean $E[w] = \alpha / (\alpha + \beta)$ feeds directly into Katz edge weights and Markov transition probabilities, giving recently co-changed edges higher traversal probability.
+**Bayesian EWMA Edge Priors.** Each import edge carries a Beta(α, β) distribution modeling co-change probability. Priors initialize from structural properties: direct value import at 0.7, barrel-routed at 0.5, dynamic at 0.4, type-only at 0.3. On each git commit, affected edges update via exponential weighted moving average with 0.995 per-commit decay. The posterior mean `E[w] = α / (α + β)` feeds directly into Katz edge weights and Markov transition probabilities, giving recently co-changed edges higher traversal probability.
 
 **Logistic Score Fusion.** For each of the 500 most recent multi-file commits, the system extracts four features per candidate:
 
 | Feature | Signal |
 |---------|--------|
-| $L$ | Path token Jaccard similarity (lexical proximity) |
-| $G$ | $1 / (\text{BFS distance} + 1)$ via multi-source BFS (graph proximity) |
-| $T$ | Maximum change coupling confidence (temporal co-change) |
-| $B$ | Normalized betweenness centrality (structural importance) |
+| L | Path token Jaccard similarity (lexical proximity) |
+| G | 1 / (BFS distance + 1) via multi-source BFS (graph proximity) |
+| T | Maximum change coupling confidence (temporal co-change) |
+| B | Normalized betweenness centrality (structural importance) |
 
-Hard negatives are mined from three tiers: direct imports, same Leiden community and 2-hop neighbors. L2-regularized logistic regression ($\lambda = 0.01$) learns repository-specific fusion weights via batch gradient descent:
+Hard negatives are mined from three tiers: direct imports, same Leiden community and 2-hop neighbors. L2-regularized logistic regression (λ = 0.01) learns repository-specific fusion weights via batch gradient descent. Repositories with fewer than 30 commits fall back to empirically tuned defaults (λ_L = 0.35, λ_G = 0.35, λ_T = 0.15, λ_B = 0.15). Training completes in under 50ms for 500 commits on a 1,000-file graph.
+
+<details>
+<summary>Logistic fusion formula (renders on GitHub)</summary>
 
 $$P(\text{co-change} \mid \mathbf{x}) = \sigma(\boldsymbol{\lambda}^T \mathbf{x}) = \frac{1}{1 + e^{-\boldsymbol{\lambda}^T \mathbf{x}}}$$
 
-Repositories with fewer than 30 commits fall back to empirically tuned defaults ($\lambda_L = 0.35$, $\lambda_G = 0.35$, $\lambda_T = 0.15$, $\lambda_B = 0.15$). Training completes in under 50ms for 500 commits on a 1,000-file graph.
+</details>
 
 <details>
 <summary><strong>Supporting infrastructure: HITS, communities and betweenness</strong></summary>
 
 Three systems provide the edge weights and structural features consumed by the stages above.
 
-**HITS Authority/Hub Scoring.** Hyperlink-Induced Topic Search with teleportation smoothing ($\alpha = 0.15$) computes per-file authority and hub scores. Authority identifies foundational files (heavily imported); hub identifies orchestrators (many outgoing imports). Barrel files receive a 0.3x authority discount. Edge weights account for import specificity ($\log_2(\text{nameCount}+1) / \log_2(6)$), type-only discount (0.7x) and dynamic import discount (0.5x). These scores feed into Markov transition weights, file role classification and the betweenness centrality features used in logistic fusion.
+**HITS Authority/Hub Scoring.** Hyperlink-Induced Topic Search with teleportation smoothing (α = 0.15) computes per-file authority and hub scores. Authority identifies foundational files (heavily imported); hub identifies orchestrators (many outgoing imports). Barrel files receive a 0.3x authority discount. Edge weights account for import specificity (`log₂(nameCount+1) / log₂(6)`), type-only discount (0.7x) and dynamic import discount (0.5x). These scores feed into Markov transition weights, file role classification and the betweenness centrality features used in logistic fusion.
 
 **Leiden Communities.** Community detection partitions the graph into densely connected clusters. Used for stratified sampling in betweenness centrality (one representative per community guarantees no blind spots), cross-community transition detection in execution flow tracing and hard negative mining in logistic fusion training.
 
-**Betweenness Centrality.** Sampled Brandes algorithm with deterministic seeded PRNG for reproducibility. $k = \max(50, 2\sqrt{|V|})$, stratified by Leiden community. Identifies structural chokepoints used in Katz phase-2 seeding and as features in logistic fusion.
+**Betweenness Centrality.** Sampled Brandes algorithm with deterministic seeded PRNG for reproducibility. k = max(50, 2√|V|), stratified by Leiden community. Identifies structural chokepoints used in Katz phase-2 seeding and as features in logistic fusion.
 
 </details>
 
@@ -226,7 +242,7 @@ Three systems provide the edge weights and structural features consumed by the s
 
 After scoring, the top predicted files are assembled into a task context with key symbols per file. A pre-flight agent reads each target once and returns exact edit locations with surrounding code. The main agent's first action is an edit, not an exploration.
 
-**The complete query pipeline runs in under 100ms on a standard laptop.** Graph construction, HITS scoring, community detection and logistic training execute once during `npx clarte` and cache in SQLite. The per-prompt path touches only the pre-computed graph.
+**The complete query pipeline runs in under 100ms on a standard laptop.** Graph construction, HITS scoring, community detection and logistic training execute once during `npx @michaelabrt/clarte` and cache in SQLite. The per-prompt path touches only the pre-computed graph.
 
 ## Results
 
@@ -339,7 +355,7 @@ Multi-language projects handled automatically when a secondary language exceeds 
 <summary><strong>CLI Reference</strong></summary>
 
 ```bash
-npx clarte [directory] [options]
+npx @michaelabrt/clarte [directory] [options]
 ```
 
 **Subcommands:**
