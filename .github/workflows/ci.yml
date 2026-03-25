@@ -111,7 +111,7 @@ jobs:
           BEFORE_TAG=$(git tag --sort=-v:refname | head -1)
           if [ -n "$BEFORE_TAG" ]; then
             VERSION="${BEFORE_TAG#v}"
-            if ! npm view "clarte@$VERSION" version &>/dev/null; then
+            if ! npm view "@michaelabrt/clarte@$VERSION" version &>/dev/null; then
               echo "Cleaning up ghost tag $BEFORE_TAG (npm publish failed)"
               git push origin --delete "$BEFORE_TAG" || true
               gh release delete "$BEFORE_TAG" --yes --cleanup-tag || true
