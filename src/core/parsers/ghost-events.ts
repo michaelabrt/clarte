@@ -7,7 +7,6 @@
  */
 
 import type { FileGraphResult } from "../graph/symbol-types";
-import type { SymbolIndex } from "../graph/symbol-resolution";
 import type { GhostEdgeCandidate } from "../graph/ghost-types";
 import { GHOST_CONFIDENCE } from "../graph/ghost-types";
 
@@ -23,15 +22,8 @@ interface EmitterInfo {
   fileCount: Set<string>;
 }
 
-/**
- * Detect event binding edges from .on()/.emit() call site pairing.
- *
- * Groups by objectName. For each object with both on and emit callers,
- * creates ghost edges from handler enclosing function to emitter enclosing function.
- */
 export function detectEventEdges(
   fileGraphResults: Map<string, FileGraphResult>,
-  _symbolIndex: SymbolIndex,
   fileCount: number,
 ): GhostEdgeCandidate[] {
   // Group on/emit call sites by objectName

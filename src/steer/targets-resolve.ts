@@ -441,13 +441,13 @@ function buildCorpus(filePaths: string[], graph: PersistedGraph, meta: EdgeMetad
  * Scale import-only scores so the highest sits at IMPORT_CEILING * min path/symbol score.
  * Preserves BM25F relative ordering among import-only files.
  */
-function applyImportCeiling(scores: Map<string, number>, importOnlyFiles: Set<string>): void {
-  if (importOnlyFiles.size === 0) return;
+function applyImportCeiling(scores: Map<string, number>, importOnlyFiles: Set<string>): Map<string, number> {
+  if (importOnlyFiles.size === 0) return scores;
   const pathSymbolScores: number[] = [];
   for (const [fp, s] of scores) {
     if (!importOnlyFiles.has(fp)) pathSymbolScores.push(s);
   }
-  if (pathSymbolScores.length === 0) return;
+  if (pathSymbolScores.length === 0) return scores;
   const minDirect = Math.min(...pathSymbolScores);
   let maxImport = 0;
   for (const fp of importOnlyFiles) {
@@ -455,12 +455,14 @@ function applyImportCeiling(scores: Map<string, number>, importOnlyFiles: Set<st
     if (s > maxImport) maxImport = s;
   }
   const ceiling = IMPORT_CEILING * minDirect;
-  if (maxImport > ceiling) {
-    const scale = ceiling / maxImport;
-    for (const fp of importOnlyFiles) {
-      scores.set(fp, (scores.get(fp) ?? 0) * scale);
-    }
+  if (maxImport <= ceiling) return scores;
+
+  const result = new Map(scores);
+  const scale = ceiling / maxImport;
+  for (const fp of importOnlyFiles) {
+    result.set(fp, (result.get(fp) ?? 0) * scale);
   }
+  return result;
 }
 
 /**
@@ -474,9 +476,9 @@ function applyTestProxy(
   meta: EdgeMetadata,
   corpus: CorpusStats,
   queryTerms: string[],
-): void {
+): Map<string, number> {
   const testMappingEntries = Object.entries(graph.testMapping);
-  if (testMappingEntries.length === 0) return;
+  if (testMappingEntries.length === 0) return scores;
 
   const testToSource = new Map<string, string[]>();
   for (const [source, tests] of testMappingEntries) {
@@ -486,6 +488,7 @@ function applyTestProxy(
     }
   }
 
+  const result = new Map(scores);
   const { N, avgdlPath, avgdlSymbols, avgdlImports, df } = corpus;
   for (const [testFp, sources] of testToSource) {
     if (!graph.files[testFp]) continue;
@@ -502,12 +505,13 @@ function applyTestProxy(
     if (testScore > 0) {
       const proxyScore = testScore * TEST_PROXY_FACTOR;
       for (const source of sources) {
-        if (proxyScore > (scores.get(source) ?? 0)) {
-          scores.set(source, proxyScore);
+        if (proxyScore > (result.get(source) ?? 0)) {
+          result.set(source, proxyScore);
         }
       }
     }
   }
+  return result;
 }
 
 const MAX_EXPANSION_HOPS = 3;
@@ -519,7 +523,11 @@ const MAX_EXPANSION_HOPS = 3;
  * Hop 1 = direct neighbors (equivalent to old behavior), hops 2-3 capture transitive
  * dependencies at 0.5^(hop-1) decay. Coupling edges are included at every hop.
  */
-function expandNeighbors(scores: Map<string, number>, directMatches: Set<string>, graph: PersistedGraph): void {
+function expandNeighbors(
+  scores: Map<string, number>,
+  directMatches: Set<string>,
+  graph: PersistedGraph,
+): Map<string, number> {
   const importers = new Map<string, string[]>();
   const imports = new Map<string, string[]>();
   for (const edge of graph.edges) {
@@ -538,10 +546,11 @@ function expandNeighbors(scores: Map<string, number>, directMatches: Set<string>
     couplingMap.get(c.fileB)?.push({ file: c.fileA, confidence: c.confidence });
   }
 
+  const result = new Map(scores);
   for (let hop = 1; hop <= MAX_EXPANSION_HOPS; hop++) {
     const decay = hop === 1 ? 1.0 : 0.5 ** (hop - 1);
     const newScores = new Map<string, number>();
-    for (const [file, score] of scores) {
+    for (const [file, score] of result) {
       if (!directMatches.has(file) && hop === 1) continue;
       if (score <= 0) continue;
 
@@ -562,9 +571,10 @@ function expandNeighbors(scores: Map<string, number>, directMatches: Set<string>
       }
     }
     for (const [f, sc] of newScores) {
-      if (sc > (scores.get(f) ?? 0)) scores.set(f, sc);
+      if (sc > (result.get(f) ?? 0)) result.set(f, sc);
     }
   }
+  return result;
 }
 
 /** Build a BM25F document from a file path, its merged symbol list and its import edges. */
@@ -644,13 +654,13 @@ function runScoringPipeline(
     }
   }
 
-  applyImportCeiling(scores, importOnlyFiles);
-  applyTestProxy(scores, graph, meta, corpus, queryTerms);
+  let rankedScores = applyImportCeiling(scores, importOnlyFiles);
+  rankedScores = applyTestProxy(rankedScores, graph, meta, corpus, queryTerms);
 
-  if (scores.size === 0) return null;
+  if (rankedScores.size === 0) return null;
 
   if (debugBM25) {
-    for (const [fp, score] of [...scores.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)) {
+    for (const [fp, score] of [...rankedScores.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)) {
       const doc = docs.get(fp);
       if (!doc) continue;
       const matched = queryTerms.filter((t) => doc.allTerms.has(t));
@@ -666,13 +676,13 @@ function runScoringPipeline(
     }
   }
 
-  const directMatches = new Set(scores.keys());
-  expandNeighbors(scores, directMatches, graph);
+  const directMatches = new Set(rankedScores.keys());
+  const expanded = expandNeighbors(rankedScores, directMatches, graph);
 
   const importTargets = new Set(graph.edges.map((e) => e.to));
   const importSources = new Set(graph.edges.map((e) => e.from));
 
-  const ranked = [...scores.entries()]
+  const ranked = [...expanded.entries()]
     .sort((a, b) => {
       const scoreDiff = b[1] - a[1];
       if (scoreDiff !== 0) return scoreDiff;

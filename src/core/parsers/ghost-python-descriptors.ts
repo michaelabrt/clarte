@@ -7,21 +7,12 @@
  */
 
 import type { FileGraphResult } from "../graph/symbol-types";
-import type { SymbolIndex } from "../graph/symbol-resolution";
 import type { ImportBinding } from "../graph/symbol-resolution";
 import type { GhostEdgeCandidate } from "../graph/ghost-types";
 import { GHOST_CONFIDENCE } from "../graph/ghost-types";
 
-/**
- * Detect Python descriptor edges.
- *
- * Descriptor classes: classes containing __get__ or __set__ methods.
- * Usage: constructorAssignments where className matches a descriptor class
- * and callerFn is undefined (module-level) or at class body scope.
- */
 export function detectPythonDescriptorEdges(
   fileGraphResults: Map<string, FileGraphResult>,
-  _symbolIndex: SymbolIndex,
   importMaps: Map<string, Map<string, ImportBinding>>,
 ): GhostEdgeCandidate[] {
   const candidates: GhostEdgeCandidate[] = [];
