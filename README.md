@@ -54,13 +54,13 @@ The graph makes the decision. The agent executes. For the full research story, s
 
 ## What Clarté is NOT
 
-**Not a RAG system.** No embeddings, no vector database, no similarity search. Clarté builds a weighted dependency graph and runs probabilistic inference over it.
+**Not a RAG system.** Clarté has embeddings (snowflake-arctic-embed-xs) and hybrid search (BM25F + semantic + RRF fusion), but retrieval is just one input. The output isn't "here are relevant code snippets" - it's a ranked prediction of which files to edit, derived from graph analysis, git history and retrieval signals combined.
 
 **Not a code search tool.** It doesn't help you find things. It tells the agent what to edit before it starts looking.
 
 **Not a framework.** No SDK, no API, no integration code. One command generates everything. Works with Claude Code, Cursor, Copilot, Windsurf, Cline and OpenCode.
 
-**Not prompt engineering.** The prediction comes from graph analysis and git history - BM25F retrieval, Katz centrality, logistic fusion trained on your commit patterns. The graph makes the decision, not the LLM.
+**Not prompt engineering.** The prediction comes from dependency graphs, Katz centrality, Markov flow analysis and logistic fusion trained on your commit patterns. The graph makes the decision, not the LLM.
 
 ## Benchmarks
 
