@@ -1,3 +1,11 @@
+## [1.0.3](https://github.com/michaelabrt/clarte/compare/v1.0.2...v1.0.3) (2026-03-25)
+
+
+### Performance Improvements
+
+* apply json_group_array optimization to loadFileGraphLean too ([909fdac](https://github.com/michaelabrt/clarte/commit/909fdac789992c604f409302f8b7ebba951fe41d))
+* use json_group_array to eliminate per-row WASM/JS boundary crossings ([a13e7e3](https://github.com/michaelabrt/clarte/commit/a13e7e399ed614d156e5fbb4302ab85d998cfa61))
+
 ## [1.0.2](https://github.com/michaelabrt/clarte/compare/v1.0.1...v1.0.2) (2026-03-25)
 
 
