@@ -1,3 +1,10 @@
+## [1.0.4](https://github.com/michaelabrt/clarte/compare/v1.0.3...v1.0.4) (2026-03-25)
+
+
+### Bug Fixes
+
+* **test:** widen lean-vs-full tolerance to 1.5x for CI runner variance ([4d42574](https://github.com/michaelabrt/clarte/commit/4d425746dbb2673dcf288c630c4ce52b4f7580e5))
+
 ## [1.0.3](https://github.com/michaelabrt/clarte/compare/v1.0.2...v1.0.3) (2026-03-25)
 
 
