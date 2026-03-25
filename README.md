@@ -10,23 +10,27 @@
 
 <p align="center"><strong>Agents don’t need better context. They need confidence.</strong></p>
 
-Your agent spends ~60% of its turns reading files it will never edit. Clarté predicts which files need editing and tells the agent to start there. The agent's first action becomes an edit, not a file read.
+Your agent spends ~60% of its turns reading files it will never edit.
+
+Clarté tells the agent where to start, so it can begin with an edit instead of exploring. In real bugs, this reduced time to first edit from ~14 minutes to ~2.
 
 ```bash
 npx @michaelabrt/clarte
 ```
 
-Zero config. Detects your stack, builds a dependency graph, generates hooks. Sub-100ms inference on every prompt. Node.js 24+.
+A pre-flight agent predicts which files need editing before the main agent starts, so it can begin with an edit instead of exploring. It runs in under 100ms per prompt and requires no configuration.
 
+<details>
+<summary><strong>Optional lighter install</strong></summary>
 For a lighter install without optional semantic search (~30 packages instead of ~190):
 
 ```bash
 npm install -g @michaelabrt/clarte --omit=optional
 ```
+</details>
 
 ---
-
-Five real bug fixes in open-source repos. Opaque prompts, Claude Sonnet, `claude -p`:
+Five real bug fixes in open-source repos (opaque prompts, Claude Sonnet):
 
 | Task | Repo | Without Clarté | With Clarté | n |
 |------|------|----------------|-------------|---|
