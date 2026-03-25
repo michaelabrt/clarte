@@ -48,15 +48,22 @@ The real signal turned out to be **first-edit timing**. Correlation with session
 
 So we stopped injecting information. We started injecting confidence.
 
-Not "this file has 49 importers and is a structural chokepoint." Instead: **"Edit `src/jsx/context.ts`. Start now."**
+> Not "this file has 49 importers and is a structural chokepoint."
+> Instead: **"Edit `src/jsx/context.ts`. Start now."**
 
 The graph makes the decision. The agent executes. For the full research story, see [docs/research.md](docs/research.md).
+
+## ELI5 (or maybe slightly more)
+
+Clarté parses your source code with [tree-sitter](https://tree-sitter.github.io/tree-sitter/) and builds a weighted dependency graph from imports, call sites and git history. On every prompt, four stages run in sequence: BM25F seed resolution finds lexically matching files; LSA expansion adds structurally related neighbors; Katz centrality propagates relevance through the import graph; and logistic fusion, trained on your commit patterns, produces a final ranking. Optional semantic search (snowflake-arctic-embed-xs) fuses with BM25F via reciprocal rank fusion when available. The top predictions go to a pre-flight agent that reads each file once and returns exact edit locations.
+
+The full query pipeline runs in under 100ms. The [Architecture](#architecture) section has the math.
 
 ## What Clarté is NOT
 
 **Not a RAG system.** Clarté has embeddings (snowflake-arctic-embed-xs) and hybrid search (BM25F + semantic + RRF fusion), but retrieval is just one input. The output isn't "here are relevant code snippets" - it's a ranked prediction of which files to edit, derived from graph analysis, git history and retrieval signals combined.
 
-**Not a code search tool.** It doesn't help you find things. It tells the agent what to edit before it starts looking.
+**Not just a search tool.** It exposes `clarte_find` for "where is the code that does X?" queries, but search is a side effect. The primary job is prediction: ranking files by edit probability before the agent starts exploring.
 
 **Not a framework.** No SDK, no API, no integration code. One command generates everything. Works with Claude Code, Cursor, Copilot, Windsurf, Cline and OpenCode.
 
@@ -92,8 +99,6 @@ Methodology, fixture projects and full reports are in the [benchmark repo](https
 
 ## Architecture
 
-Clarté parses source code with [tree-sitter](https://tree-sitter.github.io/tree-sitter/), builds a weighted dependency graph and trains repository-specific scoring weights from git history. On every prompt, it maps the task description to ranked file predictions through four stages.
-
 ```mermaid
 graph TD
     subgraph offline ["Build Phase · offline"]
@@ -126,11 +131,16 @@ You submit a task: "fix the JWT session leak." Two problems need solving.
 
 Path segments are weighted 2x higher than symbols. `auth/middleware.ts` tells you more about a session-handling bug than a function named `validate`. Import names get 0.5x because they signal consumption, not definition. The query is tokenized with camelCase splitting, compound-word preservation and domain-specific synonym expansion (`auth` → `authentication`, `db` → `database`). IDF is computed globally across the corpus.
 
+<details>
+<summary><strong>Definitely not ELI5</strong></summary>
+
 Each query term's IDF is weighted by a saturated pseudo-term-frequency that blends all three fields before applying the `k₁ = 1.2` saturation constant. The weighted pseudo-term-frequency combines all three fields before saturation (true BM25F, not per-field BM25+).
 
 $$\text{score}(d, q) = \sum_{t \in q} \text{IDF}(t) \cdot \frac{\widetilde{tf}(t, d)}{\widetilde{tf}(t, d) + k_1}$$
 
 $$\widetilde{tf}(t, d) = \sum_{f \in \lbrace \text{path, sym, imp} \rbrace} w_f \cdot \frac{tf_{f}(t, d)}{1 - b_f + b_f \cdot |d_f| \, / \, \overline{dl}_f}$$
+
+</details>
 
 Three post-processing steps refine the candidate set: spreading activation propagates scores along import edges for 3 hops with 0.5^(hop-1) decay; test proxy scoring transfers test file scores to their source files at 0.6x (test paths encode what they cover); and an import ceiling caps re-export barrels at 0.5x the minimum direct-match score.
 
@@ -143,7 +153,7 @@ The top BM25F seeds are averaged into a centroid vector. Non-seed files within c
 Sub-millisecond for typical codebases (1,000 files, 20 imports/file).
 
 <details>
-<summary><strong>BM25F parameters and LSA pipeline</strong></summary>
+<summary><strong>Definitely not ELI5: parameters and SVD pipeline</strong></summary>
 
 | Parameter | Value | Role |
 |-----------|-------|------|
@@ -181,9 +191,14 @@ If a file is reachable from the seed set through three independent import chains
 
 Katz centrality captures this. It computes the weighted sum of *all* walks from the seed set, with exponential decay per hop. The attenuation factor α is set to 85% of 1/ρ(A), where ρ(A) is the spectral radius of the weighted adjacency matrix (estimated via 10 power iterations). This guarantees convergence while maximizing the contribution of longer paths.
 
+<details>
+<summary><strong>Definitely not ELI5</strong></summary>
+
 $$\mathbf{x}_{k+1} = \alpha \, A^T \mathbf{x}_k + \mathbf{s}$$
 
 Edge weights fuse four signals: edge kind (call 0.7, extends 0.8, type-only 0.3), co-change confidence from Bayesian EWMA priors, directionality (reverse edges at 0.7x) and ghost status (inferred edges at 0.6x). Converges when the L2 norm of the update falls below 10⁻⁶ or after 50 iterations. O(|E|) per iteration on sparse representation.
+
+</details>
 
 After Katz converges, a second pass re-propagates from chokepoints (files above the 75th percentile of betweenness centrality) for one additional hop, amplifying structural bottlenecks that all paths must traverse.
 
@@ -193,6 +208,9 @@ Import graphs show static structure. Runtime follows different paths. A function
 
 Clarté extracts a symbol-level call graph from the AST and models it as an absorbing Markov chain. Each symbol is a state. Symbols with no outgoing calls are absorbing states. Transition probabilities fuse four factors: edge kind weight, coupling confidence, HITS authority of the target (raised to 0.7 to soften dominance) and days since last co-change (exponential decay with ~90-day half-life).
 
+<details>
+<summary><strong>Definitely not ELI5</strong></summary>
+
 $$w(u, v) = s(\text{kind}) \cdot c \cdot \alpha(v)^{0.7} \cdot e^{-0.033\,\Delta t}$$
 
 where *s* is the edge kind weight, *c* is coupling confidence, *α(v)* is HITS authority and *Δt* is days since last co-change.
@@ -201,11 +219,16 @@ Cross-community utility sinks (loggers, formatters) with indegree ≥ 5 receive 
 
 Forward propagation from entry points produces a flow signature: visited states with absorption probabilities, residual mass and convergence steps. The system reconstructs up to 5 diverse shortest paths (Yen's algorithm) and identifies dominator waypoints that all execution paths must traverse.
 
+</details>
+
 ### Stage 4: Adaptive Learning
 
 Hardcoded weights assume every repository has the same coupling patterns. They don't. A monorepo with 200 packages and a single-file CLI tool need fundamentally different signal blending. Clarté learns per-repository weights from two sources.
 
 **Bayesian EWMA Edge Priors.** Each import edge carries a Beta(α, β) distribution modeling co-change probability. Priors initialize from structural properties: direct value import at 0.7, barrel-routed at 0.5, dynamic at 0.4, type-only at 0.3. On each git commit, affected edges update via exponential weighted moving average with 0.995 per-commit decay. The posterior mean `E[w] = α / (α + β)` feeds directly into Katz edge weights and Markov transition probabilities, giving recently co-changed edges higher traversal probability.
+
+<details>
+<summary><strong>Definitely not ELI5</strong></summary>
 
 **Logistic Score Fusion.** For each of the 500 most recent multi-file commits, the system extracts four features per candidate:
 
@@ -220,8 +243,10 @@ Hard negatives are mined from three tiers: direct imports, same Leiden community
 
 $$P(\text{co-change} \mid \mathbf{x}) = \sigma(\boldsymbol{\lambda}^T \mathbf{x}) = \frac{1}{1 + e^{-\boldsymbol{\lambda}^T \mathbf{x}}}$$
 
+</details>
+
 <details>
-<summary><strong>Supporting infrastructure: HITS, communities and betweenness</strong></summary>
+<summary><strong>Definitely not ELI5: supporting infrastructure</strong></summary>
 
 Three systems provide the edge weights and structural features consumed by the stages above.
 
