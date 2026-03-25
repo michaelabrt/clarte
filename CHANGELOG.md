@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/michaelabrt/clarte/compare/v1.0.0...v1.0.1) (2026-03-25)
+
+
+### Performance Improvements
+
+* optimize loadFileGraph and selectContextSymbols for CI stability ([c8dbb9f](https://github.com/michaelabrt/clarte/commit/c8dbb9f724bbb81c689621a1757f0c684436571c))
+
 # 1.0.0 (2026-03-25)
 
 
