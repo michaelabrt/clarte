@@ -593,6 +593,53 @@ describe("Presentation Ordering", () => {
   });
 });
 
+// ── Swap-Remove Determinism ──────────────────────────────────────────────────
+
+describe("Swap-Remove Determinism", () => {
+  it("selectContextSymbols produces identical results on two calls with the same input", () => {
+    const nodes = [
+      makeNode(1, "src/auth/session.ts", "validateSession"),
+      makeNode(2, "src/auth/token.ts", "refreshToken"),
+      makeNode(3, "src/db/query.ts", "runQuery"),
+      makeNode(4, "src/api/handler.ts", "handleRequest"),
+      makeNode(5, "src/api/middleware.ts", "authMiddleware"),
+    ];
+    const symEdges: InMemorySymEdge[] = [
+      makeEdge(1, 2, "calls"),
+      makeEdge(4, 1, "calls"),
+      makeEdge(4, 3, "calls"),
+      makeEdge(5, 4, "calls"),
+    ];
+    const symGraph = buildSymbolGraph(nodes, symEdges);
+    const sub = buildSubgraph(nodes, [
+      { from: 1, to: 2, kind: "calls" as SymbolEdgeKind },
+      { from: 4, to: 1, kind: "calls" as SymbolEdgeKind },
+      { from: 4, to: 3, kind: "calls" as SymbolEdgeKind },
+      { from: 5, to: 4, kind: "calls" as SymbolEdgeKind },
+    ]);
+    const intentScores = new Map([
+      [1, 0.9],
+      [2, 0.7],
+      [3, 0.5],
+      [4, 0.8],
+      [5, 0.6],
+    ]);
+    const taskKeys = edgeKeys([
+      [1, 2],
+      [4, 1],
+      [4, 3],
+      [5, 4],
+    ]);
+
+    const first = selectContextSymbols(sub, intentScores, symGraph, taskKeys, 1500);
+    const second = selectContextSymbols(sub, intentScores, symGraph, taskKeys, 1500);
+
+    expect(second.selectedSymbols).toEqual(first.selectedSymbols);
+    expect(second.tokenBudgetUsed).toBe(first.tokenBudgetUsed);
+    expect(second.totalCoverage).toBeCloseTo(first.totalCoverage);
+  });
+});
+
 // ── Performance ─────────────────────────────────────────────────────────────
 
 describe("Performance", () => {

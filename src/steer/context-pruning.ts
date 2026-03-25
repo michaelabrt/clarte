@@ -15,6 +15,9 @@ import {
   SUBMODULAR_FALLBACK_THRESHOLD,
 } from "../core/config/intent-constants";
 
+// Pre-computed powers for dist ∈ {0, 1, 2} — avoids ** operator in hot loops
+const GAMMA_POWERS = [1, GAMMA_MAX_COVERAGE, GAMMA_MAX_COVERAGE * GAMMA_MAX_COVERAGE];
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface CoverageState {
@@ -104,8 +107,8 @@ export function estimateTokenCost(symbolId: number, symbolGraph: InMemorySymbolG
  */
 function bfs2Hop(sourceId: number, subgraph: SymbolSubgraph): NeighborEntry[] {
   const result: NeighborEntry[] = [{ id: sourceId, dist: 0 }];
-  const visited = new Map<number, number>(); // id -> dist
-  visited.set(sourceId, 0);
+  const visited = new Set<number>();
+  visited.add(sourceId);
 
   let frontier = [sourceId];
 
@@ -115,7 +118,7 @@ function bfs2Hop(sourceId: number, subgraph: SymbolSubgraph): NeighborEntry[] {
       // Forward edges
       for (const edge of subgraph.forward.get(u) ?? []) {
         if (!visited.has(edge.targetId) && subgraph.nodes.has(edge.targetId)) {
-          visited.set(edge.targetId, depth);
+          visited.add(edge.targetId);
           next.push(edge.targetId);
           result.push({ id: edge.targetId, dist: depth });
         }
@@ -123,7 +126,7 @@ function bfs2Hop(sourceId: number, subgraph: SymbolSubgraph): NeighborEntry[] {
       // Reverse edges
       for (const edge of subgraph.reverse.get(u) ?? []) {
         if (!visited.has(edge.targetId) && subgraph.nodes.has(edge.targetId)) {
-          visited.set(edge.targetId, depth);
+          visited.add(edge.targetId);
           next.push(edge.targetId);
           result.push({ id: edge.targetId, dist: depth });
         }
@@ -181,7 +184,7 @@ export function computeMarginalGain(
 
   let gain = 0;
   for (const { id, dist } of hood) {
-    const offer = GAMMA_MAX_COVERAGE ** dist; // 1.0 for self (dist=0), 0.8 for dist=1, 0.64 for dist=2
+    const offer = GAMMA_POWERS[dist]; // 1.0 for self (dist=0), 0.8 for dist=1, 0.64 for dist=2
     const current = state.covered.get(id) ?? 0;
     const delta = offer - current;
     if (delta > 0) gain += delta;
@@ -202,7 +205,7 @@ export function applyCoverage(
   if (!hood) return;
 
   for (const { id, dist } of hood) {
-    const offer = GAMMA_MAX_COVERAGE ** dist;
+    const offer = GAMMA_POWERS[dist];
     const current = state.covered.get(id) ?? 0;
     if (offer > current) {
       state.totalCoverage += offer - current;
@@ -256,18 +259,18 @@ export function selectContextSymbols(
   };
 
   const selected: number[] = [];
-  const inSelected = new Set<number>();
+  const candidates = [...subgraph.nodes.keys()];
   let remainingBudget = budgetTokens;
   let firstRatio: number | null = null;
   let lastRatio = 0;
 
-  // Greedy loop
-  while (remainingBudget > 0) {
-    let bestId: number | null = null;
+  // Greedy loop with shrinking candidate array (swap-remove on selection)
+  while (remainingBudget > 0 && candidates.length > 0) {
+    let bestIdx = -1;
     let bestRatio = 0;
 
-    for (const id of subgraph.nodes.keys()) {
-      if (inSelected.has(id)) continue;
+    for (let i = 0; i < candidates.length; i++) {
+      const id = candidates[i];
       const cost = costs.get(id) ?? 10;
       if (cost > remainingBudget) continue;
 
@@ -275,11 +278,13 @@ export function selectContextSymbols(
       const ratio = gain / cost;
       if (ratio > bestRatio) {
         bestRatio = ratio;
-        bestId = id;
+        bestIdx = i;
       }
     }
 
-    if (bestId === null) break;
+    if (bestIdx === -1) break;
+
+    const bestId = candidates[bestIdx];
 
     // Diminishing returns guard
     if (firstRatio === null) {
@@ -290,7 +295,9 @@ export function selectContextSymbols(
     }
 
     selected.push(bestId);
-    inSelected.add(bestId);
+    // Swap-remove: replace selected with last element, shrink array
+    candidates[bestIdx] = candidates[candidates.length - 1];
+    candidates.pop();
     remainingBudget -= costs.get(bestId) ?? 10;
     applyCoverage(bestId, neighborhoods, state);
     lastRatio = bestRatio;
