@@ -1,6 +1,6 @@
 {
   "name": "@michaelabrt/clarte",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "The starting point your agent is missing. Builds dependency graphs, predicts edit targets and steers the agent before it starts exploring.",
   "publishConfig": {
     "access": "public"
