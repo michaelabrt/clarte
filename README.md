@@ -5,32 +5,59 @@
   <a href="https://github.com/michaelabrt/clarte/actions/workflows/ci.yml"><img src="https://github.com/michaelabrt/clarte/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.npmjs.com/package/@michaelabrt/clarte"><img src="https://img.shields.io/npm/v/%40michaelabrt%2fclarte" alt="npm version"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-6.0-blue" alt="TypeScript"></a>
-  <a href="https://fsl.software"><img src="https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg" alt="License: FSL-1.1-MIT"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
-<p align="center"><strong>Agents don’t need better context. They need confidence.</strong></p>
+<p align="center"><strong>Studying how AI coding agents navigate codebases - and what actually helps.</strong></p>
 
-Your agent spends ~60% of its turns reading files it will never edit.
+> **This is an experimental research project**, not a polished product. The findings are based on 700+ controlled sessions and 30+ experiments, but the real-world evaluation covers a small number of tasks. We’re sharing it early because the results are interesting enough to warrant wider testing. Contributions, replications and skepticism are welcome.
 
-Clarté tells the agent where to start, so it can begin with an edit instead of exploring. In real bugs, this reduced time to first edit from ~14 minutes to ~2.
+We ran 30+ experiments across 700+ agent sessions to find what measurably changes agent behavior.
+
+First, we measured how agents spend their time. 170 sessions, 7,595 turns:
+
+- **59%** of turns: reading files the agent never edits
+- **13%**: re-running tests with no code change
+- **28%**: actual work
+
+We assumed the fix was better information. So we built 15 context enrichments: instability metrics, facade maps, API surfaces, type-aware ordering, task-relevant weighting. Each benchmarked in isolation and combination.
+
+**Zero wins.** Not one survived our combinatorial benchmark at realistic temperature. Three optimizations that individually showed -26%, -16% and -32% improvements combined to +63% overhead.
+
+Then we found the placebo. A minimal context file - just the project language and test framework, two lines, zero analysis - performed identically to our full 2,000-token enrichment. The content was irrelevant. The file’s existence alone suppressed the agent’s exploration phase.
+
+The real signal turned out to be **first-edit timing**. Strong correlation with session length across most tasks tested. Each delayed turn adds ~1.3 total turns. With context, agents start editing around turn 5. Without, turn 8. They find the right files on their own given enough time. They just lack the confidence to stop reading and start editing.
+
+So we stopped injecting information. We started injecting confidence: instead of telling the agent what’s important, we tell it which files to edit.
+
+For the full research story, see [docs/research.md](docs/research.md). All 30+ experiment writeups are in [docs/experiments/](docs/experiments/).
+
+## How it works
+
+Clarté is the experimental application of these findings. It parses your source code with [tree-sitter](https://tree-sitter.github.io/tree-sitter/), builds a weighted dependency graph from imports, call sites and git history, and on every prompt predicts which files need editing. The predictions go to a pre-flight agent that reads each target once and returns exact edit locations.
+
+The full query pipeline runs in under 100ms. The [Architecture](#architecture) section has the math.
 
 ```bash
 npx @michaelabrt/clarte
 ```
 
-A pre-flight agent predicts which files need editing before the main agent starts, so it can begin with an edit instead of exploring. It runs in under 100ms per prompt and requires no configuration.
+Zero config. Works with Claude Code, Cursor, Copilot, Windsurf, Cline and OpenCode. TypeScript, Python, Go, Rust, Java.
 
 <details>
-<summary><strong>Optional lighter install</strong></summary>
-For a lighter install without optional semantic search (~30 packages instead of ~190):
+<summary><strong>Lighter install</strong></summary>
+Without optional semantic search (~30 packages instead of ~190):
 
 ```bash
 npm install -g @michaelabrt/clarte --omit=optional
 ```
 </details>
 
----
-Five real bug fixes in open-source repos (opaque prompts, Claude Sonnet):
+## Early results
+
+These are promising but based on limited evaluation. Treat them as directional, not definitive.
+
+**Real-world tests** - 5 bug fixes in open-source repos (opaque prompts, Claude Sonnet, small n per task):
 
 | Task | Repo | Without Clarté | With Clarté | n |
 |------|------|----------------|-------------|---|
@@ -40,74 +67,27 @@ Five real bug fixes in open-source repos (opaque prompts, Claude Sonnet):
 | WebSocket adapter shutdown | NestJS | 53 turns | **38 turns (-28%)** | 7+7 |
 | URL fragment stripping | Hono | completed, high variance | **completed, 3x more consistent** | 8+8 |
 
-Clarté completed 5/5. Without it, the agent completed 3/5 within the same budget.
+Baseline completed 3/5 within budget. With Clarté, 5/5. These are the controlled, reproducible runs from a larger iterative development process (hundreds of sessions across more tasks and repos). The [32 experiment writeups](docs/experiments/) and [7 studies](docs/studies/) document the full research arc.
 
-## Confidence > Information
-
-We ran 30+ experiments across 700+ agent sessions to find what changes agent behavior. Not what seems like it should help. What measurably, reproducibly helps.
-
-First, we measured how agents spend their time. 170 sessions, 7,595 turns. Result: 59% of turns reading files the agent never edits. 13% re-running tests with no code change. Only 28% of a session is actual work.
-
-We assumed the fix was better information. So we built 15 context enrichments: instability metrics, facade maps, API surfaces, type-aware ordering, task-relevant weighting. Each benchmarked in isolation and combination.
-
-**Zero wins.** Not one survived our combinatorial benchmark at realistic temperature.
-
-Then we found the placebo. A minimal context file - just the project language and test framework, two lines, zero analysis - performed identically to our full 2,000-token enrichment. The content was irrelevant. The file's existence alone suppressed the agent's exploration phase.
-
-The real signal turned out to be **first-edit timing**. Correlation with session length: r = 0.70 to 1.00 across 15/19 tasks. Each delayed turn adds ~1.3 total turns. With context, agents start editing at turn 5. Without, turn 8. They find the right files on their own given enough time. They just lack the confidence to stop reading and start editing.
-
-So we stopped injecting information. We started injecting confidence.
-
-> Not "this file has 49 importers and is a structural chokepoint."
-> Instead: **"Edit `src/jsx/context.ts`. Start now."**
-
-The graph makes the decision. The agent executes. For the full research story, see [docs/research.md](docs/research.md).
-
-## ELI5 (or maybe slightly more)
-
-Clarté parses your source code with [tree-sitter](https://tree-sitter.github.io/tree-sitter/) and builds a weighted dependency graph from imports, call sites and git history. On every prompt, four stages run in sequence: BM25F seed resolution finds lexically matching files; LSA expansion adds structurally related neighbors; Katz centrality propagates relevance through the import graph; and logistic fusion, trained on your commit patterns, produces a final ranking. Optional semantic search (snowflake-arctic-embed-xs) fuses with BM25F via reciprocal rank fusion when available. The top predictions go to a pre-flight agent that reads each file once and returns exact edit locations.
-
-The full query pipeline runs in under 100ms. The [Architecture](#architecture) section has the math.
-
-## What Clarté is NOT
-
-**Not a RAG system.** Clarté has embeddings (snowflake-arctic-embed-xs) and hybrid search (BM25F + semantic + RRF fusion), but retrieval is just one input. The output isn't "here are relevant code snippets" - it's a ranked prediction of which files to edit, derived from graph analysis, git history and retrieval signals combined.
-
-**Not just a search tool.** It exposes `clarte_find` for "where is the code that does X?" queries, but search is a side effect. The primary job is prediction: ranking files by edit probability before the agent starts exploring.
-
-**Not a framework.** No SDK, no API, no integration code. One command generates everything. Works with Claude Code, Cursor, Copilot, Windsurf, Cline and OpenCode.
-
-**Not prompt engineering.** The prediction comes from dependency graphs, Katz centrality, Markov flow analysis and logistic fusion trained on your commit patterns. The graph makes the decision, not the LLM.
-
-## Benchmarks
-
-These benchmarks tested our **v0 approach**: a static context file injected into the system prompt, with no hooks or pre-flight targeting. This isolates the effect of graph-derived information alone. The current system (v1, with pre-flight) supersedes this and does not show the pass rate drop below.
-
-Same tasks, same model. Statistical testing with Wilcoxon signed-rank, bootstrap CIs, Benjamini-Hochberg FDR correction and Cliff's delta effect sizes.
-
-**Claude Sonnet 4.6** - 9 opaque tasks across 3 TypeScript fixtures, 5 repetitions (135 sessions):
+**Fixture benchmarks** (v0, context file only - no hooks or pre-flight):
 
 | Metric | Without Context | With Context | Delta | Significance |
 |--------|----------------|--------------|-------|--------------|
 | Wall-clock time (median) | 130s | **98s** | **-25%** | p<0.001, small effect |
 | Turns (median) | 16 | **11.5** | **-28%** | p<0.001, medium effect |
 | Input tokens (median) | 272K | **108K** | **-60%** | p<0.001, large effect |
-| Pass rate | 100% | 93% | -7pp | n.s. |
 
-60% fewer input tokens per turn. A placebo condition (language + test framework only, no structural analysis) showed no significant improvement, confirming the gains come from graph analysis.
+135 sessions (Claude Sonnet 4.6), 9 opaque tasks, statistical testing with Wilcoxon signed-rank, bootstrap CIs, Benjamini-Hochberg FDR correction and Cliff’s delta effect sizes. Methodology and full reports in the [benchmark repo](https://github.com/michaelabrt/clarte-benchmark).
 
-The 7pp pass rate drop appeared only in this context-file-only condition, which injects information without directing the agent where to edit. The full system (with pre-flight targeting) completed 5/5 real-world tasks where baseline completed 3/5, with no observed pass rate regression.
+## Contributing
 
-**Claude Haiku 4.5** - 3 tasks, 7 repetitions (127 sessions):
+This project benefits from wider testing. If you’re interested:
 
-| Metric | Without Context | With Context | Delta |
-|--------|----------------|--------------|-------|
-| Pass rate | 86% | **95%** | **+9pp** |
-| Turns (median) | 19 | **14** | -26% (p<0.001) |
-
-Haiku shows a correctness gain: +9pp pass rate with 26% fewer turns.
-
-Methodology, fixture projects and full reports are in the [benchmark repo](https://github.com/michaelabrt/clarte-benchmark).
+- **Try it on your codebase** and report what works and what doesn’t. We need data beyond TypeScript and Claude.
+- **Replicate the findings.** Run the [benchmark suite](https://github.com/michaelabrt/clarte-benchmark) on your own tasks and compare.
+- **Add tasks to the benchmark.** More repos, more languages, more task types.
+- **Challenge the methodology.** The experiment writeups in [docs/experiments/](docs/experiments/) are detailed enough to critique. We want to know what we’re getting wrong.
+- **Improve prediction accuracy.** The BM25F + Katz + logistic fusion pipeline is one approach. There may be better ones.
 
 ## Architecture
 
@@ -432,4 +412,4 @@ bun test           # Run tests with vitest
 
 ## License
 
-[FSL-1.1-MIT](LICENSE) - free to use, modify and distribute. The only restriction is competing use (building a product whose primary utility overlaps with Clarté's core functionality). Converts to MIT on March 17, 2028.
+[MIT](LICENSE)
