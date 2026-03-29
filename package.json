@@ -1,6 +1,6 @@
 {
   "name": "@michaelabrt/clarte",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Experimental project studying how AI coding agents navigate codebases. Builds dependency graphs, predicts edit targets and measures what actually helps.",
   "publishConfig": {
     "access": "public"
