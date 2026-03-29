@@ -1,7 +1,7 @@
 {
   "name": "@michaelabrt/clarte",
-  "version": "1.0.6",
-  "description": "The starting point your agent is missing. Builds dependency graphs, predicts edit targets and steers the agent before it starts exploring.",
+  "version": "1.0.7",
+  "description": "Experimental project studying how AI coding agents navigate codebases. Builds dependency graphs, predicts edit targets and measures what actually helps.",
   "publishConfig": {
     "access": "public"
   },
@@ -45,7 +45,7 @@
     "ai-tools"
   ],
   "author": "Michael Aboukrat",
-  "license": "FSL-1.1-MIT",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/michaelabrt/clarte.git"
