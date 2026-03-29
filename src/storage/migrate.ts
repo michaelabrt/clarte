@@ -150,6 +150,15 @@ export async function migrateFromJson(rootDir: string, store: GraphStore): Promi
     if (!callGraph) process.stderr.write(`[clarte] Warning: could not parse call-graph.json - skipping\n`);
   }
 
+  // All files existed but all parses failed - nothing to migrate
+  if (!cache && !graph && !callGraph) {
+    // Clean up corrupt files so the next run is a clean no-op
+    await deleteFileSafe(cachePath);
+    await deleteFileSafe(graphPath);
+    await deleteFileSafe(callGraphPath);
+    return false;
+  }
+
   // Build file records: merge cache.json hashes + graph.json scores
   const fileRecords = buildFileRecords(cache, graph, now);
   const edgeRecords = buildEdgeRecords(cache, graph);
