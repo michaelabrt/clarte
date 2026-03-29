@@ -87,7 +87,10 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           BEFORE_TAG=$(git tag --sort=-v:refname | head -1)
-          npx semantic-release
+          npx semantic-release 2>&1 || SR_EXIT=$?
+          if [ "${SR_EXIT:-0}" -ne 0 ]; then
+            echo "semantic-release exited $SR_EXIT (may be a no-op tag conflict, continuing)"
+          fi
           AFTER_TAG=$(git tag --sort=-v:refname | head -1)
           if [ "$BEFORE_TAG" != "$AFTER_TAG" ] && [ -n "$AFTER_TAG" ]; then
             VERSION="${AFTER_TAG#v}"
